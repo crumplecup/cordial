@@ -12,9 +12,23 @@ use std::path::{Path, PathBuf};
 use tracing::instrument;
 
 /// The socket of the session for a project's store.
+///
+/// A Unix socket's path is limited to about a hundred bytes, which a store under
+/// a deep directory exceeds, so it lives in the per-user runtime directory under
+/// a name derived from the store: the same store always finds the same socket.
 #[instrument(level = "trace")]
 pub fn socket_path(store_root: &Path) -> PathBuf {
-    store_root.join("session.sock")
+    use sha2::{Digest, Sha256};
+    let digest = Sha256::digest(store_root.as_os_str().as_encoded_bytes());
+    let name: String = digest[..8]
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
+    std::env::var_os("XDG_RUNTIME_DIR")
+        .map(PathBuf::from)
+        .filter(|dir| dir.is_dir())
+        .unwrap_or_else(std::env::temp_dir)
+        .join(format!("cordial-{name}.sock"))
 }
 
 /// Whether `command` can run in a session. These read and write only the store

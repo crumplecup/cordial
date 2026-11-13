@@ -103,7 +103,7 @@ Measured by `cordial perf workflow` against the baselines recorded 2026-11-12
   opt out); it ends with the terminal that started it (the server polls for its
   process-session leader), and `cordial session start|stop|status` is the
   explicit control, `start` meaning a fresh session. A server per project
-  (`{store}/session.sock`). Clients forward `open`,
+  (a short socket under `$XDG_RUNTIME_DIR`, named from the store). Clients forward `open`,
   `peek`, `done`, `skip`, `submit`, `next` and `stats`; the server runs them in
   its own process with output routed back, keeps the run's loaded database, and
   on the next run brings it up to date with `SourceDatabase::sync_from_disk`

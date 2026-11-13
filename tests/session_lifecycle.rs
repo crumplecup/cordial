@@ -4,6 +4,7 @@
 mod support {
     pub mod mini_workspace;
 }
+use cordial::host::socket_path;
 use miette::{IntoDiagnostic, Result};
 use std::path::Path;
 use std::process::{Child, Command, Output, Stdio};
@@ -46,7 +47,7 @@ fn a_session_serves_forwarded_commands_and_start_replaces_it() -> Result<()> {
     let project = scratch.path().join("mini");
     support::mini_workspace::write(&project)?;
     let home = scratch.path().join("store");
-    let socket = home.join("mini/session.sock");
+    let socket = socket_path(&home.join("mini"));
     assert!(text(&run(&project, &home, &["session", "status"])?.stdout).contains("No session"));
 
     let started = run(&project, &home, &["session", "start"])?;
@@ -86,7 +87,7 @@ fn a_session_ends_when_its_owner_does() -> Result<()> {
     let project = scratch.path().join("mini");
     support::mini_workspace::write(&project)?;
     let home = scratch.path().join("store");
-    let socket = home.join("mini/session.sock");
+    let socket = socket_path(&home.join("mini"));
 
     let mut owner = terminal()?;
     let mut server = cordial(

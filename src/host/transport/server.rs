@@ -47,6 +47,8 @@ pub fn serve(socket: &Path, owner: Option<u32>) -> CordialResult<()> {
         std::fs::create_dir_all(parent)?;
     }
     let listener = UnixListener::bind(socket)?;
+    // Only this user may connect, whichever directory the socket is in.
+    std::fs::set_permissions(socket, std::os::unix::fs::PermissionsExt::from_mode(0o600))?;
     keep_between_runs();
     if let Some(owner) = owner {
         watch_owner(socket.to_path_buf(), owner);
