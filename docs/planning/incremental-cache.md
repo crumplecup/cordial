@@ -121,5 +121,5 @@ Measured by `cordial perf workflow` against the baselines recorded 2026-11-12
 - [ ] C4. Facts as tracked queries, in order of measured cost (the call graph first, so an
   edit redoes only the functions it touched; then enrich, about 61 s per run).
 - [ ] C5. Whole-crate passes and cfg contexts as queries.
-- [x] C1. Cache key hygiene: analysis-source digest in place of the binary fingerprint.
+- [ ] C1. Cache key hygiene: analysis-source digest in place of the binary fingerprint.
 - [ ] C6. Re-baseline and record the acceptance numbers.
