@@ -8,11 +8,39 @@
 
 use std::path::PathBuf;
 
+#[cfg(any(
+    feature = "error_sites",
+    feature = "error_chain",
+    feature = "internal_error_chain",
+    feature = "tracing",
+    feature = "verus_ir"
+))]
 use ra_ap_hir::Semantics;
+#[cfg(any(
+    feature = "error_sites",
+    feature = "error_chain",
+    feature = "internal_error_chain",
+    feature = "tracing",
+    feature = "verus_ir"
+))]
 use ra_ap_ide_db::RootDatabase;
 use tracing::instrument;
 
+#[cfg(any(
+    feature = "error_sites",
+    feature = "error_chain",
+    feature = "internal_error_chain",
+    feature = "tracing",
+    feature = "verus_ir"
+))]
 use super::DatabaseSource;
+#[cfg(any(
+    feature = "error_sites",
+    feature = "error_chain",
+    feature = "internal_error_chain",
+    feature = "tracing",
+    feature = "verus_ir"
+))]
 use super::queries::SemanticDatabase;
 
 /// A file as one collector reads it: the database's id for it, the path the IR
@@ -35,6 +63,13 @@ pub(super) struct ScanKey<'db> {
     flag: bool,
 }
 
+#[cfg(any(
+    feature = "error_sites",
+    feature = "error_chain",
+    feature = "internal_error_chain",
+    feature = "tracing",
+    feature = "verus_ir"
+))]
 /// Build the file's carrier and run `collect` on it, or `None` when the file
 /// does not parse or the collector refuses it. The caller falls back to the
 /// uncached path in that case, which reports the error.
