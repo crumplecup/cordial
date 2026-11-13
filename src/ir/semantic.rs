@@ -179,3 +179,72 @@ pub struct SemanticFunction {
     #[setters(generate)]
     incomplete: bool,
 }
+
+impl SemanticType {
+    /// This type with each identity in it replaced by `map`'s answer.
+    #[tracing::instrument(level = "trace", skip(self, map))]
+    pub(crate) fn map_identities(
+        &self,
+        map: &mut impl FnMut(SemanticItemId) -> SemanticItemId,
+    ) -> Self {
+        match self {
+            Self::Adt { definition, label } => Self::Adt {
+                definition: map(*definition),
+                label: label.clone(),
+            },
+            other => other.clone(),
+        }
+    }
+}
+
+impl SemanticReturnContract {
+    /// This contract with each identity in it replaced by `map`'s answer.
+    #[tracing::instrument(level = "trace", skip(self, map))]
+    pub(crate) fn map_identities(
+        &self,
+        map: &mut impl FnMut(SemanticItemId) -> SemanticItemId,
+    ) -> Self {
+        match self {
+            Self::Result {
+                definition,
+                success,
+                error,
+            } => Self::Result {
+                definition: map(*definition),
+                success: success.map_identities(map),
+                error: error.map_identities(map),
+            },
+            Self::Other(ty) => Self::Other(ty.map_identities(map)),
+            Self::Unavailable => Self::Unavailable,
+        }
+    }
+}
+
+impl SemanticFunction {
+    /// These facts with every identity in them (the function's own, the types it
+    /// returns and reaches, the functions it calls) replaced by `map`'s answer.
+    /// A context analyses a copy of the crate, so its facts name the copy's items;
+    /// mapping them to the ordinary build's makes them the same facts about the
+    /// same functions and types.
+    #[tracing::instrument(level = "debug", skip(self, map))]
+    #[hotpath::measure]
+    pub(crate) fn map_identities(
+        mut self,
+        map: &mut impl FnMut(SemanticItemId) -> SemanticItemId,
+    ) -> Self {
+        self.definition = map(self.definition);
+        self.output = self.output.map_identities(map);
+        for call in &mut self.calls {
+            if let SemanticCallTarget::Function(target) = call.target {
+                call.target = SemanticCallTarget::Function(map(target));
+            }
+            call.output = call.output.map_identities(map);
+        }
+        self.reachable_result_errors = self
+            .reachable_result_errors
+            .iter()
+            .map(|ty| ty.map_identities(map))
+            .collect();
+        self
+    }
+}

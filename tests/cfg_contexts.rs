@@ -346,3 +346,33 @@ fn compatible_requests_share_contexts_and_exclusive_ones_never_do() -> Result<()
     assert!(same[1].iter().all(|context| enables(context, "kani")));
     Ok(())
 }
+
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn a_contexts_facts_name_the_ordinary_functions_they_call_by_their_ordinary_identity() -> Result<()>
+{
+    cordial::init_tracing();
+    let root = fixture()?;
+    let graph = project(vec![kani()], root.path())?;
+    let (helper, harness) = (only(&graph, "helper")?, only(&graph, "harness")?);
+    let ordinary = graph
+        .semantic_function(helper)
+        .into_diagnostic()?
+        .ok_or_else(|| miette::miette!("helper has ordinary facts"))?;
+    let entries = graph
+        .semantic_context_functions(harness)
+        .into_diagnostic()?;
+    let call = entries[0]
+        .function()
+        .calls()
+        .first()
+        .ok_or_else(|| miette::miette!("the harness calls helper"))?;
+    // The context analysed a copy of the crate; the function it calls is still the
+    // one the ordinary build has, so the fact names it as the ordinary build does.
+    assert_eq!(
+        call.target(),
+        &cordial::SemanticCallTarget::Function(*ordinary.definition()),
+        "the context's call target is the copy's identity, which nothing else knows"
+    );
+    Ok(())
+}

@@ -58,12 +58,17 @@ impl Locator<'_> {
         let file = file_id
             .original_file_respecting_includes(self.db)
             .file_id(self.db);
-        let path = self.vfs.file_path(file).as_path()?;
-        let path: &std::path::Path = path.as_ref();
+        let vfs_path = self.vfs.file_path(file);
+        // A function in a context's copy of the workspace is located where the
+        // original is: the copy has the same text, so the offset is the same.
+        let path: PathBuf = match vfs_path.as_path() {
+            Some(real) => AsRef::<std::path::Path>::as_ref(real).to_path_buf(),
+            None => super::context_crates::original_path(vfs_path)?,
+        };
         self.roots
             .iter()
             .any(|root| path.starts_with(root))
-            .then(|| FunctionLocation::new(path.to_path_buf(), u32::from(start)))
+            .then(|| FunctionLocation::new(path, u32::from(start)))
     }
 
     /// Record on `node` the trait method the function `id` implements, if it

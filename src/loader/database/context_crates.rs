@@ -11,12 +11,13 @@
 use std::collections::{BTreeSet, HashMap};
 use triomphe::Arc;
 
-use ra_ap_hir::{AssocItem, Crate, Function, HasSource, ModuleDef, attach_db};
+use ra_ap_hir::{Adt, AssocItem, Crate, Function, HasSource, InFile, ModuleDef, attach_db};
 use ra_ap_ide_db::RootDatabase;
 use ra_ap_ide_db::base_db::{
     Crate as InputCrate, SourceDatabase as RaSourceDatabase, SourceRoot, SourceRootId, all_crates,
     set_all_crates_with_durability,
 };
+use ra_ap_syntax::{AstNode, TextRange, ast::HasName};
 use ra_ap_vfs::{FileId, VfsPath, file_set::FileSet};
 use salsa::Durability;
 use tracing::instrument;
@@ -24,6 +25,20 @@ use tracing::instrument;
 use super::SourceDatabase;
 use super::contexts::LocalCfgs;
 use crate::{CordialError, CordialResult, FunctionLocation, SemanticContextKey};
+
+/// The start of the virtual path a context's copy of a file lives at; the context's
+/// number and the file's real path follow it.
+const COPY_PATH_PREFIX: &str = "/__cordial_context_";
+
+/// The real path a context's virtual copy was made from, or `None` for a path that
+/// is not a copy.
+#[instrument(level = "trace", skip(path))]
+pub(super) fn original_path(path: &VfsPath) -> Option<std::path::PathBuf> {
+    let text = path.to_string();
+    let rest = text.strip_prefix(COPY_PATH_PREFIX)?;
+    let (_, real) = rest.split_once('/')?;
+    Some(std::path::PathBuf::from(format!("/{real}")))
+}
 
 /// The first id given to the source roots that hold a context's file copies, far
 /// above any id the workspace loader used.
@@ -44,6 +59,10 @@ pub struct ContextCrates {
     /// Each original file with its copy.
     #[getter(skip)]
     files: HashMap<FileId, FileId>,
+    /// Each declaration in the copy with the ordinary build's declaration at the
+    /// same place in the source, so facts about the copy can speak of the original.
+    #[getter(skip)]
+    counterparts: HashMap<ModuleDef, ModuleDef>,
 }
 
 impl ContextCrates {
@@ -62,6 +81,12 @@ impl ContextCrates {
     #[instrument(level = "trace", skip(self))]
     pub(super) fn copy_of(&self, original: FileId) -> Option<FileId> {
         self.files.get(&original).copied()
+    }
+
+    /// The ordinary build's declaration of what `definition` declares in the copy.
+    #[instrument(level = "trace", skip(self))]
+    pub(super) fn counterpart(&self, definition: ModuleDef) -> Option<ModuleDef> {
+        self.counterparts.get(&definition).copied()
     }
 
     /// The original of each copy.
@@ -127,6 +152,7 @@ impl SourceDatabase {
         let mut registered: Vec<InputCrate> = all_crates(&self.db).iter().copied().collect();
         registered.extend(shadows.iter().map(|(_, copy)| *copy));
         set_all_crates_with_durability(&mut self.db, registered, Durability::MEDIUM);
+        let counterparts = self.counterparts_of(&shadows, &files);
         let bytes: usize = files
             .values()
             .map(|copy| self.db.file_text(*copy).text(&self.db).len())
@@ -141,6 +167,7 @@ impl SourceDatabase {
             context: context.clone(),
             crates: shadows,
             files,
+            counterparts,
         };
         self.context_crates.push(added.clone());
         Ok(added)
@@ -174,7 +201,7 @@ impl SourceDatabase {
                 };
                 let Some(real) = path.as_path() else { continue };
                 let copy_path = VfsPath::new_virtual_path(format!(
-                    "/__cordial_context_{index}{}",
+                    "{COPY_PATH_PREFIX}{index}{}",
                     real.as_str()
                 ));
                 let text = self.db.file_text(original).text(&self.db).to_string();
@@ -197,6 +224,40 @@ impl SourceDatabase {
             Durability::LOW,
         );
         Ok(copies)
+    }
+
+    /// Pair each declaration in a copy with the ordinary build's at the same place
+    /// in the source: the same file, the same name token, the same kind of item.
+    #[instrument(level = "debug", skip(self, pairs, files))]
+    #[hotpath::measure(impl_type = "SourceDatabase")]
+    fn counterparts_of(
+        &self,
+        pairs: &[(InputCrate, InputCrate)],
+        files: &HashMap<FileId, FileId>,
+    ) -> HashMap<ModuleDef, ModuleDef> {
+        let originals: HashMap<FileId, FileId> = files
+            .iter()
+            .map(|(original, copy)| (*copy, *original))
+            .collect();
+        attach_db(&self.db, || {
+            let mut found = HashMap::new();
+            for (ordinary, copy) in pairs {
+                let at: HashMap<_, _> = declared_in(&self.db, Crate::from(*ordinary))
+                    .into_iter()
+                    .filter_map(|definition| {
+                        Some((place_of(&self.db, definition, &HashMap::new())?, definition))
+                    })
+                    .collect();
+                for definition in declared_in(&self.db, Crate::from(*copy)) {
+                    if let Some(place) = place_of(&self.db, definition, &originals)
+                        && let Some(ordinary) = at.get(&place)
+                    {
+                        found.insert(definition, *ordinary);
+                    }
+                }
+            }
+            found
+        })
     }
 
     /// Bring every context's copy of `original` up to date with `text`.
@@ -331,4 +392,75 @@ fn functions_of(db: &RootDatabase, krate: Crate) -> Vec<Function> {
         }
     }
     functions
+}
+
+/// The kind of item and the original place its name is written: the key two
+/// declarations share when one is the copy of the other.
+type Place = (u8, FileId, TextRange);
+
+/// Every declaration a crate makes that facts can name: its functions, types,
+/// traits and constants, including the associated items of impls and traits.
+#[instrument(level = "debug", skip(db))]
+#[hotpath::measure]
+fn declared_in(db: &RootDatabase, krate: Crate) -> Vec<ModuleDef> {
+    let mut found = Vec::new();
+    for module in krate.modules(db) {
+        found.extend(module.declarations(db));
+        for implementation in module.impl_defs(db) {
+            found.extend(implementation.items(db).into_iter().map(associated));
+        }
+    }
+    let traits: Vec<_> = found
+        .iter()
+        .filter_map(|definition| match definition {
+            ModuleDef::Trait(declared) => Some(*declared),
+            _ => None,
+        })
+        .collect();
+    for declared in traits {
+        found.extend(declared.items(db).into_iter().map(associated));
+    }
+    found
+}
+
+fn associated(item: AssocItem) -> ModuleDef {
+    match item {
+        AssocItem::Function(function) => ModuleDef::Function(function),
+        AssocItem::Const(constant) => ModuleDef::Const(constant),
+        AssocItem::TypeAlias(alias) => ModuleDef::TypeAlias(alias),
+    }
+}
+
+/// Where `definition`'s name is written in the original source, with `originals`
+/// naming a copy's file by its original's.
+#[instrument(level = "trace", skip(db, definition, originals))]
+fn place_of(
+    db: &RootDatabase,
+    definition: ModuleDef,
+    originals: &HashMap<FileId, FileId>,
+) -> Option<Place> {
+    let (kind, range) = match definition {
+        ModuleDef::Function(it) => (1, name_range(db, it.source(db)?)?),
+        ModuleDef::Adt(Adt::Struct(it)) => (2, name_range(db, it.source(db)?)?),
+        ModuleDef::Adt(Adt::Enum(it)) => (3, name_range(db, it.source(db)?)?),
+        ModuleDef::Adt(Adt::Union(it)) => (4, name_range(db, it.source(db)?)?),
+        ModuleDef::Trait(it) => (5, name_range(db, it.source(db)?)?),
+        ModuleDef::TypeAlias(it) => (6, name_range(db, it.source(db)?)?),
+        ModuleDef::Const(it) => (7, name_range(db, it.source(db)?)?),
+        ModuleDef::Static(it) => (8, name_range(db, it.source(db)?)?),
+        _ => return None,
+    };
+    let (file, range) = range;
+    Some((kind, originals.get(&file).copied().unwrap_or(file), range))
+}
+
+/// The file and range of an item's name as written in the source, even when a
+/// macro generated the item.
+fn name_range<N: AstNode + HasName>(
+    db: &RootDatabase,
+    source: InFile<N>,
+) -> Option<(FileId, TextRange)> {
+    let name = source.value.name()?;
+    let (range, _) = InFile::new(source.file_id, name.syntax()).original_file_range_opt(db)?;
+    Some((range.file_id.file_id(db), range.range))
 }
