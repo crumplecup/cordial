@@ -57,6 +57,104 @@ for that instead of building a second invalidation scheme.
   loads the workspace once. After that, only what an edit invalidates is
   recomputed.
 
+## Settled design: layers and milestones (C4/C5)
+
+Written 2026-11-13, after the first profiles. Nothing below is a cache we invent;
+every step is a Salsa query, an input, or an assembly of their results.
+
+### Layers
+
+```text
+A inputs        file texts, crate graph and cfg (rust-analyzer's); the cordial policy
+B file facts    one tracked query per collector, keyed by file
+C item facts    per-function and per-item queries, keyed by item identity
+D crate facts   definitions, call graph, path inclusions: queries over B and C
+E assembly      the IR graph, built from B-D results (cheap, deterministic)
+F hooks         enrichers, probes, assessors read the IR as they do today
+```
+
+- **A.** File text and the crate graph are rust-analyzer's inputs; `change_file`
+  already feeds edits in. The cordial policy (`cordial.toml`) becomes one Salsa
+  input, set only when its value differs, so a policy change invalidates what read
+  it and nothing else.
+- **B.** Each file-local collector (scope, attributes, visibility, observability,
+  derives, glob imports, inline tests, error sites and chains, the error-apply
+  families, panics, antipatterns) is its own `#[salsa::tracked]` query keyed by a
+  `FileKey` (file id and path). Separate queries, not one `file_facts`, so an edit
+  that leaves one collector's output equal leaves its consumers untouched (early
+  cutoff). Outputs are `Clone + Eq` typed facts; the projection stops computing
+  them inline.
+- **C.** `function_evidence` and `direct_facts` exist. Add per-function syntax
+  facts (`function_source_syntax`, call syntax) and per-item facts, keyed by item
+  identity (module path and name, or the impl's ordinal), never by position.
+- **D.** Whole-crate passes read C through queries: `definitions` (identity to
+  item), `call_graph`, `path_inclusions`. A pass reads only the facts it needs, so
+  an edit recomputes the passes whose inputs changed.
+- **E.** The IR stays the consumer contract (probes, assessors, reporters, apply
+  keep `IrView`). It is assembled each run from B-D results by moving memoised
+  values into nodes: O(project) but a copy, not a recomputation. Node attributes
+  hold shared values, so assembly does not serialise or deep-clone every fact.
+- **F.** The hook API is public (plugins implement it), so it does not change.
+  Built-in enrichers become *providers*: a per-function or per-file query that
+  returns the attributes it would have written, applied during assembly. A legacy
+  enricher (a plugin's) still runs over the assembled IR. Probes and assessors
+  stay IR readers.
+
+### Granularity: files, not positions
+
+Facts keep the offsets and ranges they have, and the transformations depend on
+exact edit ranges. So a comment line recomputes the facts of its own file and no
+other, and the cost of an edit is the edited file, not the project. Position-free
+facts would also spare that file, and need every payload reworked; they are a later
+refinement, taken only if the edited file's cost is measured to matter.
+
+### Cfg contexts (C5)
+
+rust-analyzer reads cfg from the crate graph input, so a query argument cannot
+carry it, and the current toggle-and-restore invalidates every result each run.
+The Salsa-native shape is to **add each context as a crate in the graph**: the same
+root file with different `cfg_options` and its own crate id, so rust-analyzer's own
+queries (keyed by crate) hold every context at once and nothing is toggled. A
+context's test binaries depend on that context's copy of the library. Two
+conditions gate this, checked by a spike before anything depends on it: a shadow
+crate gives different facts from the original, and adding it does not re-execute
+the original's queries. The fallback is a database per context, applying every
+edit to each and computing only the gated closure there.
+
+### Milestones, in order, each tested before the next
+
+1. **Per-file collectors (B).** The harness (`FileKey`, one source carrier shared
+   with the projection) and the first queries; then every other file-local
+   collector. Tested by: the assembled IR equals the IR the inline collectors made
+   (existing golden tests), and after an edit to one file only that file's queries
+   execute (counted through the query events).
+2. **Per-function and per-item facts (C), then crate passes (D).**
+3. **Assembly with shared attribute values, and providers for the built-in
+   enrichers (E, F).** `source-calls`, `internal_error_chain` and the other
+   per-run enrichers, one at a time, each against its golden findings.
+4. **Contexts as coexisting crates (C5):** the spike, then the leaf pass and the
+   context pass.
+5. **Counters (C2)** generalised from the priming events to every query: executed
+   against reused, per stage, in the run's events.
+6. **Acceptance:** the edit-loop tests below, then (and only then) measurement.
+
+### Tests that establish each step
+
+- **Equivalence.** The IR and the findings after a step equal those before it, on
+  every fixture the suite already has.
+- **Locality.** On a fixture, after editing one file: queries for other files do
+  not execute; a body edit does not recompute callers whose facts are equal; a
+  signature edit recomputes callers and no more. These use the query events, never
+  timing.
+- **Determinism.** Parallel priming interns in an arbitrary order, so equality is
+  checked on content, not on database-local ids.
+
+### Not doing
+
+A query wrapping the whole pipeline; a second database of copied facts; a cache
+of decoded attributes beside the IR; a digest or key built by hand. Where a Salsa
+mechanism does the job, it is the one used.
+
 ## Order
 
 The cold profile (hotpath, 2026-11-12, 722 s with profiling overhead) says where
@@ -130,8 +228,7 @@ Measured by `cordial perf workflow` against the baselines recorded 2026-11-12
   policy are unchanged (`call graph: reused from the run cache`). Measured on cordial:
   call graph 194.7 s -> 0.004 s, wall 546.7 s -> 14.8 s on an unchanged tree. Any edit
   still rebuilds it, because the entry is keyed on the whole tree.
-- [ ] C4. Facts as tracked queries, in order of measured cost (the call graph first, so an
-  edit redoes only the functions it touched; then enrich, about 61 s per run).
-- [ ] C5. Whole-crate passes and cfg contexts as queries.
+- [ ] C4. Facts as tracked queries: milestones 1-3 of the settled design above.
+- [ ] C5. Whole-crate passes as queries (milestone 2) and cfg contexts as coexisting crates (milestone 4).
 - [ ] C1. Cache key hygiene: analysis-source digest in place of the binary fingerprint.
 - [ ] C6. Re-baseline and record the acceptance numbers.
