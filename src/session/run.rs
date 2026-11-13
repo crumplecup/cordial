@@ -261,6 +261,13 @@ pub(super) fn run_session(
         timings.record("phase", "ledger", started.elapsed());
         ledger.record_last_run_timings(timings.clone().into_vec(), run_started.elapsed());
         ledger.write(&store)?;
+        crate::perf::runlog::record(
+            &store,
+            session.project_root(),
+            &ledger,
+            all_findings.len(),
+            crate::host::take_notes(),
+        );
         task.finish("Updated gate ledger".to_string());
     }
 

@@ -63,6 +63,12 @@ pub enum PerfCommands {
         #[arg(long)]
         strict: bool,
     },
+    /// Show the most recent runs from the log every `open` and `submit` appends to.
+    Runs {
+        /// How many of the latest runs to show.
+        #[arg(long, default_value_t = 20)]
+        last: usize,
+    },
     /// Mark a record as the baseline for its subject and state.
     Baseline {
         /// The record (id or unique prefix).
@@ -136,6 +142,7 @@ impl PerfCommands {
         match self {
             Self::List { json } => list(ctx, json),
             Self::Baseline { record } => baseline(ctx, &record),
+            Self::Runs { last } => runs(ctx, last),
             Self::Compare {
                 first,
                 second,
@@ -464,6 +471,44 @@ fn compare_records(
             ctx.store().perf_dir(),
             format!("regressed: {}", regressed.join(", ")),
         ));
+    }
+    Ok(())
+}
+
+/// Print the last `last` rows of the run log as an aligned table.
+#[instrument(level = "debug", skip(ctx), err(level = "warn"))]
+fn runs(ctx: &ActCtx, last: usize) -> CordialResult<()> {
+    let file = crate::perf::runlog::path(ctx.store());
+    let mut output = crate::host::stdout();
+    let Ok(text) = std::fs::read_to_string(&file) else {
+        writeln!(output, "No runs logged yet ({}).", file.display())?;
+        return Ok(());
+    };
+    let mut lines = text.lines();
+    let header: Vec<&str> = lines.next().unwrap_or_default().split(',').collect();
+    let rows: Vec<Vec<&str>> = lines.map(|line| line.split(',').collect()).collect();
+    let shown = &rows[rows.len().saturating_sub(last)..];
+    let widths: Vec<usize> = header
+        .iter()
+        .enumerate()
+        .map(|(index, name)| {
+            shown
+                .iter()
+                .filter_map(|row| row.get(index))
+                .map(|cell| cell.len())
+                .chain([name.len()])
+                .max()
+                .unwrap_or(0)
+        })
+        .collect();
+    let table = std::iter::once(&header).chain(shown.iter());
+    for row in table {
+        let cells: Vec<String> = row
+            .iter()
+            .zip(&widths)
+            .map(|(cell, width)| format!("{cell:>width$}"))
+            .collect();
+        writeln!(output, "{}", cells.join("  "))?;
     }
     Ok(())
 }

@@ -8,6 +8,7 @@ mod nextest;
 mod profile;
 mod record;
 mod report;
+pub mod runlog;
 mod spread;
 mod store;
 mod timing;

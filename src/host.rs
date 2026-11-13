@@ -3,12 +3,15 @@
 //! `docs/planning/incremental-cache.md`.
 
 mod databases;
+mod notes;
 mod output;
 mod protocol;
 #[cfg(feature = "cli")]
 mod transport;
 
 pub use databases::{keep, keep_between_runs, keeping, key_of, take_current};
+pub use notes::{RunNotes, take as take_notes};
+pub(crate) use notes::{cache_hit, kept, loaded, reloaded};
 pub use output::{FrameSink, Out, Stream, stderr, stdout, with_sink};
 pub use protocol::{Frame, PROTOCOL, Request, read_frame, write_frame};
 #[cfg(feature = "cli")]

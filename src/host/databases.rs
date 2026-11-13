@@ -46,6 +46,7 @@ pub fn take_current(self_key: &str) -> Option<SourceDatabase> {
     match database.sync_from_disk() {
         Ok(SyncOutcome::Current) => {
             tracing::info!(target: "cordial::session", "reusing the kept database; nothing changed");
+            super::kept(0);
             Some(database)
         }
         Ok(SyncOutcome::Updated(files)) => {
@@ -54,6 +55,7 @@ pub fn take_current(self_key: &str) -> Option<SourceDatabase> {
                 files = files.len(),
                 "reusing the kept database; source files changed"
             );
+            super::kept(files.len());
             Some(database)
         }
         Ok(SyncOutcome::Reload(path)) => {
@@ -62,10 +64,12 @@ pub fn take_current(self_key: &str) -> Option<SourceDatabase> {
                 path = %path.display(),
                 "the kept database no longer matches the disk; loading again"
             );
+            super::reloaded();
             None
         }
         Err(error) => {
             tracing::warn!(target: "cordial::session", error = ?error, "could not bring the kept database up to date; loading again");
+            super::reloaded();
             None
         }
     }

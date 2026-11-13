@@ -124,7 +124,10 @@ impl CacheToken {
                     database.set_reporter(reporter);
                     database
                 }
-                None => SourceDatabase::load_reporting(&recipe.root, &recipe.options, &reporter)?,
+                None => {
+                    crate::host::loaded();
+                    SourceDatabase::load_reporting(&recipe.root, &recipe.options, &reporter)?
+                }
             };
             *slot = Slot {
                 database: Some(database),
@@ -158,6 +161,7 @@ impl CacheToken {
             match cache.read_crate_ir(name) {
                 Ok(Some(ir)) => {
                     tracing::info!(target: "cordial::cache", crate_name = %name, "result cache hit");
+                    crate::host::cache_hit();
                     locked(&self.reporter).say(format!("Reusing the cached analysis of {name}"));
                     return Ok(ir);
                 }
