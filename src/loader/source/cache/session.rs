@@ -73,6 +73,11 @@ impl Drop for CacheToken {
     /// A session keeps the run's loaded database for the next run.
     #[tracing::instrument(level = "debug", skip(self))]
     fn drop(&mut self) {
+        // The run is over; the cache files it started are finished before it
+        // returns, so nothing reads or exits on a half-written entry.
+        if let Some(cache) = locked(&self.cache).as_ref() {
+            cache.finish_writes();
+        }
         let slot = std::mem::take(&mut *locked(&self.slot));
         if let (Some(key), Some(database)) = (slot.kept_as, slot.database) {
             crate::host::keep(key, database);

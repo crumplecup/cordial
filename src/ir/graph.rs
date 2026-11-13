@@ -12,6 +12,10 @@ use crate::ir::{EdgeKind, EdgeWeight, IrIndexes, NodeId, NodeKind, NodeWeight};
 
 /// zstd level for IR files: fast to write, still an order of magnitude smaller than JSON.
 const ZSTD_LEVEL: i32 = 3;
+/// Buffer for reading and writing the IR file, which is a very large JSON
+/// document that a small default buffer would feed to the codec a few KB at a
+/// time.
+const IO_BUFFER_BYTES: usize = 4 * 1024 * 1024;
 
 /// Serializable snapshot of a crate graph for cache read/write.
 #[derive(Debug, Clone, Serialize, Deserialize, derive_getters::Getters)]
@@ -27,6 +31,37 @@ pub struct CrateIrSnapshot {
     edges: Vec<(u32, u32, EdgeWeight)>,
     /// Path and kind indexes for this snapshot.
     indexes: IrIndexes,
+}
+
+impl CrateIrSnapshot {
+    /// Write the snapshot as compact JSON compressed with zstd. A snapshot owns
+    /// its data, so this can run on another thread while the IR it came from is
+    /// still being used.
+    #[instrument(level = "info", skip(self, path), err(level = "warn"))]
+    #[hotpath::measure(impl_type = "CrateIrSnapshot")]
+    pub fn write_cache(&self, path: &Path) -> CordialResult<()> {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        let started = std::time::Instant::now();
+        let encoder = zstd::stream::write::Encoder::new(fs::File::create(path)?, ZSTD_LEVEL)?;
+        // The JSON writer emits many small writes; batch them for the encoder.
+        let mut out = std::io::BufWriter::with_capacity(IO_BUFFER_BYTES, encoder);
+        serde_json::to_writer(&mut out, self)?;
+        out.into_inner()
+            .map_err(std::io::IntoInnerError::into_error)?
+            .finish()?;
+        tracing::debug!(
+            target: "cordial::metrics",
+            path = %path.display(),
+            bytes = fs::metadata(path).map(|meta| meta.len()).unwrap_or(0),
+            nodes = self.nodes().len(),
+            edges = self.edges().len(),
+            millis = started.elapsed().as_millis() as u64,
+            "ir file written"
+        );
+        Ok(())
+    }
 }
 
 /// One crate's append-oriented IR graph.
@@ -234,24 +269,7 @@ impl CrateIr {
     #[instrument(level = "info", skip(self, path), err(level = "warn"))]
     #[hotpath::measure(impl_type = "CrateIr")]
     pub fn write_cache(&self, path: &Path) -> CordialResult<()> {
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)?;
-        }
-        let started = std::time::Instant::now();
-        let snapshot = self.snapshot()?;
-        let mut encoder = zstd::stream::write::Encoder::new(fs::File::create(path)?, ZSTD_LEVEL)?;
-        serde_json::to_writer(&mut encoder, &snapshot)?;
-        encoder.finish()?;
-        tracing::debug!(
-            target: "cordial::metrics",
-            path = %path.display(),
-            bytes = fs::metadata(path).map(|meta| meta.len()).unwrap_or(0),
-            nodes = snapshot.nodes().len(),
-            edges = snapshot.edges().len(),
-            millis = started.elapsed().as_millis() as u64,
-            "ir file written"
-        );
-        Ok(())
+        self.snapshot()?.write_cache(path)
     }
 
     /// Read an IR file written by [`Self::write_cache`].
@@ -260,7 +278,8 @@ impl CrateIr {
     pub fn read_cache(path: &Path) -> CordialResult<Self> {
         let started = std::time::Instant::now();
         let decoder = zstd::stream::read::Decoder::new(fs::File::open(path)?)?;
-        let snapshot: CrateIrSnapshot = serde_json::from_reader(std::io::BufReader::new(decoder))?;
+        let snapshot: CrateIrSnapshot =
+            serde_json::from_reader(std::io::BufReader::with_capacity(IO_BUFFER_BYTES, decoder))?;
         let decoded = started.elapsed();
         let (nodes, edges) = (snapshot.nodes().len(), snapshot.edges().len());
         let ir = Self::from_snapshot(snapshot)?;
