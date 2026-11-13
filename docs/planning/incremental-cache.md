@@ -99,7 +99,17 @@ Measured by `cordial perf workflow` against the baselines recorded 2026-11-12
 
 ## Checklist
 
-- [ ] C3. Persistent session process (first).
+- [x] C3. Persistent session process (first). `cordial session start|stop|status`
+  runs a server per project (`{store}/session.sock`). Clients forward `open`,
+  `peek`, `done`, `skip`, `submit`, `next` and `stats`; the server runs them in
+  its own process with output routed back, keeps the run's loaded database, and
+  on the next run brings it up to date with `SourceDatabase::sync_from_disk`
+  (source edits become input changes; a changed manifest, compiled input, or the
+  set of source files drops it for a reload). A command the session cannot take,
+  or declines because the build environment differs, runs locally. Tested for
+  agreement with a fresh load after each kind of edit. **Not yet measured** on
+  cordial itself: how much a re-projection on the live database saves is the
+  first number to take when measurement resumes.
 - [ ] C2. Reuse counters in the run record.
 - [ ] C4. Facts as tracked queries, in order of measured cost.
 - [ ] C5. Whole-crate passes and cfg contexts as queries.
