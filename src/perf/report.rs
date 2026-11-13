@@ -188,8 +188,16 @@ pub fn render_usage(record: &RunRecord, top: usize) -> String {
         }
     }
     if !record.values().is_empty() {
-        let _ = writeln!(out, "\nStorage and other values:");
-        for (key, value) in record.values() {
+        // The largest first; the record keeps all of them.
+        let mut values: Vec<(&String, &u64)> = record.values().iter().collect();
+        values.sort_by_key(|(_, value)| std::cmp::Reverse(**value));
+        let _ = writeln!(
+            out,
+            "\nStorage and other values (largest {} of {}):",
+            top.min(values.len()),
+            values.len()
+        );
+        for (key, value) in values.into_iter().take(top) {
             let shown = if key.ends_with(".bytes") {
                 format_bytes(*value)
             } else {

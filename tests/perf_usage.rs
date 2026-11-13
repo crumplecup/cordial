@@ -54,7 +54,11 @@ fn byte_counts_read_in_every_unit_hotpath_prints() {
     assert_eq!(format_bytes(221), "221 B");
     assert_eq!(format_bytes(170_917_888), "163.0 MB");
     assert!(counts_exactly("storage.context.+kani.files"));
-    assert!(counts_exactly("storage.salsa.query.direct_facts.memos"));
+    assert!(counts_exactly("storage.store.cache.files"));
+    assert!(
+        !counts_exactly("storage.salsa.query.direct_facts.memos"),
+        "rust-analyzer's own counts move with its version and trend"
+    );
     assert!(!counts_exactly("storage.store.cache.bytes"));
 }
 
@@ -159,7 +163,10 @@ fn a_profiled_record_carries_the_sections_and_gates_on_the_exact_counts() -> Res
     );
     let text = render_profile(&record, 5);
     assert!(text.contains("Functions by bytes allocated"), "{text}");
-    assert!(text.contains("Storage and other values"), "{text}");
+    assert!(
+        text.contains("Storage and other values (largest 3 of 3)"),
+        "{text}"
+    );
     assert!(
         text.contains("12.9 MB  storage.store.cache.bytes") || text.contains("13.0 MB"),
         "{text}"

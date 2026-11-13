@@ -14,9 +14,14 @@ use tracing::instrument;
 
 use super::parse_duration;
 
-/// Names that end a value's key when it counts things exactly, so the comparison
-/// can gate on it. Anything else (a size in bytes) trends.
+/// Names that end a value's key when it counts things exactly.
 const EXACT_SUFFIXES: &[&str] = &[".files", ".crates", ".memos", ".count"];
+
+/// What the comparison gates on: counts of what cordial itself stores and copies.
+/// The Salsa database's memo counts are recorded too, but most of them are
+/// rust-analyzer's own queries and move with its version, so they trend like any
+/// other value and do not fail a comparison.
+const GATED_PREFIXES: &[&str] = &["storage.store.", "storage.context."];
 
 /// Bytes allocated by one function over a run.
 #[derive(
@@ -102,10 +107,12 @@ pub fn parse_bytes(text: &str) -> Option<u64> {
     Some((value * scale).round() as u64)
 }
 
-/// Whether a value's key says it counts things exactly.
+/// Whether a value counts things exactly and is one cordial owns, so the
+/// comparison gates on it.
 #[instrument(level = "trace")]
 pub fn counts_exactly(key: &str) -> bool {
     EXACT_SUFFIXES.iter().any(|suffix| key.ends_with(suffix))
+        && GATED_PREFIXES.iter().any(|prefix| key.starts_with(prefix))
 }
 
 /// A percentage such as `103.7%` in tenths of a percent.

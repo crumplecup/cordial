@@ -141,8 +141,11 @@ to the etiquette's design:
   their unit (a figure just above a kilobyte steps by about a tenth of itself), so
   bytes allocated and bytes stored are listed when they move and do not fail a
   comparison. The values that count things (`.files`, `.crates`, `.memos`,
-  `.count`) are exact numbers and become counters, which the comparison does gate
-  on. A value's key says which it is, so the storage module names values by that
+  `.count`) are exact numbers, and the ones cordial owns (`storage.store.*` and
+  `storage.context.*`) become counters, which the comparison does gate on. The
+  Salsa database's memo counts are recorded but trend: most are rust-analyzer's
+  own queries, and gating on them would fail a comparison on a dependency bump.
+  A value's key says which kind it is, so the storage module names values by that
   convention, and the etiquette checks it.
 - **Sections are data-driven.** A section appears in the report when something fed
   it, so a missing `mutexes` section means no instrumented lock was taken, not a
