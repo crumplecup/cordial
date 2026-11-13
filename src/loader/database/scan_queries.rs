@@ -14,7 +14,16 @@ use std::path::PathBuf;
     feature = "internal_error_chain",
     feature = "tracing",
     feature = "verus_ir",
-    feature = "visibility"
+    feature = "visibility",
+    feature = "allows",
+    feature = "cfg_hygiene",
+    feature = "cfg_scatter",
+    feature = "glob_imports",
+    feature = "inline_tests",
+    feature = "modularity",
+    feature = "pageantry",
+    feature = "derives",
+    feature = "cli_layout"
 ))]
 use ra_ap_hir::Semantics;
 #[cfg(any(
@@ -23,7 +32,16 @@ use ra_ap_hir::Semantics;
     feature = "internal_error_chain",
     feature = "tracing",
     feature = "verus_ir",
-    feature = "visibility"
+    feature = "visibility",
+    feature = "allows",
+    feature = "cfg_hygiene",
+    feature = "cfg_scatter",
+    feature = "glob_imports",
+    feature = "inline_tests",
+    feature = "modularity",
+    feature = "pageantry",
+    feature = "derives",
+    feature = "cli_layout"
 ))]
 use ra_ap_ide_db::RootDatabase;
 #[cfg(any(
@@ -32,7 +50,16 @@ use ra_ap_ide_db::RootDatabase;
     feature = "internal_error_chain",
     feature = "tracing",
     feature = "verus_ir",
-    feature = "visibility"
+    feature = "visibility",
+    feature = "allows",
+    feature = "cfg_hygiene",
+    feature = "cfg_scatter",
+    feature = "glob_imports",
+    feature = "inline_tests",
+    feature = "modularity",
+    feature = "pageantry",
+    feature = "derives",
+    feature = "cli_layout"
 ))]
 use tracing::instrument;
 
@@ -42,7 +69,16 @@ use tracing::instrument;
     feature = "internal_error_chain",
     feature = "tracing",
     feature = "verus_ir",
-    feature = "visibility"
+    feature = "visibility",
+    feature = "allows",
+    feature = "cfg_hygiene",
+    feature = "cfg_scatter",
+    feature = "glob_imports",
+    feature = "inline_tests",
+    feature = "modularity",
+    feature = "pageantry",
+    feature = "derives",
+    feature = "cli_layout"
 ))]
 use super::DatabaseSource;
 #[cfg(any(
@@ -51,7 +87,16 @@ use super::DatabaseSource;
     feature = "internal_error_chain",
     feature = "tracing",
     feature = "verus_ir",
-    feature = "visibility"
+    feature = "visibility",
+    feature = "allows",
+    feature = "cfg_hygiene",
+    feature = "cfg_scatter",
+    feature = "glob_imports",
+    feature = "inline_tests",
+    feature = "modularity",
+    feature = "pageantry",
+    feature = "derives",
+    feature = "cli_layout"
 ))]
 use super::queries::SemanticDatabase;
 
@@ -81,7 +126,16 @@ pub(super) struct ScanKey<'db> {
     feature = "internal_error_chain",
     feature = "tracing",
     feature = "verus_ir",
-    feature = "visibility"
+    feature = "visibility",
+    feature = "allows",
+    feature = "cfg_hygiene",
+    feature = "cfg_scatter",
+    feature = "glob_imports",
+    feature = "inline_tests",
+    feature = "modularity",
+    feature = "pageantry",
+    feature = "derives",
+    feature = "cli_layout"
 ))]
 /// Build the file's carrier and run `collect` on it, or `None` when the file
 /// does not parse or the collector refuses it. The caller falls back to the
@@ -270,6 +324,86 @@ pub(super) fn visibility_file<'db>(
                 let _ = (root_db, sema);
                 crate::ir::SourcePolicyInventory::native_visibility_file(source)
             }
+        },
+    )
+}
+
+/// One policy file's contribution to the crate's inventory, and its snapshot.
+#[cfg(any(
+    feature = "allows",
+    feature = "cfg_hygiene",
+    feature = "cfg_scatter",
+    feature = "glob_imports",
+    feature = "inline_tests",
+    feature = "modularity",
+    feature = "pageantry",
+    feature = "derives",
+    feature = "visibility",
+    feature = "cli_layout"
+))]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct PolicyFile {
+    part: crate::ir::SourcePolicyInventory,
+    snapshot: crate::FileSnapshot,
+}
+
+#[cfg(any(
+    feature = "allows",
+    feature = "cfg_hygiene",
+    feature = "cfg_scatter",
+    feature = "glob_imports",
+    feature = "inline_tests",
+    feature = "modularity",
+    feature = "pageantry",
+    feature = "derives",
+    feature = "visibility",
+    feature = "cli_layout"
+))]
+impl PolicyFile {
+    /// What the file adds to the inventory.
+    #[instrument(level = "trace", skip(self))]
+    pub(super) fn part(&self) -> &crate::ir::SourcePolicyInventory {
+        &self.part
+    }
+
+    /// The file's path and digest.
+    #[instrument(level = "trace", skip(self))]
+    pub(super) fn snapshot(&self) -> &crate::FileSnapshot {
+        &self.snapshot
+    }
+}
+
+#[cfg(any(
+    feature = "allows",
+    feature = "cfg_hygiene",
+    feature = "cfg_scatter",
+    feature = "glob_imports",
+    feature = "inline_tests",
+    feature = "modularity",
+    feature = "pageantry",
+    feature = "derives",
+    feature = "visibility",
+    feature = "cli_layout"
+))]
+#[salsa::tracked(returns(ref))]
+#[instrument(level = "debug", skip(db, key))]
+#[hotpath::measure]
+pub(super) fn policy_file<'db>(
+    db: &'db dyn SemanticDatabase,
+    key: ScanKey<'db>,
+) -> Option<PolicyFile> {
+    scanned(
+        db.root_database(),
+        (key.file(db), key.path(db)),
+        "policy_file",
+        |source, _| {
+            Ok(PolicyFile {
+                part: crate::ir::SourcePolicyInventory::native_file_part(source, key.root(db))?,
+                snapshot: crate::FileSnapshot::new(
+                    source.path().to_path_buf(),
+                    source.source_digest(),
+                ),
+            })
         },
     )
 }

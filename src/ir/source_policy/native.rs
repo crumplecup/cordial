@@ -69,6 +69,46 @@ mod tokens;
 mod visibility;
 
 impl SourcePolicyInventory {
+    /// What one file contributes to the inventory, as an inventory of its own.
+    /// It is a function of the file alone, so a session keeps it until the file
+    /// changes; [`Self::absorb`] merges it in.
+    #[tracing::instrument(level = "debug", skip(file), err(level = "warn"))]
+    #[hotpath::measure(impl_type = "SourcePolicyInventory")]
+    pub(crate) fn native_file_part(
+        file: &DatabaseSource<'_>,
+        crate_root: &Path,
+    ) -> CordialResult<Self> {
+        let mut part = Self::default();
+        part.collect_native_file(file, crate_root)?;
+        Ok(part)
+    }
+
+    /// Append another inventory's per-file records to this one, in order.
+    #[tracing::instrument(level = "debug", skip(self, part))]
+    #[hotpath::measure(impl_type = "SourcePolicyInventory")]
+    pub(crate) fn absorb(&mut self, part: Self) {
+        if !part.crate_root.as_os_str().is_empty() {
+            self.crate_root = part.crate_root;
+        }
+        self.snapshots.extend(part.snapshots);
+        #[cfg(feature = "modularity")]
+        self.modularity.extend(part.modularity);
+        #[cfg(feature = "pageantry")]
+        self.pageantry.extend(part.pageantry);
+        #[cfg(feature = "derives")]
+        self.derives.extend(part.derives);
+        #[cfg(feature = "allows")]
+        self.allows.extend(part.allows);
+        #[cfg(feature = "glob_imports")]
+        self.glob_imports.extend(part.glob_imports);
+        #[cfg(feature = "inline_tests")]
+        self.inline_tests.extend(part.inline_tests);
+        #[cfg(feature = "cfg_hygiene")]
+        self.cfg_names.extend(part.cfg_names);
+        #[cfg(feature = "cfg_scatter")]
+        self.cfg_groups.extend(part.cfg_groups);
+    }
+
     #[tracing::instrument(level = "debug", skip(file, self), err(level = "warn"))]
     #[hotpath::measure(impl_type = "SourcePolicyInventory")]
     pub(crate) fn collect_native_file(

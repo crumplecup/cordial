@@ -5,6 +5,19 @@ mod antipatterns;
 #[cfg(feature = "cli_layout")]
 mod cli_layout;
 mod declarations;
+#[cfg(any(
+    feature = "allows",
+    feature = "cfg_hygiene",
+    feature = "cfg_scatter",
+    feature = "glob_imports",
+    feature = "inline_tests",
+    feature = "modularity",
+    feature = "pageantry",
+    feature = "derives",
+    feature = "visibility",
+    feature = "cli_layout"
+))]
+use super::scan_queries;
 pub(super) use declarations::source_of;
 #[cfg(feature = "internal_error_chain")]
 mod error_apply;
@@ -228,18 +241,41 @@ impl SourceDatabase {
         ))]
         let snapshots = {
             let mut snapshots = snapshots;
-            let sema = ra_ap_hir::Semantics::new(&self.db);
             for path in policy_paths {
-                let source = self.policy_source(path, &sema)?;
-                policies.collect_native_file(&source, target.crate_root())?;
+                let key = scan_queries::ScanKey::new(
+                    &self.db,
+                    self.file_id(path)?,
+                    path.clone(),
+                    PathBuf::new(),
+                    target.crate_root().to_path_buf(),
+                    String::new(),
+                    false,
+                );
+                let (part, snapshot) = match scan_queries::policy_file(&self.db, key) {
+                    Some(found) => (found.part().clone(), found.snapshot().clone()),
+                    // The query declines a file that does not parse; the direct
+                    // path reports why.
+                    None => {
+                        let sema = ra_ap_hir::Semantics::new(&self.db);
+                        let source = self.policy_source(path, &sema)?;
+                        (
+                            crate::ir::SourcePolicyInventory::native_file_part(
+                                &source,
+                                target.crate_root(),
+                            )?,
+                            crate::FileSnapshot::new(
+                                source.path().to_path_buf(),
+                                source.source_digest(),
+                            ),
+                        )
+                    }
+                };
+                policies.absorb(part);
                 if !snapshots
                     .iter()
-                    .any(|snapshot| snapshot.path() == source.path())
+                    .any(|existing| existing.path() == snapshot.path())
                 {
-                    snapshots.push(crate::FileSnapshot::new(
-                        source.path().to_path_buf(),
-                        source.source_digest(),
-                    ));
+                    snapshots.push(snapshot);
                 }
             }
             policies.sort();
