@@ -1,7 +1,7 @@
 //! Per-test profiles: reading `hotpath` reports and joining them to timings.
 
 use cordial::perf::{
-    PerfEnvironment, PerfIdentityBuilder, PerfSubject, RunRecord, Spread, TestTiming, aggregate,
+    PerfEnvironment, PerfIdentityBuilder, PerfSubject, RunRecord, RunRecordBuilder, Spread, TestTiming, aggregate,
     attach, parse_duration, parse_report, profiled, read_profiles, render_profile,
 };
 use miette::{IntoDiagnostic, Result};
@@ -61,16 +61,13 @@ fn timing_record() -> Result<RunRecord> {
         .recorded_at(1u64)
         .build()
         .into_diagnostic()?;
-    Ok(RunRecord::new(
-        identity,
-        PerfEnvironment::capture(std::path::Path::new(".")),
-        PerfSubject::tests("set"),
-        None,
-        Vec::new(),
-        Vec::new(),
-        BTreeMap::new(),
-        vec![test],
-    ))
+    RunRecordBuilder::default()
+        .identity(identity)
+        .environment(PerfEnvironment::capture(std::path::Path::new(".")))
+        .subject(PerfSubject::tests("set"))
+        .tests(vec![test])
+        .build()
+        .into_diagnostic()
 }
 
 #[test]
@@ -83,7 +80,7 @@ fn profiles_give_a_test_its_fixed_cost_and_the_run_its_functions() -> Result<()>
     assert_eq!(profiles.len(), 1);
     assert_eq!(aggregate(&profiles)[0].name(), "test");
 
-    let record = profiled(&timing_record()?, "set", &profiles);
+    let record = profiled(&timing_record()?, "set", &profiles).into_diagnostic()?;
     assert_eq!(record.subject().to_string(), "tests:set+profile");
     let test = &record.tests()[0];
     assert_eq!(test.fixed_ns(), 7_000_000_000);

@@ -1,7 +1,9 @@
 //! Per-test profiles: each test process writes the `hotpath` report of what it
 //! ran, and this reads them back to say where a test's time went.
 
-use super::{FunctionTiming, PerfSubject, RunRecord, Spread, StageTiming, TestTiming};
+use super::{
+    FunctionTiming, PerfSubject, RunRecord, RunRecordBuilder, Spread, StageTiming, TestTiming,
+};
 use crate::{CordialError, CordialResult};
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -167,18 +169,22 @@ pub fn aggregate(profiles: &[TestProfile]) -> Vec<FunctionTiming> {
 /// A timing record with the profiles joined in: each test's functions and fixed
 /// cost, and the whole run's functions. It is a different subject from the
 /// unprofiled set (`<set>+profile`), because profiling slows what it measures.
-#[instrument(level = "debug", skip(record, profiles))]
-pub fn profiled(record: &RunRecord, set: &str, profiles: &[TestProfile]) -> RunRecord {
+#[instrument(level = "debug", skip(record, profiles), err(level = "warn"))]
+pub fn profiled(
+    record: &RunRecord,
+    set: &str,
+    profiles: &[TestProfile],
+) -> CordialResult<RunRecord> {
     let mut counters = record.counters().clone();
     counters.insert("profiled".to_owned(), profiles.len() as u64);
-    RunRecord::new(
-        record.identity().clone(),
-        record.environment().clone(),
-        PerfSubject::tests(format!("{set}+profile")),
-        record.state(),
-        record.stages().clone(),
-        aggregate(profiles),
-        counters,
-        attach(record.tests().clone(), profiles),
-    )
+    RunRecordBuilder::default()
+        .identity(record.identity().clone())
+        .environment(record.environment().clone())
+        .subject(PerfSubject::tests(format!("{set}+profile")))
+        .state(record.state())
+        .stages(record.stages().clone())
+        .functions(aggregate(profiles))
+        .counters(counters)
+        .tests(attach(record.tests().clone(), profiles))
+        .build()
 }

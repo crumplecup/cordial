@@ -3,7 +3,7 @@
 use cordial::StoreLayout;
 use cordial::perf::{
     ChangeKind, PerfEnvironment, PerfIdentityBuilder, PerfState, PerfStore, PerfSubject, RunRecord,
-    Spread, StageTiming, TestTiming,
+    RunRecordBuilder, Spread, StageTiming, TestTiming,
 };
 use miette::{IntoDiagnostic, Result};
 use std::collections::BTreeMap;
@@ -16,16 +16,15 @@ fn record(sha: &str, at: u64, subject: PerfSubject, state: Option<PerfState>) ->
         .recorded_at(at)
         .build()
         .into_diagnostic()?;
-    Ok(RunRecord::new(
-        identity,
-        environment(),
-        subject,
-        state,
-        vec![StageTiming::new("load".to_owned(), Spread::single(5))],
-        Vec::new(),
-        BTreeMap::from([("queries_executed".to_owned(), 7)]),
-        Vec::new(),
-    ))
+    RunRecordBuilder::default()
+        .identity(identity)
+        .environment(environment())
+        .subject(subject)
+        .state(state)
+        .stages(vec![StageTiming::new("load".to_owned(), Spread::single(5))])
+        .counters(BTreeMap::from([("queries_executed".to_owned(), 7)]))
+        .build()
+        .into_diagnostic()
 }
 
 fn environment() -> PerfEnvironment {

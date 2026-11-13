@@ -267,7 +267,7 @@ fn body_calls(
             for argument in macros
                 .arguments(&invocation)
                 .iter()
-                .take(assert_arguments(name.text().as_ref()))
+                .take(assert_arguments(name.text()))
             {
                 body_calls(macros, argument.syntax(), out);
             }
@@ -283,7 +283,7 @@ fn body_calls(
 fn associated(scope: &SemanticsScope<'_>, db: &RootDatabase, path: &ast::Path) -> Option<Function> {
     let qualifier = path.qualifier()?;
     let name = path.segment()?.name_ref()?;
-    let named = |function: Function| function.name(db).as_str() == &*name.text();
+    let named = |function: Function| function.name(db).as_str() == name.text();
     let ty = match scope.speculative_resolve(&qualifier)? {
         PathResolution::Def(ModuleDef::Trait(declared)) => {
             return declared.items(db).into_iter().find_map(|item| match item {

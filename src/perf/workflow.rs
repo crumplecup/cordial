@@ -2,7 +2,8 @@
 //! after one edit, with each stage's time read back from the gate ledger.
 
 use super::{
-    PerfEnvironment, PerfIdentity, PerfState, PerfSubject, RunRecord, Spread, StageTiming,
+    PerfEnvironment, PerfIdentity, PerfState, PerfSubject, RunRecord, RunRecordBuilder, Spread,
+    StageTiming,
 };
 use crate::{CordialError, CordialResult, GateLedger, StoreLayout, project_slug_from_path};
 use std::collections::BTreeMap;
@@ -196,16 +197,16 @@ pub fn measure_workflow(
             continue;
         }
         let (stages, counters) = fold(&samples);
-        records.push(RunRecord::new(
-            identity.clone(),
-            environment.clone(),
-            PerfSubject::workflow(request.name()),
-            Some(state),
-            stages,
-            Vec::new(),
-            counters,
-            Vec::new(),
-        ));
+        records.push(
+            RunRecordBuilder::default()
+                .identity(identity.clone())
+                .environment(environment.clone())
+                .subject(PerfSubject::workflow(request.name()))
+                .state(Some(state))
+                .stages(stages)
+                .counters(counters)
+                .build()?,
+        );
     }
     Ok(records)
 }

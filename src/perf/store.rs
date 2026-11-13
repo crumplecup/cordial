@@ -159,7 +159,6 @@ impl PerfStore {
         Ok(self
             .list()?
             .into_iter()
-            .filter(|record| record.subject().to_string() == subject && record.state() == state)
-            .next_back())
+            .rfind(|record| record.subject().to_string() == subject && record.state() == state))
     }
 }

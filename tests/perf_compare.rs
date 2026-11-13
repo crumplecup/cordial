@@ -3,7 +3,7 @@
 use cordial::StoreLayout;
 use cordial::perf::{
     ChangeKind, PerfEnvironment, PerfIdentityBuilder, PerfState, PerfStore, PerfSubject, RunRecord,
-    Spread, StageTiming, Verdict, compare, judge, render_comparison,
+    RunRecordBuilder, Spread, StageTiming, Verdict, compare, judge, render_comparison,
 };
 use miette::{IntoDiagnostic, Result};
 use std::collections::BTreeMap;
@@ -29,19 +29,20 @@ fn record(
         .recorded_at(at)
         .build()
         .into_diagnostic()?;
-    Ok(RunRecord::new(
-        identity,
-        environment,
-        PerfSubject::workflow("cordial"),
-        Some(PerfState::Cold),
-        vec![StageTiming::new("phase/load_and_probe".to_owned(), time)],
-        Vec::new(),
-        counters
-            .iter()
-            .map(|(name, value)| ((*name).to_owned(), *value))
-            .collect::<BTreeMap<_, _>>(),
-        Vec::new(),
-    ))
+    RunRecordBuilder::default()
+        .identity(identity)
+        .environment(environment)
+        .subject(PerfSubject::workflow("cordial"))
+        .state(Some(PerfState::Cold))
+        .stages(vec![StageTiming::new("phase/load_and_probe".to_owned(), time)])
+        .counters(
+            counters
+                .iter()
+                .map(|(name, value)| ((*name).to_owned(), *value))
+                .collect::<BTreeMap<_, _>>(),
+        )
+        .build()
+        .into_diagnostic()
 }
 
 #[test]

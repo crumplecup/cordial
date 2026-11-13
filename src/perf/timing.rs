@@ -2,7 +2,8 @@
 
 use super::nextest::{NextestRequest, TestRun, parse_events, run};
 use super::{
-    PerfEnvironment, PerfIdentity, PerfSubject, RunRecord, Spread, StageTiming, TestTiming,
+    PerfEnvironment, PerfIdentity, PerfSubject, RunRecord, RunRecordBuilder, Spread, StageTiming,
+    TestTiming,
 };
 use crate::CordialResult;
 use std::collections::BTreeMap;
@@ -67,16 +68,14 @@ fn record_of(
         ("repeats".to_owned(), runs.len() as u64),
         ("threads".to_owned(), u64::from(threads)),
     ]);
-    Ok(RunRecord::new(
-        PerfIdentity::capture(root)?,
-        PerfEnvironment::capture(root),
-        PerfSubject::tests(set),
-        None,
-        stages,
-        Vec::new(),
-        counters,
-        tests,
-    ))
+    RunRecordBuilder::default()
+        .identity(PerfIdentity::capture(root)?)
+        .environment(PerfEnvironment::capture(root))
+        .subject(PerfSubject::tests(set))
+        .stages(stages)
+        .counters(counters)
+        .tests(tests)
+        .build()
 }
 
 /// Run the set `repeat` times, keeping each repeat's raw events under `raw_dir`,

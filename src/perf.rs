@@ -21,6 +21,7 @@ pub use identity::{PerfIdentity, PerfIdentityBuilder};
 pub use nextest::{NextestRequest, TestRun, parse_events};
 pub use profile::{TestProfile, aggregate, attach, profiled, fixed_ns, parse_duration, parse_report, read_profiles};
 pub use record::{
+    RunRecordBuilder,
     FunctionTiming, PerfState, PerfSubject, RECORD_SCHEMA, RunRecord, StageTiming, SubjectKind,
     TestTiming,
 };

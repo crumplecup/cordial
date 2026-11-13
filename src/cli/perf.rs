@@ -362,7 +362,7 @@ fn profile(ctx: &ActCtx, name: &str, options: TimingOptions) -> CordialResult<()
         1,
     );
     let timed = measure(ctx.project_root(), &request, &store.raw_dir())?;
-    let record = profiled(&timed, name, &read_profiles(&directory)?);
+    let record = profiled(&timed, name, &read_profiles(&directory)?)?;
     let path = store.save(&record)?;
     let mut output = io::stdout().lock();
     write!(output, "{}", render_profile(&record, options.top))?;

@@ -119,7 +119,7 @@ pub(crate) fn macro_at(
     let mut segments = Vec::new();
     for (index, segment) in path.segments().enumerate() {
         match segment.kind()? {
-            ast::PathSegmentKind::Name(name) => segments.push(Name::new_root(name.text().as_ref())),
+            ast::PathSegmentKind::Name(name) => segments.push(Name::new_root(name.text())),
             ast::PathSegmentKind::CrateKw => kind = PathKind::Crate,
             ast::PathSegmentKind::SelfKw => kind = PathKind::Super(0),
             ast::PathSegmentKind::SuperKw => {

@@ -136,20 +136,42 @@ impl TestTiming {
 
 /// Everything one measured run recorded.
 #[derive(
-    Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_getters::Getters, derive_new::new,
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    derive_getters::Getters,
+    derive_builder::Builder,
 )]
+#[builder(build_fn(error = "crate::error::CordialError"), setter(into))]
 pub struct RunRecord {
-    #[new(value = "RECORD_SCHEMA")]
+    /// The record format version; a reader refuses any it does not know.
+    #[builder(default = "RECORD_SCHEMA")]
     #[getter(copy)]
     schema: u32,
+    /// The commit that was measured.
     identity: PerfIdentity,
+    /// The machine, software and dependencies the run happened on.
     environment: PerfEnvironment,
+    /// What was measured.
     subject: PerfSubject,
+    /// The state a workflow started from, when it has one.
+    #[builder(default)]
     #[getter(copy)]
     state: Option<PerfState>,
+    /// Wall time of each pipeline stage.
+    #[builder(default)]
     stages: Vec<StageTiming>,
+    /// Measured functions from the `hotpath` report.
+    #[builder(default)]
     functions: Vec<FunctionTiming>,
+    /// Exact counts of the run, such as hooks run per stage.
+    #[builder(default)]
     counters: BTreeMap<String, u64>,
+    /// Per-test timings, for test subjects.
+    #[builder(default)]
     tests: Vec<TestTiming>,
 }
 

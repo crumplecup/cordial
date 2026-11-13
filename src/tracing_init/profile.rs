@@ -64,7 +64,7 @@ pub(super) fn start() {
         let spawned = std::thread::Builder::new()
             .name("cordial-profile".to_owned())
             .spawn(move || {
-                let guard = hotpath::HotpathGuardBuilder::new("test")
+                let _guard = hotpath::HotpathGuardBuilder::new("test")
                     .format(hotpath::Format::JsonPretty)
                     .output_path(path)
                     .functions_limit(0)
@@ -72,7 +72,7 @@ pub(super) fn start() {
                 let _ = ready.send(());
                 // Waits for the sender to drop, which is the test ending.
                 let _ = finished.recv();
-                drop(guard);
+                // `_guard` drops here, which writes the report.
             });
         match spawned {
             Ok(helper) => {

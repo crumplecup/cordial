@@ -1,6 +1,6 @@
 //! Test timing: reading nextest's events, folding repeats, and ranking.
 
-use cordial::perf::{PerfEnvironment, PerfIdentityBuilder, PerfSubject, RunRecord};
+use cordial::perf::{PerfEnvironment, PerfIdentityBuilder, PerfSubject, RunRecordBuilder};
 use cordial::perf::{TestRun, measure_from, parse_events, render_timing, summarise};
 use miette::{IntoDiagnostic, Result};
 use std::collections::BTreeMap;
@@ -69,19 +69,19 @@ fn the_ranking_lists_binaries_and_the_slowest_tests_first() -> Result<()> {
         .recorded_at(1u64)
         .build()
         .into_diagnostic()?;
-    let record = RunRecord::new(
-        identity,
-        PerfEnvironment::capture(std::path::Path::new(env!("CARGO_MANIFEST_DIR"))),
-        PerfSubject::tests("sample"),
-        None,
-        Vec::new(),
-        Vec::new(),
-        BTreeMap::from([
+    let record = RunRecordBuilder::default()
+        .identity(identity)
+        .environment(PerfEnvironment::capture(std::path::Path::new(
+            env!("CARGO_MANIFEST_DIR"),
+        )))
+        .subject(PerfSubject::tests("sample"))
+        .counters(BTreeMap::from([
             ("repeats".to_owned(), totals.len() as u64),
             ("failed".to_owned(), failures),
-        ]),
-        tests,
-    );
+        ]))
+        .tests(tests)
+        .build()
+        .into_diagnostic()?;
     let text = render_timing(&record, 2);
     let slow = text
         .find("alpha::slow")
