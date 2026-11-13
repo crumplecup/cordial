@@ -74,9 +74,9 @@ impl CrateTypeIndex {
         let root = ir.root()?;
         let value = ir
             .node(root)
-            .and_then(|node| node.attr(TYPE_INDEX_ATTR).cloned())
+            .and_then(|node| node.attr(TYPE_INDEX_ATTR))
             .ok_or_else(|| CordialError::unreachable(TYPE_INDEX_ATTR))?;
-        let facts: CrateTypeIndexFacts = serde_json::from_value(value)?;
+        let facts: CrateTypeIndexFacts = serde::Deserialize::deserialize(value)?;
         Ok(Self {
             declarations: facts.declarations.into_iter().collect(),
             local: facts

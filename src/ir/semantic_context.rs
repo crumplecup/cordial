@@ -159,7 +159,6 @@ impl ContextActivity {
         view: &(impl crate::ir::IrView + ?Sized),
         id: crate::NodeId,
     ) -> crate::CordialResult<Vec<SemanticContextKey>> {
-        let attribute = |key: &str| view.node(id).and_then(|node| node.attr(key).cloned());
         let mut active = Vec::new();
         if view
             .node(id)
@@ -169,8 +168,9 @@ impl ContextActivity {
         }
         if let (Some(plan), Some(indexes)) = (
             &self.plan,
-            attribute(ATTR_SEMANTIC_ACTIVITY)
-                .map(serde_json::from_value::<Vec<u32>>)
+            view.node(id)
+                .and_then(|node| node.attr(ATTR_SEMANTIC_ACTIVITY))
+                .map(<Vec<u32> as serde::Deserialize>::deserialize)
                 .transpose()?,
         ) {
             active.extend(

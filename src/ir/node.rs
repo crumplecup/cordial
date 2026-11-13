@@ -186,7 +186,7 @@ impl<'a> NodeRef<'a> {
 
     /// Latest attribute value stored under `key`, if present.
     #[instrument(level = "trace", skip(self))]
-    pub fn attr(&self, key: &str) -> Option<&serde_json::Value> {
+    pub fn attr(&self, key: &str) -> Option<&'a serde_json::Value> {
         self.weight.attr(key)
     }
 }

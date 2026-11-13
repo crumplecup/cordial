@@ -376,8 +376,8 @@ impl Budget {
 #[instrument(level = "trace", skip(graph, node), err(level = "warn"))]
 fn push_activity(graph: &mut CrateIr, node: NodeId, index: u32) -> CordialResult<()> {
     let mut active: Vec<u32> = crate::IrView::node(graph, node)
-        .and_then(|node| node.attr(crate::ATTR_SEMANTIC_ACTIVITY).cloned())
-        .map(serde_json::from_value)
+        .and_then(|node| node.attr(crate::ATTR_SEMANTIC_ACTIVITY))
+        .map(<Vec<u32> as serde::Deserialize>::deserialize)
         .transpose()?
         .unwrap_or_default();
     active.push(index);

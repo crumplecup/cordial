@@ -11,10 +11,12 @@ pub(super) fn optional<T: DeserializeOwned>(
     id: NodeId,
     key: &str,
 ) -> CordialResult<Option<T>> {
+    // Decode from the stored value in place: cloning it first copied whole-crate
+    // records (the type index, the plan) once per call.
     Ok(view
         .node(id)
-        .and_then(|node| node.attr(key).cloned())
-        .map(serde_json::from_value)
+        .and_then(|node| node.attr(key))
+        .map(T::deserialize)
         .transpose()?)
 }
 

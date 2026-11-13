@@ -211,9 +211,9 @@ pub(super) fn conversion_graphs_from_ir(ir: &dyn IrView) -> CordialResult<Vec<Er
     let root = ir.root()?;
     let value = ir
         .node(root)
-        .and_then(|node| node.attr(GRAPH_ATTR).cloned())
+        .and_then(|node| node.attr(GRAPH_ATTR))
         .ok_or_else(|| CordialError::unreachable(GRAPH_ATTR))?;
-    Ok(serde_json::from_value(value)?)
+    Ok(serde::Deserialize::deserialize(value)?)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
