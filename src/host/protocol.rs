@@ -13,6 +13,10 @@ use tracing::instrument;
 /// Bump when a request or frame changes shape; a server refuses any other.
 pub const PROTOCOL: u32 = 1;
 
+/// The reason a server gives when it was started from another build than the
+/// client's, so the client replaces it rather than running the command itself.
+pub const STALE_BUILD: &str = "the session runs another build of cordial";
+
 /// One command a client asks the session to run.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_getters::Getters)]
 pub struct Request {
@@ -23,6 +27,10 @@ pub struct Request {
     argv: Vec<String>,
     /// The environment variables that shape a build, as the client has them.
     env: BTreeMap<String, String>,
+    /// The cordial executable the client is, as the run cache fingerprints it. A
+    /// server started from another build refuses, so a rebuilt cordial never
+    /// answers from the old code.
+    build: String,
     /// Ask the server to exit instead of running a command.
     #[getter(copy)]
     shutdown: bool,
@@ -36,6 +44,7 @@ impl Request {
             version: PROTOCOL,
             argv,
             env,
+            build: crate::run_cache::executable_fingerprint(),
             shutdown: false,
         }
     }
@@ -47,6 +56,7 @@ impl Request {
             version: PROTOCOL,
             argv: Vec::new(),
             env: BTreeMap::new(),
+            build: String::new(),
             shutdown: true,
         }
     }

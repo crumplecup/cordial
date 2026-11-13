@@ -10,9 +10,9 @@
 mod key;
 mod store;
 
-#[cfg(feature = "cli")]
-pub(crate) use key::shapes_the_build;
 #[cfg(feature = "tracing")]
 pub(crate) use key::policy_digest;
 pub(crate) use key::{KeyRequest, SCHEMA as RUN_CACHE_SCHEMA, gather};
+#[cfg(feature = "cli")]
+pub(crate) use key::{executable_fingerprint, shapes_the_build};
 pub(crate) use store::RunCache;

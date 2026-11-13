@@ -1,7 +1,7 @@
 //! The client side: hand a command to a running session, or decline so the
 //! caller runs it itself.
 
-use crate::host::{Frame, Request, Stream, read_frame};
+use crate::host::{Frame, Request, STALE_BUILD, Stream, read_frame};
 use crate::run_cache::shapes_the_build;
 use clap::Parser;
 use std::collections::BTreeMap;
@@ -174,14 +174,51 @@ pub fn forward(args: &[OsString]) -> Option<i32> {
     }
     let request = serde_json::to_string(&Request::command(argv, build_environment())).ok()?;
     writeln!(stream, "{request}").ok()?;
-    relay(&mut stream)
+    match relay(&mut stream) {
+        Relayed::Finished(code) => code,
+        // A session from before a rebuild must not answer with the old code: it
+        // is replaced, and the command goes to the new one.
+        Relayed::Stale => {
+            tracing::info!("the session predates this build; replacing it");
+            let _ = stop(&socket);
+            if !(starts_a_session(&cli.command) && super::terminal::terminal_owner().is_some()) {
+                return None;
+            }
+            start_session(
+                &project,
+                &store_home,
+                &store_root,
+                super::terminal::terminal_owner(),
+            )
+            .ok()?;
+            let _ = writeln!(
+                std::io::stderr(),
+                "The session was from an older build of cordial; started a new one."
+            );
+            let mut stream = UnixStream::connect(&socket).ok()?;
+            writeln!(stream, "{request}").ok()?;
+            match relay(&mut stream) {
+                Relayed::Finished(code) => code,
+                Relayed::Stale => None,
+            }
+        }
+    }
+}
+
+/// How a session answered a forwarded command.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Relayed {
+    /// The command is done, or the caller should run it itself (`None`).
+    Finished(Option<i32>),
+    /// The session was started from another build of cordial.
+    Stale,
 }
 
 /// Copy the server's output to ours until its exit frame. A refusal, or a server
 /// that says nothing before it goes, returns `None`; one that goes mid-command
 /// has already printed, so that is an error exit rather than a second run.
 #[instrument(level = "debug", skip(stream))]
-fn relay(stream: &mut UnixStream) -> Option<i32> {
+fn relay(stream: &mut UnixStream) -> Relayed {
     let mut started = false;
     loop {
         match read_frame(stream) {
@@ -192,18 +229,19 @@ fn relay(stream: &mut UnixStream) -> Option<i32> {
                     Stream::Stderr => std::io::stderr().write_all(&bytes),
                 };
             }
-            Ok(Some(Frame::Exit(code))) => return Some(code),
+            Ok(Some(Frame::Exit(code))) => return Relayed::Finished(Some(code)),
+            Ok(Some(Frame::Refused(reason))) if reason == STALE_BUILD => return Relayed::Stale,
             Ok(Some(Frame::Refused(reason))) => {
                 tracing::info!(reason, "the session declined; running here");
-                return None;
+                return Relayed::Finished(None);
             }
-            Ok(None) | Err(_) if !started => return None,
+            Ok(None) | Err(_) if !started => return Relayed::Finished(None),
             Ok(None) | Err(_) => {
                 let _ = writeln!(
                     std::io::stderr(),
                     "the session ended before the command finished"
                 );
-                return Some(1);
+                return Relayed::Finished(Some(1));
             }
         }
     }

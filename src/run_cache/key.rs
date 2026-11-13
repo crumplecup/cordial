@@ -138,7 +138,7 @@ pub(crate) fn shapes_the_build(name: &str) -> bool {
 /// Path, size and modification time of this binary: a rebuild changes what the
 /// analysis does, so it must change the key.
 #[instrument(level = "debug")]
-fn executable_fingerprint() -> String {
+pub(crate) fn executable_fingerprint() -> String {
     std::env::current_exe()
         .and_then(|path| {
             let meta = std::fs::metadata(&path)?;

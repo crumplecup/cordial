@@ -6,8 +6,8 @@ mod support {
 }
 use clap::Parser;
 use cordial::host::{
-    Frame, FrameSink, Request, Stream, build_environment, keep, key_of, read_frame, serve,
-    socket_path, stop, take_current, with_sink,
+    Frame, FrameSink, Request, STALE_BUILD, Stream, build_environment, keep, key_of, read_frame,
+    serve, socket_path, stop, take_current, with_sink,
 };
 use cordial::{Cli, SemanticCargoOptions, SourceDatabase};
 use miette::{IntoDiagnostic, Result};
@@ -124,6 +124,21 @@ fn a_server_answers_like_a_local_run_and_stops_when_asked() -> Result<()> {
         &Request::command(vec!["cordial".into(), "tiers".into()], env),
     )?;
     assert!(matches!(refused.last(), Some(Frame::Refused(reason)) if reason.contains("RUSTFLAGS")));
+
+    // A client from another build is told so, and the command is not run: a
+    // session from before a rebuild must not answer with the old code.
+    let mut other = serde_json::to_value(Request::command(
+        vec!["cordial".into(), "tiers".into()],
+        build_environment(),
+    ))
+    .into_diagnostic()?;
+    other["build"] = "another build".into();
+    let mut stream = UnixStream::connect(&socket).into_diagnostic()?;
+    writeln!(stream, "{other}").into_diagnostic()?;
+    assert_eq!(
+        read_frame(&mut stream).into_diagnostic()?,
+        Some(Frame::Refused(STALE_BUILD.to_owned()))
+    );
 
     // A second server on a live socket is an error; the first one is untouched.
     assert!(serve(&socket, None).is_err());

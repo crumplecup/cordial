@@ -2,7 +2,8 @@
 //! process, so the databases it keeps survive from one command to the next.
 
 use crate::host::{
-    Frame, FrameSink, PROTOCOL, Request, Stream, keep_between_runs, with_sink, write_frame,
+    Frame, FrameSink, PROTOCOL, Request, STALE_BUILD, Stream, keep_between_runs, with_sink,
+    write_frame,
 };
 use crate::run_cache::shapes_the_build;
 use crate::{CordialError, CordialResult};
@@ -33,6 +34,7 @@ impl FrameSink for Connection {
 /// is an error, since two sessions would each hold half the state.
 #[instrument(level = "debug", err(level = "warn"))]
 pub fn serve(socket: &Path, owner: Option<u32>) -> CordialResult<()> {
+    let _ = server_build();
     if UnixStream::connect(socket).is_ok() {
         return Err(CordialError::perf(
             socket.to_path_buf(),
@@ -92,6 +94,14 @@ fn watch_owner(socket: std::path::PathBuf, owner: u32) {
     }
 }
 
+/// The build this server was started from, fixed when it first asks. Asked once
+/// at startup, before any rebuild can replace the file it came from.
+#[instrument(level = "trace")]
+fn server_build() -> &'static str {
+    static BUILD: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    BUILD.get_or_init(crate::run_cache::executable_fingerprint)
+}
+
 /// The first build-shaping variable on which the client and this server differ.
 /// The server's environment is fixed when it starts, so a command that would
 /// build differently has to run in its own process.
@@ -128,6 +138,10 @@ fn handle(stream: UnixStream) -> CordialResult<bool> {
     if request.shutdown() {
         write_frame(&mut reply, &Frame::Exit(0))?;
         return Ok(true);
+    }
+    if request.build() != server_build() {
+        write_frame(&mut reply, &Frame::Refused(STALE_BUILD.to_owned()))?;
+        return Ok(false);
     }
     if let Some(name) = environment_conflict(&request) {
         write_frame(
