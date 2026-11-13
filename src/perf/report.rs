@@ -66,3 +66,83 @@ pub fn render_timing(record: &RunRecord, top: usize) -> String {
     }
     out
 }
+
+/// The stages of a workflow record, slowest first, with the counters beneath.
+#[instrument(level = "debug", skip(record))]
+pub fn render_stages(record: &RunRecord, top: usize) -> String {
+    let mut out = String::new();
+    let state = record
+        .state()
+        .map_or_else(String::new, |state| format!(" {state}"));
+    let _ = writeln!(
+        out,
+        "{}{state} at {} ({} stages)",
+        record.subject(),
+        record.identity().sha().chars().take(8).collect::<String>(),
+        record.stages().len()
+    );
+    let mut stages: Vec<_> = record.stages().iter().collect();
+    stages.sort_by_key(|stage| std::cmp::Reverse(stage.time().median()));
+    for stage in stages.into_iter().take(top) {
+        let _ = writeln!(
+            out,
+            "  {:>9}  ±{:<8}  {}",
+            format_nanos(stage.time().median()),
+            format_nanos(stage.time().mad()),
+            stage.name()
+        );
+    }
+    for (name, value) in record.counters() {
+        let _ = writeln!(out, "  {value:>9}  {name}");
+    }
+    out
+}
+
+/// Where a profiled run's time went: the setup share of all test time, the tests
+/// with the most setup, and the functions that took the most in total.
+#[instrument(level = "debug", skip(record))]
+pub fn render_profile(record: &RunRecord, top: usize) -> String {
+    let mut out = String::new();
+    let wall: u64 = record.tests().iter().map(|test| test.wall().median()).sum();
+    let fixed: u64 = record.tests().iter().map(TestTiming::fixed_ns).sum();
+    let share = if wall == 0 {
+        0.0
+    } else {
+        fixed as f64 * 100.0 / wall as f64
+    };
+    let _ = writeln!(
+        out,
+        "{}: {} profiled of {} tests; setup {} of {} ({share:.1}%)",
+        record.subject(),
+        record.counters().get("profiled").copied().unwrap_or(0),
+        record.tests().len(),
+        format_nanos(fixed),
+        format_nanos(wall)
+    );
+    let mut tests: Vec<&TestTiming> = record.tests().iter().collect();
+    tests.sort_by_key(|test| std::cmp::Reverse(test.fixed_ns()));
+    let _ = writeln!(out, "\nMost setup:");
+    for test in tests.into_iter().take(top) {
+        let _ = writeln!(
+            out,
+            "  {:>9}  {:>5.1}% of {:>9}  {}::{}",
+            format_nanos(test.fixed_ns()),
+            test.fixed_share() * 100.0,
+            format_nanos(test.wall().median()),
+            test.binary(),
+            test.name()
+        );
+    }
+    let _ = writeln!(out, "\nFunctions by total time:");
+    for function in record.functions().iter().take(top) {
+        let _ = writeln!(
+            out,
+            "  {:>9}  {:>8} calls  p95 {:>9}  {}",
+            format_nanos(function.total_ns()),
+            function.calls(),
+            format_nanos(function.p95_ns()),
+            function.name()
+        );
+    }
+    out
+}

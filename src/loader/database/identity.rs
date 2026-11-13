@@ -98,6 +98,7 @@ pub(crate) fn is_verus_macro(
 /// lowers, but the module around it still scopes the path (imports, the prelude,
 /// `crate::` and `$crate`-style paths). A macro defined with textual scope in the
 /// same module is not found this way, so it is never mistaken for another.
+#[cfg(any(feature = "tracing", feature = "verus_ir"))]
 #[tracing::instrument(level = "debug", skip(sema, invocation))]
 pub(crate) fn macro_by_path(
     sema: &Semantics<'_, RootDatabase>,

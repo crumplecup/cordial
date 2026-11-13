@@ -1,7 +1,7 @@
 # Performance metrics: where the time goes, and whether it changed
 
-**Status:** Active, 2026-11-12. Nothing is built yet; this document fixes the
-strategy so each slice lands against it.
+**Status:** Active, 2026-11-12. P1 to P6 are built; P7 (first baseline and
+findings) and P8 (the pre-merge step) follow the first measured run.
 
 ## Purpose
 
@@ -166,17 +166,45 @@ here should replace the ad hoc numbers used there.
   `{store}/perf/raw/` as they arrive, and `--from FILE...` rebuilds a record from
   them if a long run is interrupted. The output ranks binaries by total time and
   lists the slowest tests. The `all` set is every test.
-- [ ] **P3. Workflow harness.** `cordial perf workflow`: cold, warm, incremental,
-  apply, with repetition and the quiet-machine check; stage timings from the
-  pipeline's existing timing boundaries.
-- [ ] **P4. Counters.** Salsa query executed/reused, contexts, files,
-  functions, cargo invocations exposed from the database and written to the
-  record.
-- [ ] **P5. Per-test profile.** Profile feature, per-test `hotpath` file named
-  from the nextest environment, aggregator, fixed-cost share.
-- [ ] **P6. Compare.** `cordial perf compare` and `cordial perf baseline` with tolerance, spread and verdicts;
-  tests for each verdict and for the changed-inputs report, including a
-  dependency update and a different machine.
+- [x] **P3. Workflow harness.** `cordial perf workflow [name]` runs `cordial
+  open` (the whole pipeline) against the project with an isolated work store
+  under `{store}/perf/work`: **cold** (empty store), **warm** (immediately again)
+  and, when `[perf.workflows.<name>] edit = "<file>"` is set, **incremental** (one
+  comment line appended to that file, restored afterwards even on failure).
+  `--repeat N` (default 3) takes each stage's median. Stage timings come from the
+  gate ledger the run writes (`phase`, `pipeline`, `enrich`, `assess`, `report`
+  hooks), plus the process wall time. One record per state, subject
+  `workflow:<name>`. Not built: the **apply** state and the quiet-machine check;
+  the harness does not look at machine load, so run it on a quiet machine.
+- [x] **P4. Counters (partial).** What the pipeline exposes exactly: hooks run per stage
+  (`hooks.<stage>`) and total hook invocations, written to every workflow record.
+  A rise in any gated counter regresses the comparison. **Not available:** Salsa
+  queries executed and reused. rust-analyzer's `RootDatabase::new` takes only an
+  LRU capacity and offers no event callback, so the counts would need a wrapper
+  database; that is a separate piece of work. Files, functions and cargo
+  invocations are likewise not yet counted.
+- [x] **P5. Per-test profile.** `cordial perf tests profile <set>` runs the set
+  with `--features full,hotpath` and `CORDIAL_PERF_PROFILE_DIR` set. Each test
+  process starts a `hotpath` guard from `init_tracing` (no per-test edits) on a
+  helper thread, so the report is written before the process ends; the report is
+  named from `NEXTEST_BINARY_ID` and `NEXTEST_TEST_NAME`. The profiles are joined
+  to the timings: per-test slowest functions, **fixed cost** (the totals of
+  `load_reporting` and `project_target`: loading the workspace and projecting it
+  into the IR), the run's functions by total time, and the fixed share. The
+  record's subject is `<set>+profile`, since profiling slows what it measures.
+  `hotpath` timing reports carry totals and p95 but no self time, so a
+  function's self time is not recorded.
+- [x] **P6. Compare.** `cordial perf compare [first] [second]` and `cordial perf
+  baseline <id>`. A timing counts as moved only beyond both the tolerance
+  (`--tolerance`, default 10% of the earlier median) and the larger spread.
+  Gated counters are exact: a rise regresses, a fall improves; `repeats`,
+  `threads` and `profiled` describe the run and do not gate. The verdict is
+  regressed if any gated counter rose or any stage or test regressed, improved if
+  none did and something improved, else unchanged. The comparison always prints:
+  changed inputs (machine, software, dependency) with before and after, and a
+  hardware caution when the machine differs. Baselines are marked explicitly in
+  `{store}/perf/baselines.json` and shown by `perf list`; `--strict` exits with an
+  error on a regression.
 - [ ] **P7. First baseline and findings.** Record the baseline for the current
   `dev`; write up the fixed-cost findings for the tests and the decisions they
   imply (lockfile and offline fixtures, shared loaded workspaces, a loader path
