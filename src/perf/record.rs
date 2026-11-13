@@ -1,6 +1,8 @@
 //! The run record: what one measured run wrote down.
 
-use super::{PerfEnvironment, PerfIdentity, Spread};
+use super::{
+    ChannelUsage, FunctionAllocation, LockUsage, PerfEnvironment, PerfIdentity, Spread, ThreadUsage,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter, Result as FmtResult};
@@ -176,6 +178,26 @@ pub struct RunRecord {
     /// Per-test timings, for test subjects.
     #[builder(default)]
     tests: Vec<TestTiming>,
+    /// Bytes allocated per function, from a profile built with `hotpath-alloc`.
+    #[builder(default)]
+    #[serde(default)]
+    allocations: Vec<FunctionAllocation>,
+    /// Each thread's processor use and heap traffic.
+    #[builder(default)]
+    #[serde(default)]
+    threads: Vec<ThreadUsage>,
+    /// How long each named lock was waited for.
+    #[builder(default)]
+    #[serde(default)]
+    locks: Vec<LockUsage>,
+    /// How much crossed each named channel.
+    #[builder(default)]
+    #[serde(default)]
+    channels: Vec<ChannelUsage>,
+    /// The sizes the program reported: stored files and bytes, memoised results.
+    #[builder(default)]
+    #[serde(default)]
+    values: BTreeMap<String, u64>,
 }
 
 /// Lower-case letters, digits and hyphens only, so an id is a safe file name.

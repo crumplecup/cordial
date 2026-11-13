@@ -2,7 +2,8 @@
 //! ran, and this reads them back to say where a test's time went.
 
 use super::{
-    FunctionTiming, PerfSubject, RunRecord, RunRecordBuilder, Spread, StageTiming, TestTiming,
+    FunctionTiming, PerfSubject, ProfileUsage, RunRecord, RunRecordBuilder, Spread, StageTiming,
+    TestTiming,
 };
 use crate::{CordialError, CordialResult};
 use std::collections::BTreeMap;
@@ -26,6 +27,19 @@ pub struct TestProfile {
     #[getter(copy)]
     wall_ns: u64,
     functions: Vec<FunctionTiming>,
+    /// What the profile says besides time: allocation, threads, locks, channels
+    /// and reported values.
+    #[new(default)]
+    usage: ProfileUsage,
+}
+
+impl TestProfile {
+    /// This profile with the non-timing sections it was read with.
+    #[instrument(level = "trace", skip(self, usage))]
+    pub fn with_usage(mut self, usage: ProfileUsage) -> Self {
+        self.usage = usage;
+        self
+    }
 }
 
 /// A duration as `hotpath` prints it (`14.35 s`, `10.34 ms`, `14.97 µs`, `80 ns`).
@@ -48,6 +62,13 @@ pub fn parse_duration(text: &str) -> Option<u64> {
 #[hotpath::measure]
 pub fn parse_report(text: &str) -> CordialResult<(u64, Vec<FunctionTiming>)> {
     let report: serde_json::Value = serde_json::from_str(text)?;
+    Ok(timing_of(&report))
+}
+
+/// The timing section of a parsed report: its lifetime and its functions.
+#[instrument(level = "debug", skip(report))]
+#[hotpath::measure]
+fn timing_of(report: &serde_json::Value) -> (u64, Vec<FunctionTiming>) {
     let timing = &report["functions_timing"];
     let wall = timing["total_elapsed_ns"].as_u64().unwrap_or(0);
     let functions = timing["data"]
@@ -66,7 +87,7 @@ pub fn parse_report(text: &str) -> CordialResult<(u64, Vec<FunctionTiming>)> {
                 .collect()
         })
         .unwrap_or_default();
-    Ok((wall, functions))
+    (wall, functions)
 }
 
 /// Every profile in `dir`, one per file named `{binary}${test}.json`.
@@ -87,14 +108,13 @@ pub fn read_profiles(dir: &Path) -> CordialResult<Vec<TestProfile>> {
         let Some((binary, name)) = stem.split_once('$') else {
             continue;
         };
-        let (wall, functions) = parse_report(&std::fs::read_to_string(&path)?)
+        let report: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&path)?)
             .map_err(|_| CordialError::perf(path.clone(), "not a hotpath report".to_owned()))?;
-        profiles.push(TestProfile::new(
-            binary.to_owned(),
-            name.to_owned(),
-            wall,
-            functions,
-        ));
+        let (wall, functions) = timing_of(&report);
+        profiles.push(
+            TestProfile::new(binary.to_owned(), name.to_owned(), wall, functions)
+                .with_usage(ProfileUsage::from_report(&report)),
+        );
     }
     Ok(profiles)
 }
@@ -189,8 +209,11 @@ pub fn profiled(
     set: &str,
     profiles: &[TestProfile],
 ) -> CordialResult<RunRecord> {
+    let usage = ProfileUsage::merge(profiles.iter().map(TestProfile::usage));
     let mut counters = record.counters().clone();
     counters.insert("profiled".to_owned(), profiles.len() as u64);
+    // The values that count things are exact, so the comparison gates on them.
+    counters.extend(usage.exact_counters());
     RunRecordBuilder::default()
         .identity(record.identity().clone())
         .environment(record.environment().clone())
@@ -200,5 +223,10 @@ pub fn profiled(
         .functions(aggregate(profiles))
         .counters(counters)
         .tests(attach(record.tests().clone(), profiles))
+        .allocations(usage.allocations().clone())
+        .threads(usage.threads().clone())
+        .locks(usage.locks().clone())
+        .channels(usage.channels().clone())
+        .values(usage.values().clone())
         .build()
 }

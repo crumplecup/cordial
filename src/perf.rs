@@ -12,6 +12,7 @@ pub mod runlog;
 mod spread;
 mod store;
 mod timing;
+mod usage;
 mod workflow;
 
 pub use compare::{
@@ -27,8 +28,14 @@ pub use record::{
     FunctionTiming, PerfState, PerfSubject, RECORD_SCHEMA, RunRecord, RunRecordBuilder,
     StageTiming, SubjectKind, TestTiming,
 };
-pub use report::{format_nanos, render_profile, render_stages, render_timing};
+pub use report::{
+    format_bytes, format_nanos, render_profile, render_stages, render_timing, render_usage,
+};
 pub use spread::Spread;
 pub use store::PerfStore;
 pub use timing::{TimingRequest, measure, measure_from, summarise};
+pub use usage::{
+    ChannelUsage, FunctionAllocation, LockUsage, ProfileUsage, ThreadUsage, counts_exactly,
+    parse_bytes,
+};
 pub use workflow::{StageSample, WorkflowRequest, WorkflowRequestBuilder, fold, measure_workflow};

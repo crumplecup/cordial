@@ -1,7 +1,7 @@
 //! Compare two run records: which counters moved exactly, which timings moved
 //! by more than noise and tolerance, and which inputs differ between them.
 
-use super::{ChangeKind, EnvironmentChange, RunRecord, Spread, format_nanos};
+use super::{ChangeKind, EnvironmentChange, RunRecord, Spread, format_bytes, format_nanos};
 use std::collections::BTreeMap;
 use std::fmt::Write;
 use tracing::instrument;
@@ -96,6 +96,13 @@ pub struct Comparison {
     stages: Vec<Delta>,
     functions: Vec<Delta>,
     tests: Vec<Delta>,
+    /// Bytes allocated per function. They trend: hotpath prints them to one
+    /// decimal of their unit, so a small move is not a finding.
+    allocations: Vec<Delta>,
+    /// Stored and held sizes in bytes (the store's entries, a context's copy, the
+    /// database's memos). They trend; the counts beside them (files, crates,
+    /// memos) are exact and gate through the counters.
+    storage: Vec<Delta>,
     changed_inputs: Vec<EnvironmentChange>,
     /// Setup share of all test time, before and after.
     fixed_share: Option<(f64, f64)>,
@@ -156,6 +163,25 @@ fn functions_of(record: &RunRecord) -> BTreeMap<String, Spread> {
 }
 
 #[instrument(level = "trace", skip(record))]
+fn allocations_of(record: &RunRecord) -> BTreeMap<String, Spread> {
+    record
+        .allocations()
+        .iter()
+        .map(|item| (item.name().clone(), Spread::single(item.total_bytes())))
+        .collect()
+}
+
+#[instrument(level = "trace", skip(record))]
+fn storage_of(record: &RunRecord) -> BTreeMap<String, Spread> {
+    record
+        .values()
+        .iter()
+        .filter(|(key, _)| key.ends_with(".bytes"))
+        .map(|(key, value)| (key.clone(), Spread::single(*value)))
+        .collect()
+}
+
+#[instrument(level = "trace", skip(record))]
 fn tests_of(record: &RunRecord) -> BTreeMap<String, Spread> {
     record
         .tests()
@@ -197,6 +223,8 @@ pub fn compare(before: &RunRecord, after: &RunRecord, tolerance: f64) -> Compari
     let stages = pair(stages_of(before), &stages_of(after), tolerance);
     let functions = pair(functions_of(before), &functions_of(after), tolerance);
     let tests = pair(tests_of(before), &tests_of(after), tolerance);
+    let allocations = pair(allocations_of(before), &allocations_of(after), tolerance);
+    let storage = pair(storage_of(before), &storage_of(after), tolerance);
     let grew = counters
         .iter()
         .any(|counter| counter.gated() && counter.after() > counter.before());
@@ -225,6 +253,8 @@ pub fn compare(before: &RunRecord, after: &RunRecord, tolerance: f64) -> Compari
         stages,
         functions,
         tests,
+        allocations,
+        storage,
         changed_inputs: after.environment().changes_from(before.environment()),
         fixed_share: share_of(before).zip(share_of(after)),
         verdict,
@@ -268,10 +298,16 @@ pub fn render_comparison(comparison: &Comparison, top: usize) -> String {
             );
         }
     }
-    for (title, deltas) in [
-        ("Stages", comparison.stages()),
-        ("Functions", comparison.functions()),
-        ("Tests", comparison.tests()),
+    for (title, deltas, shown) in [
+        (
+            "Stages",
+            comparison.stages(),
+            format_nanos as fn(u64) -> String,
+        ),
+        ("Functions", comparison.functions(), format_nanos),
+        ("Tests", comparison.tests(), format_nanos),
+        ("Bytes allocated", comparison.allocations(), format_bytes),
+        ("Stored bytes", comparison.storage(), format_bytes),
     ] {
         let moved: Vec<&Delta> = deltas
             .iter()
@@ -291,9 +327,9 @@ pub fn render_comparison(comparison: &Comparison, top: usize) -> String {
             let _ = writeln!(
                 out,
                 "  {:>9} -> {:<9} ({sign}{})  {}  {}",
-                format_nanos(delta.before().median()),
-                format_nanos(delta.after().median()),
-                format_nanos(u64::try_from(delta.moved().unsigned_abs()).unwrap_or(u64::MAX)),
+                shown(delta.before().median()),
+                shown(delta.after().median()),
+                shown(u64::try_from(delta.moved().unsigned_abs()).unwrap_or(u64::MAX)),
                 delta.verdict(),
                 delta.name()
             );

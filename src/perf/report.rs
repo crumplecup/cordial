@@ -15,6 +15,23 @@ pub fn format_nanos(nanos: u64) -> String {
     }
 }
 
+/// A byte count in the unit that reads best, in powers of 1024.
+#[instrument(level = "trace")]
+pub fn format_bytes(bytes: u64) -> String {
+    const UNITS: [&str; 5] = ["B", "KB", "MB", "GB", "TB"];
+    let mut value = bytes as f64;
+    let mut unit = 0;
+    while value >= 1024.0 && unit + 1 < UNITS.len() {
+        value /= 1024.0;
+        unit += 1;
+    }
+    if unit == 0 {
+        format!("{bytes} B")
+    } else {
+        format!("{value:.1} {}", UNITS[unit])
+    }
+}
+
 /// The slowest tests and the per-binary totals of a timing record, `top` tests long.
 #[instrument(level = "debug", skip(record))]
 #[hotpath::measure]
@@ -146,6 +163,84 @@ pub fn render_profile(record: &RunRecord, top: usize) -> String {
             format_nanos(function.p95_ns()),
             function.name()
         );
+    }
+    out.push_str(&render_usage(record, top));
+    out
+}
+
+/// The sections of a profile besides time: what was allocated, what was stored,
+/// which locks were waited for and what each thread did. A section the profile
+/// did not carry is left out.
+#[instrument(level = "debug", skip(record))]
+#[hotpath::measure]
+pub fn render_usage(record: &RunRecord, top: usize) -> String {
+    let mut out = String::new();
+    if !record.allocations().is_empty() {
+        let _ = writeln!(out, "\nFunctions by bytes allocated:");
+        for item in record.allocations().iter().take(top) {
+            let _ = writeln!(
+                out,
+                "  {:>9}  {:>8} calls  {}",
+                format_bytes(item.total_bytes()),
+                item.calls(),
+                item.name()
+            );
+        }
+    }
+    if !record.values().is_empty() {
+        let _ = writeln!(out, "\nStorage and other values:");
+        for (key, value) in record.values() {
+            let shown = if key.ends_with(".bytes") {
+                format_bytes(*value)
+            } else {
+                value.to_string()
+            };
+            let _ = writeln!(out, "  {shown:>9}  {key}");
+        }
+    }
+    if !record.locks().is_empty() {
+        let _ = writeln!(out, "\nLocks:");
+        for lock in record.locks() {
+            let _ = writeln!(
+                out,
+                "  {:>9} taken  wait avg {:>9}  p95 {:>9}  {}",
+                lock.count(),
+                format_nanos(lock.wait_avg_ns()),
+                format_nanos(lock.wait_p95_ns()),
+                lock.label()
+            );
+        }
+    }
+    if !record.channels().is_empty() {
+        let _ = writeln!(out, "\nChannels:");
+        for channel in record.channels() {
+            let _ = writeln!(
+                out,
+                "  {:>9} sent  {:>9} received  {}",
+                channel.sent(),
+                channel.received(),
+                channel.label()
+            );
+        }
+    }
+    if record
+        .threads()
+        .iter()
+        .any(|thread| thread.alloc_bytes() > 0)
+    {
+        let _ = writeln!(out, "\nThreads by bytes allocated:");
+        let mut threads: Vec<_> = record.threads().iter().collect();
+        threads.sort_by_key(|thread| std::cmp::Reverse(thread.alloc_bytes()));
+        for thread in threads.into_iter().take(top) {
+            let _ = writeln!(
+                out,
+                "  {:>9} allocated  {:>9} freed  cpu peak {:>5.1}%  {}",
+                format_bytes(thread.alloc_bytes()),
+                format_bytes(thread.dealloc_bytes()),
+                thread.cpu_peak_tenths() as f64 / 10.0,
+                thread.name()
+            );
+        }
     }
     out
 }
