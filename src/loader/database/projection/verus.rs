@@ -1,41 +1,44 @@
 //! Project dialect facts from the canonical database trees into the graph.
 use super::SourceDatabase;
+use crate::loader::database::scan_queries::{self, ScanKey};
 use crate::{
     CordialResult,
     ir::{SourceVerus, VerusFile},
-    loader::{DatabaseSource, module_path_from_src_file},
+    loader::module_path_from_src_file,
 };
 use ra_ap_hir::Semantics;
-use ra_ap_ide_db::base_db::SourceDatabase as RaSourceDatabase;
 use std::path::Path;
 
 impl SourceDatabase {
     #[tracing::instrument(level = "debug", skip(self), err(level = "warn"))]
     #[hotpath::measure(impl_type = "SourceDatabase")]
     pub(super) fn project_verus(&self, root: &Path) -> CordialResult<SourceVerus> {
-        let sema = Semantics::new(&self.db);
         SourceVerus::collect_with(root, |path, tree| {
-            let file = self.file_id(path)?;
-            let edition = sema.attach_first_edition(file);
-            if let Some(error) = edition.parse(&self.db).errors().first() {
-                return Err(anyhow::Error::new(error.clone()).into());
-            }
-            let source = DatabaseSource::new(
+            let key = ScanKey::new(
                 &self.db,
-                path,
-                self.db.file_text(file).text(&self.db),
-                sema.parse(edition),
-                ra_ap_ide_db::line_index(&self.db, file),
+                self.file_id(path)?,
+                path.to_path_buf(),
+                tree.to_path_buf(),
+                root.to_path_buf(),
+                String::new(),
+                false,
             );
-            Ok(ra_ap_hir::attach_db(&self.db, || {
-                VerusFile::new(
-                    crate::FileSnapshot::new(path.to_path_buf(), source.source_digest()),
-                    source
-                        .verus_facts(&module_path_from_src_file(tree, path).join("::"), &|call| {
-                            super::super::identity::is_verus_macro(&sema, call)
-                        }),
-                )
-            }))
+            match scan_queries::verus_file(&self.db, key) {
+                Some(found) => Ok(found.clone()),
+                None => {
+                    let sema = Semantics::new(&self.db);
+                    let (_, source) = self.declaration_source(&sema, path)?;
+                    Ok(ra_ap_hir::attach_db(&self.db, || {
+                        VerusFile::new(
+                            crate::FileSnapshot::new(path.to_path_buf(), source.source_digest()),
+                            source.verus_facts(
+                                &module_path_from_src_file(tree, path).join("::"),
+                                &|call| super::super::identity::is_verus_macro(&sema, call),
+                            ),
+                        )
+                    }))
+                }
+            }
         })
     }
 }

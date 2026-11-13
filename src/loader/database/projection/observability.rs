@@ -1,5 +1,6 @@
 //! Collect crate-wide tracing evidence from canonical database trees.
 use super::SourceDatabase;
+use crate::loader::database::scan_queries::{self, ScanKey};
 use crate::{CordialResult, ir::SourceObservability, loader::DatabaseSource};
 use ra_ap_hir::Semantics;
 use ra_ap_ide_db::base_db::SourceDatabase as RaSourceDatabase;
@@ -12,37 +13,65 @@ impl SourceDatabase {
         &self,
         root: &Path,
     ) -> CordialResult<SourceObservability> {
-        let sema = Semantics::new(&self.db);
         SourceObservability::collect_with(root, |path, tree| {
-            let file = self.file_id(path)?;
-            let edition = sema.attach_first_edition(file);
-            if let Some(error) = edition.parse(&self.db).errors().first() {
-                if crate::loader::path_has_fixtures(path, root) {
-                    return Ok(SourceObservability::invalid_file(
-                        path,
-                        root,
-                        self.db.file_text(file).text(&self.db),
-                    ));
-                }
-                return Err(anyhow::Error::new(error.clone()).into());
-            }
-            let source = DatabaseSource::new(
+            let key = ScanKey::new(
                 &self.db,
-                path,
-                self.db.file_text(file).text(&self.db),
-                sema.parse(edition),
-                ra_ap_ide_db::line_index(&self.db, file),
+                self.file_id(path)?,
+                path.to_path_buf(),
+                tree.to_path_buf(),
+                root.to_path_buf(),
+                String::new(),
+                false,
             );
-            Ok(ra_ap_hir::attach_db(&self.db, || {
-                SourceObservability::native_file(
-                    &source,
-                    tree,
-                    root,
-                    &|call| super::super::identity::macro_by_path(&sema, call),
-                    &|path, scope| super::super::identity::macro_at(&sema, scope, path),
-                )
-            }))
+            match scan_queries::observability_file(&self.db, key) {
+                Some(found) => Ok(found.clone()),
+                None => self.observability_direct(path, tree, root),
+            }
         })
+    }
+}
+
+impl SourceDatabase {
+    /// One file's observability facts, computed outside the query: for a file
+    /// the query declined, which also reports why (or records a fixture that
+    /// does not parse).
+    #[tracing::instrument(level = "debug", skip(self, tree, root), err(level = "warn"))]
+    #[hotpath::measure(impl_type = "SourceDatabase")]
+    fn observability_direct(
+        &self,
+        path: &Path,
+        tree: &Path,
+        root: &Path,
+    ) -> CordialResult<crate::ir::ObservabilityFile> {
+        let sema = Semantics::new(&self.db);
+        let file = self.file_id(path)?;
+        let edition = sema.attach_first_edition(file);
+        if let Some(error) = edition.parse(&self.db).errors().first() {
+            if crate::loader::path_has_fixtures(path, root) {
+                return Ok(SourceObservability::invalid_file(
+                    path,
+                    root,
+                    self.db.file_text(file).text(&self.db),
+                ));
+            }
+            return Err(anyhow::Error::new(error.clone()).into());
+        }
+        let source = DatabaseSource::new(
+            &self.db,
+            path,
+            self.db.file_text(file).text(&self.db),
+            sema.parse(edition),
+            ra_ap_ide_db::line_index(&self.db, file),
+        );
+        Ok(ra_ap_hir::attach_db(&self.db, || {
+            SourceObservability::native_file(
+                &source,
+                tree,
+                root,
+                &|call| super::super::identity::macro_by_path(&sema, call),
+                &|path, scope| super::super::identity::macro_at(&sema, scope, path),
+            )
+        }))
     }
 }
 

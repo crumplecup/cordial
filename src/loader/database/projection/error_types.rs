@@ -17,6 +17,8 @@ impl SourceDatabase {
                 path.to_path_buf(),
                 tree.to_path_buf(),
                 root.to_path_buf(),
+                String::new(),
+                false,
             );
             match scan_queries::error_types_file(&self.db, key) {
                 Some(found) => Ok(found.clone()),
