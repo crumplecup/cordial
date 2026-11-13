@@ -128,3 +128,35 @@ fn a_failing_command_is_an_error_and_still_restores_the_edit() -> Result<()> {
     );
     Ok(())
 }
+
+#[test]
+fn a_run_that_did_not_rewrite_the_ledger_does_not_borrow_the_last_runs_stages() -> Result<()> {
+    cordial::init_tracing();
+    let scratch = tempfile::tempdir().into_diagnostic()?;
+    let project = scratch.path().join("example");
+    fs::create_dir_all(&project).into_diagnostic()?;
+    // Writes a ledger only when the store is empty; later runs leave it alone.
+    let program = scratch.path().join("once");
+    let script = "#!/bin/sh\nwhile [ $# -gt 0 ]; do case \"$1\" in --project) p=\"$2\"; shift 2;; --store-home) h=\"$2\"; shift 2;; *) shift;; esac; done\n\
+        d=\"$h/$(basename \"$p\")\"; [ -f \"$d/ledger.json\" ] && exit 0\n\
+        mkdir -p \"$d\"; echo '{\"last_run_timings\":[{\"stage\":\"phase\",\"id\":\"load_and_probe\",\"elapsed_nanos\":9000,\"invocations\":1}]}' > \"$d/ledger.json\"\n";
+    fs::write(&program, script).into_diagnostic()?;
+    fs::set_permissions(&program, fs::Permissions::from_mode(0o755)).into_diagnostic()?;
+    let request = WorkflowRequestBuilder::default()
+        .name("example")
+        .program(program)
+        .repeat(1u32)
+        .build()
+        .into_diagnostic()?;
+    let records =
+        measure_workflow(&project, &scratch.path().join("work"), &request).into_diagnostic()?;
+    let has = |index: usize, name: &str| {
+        records[index].stages().iter().any(|stage| stage.name() == name)
+    };
+    assert!(has(0, "phase/load_and_probe"), "the cold run wrote it");
+    assert_eq!(records[0].counters().get("pipeline_ran"), Some(&1));
+    assert!(!has(1, "phase/load_and_probe"), "the warm run only saw an old ledger");
+    assert!(has(1, "process"));
+    assert_eq!(records[1].counters().get("pipeline_ran"), Some(&0));
+    Ok(())
+}

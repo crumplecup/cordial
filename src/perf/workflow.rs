@@ -39,10 +39,17 @@ impl StageSample {
     /// Read the stages and counters of the ledger's last run, plus the wall time
     /// of the process that produced it. Counters are exact for a given tree:
     /// the number of hooks each stage ran and their invocations.
+    ///
+    /// `fresh` says the command rewrote the ledger. When it did not, the ledger
+    /// holds an earlier run's timings, which are not this run's: only the process
+    /// time is kept, and `pipeline_ran` is 0 so the difference is visible.
     #[instrument(level = "debug", skip(ledger))]
-    pub fn from_ledger(ledger: &GateLedger, process_nanos: u64) -> Self {
+    pub fn from_ledger(ledger: &GateLedger, process_nanos: u64, fresh: bool) -> Self {
         let mut stages = BTreeMap::from([("process".to_owned(), process_nanos)]);
-        let mut counters = BTreeMap::new();
+        let mut counters = BTreeMap::from([("pipeline_ran".to_owned(), u64::from(fresh))]);
+        if !fresh {
+            return Self { stages, counters };
+        }
         for timing in ledger.last_run_timings() {
             let nanos = u64::try_from(*timing.elapsed_nanos()).unwrap_or(u64::MAX);
             stages.insert(format!("{}/{}", timing.stage(), timing.id()), nanos);
@@ -79,17 +86,46 @@ pub fn fold(samples: &[StageSample]) -> (Vec<StageTiming>, BTreeMap<String, u64>
     (stages, counters)
 }
 
-/// Run `open` once against `root` with `work_home` as the store home, and read
+/// The command that runs the whole pipeline in each state. `open` builds a
+/// fresh list from an empty store; once a list exists it reuses it while the
+/// tree looks unchanged, so the later states use `submit`, which always checks
+/// the tree.
+#[derive(Debug, Clone, Copy)]
+enum Step {
+    Open,
+    Submit,
+}
+
+impl Step {
+    #[instrument(level = "trace", skip(self))]
+    fn arguments(self) -> &'static [&'static str] {
+        match self {
+            Self::Open => &["open"],
+            Self::Submit => &["submit", "--tier", "build"],
+        }
+    }
+}
+
+/// Run `step` once against `root` with `work_home` as the store home, and read
 /// the ledger it wrote.
 #[instrument(level = "debug", skip(request), err(level = "warn"))]
-fn run_once(request: &WorkflowRequest, root: &Path, work_home: &Path) -> CordialResult<StageSample> {
+fn run_once(
+    request: &WorkflowRequest,
+    root: &Path,
+    work_home: &Path,
+    step: Step,
+) -> CordialResult<StageSample> {
+    let ledger_path = work_home
+        .join(project_slug_from_path(root))
+        .join("ledger.json");
+    let before = std::fs::read(&ledger_path).ok();
     let started = Instant::now();
     let status = Command::new(request.program())
         .arg("--project")
         .arg(root)
         .arg("--store-home")
         .arg(work_home)
-        .arg("open")
+        .args(step.arguments())
         .env("CORDIAL_NO_PROGRESS", "1")
         .stdin(Stdio::null())
         .stdout(Stdio::null())
@@ -98,16 +134,18 @@ fn run_once(request: &WorkflowRequest, root: &Path, work_home: &Path) -> Cordial
     if !status.success() {
         return Err(CordialError::perf(
             root.to_path_buf(),
-            format!("`open` exited with {:?}", status.code()),
+            format!("`cordial {}` exited with {:?}", step.arguments().join(" "), status.code()),
         ));
     }
     let layout = StoreLayout::from_root(
         work_home.join(project_slug_from_path(root)),
         project_slug_from_path(root),
     );
+    let fresh = std::fs::read(&ledger_path).ok() != before;
     Ok(StageSample::from_ledger(
         &GateLedger::read(&layout)?,
         process,
+        fresh,
     ))
 }
 
@@ -121,8 +159,8 @@ fn edit_file(file: &Path, round: u32) -> CordialResult<Vec<u8>> {
     Ok(original)
 }
 
-/// Measure the workflow: for each repeat, a cold run on an empty store, a warm
-/// run straight after, and (when an edit file is named) an incremental run after
+/// Measure the workflow: for each repeat, a cold `open` on an empty store, a warm
+/// `submit` straight after, and (when an edit file is named) an incremental run after
 /// one edit. Returns one record per state. The edited file is always restored.
 #[instrument(level = "debug", skip(root, work_home), err(level = "warn"))]
 pub fn measure_workflow(
@@ -138,12 +176,12 @@ pub fn measure_workflow(
         if slug_dir.exists() {
             std::fs::remove_dir_all(&slug_dir)?;
         }
-        cold.push(run_once(request, root, work_home)?);
-        warm.push(run_once(request, root, work_home)?);
+        cold.push(run_once(request, root, work_home, Step::Open)?);
+        warm.push(run_once(request, root, work_home, Step::Submit)?);
         if let Some(file) = request.edit() {
             let path = root.join(file);
             let original = edit_file(&path, round)?;
-            let sample = run_once(request, root, work_home);
+            let sample = run_once(request, root, work_home, Step::Submit);
             std::fs::write(&path, original)?;
             incremental.push(sample?);
         }

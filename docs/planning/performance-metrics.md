@@ -166,11 +166,15 @@ here should replace the ad hoc numbers used there.
   `{store}/perf/raw/` as they arrive, and `--from FILE...` rebuilds a record from
   them if a long run is interrupted. The output ranks binaries by total time and
   lists the slowest tests. The `all` set is every test.
-- [x] **P3. Workflow harness.** `cordial perf workflow [name]` runs `cordial
-  open` (the whole pipeline) against the project with an isolated work store
-  under `{store}/perf/work`: **cold** (empty store), **warm** (immediately again)
-  and, when `[perf.workflows.<name>] edit = "<file>"` is set, **incremental** (one
-  comment line appended to that file, restored afterwards even on failure).
+- [x] **P3. Workflow harness.** `cordial perf workflow [name]` runs the
+  whole pipeline against the project with an isolated work store under
+  `{store}/perf/work`: **cold** (`open` on an empty store), **warm** (`submit
+  --tier build` straight after) and, when `[perf.workflows.<name>] edit = "<file>"` is set, **incremental** (one
+  comment line appended to that file, then `submit --tier build`; the file is
+  restored afterwards even on failure). `open` reuses a list while the tree
+  looks unchanged, so only `submit` is guaranteed to run the pipeline. A run
+  that did not rewrite the ledger keeps only its process time and records
+  `pipeline_ran = 0`, never the previous run's stages.
   `--repeat N` (default 3) takes each stage's median. Stage timings come from the
   gate ledger the run writes (`phase`, `pipeline`, `enrich`, `assess`, `report`
   hooks), plus the process wall time. One record per state, subject
