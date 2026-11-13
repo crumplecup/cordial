@@ -111,15 +111,20 @@ refinement, taken only if the edited file's cost is measured to matter.
 ### Cfg contexts (C5)
 
 rust-analyzer reads cfg from the crate graph input, so a query argument cannot
-carry it, and the current toggle-and-restore invalidates every result each run.
-The Salsa-native shape is to **add each context as a crate in the graph**: the same
-root file with different `cfg_options` and its own crate id, so rust-analyzer's own
-queries (keyed by crate) hold every context at once and nothing is toggled. A
-context's test binaries depend on that context's copy of the library. Two
-conditions gate this, checked by a spike before anything depends on it: a shadow
-crate gives different facts from the original, and adding it does not re-execute
-the original's queries. The fallback is a database per context, applying every
-edit to each and computing only the gated closure there.
+carry it, and toggling every local crate's cfg and restoring it made every memo
+stale on each run. Adding a copy of each crate under the context's cfg is not
+enough on its own: rust-analyzer resolves a file in the first crate of its source
+root, so a file in two crates never resolves in the second (`file_to_def` takes the
+first module). So **a context is a copy of the workspace**: each local source file
+copied to a virtual path under a source root of its own, and a copy of each local
+crate under the context's cfg, rooted at those copies, with dependencies between
+local crates following to the copies. Every query is then keyed by files and crates
+the ordinary build does not use. The dependency crates are shared. The context and
+leaf passes read the copies' trees with the code they always had; edits (from
+`change_file` and `sync_from_disk`) are applied to each copy. `add_context_crates`
+is idempotent, so in a session a context is built once. Built 2026-11-13
+(`context_crates.rs`); the spike's conditions held: the copy sees its gated code,
+the ordinary build is unchanged, and adding a context re-ran no query for it.
 
 ### Milestones, in order, each tested before the next
 
@@ -238,6 +243,6 @@ Measured by `cordial perf workflow` against the baselines recorded 2026-11-12
   antipatterns 2.9 s, panics 2.4 s, architecture 1.1 s, signatures 0.7 s, then the
   per-function syntax facts in `populate` and the tracing inventories (4.7 s). CLI layout
   (0.8 s) is left alone: its per-file value holds syntax nodes, which cannot be a query value.
-- [ ] C5. Whole-crate passes as queries (milestone 2) and cfg contexts as coexisting crates (milestone 4).
+- [ ] C5. Whole-crate passes as queries (milestone 2). Cfg contexts (milestone 4) are built: the context and leaf passes read per-context copies of the workspace (`add_context_crates`), nothing is toggled, and the ordinary build's memos survive. Still to do there: prime a context's function evidence in parallel (it is read one function at a time).
 - [ ] C1. Cache key hygiene: analysis-source digest in place of the binary fingerprint.
 - [ ] C6. Re-baseline and record the acceptance numbers.
