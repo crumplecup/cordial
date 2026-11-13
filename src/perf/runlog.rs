@@ -2,7 +2,7 @@
 //! the store, so how the tool performs accumulates without anyone measuring.
 
 use crate::host::RunNotes;
-use crate::{CordialResult, GateLedger, HookTiming};
+use crate::{CordialResult, HookTiming};
 use std::io::Write;
 use std::path::PathBuf;
 use tracing::instrument;
@@ -27,6 +27,8 @@ pub const COLUMNS: &[&str] = &[
     "enrich_s",
     "assess_s",
     "render_s",
+    "stopped_after",
+    "cache",
 ];
 
 /// The log of this store's runs.
@@ -45,17 +47,23 @@ fn seconds(timings: &[HookTiming], stage: &str, prefix: &str) -> f64 {
         .sum()
 }
 
-/// One run as a CSV row (no newline), matching [`COLUMNS`].
-#[instrument(level = "debug", skip(timings, notes))]
-pub fn row(
-    at: u64,
-    commit: &str,
-    dirty: bool,
+/// What a run produced, as the log needs it.
+#[derive(Debug, Clone, derive_getters::Getters, derive_new::new)]
+pub struct RunFacts {
+    /// The hooks' times.
+    timings: Vec<HookTiming>,
+    /// The run's wall time in seconds.
+    wall_secs: f64,
+    /// How many findings it produced.
     findings: usize,
-    timings: (&[HookTiming], f64),
-    notes: RunNotes,
-) -> String {
-    let (timings, wall) = timings;
+    /// The stage it was asked to stop after, if it was stopped.
+    stopped_after: Option<String>,
+}
+
+/// One run as a CSV row (no newline), matching [`COLUMNS`].
+#[instrument(level = "debug", skip(facts, notes))]
+pub fn row(at: u64, commit: &str, dirty: bool, facts: &RunFacts, notes: RunNotes) -> String {
+    let timings = facts.timings();
     let mode = if crate::host::keeping() {
         "session"
     } else {
@@ -63,7 +71,7 @@ pub fn row(
     };
     let fields = [
         at.to_string(),
-        crate::csv_row::csv_field(commit),
+        commit.replace(',', ""),
         u8::from(dirty).to_string(),
         mode.to_owned(),
         notes.loaded().to_string(),
@@ -71,28 +79,30 @@ pub fn row(
         notes.reloaded().to_string(),
         notes.files_changed().to_string(),
         notes.cache_hits().to_string(),
-        findings.to_string(),
-        format!("{wall:.2}"),
-        format!("{:.2}", seconds(timings, "phase", "load_and_probe")),
-        format!("{:.2}", seconds(timings, "pipeline", "source_ir")),
-        format!("{:.2}", seconds(timings, "pipeline", "call_graph")),
-        format!("{:.2}", seconds(timings, "pipeline", "source_facts")),
-        format!("{:.2}", seconds(timings, "enrich", "")),
-        format!("{:.2}", seconds(timings, "assess", "")),
-        format!("{:.2}", seconds(timings, "phase", "render_and_write")),
+        facts.findings().to_string(),
+        format!("{:.3}", facts.wall_secs()),
+        format!("{:.3}", seconds(timings, "phase", "load_and_probe")),
+        format!("{:.3}", seconds(timings, "pipeline", "source_ir")),
+        format!("{:.3}", seconds(timings, "pipeline", "call_graph")),
+        format!("{:.3}", seconds(timings, "pipeline", "source_facts")),
+        format!("{:.3}", seconds(timings, "enrich", "")),
+        format!("{:.3}", seconds(timings, "assess", "")),
+        format!("{:.3}", seconds(timings, "phase", "render_and_write")),
+        facts.stopped_after().clone().unwrap_or_default(),
+        // Commas separate the columns, so the events are joined by semicolons.
+        notes.events().join(" | ").replace(',', ";"),
     ];
     fields.join(",")
 }
 
 /// Append this run's row to the store's log, writing the header first when the
 /// log is new. A log that cannot be written never fails the run it describes.
-#[instrument(level = "debug", skip(store, ledger, findings, notes))]
+#[instrument(level = "debug", skip(store, facts, notes))]
 #[hotpath::measure]
 pub fn record(
     store: &crate::StoreLayout,
     project_root: &std::path::Path,
-    ledger: &GateLedger,
-    findings: usize,
+    facts: &RunFacts,
     notes: RunNotes,
 ) {
     let result = (|| -> CordialResult<()> {
@@ -102,11 +112,7 @@ pub fn record(
             identity.recorded_at(),
             &commit,
             identity.dirty(),
-            findings,
-            (
-                ledger.last_run_timings(),
-                *ledger.last_run_wall_nanos() as f64 / 1e9,
-            ),
+            facts,
             notes,
         );
         let file = path(store);

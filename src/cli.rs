@@ -51,6 +51,11 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub crate_name: Option<String>,
 
+    /// End `open` or `submit` cleanly after one pipeline stage and log the
+    /// timings so far, to measure a stage without running the rest.
+    #[arg(long, global = true, value_parser = clap::builder::PossibleValuesParser::new(crate::STAGES))]
+    pub stop_after: Option<String>,
+
     /// Nested clap subcommand.
     #[command(subcommand)]
     pub command: Commands,
@@ -119,6 +124,7 @@ impl Cli {
             self.crate_name,
             self.store_home,
             progress,
+            self.stop_after,
         ))
     }
 }

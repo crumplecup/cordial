@@ -19,6 +19,7 @@ use crate::objects::{Artifact, Finding};
 use crate::plugin::Plugin;
 use crate::progress::{ProgressSink, noop_progress, noop_progress_arc};
 
+use crate::CordialError;
 use tracing::instrument;
 #[cfg(feature = "panics")]
 mod apply;
@@ -51,6 +52,16 @@ pub(crate) use source_facts::prepare_workspace_call_graph;
 pub(crate) use source_facts::prepare_workspace_proof_harness;
 #[cfg(any(feature = "derives", feature = "antipatterns"))]
 pub(crate) use source_facts::prepare_workspace_source_facts;
+
+/// The pipeline stages a run can be stopped after, in the order it passes them.
+pub const STAGES: &[&str] = &[
+    "source_ir",
+    "source_facts",
+    "call_graph",
+    "enrich",
+    "probe",
+    "assess",
+];
 
 /// Read-only paths and run context shared with hooks.
 ///
@@ -204,6 +215,7 @@ impl SessionBuilder {
             progress: Some(noop_progress_arc()),
             measurement_mode: Some(false),
             ir_snapshot: Some(false),
+            stop_after: None,
         }
     }
 
@@ -251,6 +263,13 @@ impl SessionBuilder {
         self
     }
 
+    /// End the run cleanly after the named pipeline stage (see [`STAGES`]).
+    #[instrument(level = "trace", skip(self, stage))]
+    pub fn with_stop_after(mut self, stage: impl Into<String>) -> Self {
+        self.stop_after = Some(Some(stage.into()));
+        self
+    }
+
     /// Add one directly available etiquette before building the runtime session.
     #[instrument(level = "trace", skip(self, etiquette))]
     pub fn register(mut self, etiquette: impl IntoEtiquette) -> Self {
@@ -289,6 +308,7 @@ impl SessionBuilder {
             progress: self.progress.unwrap_or_else(noop_progress_arc),
             measurement_mode: self.measurement_mode.unwrap_or(false),
             ir_snapshot: self.ir_snapshot.unwrap_or(false),
+            stop_after: self.stop_after.flatten(),
         }
     }
 }
@@ -325,6 +345,9 @@ pub struct RuntimeSession {
     /// Write each crate's IR under `cache/` after enrichment.
     #[builder(default)]
     ir_snapshot: bool,
+    /// End the run cleanly after this pipeline stage, for measuring one stage.
+    #[builder(default)]
+    stop_after: Option<String>,
 }
 
 impl RuntimeSession {
@@ -336,6 +359,15 @@ impl RuntimeSession {
     #[instrument(level = "trace", skip(self))]
     pub(super) fn ir_snapshot(&self) -> bool {
         self.ir_snapshot
+    }
+
+    /// Where the pipeline passes `stage`: ends the run there if it was asked to.
+    #[instrument(level = "trace", skip(self), err(level = "warn"))]
+    pub(super) fn checkpoint(&self, stage: &str) -> CordialResult<()> {
+        match &self.stop_after {
+            Some(wanted) if wanted == stage => Err(CordialError::stopped_after(stage)),
+            _ => Ok(()),
+        }
     }
     #[instrument(level = "trace", skip(self))]
     pub(super) fn registered_plugins(&self) -> &[&'static dyn Plugin] {

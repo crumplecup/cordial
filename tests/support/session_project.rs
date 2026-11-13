@@ -3,7 +3,7 @@
 
 use miette::{IntoDiagnostic, Result};
 use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::{Command, Output, Stdio};
 
 /// One log row: column name to cell.
@@ -63,12 +63,6 @@ impl Project {
             .ok_or_else(|| miette::miette!("no run was logged"))
     }
 
-    /// `submit` in the session and the row it logged.
-    pub(crate) fn submit(&self) -> Result<Row> {
-        self.run(&["submit", "--tier", "build"], true)?;
-        self.last()
-    }
-
     /// The findings a plain process finds on this tree, in a store of its own so
     /// that it runs the whole pipeline instead of reusing a list.
     pub(crate) fn plain_findings(&self, label: &str) -> Result<String> {
@@ -81,11 +75,4 @@ impl Project {
         plain.run(&["open"], false)?;
         Ok(plain.last()?["findings"].clone())
     }
-}
-
-/// Append `text` to the file at `path`.
-pub(crate) fn append(path: &Path, text: &str) -> Result<()> {
-    let mut contents = std::fs::read_to_string(path).into_diagnostic()?;
-    contents.push_str(text);
-    std::fs::write(path, contents).into_diagnostic()
 }

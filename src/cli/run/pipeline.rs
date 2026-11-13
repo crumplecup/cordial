@@ -66,6 +66,9 @@ pub(in crate::cli) fn execute_run_plugins_locked(
         .with_store_root(store.root().clone())
         .with_store_home(effective_store_home.clone())
         .with_progress_sink(progress.clone());
+    if let Some(stage) = ctx.stop_after() {
+        builder = builder.with_stop_after(stage.clone());
+    }
     for plugin in &plugins {
         builder = builder.register_plugin(*plugin);
     }
@@ -82,7 +85,20 @@ pub(in crate::cli) fn execute_run_plugins_locked(
     )?;
     #[cfg(feature = "quality")]
     let run_started = std::time::SystemTime::now();
-    let outcome = session.run(filter.as_ref())?;
+    let outcome = match session.run(filter.as_ref()) {
+        Err(error) if error.stopped_stage().is_some() => {
+            writeln!(
+                crate::host::stdout(),
+                "Stopped after {}. Its timings are in the run log (cordial perf runs).",
+                error.stopped_stage().unwrap_or_default()
+            )?;
+            for event in crate::host::last_events() {
+                writeln!(crate::host::stdout(), "  {event}")?;
+            }
+            return Ok(());
+        }
+        other => other?,
+    };
     let summary = print_run_summary(outcome.as_ref())?;
     #[cfg(feature = "quality")]
     let open_action_items = if write_worklist {

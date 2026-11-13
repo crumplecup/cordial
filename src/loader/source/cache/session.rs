@@ -126,6 +126,9 @@ impl CacheToken {
                 }
                 None => {
                     crate::host::loaded();
+                    crate::host::event(
+                        "database: loaded from scratch (none kept for this workspace)".to_owned(),
+                    );
                     SourceDatabase::load_reporting(&recipe.root, &recipe.options, &reporter)?
                 }
             };
@@ -162,14 +165,23 @@ impl CacheToken {
                 Ok(Some(ir)) => {
                     tracing::info!(target: "cordial::cache", crate_name = %name, "result cache hit");
                     crate::host::cache_hit();
+                    crate::host::event(format!("crate IR {name}: reused from the run cache"));
                     locked(&self.reporter).say(format!("Reusing the cached analysis of {name}"));
                     return Ok(ir);
                 }
                 Ok(None) => self.explain_miss(cache, name),
                 Err(error) => {
+                    crate::host::event(format!(
+                        "crate IR {name}: cache unreadable; analysing again"
+                    ));
                     tracing::warn!(target: "cordial::cache", error = ?error, "cached analysis unreadable; analysing again");
                 }
             }
+        }
+        if cache.is_none() {
+            crate::host::event(format!(
+                "crate IR {name}: no cache key; analysing from scratch"
+            ));
         }
         let ir = self.with_loaded_database(|database| database.project_target(target))?;
         if let Some(cache) = &cache
@@ -189,8 +201,13 @@ impl CacheToken {
         let cache = locked(&self.cache).clone();
         if let Some(cache) = &cache {
             match cache.read_path_inclusions() {
-                Ok(Some(facts)) => return Ok(facts),
-                Ok(None) => {}
+                Ok(Some(facts)) => {
+                    crate::host::event("path inclusions: reused from the run cache".to_owned());
+                    return Ok(facts);
+                }
+                Ok(None) => {
+                    crate::host::event("path inclusions: not cached; projecting them".to_owned());
+                }
                 Err(error) => {
                     tracing::warn!(target: "cordial::cache", error = ?error, "cached path inclusions unreadable; analysing again");
                 }
@@ -226,6 +243,9 @@ impl CacheToken {
                 shown.join(", ")
             )
         };
+        crate::host::event(format!(
+            "crate IR {crate_name}: not cached ({reason}); analysing"
+        ));
         locked(&self.reporter).say(format!("Analysing {crate_name} ({reason})"));
     }
 }

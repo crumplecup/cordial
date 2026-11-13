@@ -324,6 +324,7 @@ pub(super) struct ActCtx {
     crate_name: Option<String>,
     store_home: Option<PathBuf>,
     progress: Arc<dyn ProgressSink>,
+    stop_after: Option<String>,
 }
 
 impl Commands {

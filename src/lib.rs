@@ -409,7 +409,7 @@ pub use reporter::{
     render_quality_workspace_summary_markdown,
 };
 pub use session::{
-    RunAll, RunFilter, RunOutcome, RuntimeSession, Session, SessionBuilder, SessionView,
+    RunAll, RunFilter, RunOutcome, RuntimeSession, STAGES, Session, SessionBuilder, SessionView,
 };
 pub use store::{StoreLayout, SysrootCache, default_store_home, project_slug_from_path};
 pub use store_lock::{SysrootLock, WorklistLock};

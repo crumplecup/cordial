@@ -68,6 +68,31 @@ fn empty_outcome() -> Box<dyn RunOutcome> {
     })
 }
 
+/// A run that was asked to stop after a stage still says what it cost so far.
+#[instrument(level = "debug", skip(store, session, timings, error))]
+fn log_stopped(
+    store: &StoreLayout,
+    session: &RuntimeSession,
+    timings: &HookTimings,
+    started: Instant,
+    error: &crate::CordialError,
+) {
+    if error.stopped_stage().is_none() {
+        return;
+    }
+    crate::perf::runlog::record(
+        store,
+        session.project_root(),
+        &crate::perf::runlog::RunFacts::new(
+            timings.clone().into_vec(),
+            started.elapsed().as_secs_f64(),
+            0,
+            error.stopped_stage().map(str::to_owned),
+        ),
+        crate::host::take_notes(),
+    );
+}
+
 #[instrument(level = "info", skip(session, filter), err(level = "warn"))]
 #[hotpath::measure]
 pub(super) fn run_session(
@@ -159,7 +184,9 @@ pub(super) fn run_session(
         &mut timings,
     );
     timings.record("phase", "load_and_probe", started.elapsed());
-    let loaded = loaded?;
+    let loaded = loaded.inspect_err(|error| {
+        log_stopped(&store, session, &timings, run_started, error);
+    })?;
     #[cfg(feature = "shadow")]
     let (mut workspace, markers_by_crate) = loaded.into_parts();
     #[cfg(not(feature = "shadow"))]
@@ -178,6 +205,9 @@ pub(super) fn run_session(
     );
     timings.record("phase", "assess", started.elapsed());
     let mut all_findings = all_findings?;
+    session.checkpoint("assess").inspect_err(|error| {
+        log_stopped(&store, session, &timings, run_started, error);
+    })?;
 
     #[cfg(feature = "shadow")]
     {
@@ -264,8 +294,12 @@ pub(super) fn run_session(
         crate::perf::runlog::record(
             &store,
             session.project_root(),
-            &ledger,
-            all_findings.len(),
+            &crate::perf::runlog::RunFacts::new(
+                timings.clone().into_vec(),
+                run_started.elapsed().as_secs_f64(),
+                all_findings.len(),
+                None,
+            ),
             crate::host::take_notes(),
         );
         task.finish("Updated gate ledger".to_string());

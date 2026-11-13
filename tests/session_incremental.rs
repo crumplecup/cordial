@@ -5,16 +5,18 @@
 
 mod support {
     pub mod mini_workspace;
+    pub mod session_edits;
     pub mod session_project;
 }
 use cordial::host::socket_path;
 use miette::{IntoDiagnostic, Result};
-use support::session_project::{Project, Row, append};
+use support::session_edits::{append, submit};
+use support::session_project::{Project, Row};
 
 /// `submit` in the session, then a plain run on the same tree: the findings must
 /// be the same.
 fn submit_and_check(project: &Project, label: &str) -> Result<Row> {
-    let session = project.submit()?;
+    let session = submit(project)?;
     assert_eq!(
         session["findings"],
         project.plain_findings(label)?,

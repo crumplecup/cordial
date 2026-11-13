@@ -1,7 +1,7 @@
 //! The run log: one row per run, appended by the run itself.
 
 use cordial::host::take_notes;
-use cordial::perf::runlog::{COLUMNS, path, record, row};
+use cordial::perf::runlog::{COLUMNS, RunFacts, path, record, row};
 use cordial::{GateLedger, StoreLayout};
 use miette::{IntoDiagnostic, Result};
 
@@ -22,14 +22,8 @@ const LEDGER: &str = r#"{
 fn a_row_has_one_cell_per_column_and_sums_the_stages() -> Result<()> {
     cordial::init_tracing();
     let ledger: GateLedger = serde_json::from_str(LEDGER).into_diagnostic()?;
-    let line = row(
-        1_000,
-        "abcd1234",
-        true,
-        7,
-        (ledger.last_run_timings(), 12.5),
-        take_notes(),
-    );
+    let facts = RunFacts::new(ledger.last_run_timings().clone(), 12.5, 7, None);
+    let line = row(1_000, "abcd1234", true, &facts, take_notes());
     let cells: Vec<&str> = line.split(',').collect();
     assert_eq!(cells.len(), COLUMNS.len(), "{line}");
     let cell = |name: &str| -> Result<&str> {
@@ -43,12 +37,12 @@ fn a_row_has_one_cell_per_column_and_sums_the_stages() -> Result<()> {
     assert_eq!(cell("dirty")?, "1");
     assert_eq!(cell("mode")?, "process");
     assert_eq!(cell("findings")?, "7");
-    assert_eq!(cell("wall_s")?, "12.50");
-    assert_eq!(cell("load_and_probe_s")?, "10.00");
-    assert_eq!(cell("source_ir_s")?, "6.00");
-    assert_eq!(cell("call_graph_s")?, "3.00");
-    assert_eq!(cell("enrich_s")?, "0.75", "the enrichers are summed");
-    assert_eq!(cell("render_s")?, "2.00");
+    assert_eq!(cell("wall_s")?, "12.500");
+    assert_eq!(cell("load_and_probe_s")?, "10.000");
+    assert_eq!(cell("source_ir_s")?, "6.000");
+    assert_eq!(cell("call_graph_s")?, "3.000");
+    assert_eq!(cell("enrich_s")?, "0.750", "the enrichers are summed");
+    assert_eq!(cell("render_s")?, "2.000");
     Ok(())
 }
 
@@ -58,8 +52,9 @@ fn each_run_appends_a_row_and_the_header_is_written_once() -> Result<()> {
     let home = tempfile::tempdir().into_diagnostic()?;
     let store = StoreLayout::from_root(home.path().join("p"), "p");
     let ledger: GateLedger = serde_json::from_str(LEDGER).into_diagnostic()?;
+    let facts = RunFacts::new(ledger.last_run_timings().clone(), 12.5, 4, None);
     for _ in 0..3 {
-        record(&store, home.path(), &ledger, 4, take_notes());
+        record(&store, home.path(), &facts, take_notes());
     }
     let text = std::fs::read_to_string(path(&store)).into_diagnostic()?;
     let lines: Vec<&str> = text.lines().collect();

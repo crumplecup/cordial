@@ -205,9 +205,11 @@ pub(super) fn load_and_probe(
     for target in targets {
         let crate_ir = if loaders.iter().any(|loader| loader.id() == SourceLoader::ID) {
             progress.set_message(format!("Building source IR for {}", target.crate_name()));
-            timings.measure("pipeline", "source_ir", || {
+            let built = timings.measure("pipeline", "source_ir", || {
                 parsed_source_session.project_target(target)
-            })?
+            })?;
+            session.checkpoint("source_ir")?;
+            built
         } else {
             CrateIr::new(target.crate_name())
         };
@@ -255,12 +257,14 @@ pub(super) fn load_and_probe(
                     enrichers,
                 )
             })?;
+            session.checkpoint("source_facts")?;
         }
     }
     #[cfg(any(feature = "derives", feature = "antipatterns", feature = "tracing"))]
     timings.measure("pipeline", "call_graph", || {
         crate::session::prepare_workspace_call_graph(&mut workspace, session, enrichers)
     })?;
+    session.checkpoint("call_graph")?;
     for target in targets {
         for enricher in enrichers {
             progress.set_message(format!(
@@ -275,6 +279,8 @@ pub(super) fn load_and_probe(
             })?;
             progress.inc(1);
         }
+
+        session.checkpoint("enrich")?;
 
         if session.ir_snapshot() {
             progress.set_message(format!("Writing the IR file for {}", target.crate_name()));
@@ -304,6 +310,7 @@ pub(super) fn load_and_probe(
             progress.inc(1);
         }
     }
+    session.checkpoint("probe")?;
     progress.finish(format!("Analyzed {} crate(s)", targets.len()));
 
     Ok(LoadedWorkspace::new(workspace, markers_by_crate))

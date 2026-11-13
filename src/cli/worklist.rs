@@ -157,6 +157,10 @@ pub(super) fn execute_open(ctx: &ActCtx, json: bool) -> CordialResult<()> {
             quality_plugins(),
             RunOptions::new(false, true, false, false),
         )?;
+        if ctx.stop_after().is_some() {
+            // A run asked to stop after a stage ends before it writes a list.
+            return Ok(());
+        }
     }
     let mut list =
         Worklist::read(ctx.store())?.ok_or_else(|| CordialError::gate_did_not_write_worklist())?;

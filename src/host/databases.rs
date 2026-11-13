@@ -47,6 +47,7 @@ pub fn take_current(self_key: &str) -> Option<SourceDatabase> {
         Ok(SyncOutcome::Current) => {
             tracing::info!(target: "cordial::session", "reusing the kept database; nothing changed");
             super::kept(0);
+            super::event("database: reused from the session, no source file changed".to_owned());
             Some(database)
         }
         Ok(SyncOutcome::Updated(files)) => {
@@ -56,6 +57,10 @@ pub fn take_current(self_key: &str) -> Option<SourceDatabase> {
                 "reusing the kept database; source files changed"
             );
             super::kept(files.len());
+            super::event(format!(
+                "database: reused from the session; {} source file(s) changed and were fed in",
+                files.len()
+            ));
             Some(database)
         }
         Ok(SyncOutcome::Reload(path)) => {
@@ -65,11 +70,18 @@ pub fn take_current(self_key: &str) -> Option<SourceDatabase> {
                 "the kept database no longer matches the disk; loading again"
             );
             super::reloaded();
+            super::event(format!(
+                "database: dropped, {} changed what it was loaded from; loading again",
+                path.display()
+            ));
             None
         }
         Err(error) => {
             tracing::warn!(target: "cordial::session", error = ?error, "could not bring the kept database up to date; loading again");
             super::reloaded();
+            super::event(
+                "database: dropped, it could not follow the disk; loading again".to_owned(),
+            );
             None
         }
     }
