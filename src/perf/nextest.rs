@@ -41,32 +41,44 @@ impl NextestRequest {
     }
 }
 
-/// The test binaries to build for `filter`, when it names nothing else.
+/// The test binaries to build for `filter`, when every alternative names one.
 ///
 /// Nextest applies a filterset after it has built, so `-E binary(x)` still
 /// compiles every test binary in the repository, which for a new feature set is
-/// most of an hour. A filter that is only `binary(name)` terms joined by `|` can
-/// say the same thing to cargo with `--test name`, which builds just those. `None`
-/// when the filter says more than that, or a name is not a test file here, and the
+/// most of an hour. A filter whose `|` alternatives each name a binary, alone or
+/// narrowed by `test(..)` with `&` (`binary(x) & test(y)` is one test), can say the
+/// same thing to cargo with `--test x`, which builds just that. `None` when an
+/// alternative names no binary, or names one that is not a test file here, and the
 /// caller then builds everything because it cannot do better.
 #[instrument(level = "debug", skip(root))]
 #[hotpath::measure]
 pub fn build_targets(root: &Path, filter: &str) -> Option<Vec<String>> {
-    let mut targets = Vec::new();
-    for term in filter.split('|') {
-        let name = term
-            .trim()
-            .strip_prefix("binary(")?
-            .strip_suffix(')')?
-            .trim();
-        let plain = !name.is_empty()
-            && name
-                .chars()
-                .all(|c| c.is_alphanumeric() || c == '_' || c == '-');
-        if !plain || !root.join("tests").join(format!("{name}.rs")).is_file() {
-            return None;
+    let mut targets: Vec<String> = Vec::new();
+    for alternative in filter.split('|') {
+        let mut named = None;
+        for part in alternative.split('&').map(str::trim) {
+            if let Some(name) = part
+                .strip_prefix("binary(")
+                .and_then(|rest| rest.strip_suffix(')'))
+            {
+                let name = name.trim();
+                let plain = !name.is_empty()
+                    && name
+                        .chars()
+                        .all(|c| c.is_alphanumeric() || c == '_' || c == '-');
+                if !plain || !root.join("tests").join(format!("{name}.rs")).is_file() {
+                    return None;
+                }
+                named = Some(name);
+            } else if !(part.starts_with("test(") && part.ends_with(')')) {
+                // Anything but a narrowing by test name could widen the set.
+                return None;
+            }
         }
-        targets.push(name.to_owned());
+        let name = named?;
+        if !targets.iter().any(|known| known == name) {
+            targets.push(name.to_owned());
+        }
     }
     Some(targets)
 }

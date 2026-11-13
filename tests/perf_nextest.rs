@@ -30,14 +30,37 @@ fn a_filter_of_binaries_builds_only_those_binaries() -> Result<()> {
 }
 
 #[test]
+fn a_binary_narrowed_to_a_test_builds_that_binary() -> Result<()> {
+    cordial::init_tracing();
+    let root = project(&["context_crates", "verus_ir"])?;
+    assert_eq!(
+        build_targets(
+            root.path(),
+            "binary(context_crates) & test(a_context_is_crates)"
+        ),
+        Some(vec!["context_crates".to_owned()])
+    );
+    assert_eq!(
+        build_targets(
+            root.path(),
+            "binary(context_crates) & test(one) | binary(verus_ir) & test(two) | binary(context_crates)"
+        ),
+        Some(vec!["context_crates".to_owned(), "verus_ir".to_owned()]),
+        "each binary is built once"
+    );
+    Ok(())
+}
+
+#[test]
 fn anything_more_than_binaries_cannot_be_scoped() -> Result<()> {
     cordial::init_tracing();
     let root = project(&["context_crates"])?;
     for filter in [
         "all()",
-        "binary(context_crates) & test(an_edit)",
         "test(an_edit)",
         "binary(context_crates) | test(x)",
+        "binary(context_crates) & !test(x)",
+        "binary(context_crates) & package(cordial)",
         "binary(not_a_test_file)",
         "binary()",
         "binary(a b)",
