@@ -257,7 +257,7 @@ fn compiled_opt_out_points_at_cordial_toml() {
             etiquette.id()
         );
         assert!(
-            !opt_out.contains("exceptions"),
+            !opt_out.contains("cordial exceptions"),
             "{} opt_out should not point at exceptions, got {opt_out}",
             etiquette.id()
         );

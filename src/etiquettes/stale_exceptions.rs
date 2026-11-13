@@ -51,7 +51,7 @@ pub static STALE_EXCEPTIONS_ETIQUETTE: LazyLock<StaticQualityEtiquette> = LazyLo
                 "Does every exception row still suppress a finding?",
                 "An exception keyed to a file, line, rule, or context goes dead when the code moves or the finding is fixed. A dead row hides nothing today and misleads tomorrow.",
                 "Flags each exception row whose etiquette ran and produced no finding the row matches.",
-                "None; fix the row with `cordial exceptions edit` or `cordial exceptions remove`.",
+                "`[lints.stale_exceptions] enabled = false` in cordial.toml turns the etiquette off.",
                 vec![EtiquetteRuleExplain::new(
                     STALE_EXCEPTION_RULE_ID,
                     "An exception row that matches no finding",

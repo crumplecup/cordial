@@ -14,6 +14,7 @@ fn plans_exact_regenerable_paths_and_preserves_curated_data() -> miette::Result<
     fs::create_dir_all(store.quality_patches_dir()).into_diagnostic()?;
     fs::create_dir_all(store.patches_dir()).into_diagnostic()?;
     fs::create_dir_all(store.config_dir()).into_diagnostic()?;
+    fs::create_dir_all(store.perf_dir().join("records")).into_diagnostic()?;
     fs::write(store.cache_dir().join("ir.json"), b"1234").into_diagnostic()?;
     fs::write(store.findings_dir().join("report.md"), b"abc").into_diagnostic()?;
     fs::write(store.worklist_path(), b"not a current worklist").into_diagnostic()?;

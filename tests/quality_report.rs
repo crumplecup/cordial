@@ -96,6 +96,7 @@ fn quality_report_lists_resolution_order() -> miette::Result<()> {
             "Creusot diagnostics",
             "Verus compiler warnings",
             "Proof patterns",
+            "Stale exceptions",
         ]
     );
 
