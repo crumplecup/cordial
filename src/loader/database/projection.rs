@@ -91,10 +91,6 @@ impl SourceDatabase {
         self.project_contexts(paths, outline.functions(), &mut graph)?;
         #[cfg(feature = "tracing")]
         {
-            // Analysing the contexts changed the database's cfg input and put it
-            // back, which makes every function result stale; the stages below
-            // ask for them again, so recompute them together first.
-            self.prime_function_evidence();
             self.project_tracing_inventories(&outline, &mut graph)?;
             self.project_leaves(&mut graph)?;
             self.project_observability_calls(&outline, &mut graph)?;

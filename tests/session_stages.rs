@@ -37,6 +37,10 @@ fn a_run_stops_after_the_stage_it_is_asked_to_and_says_what_it_reused() -> Resul
     let (source, said) = stop_after(&project, "source_ir")?;
     assert!(said.contains("crate IR mini: not cached"), "{said}");
     assert!(said.contains("database: loaded from scratch"), "{said}");
+    assert!(
+        said.contains("function evidence (workspace):") && said.contains("evaluated for"),
+        "the run says how much of the per-function work was new: {said}"
+    );
     assert!(seconds(&source, "source_ir_s") > 0.0);
     assert_eq!(
         seconds(&source, "call_graph_s"),

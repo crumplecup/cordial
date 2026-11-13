@@ -25,6 +25,19 @@ impl SourceDatabase {
     #[hotpath::measure(impl_type = "SourceDatabase")]
     pub(super) fn prime_function_evidence(&self) {
         let functions = attach_db(&self.db, || local_functions(&self.db));
+        self.prime_functions("workspace", &functions);
+    }
+
+    /// Evaluate the evidence of `functions` on worker threads. The results are
+    /// those of the database's cfg as it is now: after the cfg changes they are
+    /// computed again, so a pass that enters a context primes inside it.
+    ///
+    /// Says, as a run event, how many of the functions were evaluated now and how
+    /// many were already known, so a pass that recomputes everything shows it.
+    #[instrument(level = "debug", skip(self, functions))]
+    #[hotpath::measure(impl_type = "SourceDatabase")]
+    pub(in crate::loader::database) fn prime_functions(&self, label: &str, functions: &[Function]) {
+        let before = queries::evidence_executed();
         let workers = std::thread::available_parallelism()
             .map_or(1, usize::from)
             .min(functions.len().max(1));
@@ -40,7 +53,7 @@ impl SourceDatabase {
         std::thread::scope(|scope| {
             for _ in 0..workers {
                 let db = self.db.clone();
-                let (functions, next, dispatch) = (&functions, &next, dispatch.clone());
+                let (functions, next, dispatch) = (functions, &next, dispatch.clone());
                 let spawned = std::thread::Builder::new()
                     .stack_size(WORKER_STACK_BYTES)
                     .spawn_scoped(scope, move || {
@@ -55,6 +68,11 @@ impl SourceDatabase {
                 }
             }
         });
+        let evaluated = queries::evidence_executed().saturating_sub(before);
+        crate::host::event(format!(
+            "function evidence ({label}): {evaluated} evaluated for {} function(s), the rest already known",
+            functions.len()
+        ));
     }
 }
 

@@ -25,6 +25,17 @@ impl SemanticDatabase for RootDatabase {
     }
 }
 
+/// How many function-evidence queries have run to completion in this process, as
+/// opposed to being answered from a memo. A pass that wants to say how much of
+/// its work was new reads it before and after.
+static EVIDENCE_EXECUTED: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// The number of function-evidence queries executed so far.
+#[instrument(level = "trace")]
+pub(super) fn evidence_executed() -> usize {
+    EVIDENCE_EXECUTED.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 #[salsa::interned]
 pub(super) struct FunctionKey<'db> {
     #[returns(copy)]
@@ -233,6 +244,7 @@ pub(super) fn function_evidence<'db>(
 #[instrument(level = "debug", skip(db, key))]
 #[hotpath::measure]
 fn collect_reachable(db: &dyn SemanticDatabase, key: FunctionKey<'_>) -> Option<SemanticFunction> {
+    EVIDENCE_EXECUTED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let facts = direct_facts(db, key).as_ref()?.facts.clone();
     let mut incomplete = *facts.incomplete();
     let mut reachable_result_errors = Vec::new();

@@ -130,6 +130,23 @@ impl SourceDatabase {
                 .map(|package| package.root().clone())
                 .collect();
             let locator = super::super::external::Locator::new(&self.db, &self.vfs, roots);
+            // Each context is a new cfg, so none of the results are computed yet:
+            // evaluate the leaf functions together, then read them below.
+            let mut definitions = Vec::new();
+            for path in files {
+                let file = self.file_id(path)?;
+                let tree = sema.parse(sema.attach_first_edition(file));
+                definitions.extend(
+                    tree.syntax()
+                        .descendants()
+                        .filter_map(ast::Fn::cast)
+                        .filter_map(|function| {
+                            sema.to_def(&function)
+                                .or_else(|| expanded_definition(&sema, &function))
+                        }),
+                );
+            }
+            self.prime_functions("leaf files", &definitions);
             for path in files {
                 let file = self.file_id(path)?;
                 let tree = sema.parse(sema.attach_first_edition(file));
