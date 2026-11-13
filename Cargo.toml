@@ -73,6 +73,9 @@ anyhow = "1"
 default = ["full", "quick"]
 # Opt-in profiling. The dependency's macros are no-ops without this feature.
 hotpath = ["hotpath/hotpath"]
+# Allocation profiling: the counting allocator below, and `functions_alloc` and
+# per-thread bytes in every profile.
+hotpath-alloc = ["hotpath", "hotpath/hotpath-alloc"]
 # Private features (leading `_`): never enabled by a user, only by other
 # features. `cordial`'s feature_warnings etiquette excludes them from the
 # powerset on its own; `just check-features` lists them in its exclusions.

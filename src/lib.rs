@@ -39,6 +39,7 @@ pub mod perf;
 mod plugin;
 mod plugins;
 mod process_memory;
+mod profiling;
 mod progress;
 #[cfg(any(feature = "impl_coverage", feature = "amenable_std"))]
 mod proof_harness;
