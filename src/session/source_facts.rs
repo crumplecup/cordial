@@ -108,6 +108,7 @@ pub(crate) fn prepare_workspace_source_facts(
 #[hotpath::measure]
 pub(crate) fn prepare_workspace_call_graph(
     workspace: &mut WorkspaceIr,
+    source: Option<&SourceLoadView>,
     session: &dyn SessionView,
     enrichers: &[&dyn IrEnricher],
 ) -> CordialResult<()> {
@@ -118,9 +119,18 @@ pub(crate) fn prepare_workspace_call_graph(
         && workspace.call_graph().is_none()
     {
         let config = crate::config::load_session_config(session);
-        workspace.refresh_tracing_call_graph(config.tracing())?;
+        let graph = match source {
+            Some(source) => {
+                let policy = crate::run_cache::policy_digest(config.tracing())?;
+                source.cached_call_graph(&policy, || {
+                    workspace.evaluate_tracing_call_graph(config.tracing())
+                })?
+            }
+            None => workspace.evaluate_tracing_call_graph(config.tracing())?,
+        };
+        workspace.set_call_graph(graph);
     }
     #[cfg(not(feature = "tracing"))]
-    let _ = (workspace, session, enrichers);
+    let _ = (workspace, source, session, enrichers);
     Ok(())
 }

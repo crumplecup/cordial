@@ -38,7 +38,7 @@ use super::apply::crate_gate_cfgs;
 use graph::Origin;
 
 /// Workspace-wide call-graph facts retained by the session IR.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, serde::Serialize, serde::Deserialize)]
 pub struct CallGraphFacts {
     /// Crate name -> qualified names never worth recording as needing
     /// `#[instrument]`, regardless of role/recipe.

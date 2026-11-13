@@ -48,6 +48,18 @@ impl SourceLoadView {
         self.cache_token.path_inclusions()
     }
 
+    /// The call-graph facts under `policy`, from the run's cached results when
+    /// they hold them, else from `compute`, which is then recorded.
+    #[cfg(feature = "tracing")]
+    #[tracing::instrument(level = "debug", skip(self, compute), err(level = "warn"))]
+    pub(crate) fn cached_call_graph(
+        &self,
+        policy: &str,
+        compute: impl FnOnce() -> crate::CordialResult<crate::etiquettes::tracing::CallGraphFacts>,
+    ) -> crate::CordialResult<crate::etiquettes::tracing::CallGraphFacts> {
+        self.cache_token.call_graph(policy, compute)
+    }
+
     /// A view that supplies no files and reads through the database of the run
     /// current on this thread. Its caller must drop the view before rereading
     /// files it has edited.

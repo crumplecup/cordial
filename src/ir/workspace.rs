@@ -132,12 +132,23 @@ impl WorkspaceIr {
         &mut self,
         config: &crate::config::TracingThresholds,
     ) -> crate::CordialResult<()> {
+        let graph = self.evaluate_tracing_call_graph(config)?;
+        self.set_call_graph(graph);
+        Ok(())
+    }
+
+    /// The tracing proof reachability of the crate IRs in the workspace, without
+    /// attaching it.
+    #[cfg(feature = "tracing")]
+    #[instrument(level = "debug", skip(self, config), err(level = "warn"))]
+    pub(crate) fn evaluate_tracing_call_graph(
+        &self,
+        config: &crate::config::TracingThresholds,
+    ) -> crate::CordialResult<crate::etiquettes::tracing::CallGraphFacts> {
         let facts = self.path_inclusions().ok_or_else(|| {
             crate::CordialError::workspace_source_facts_missing("workspace source inventory")
         })?;
-        let graph = crate::etiquettes::tracing::workspace_call_graph(config, facts, &self.crates)?;
-        self.set_call_graph(graph);
-        Ok(())
+        crate::etiquettes::tracing::workspace_call_graph(config, facts, &self.crates)
     }
 
     #[cfg(feature = "tracing")]

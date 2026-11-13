@@ -262,7 +262,12 @@ pub(super) fn load_and_probe(
     }
     #[cfg(any(feature = "derives", feature = "antipatterns", feature = "tracing"))]
     timings.measure("pipeline", "call_graph", || {
-        crate::session::prepare_workspace_call_graph(&mut workspace, session, enrichers)
+        let source = targets.iter().find_map(|target| {
+            load_views
+                .get(&format!("{}:{}", target.crate_name(), SourceLoader::ID))
+                .and_then(|view| view.as_any().downcast_ref::<SourceLoadView>())
+        });
+        crate::session::prepare_workspace_call_graph(&mut workspace, source, session, enrichers)
     })?;
     session.checkpoint("call_graph")?;
     for target in targets {

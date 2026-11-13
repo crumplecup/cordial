@@ -62,6 +62,10 @@ fn a_run_stops_after_the_stage_it_is_asked_to_and_says_what_it_reused() -> Resul
         graph["cache"].contains("reused from the run cache"),
         "{graph:?}"
     );
+    assert!(
+        said.contains("call graph: not cached; building it"),
+        "{said}"
+    );
     assert!(seconds(&graph, "call_graph_s") > 0.0);
     assert_eq!(seconds(&graph, "enrich_s"), 0.0);
 
@@ -78,6 +82,10 @@ fn a_run_stops_after_the_stage_it_is_asked_to_and_says_what_it_reused() -> Resul
     assert!(
         !said.contains("database:"),
         "no database was needed: {said}"
+    );
+    assert!(
+        said.contains("call graph: reused from the run cache"),
+        "the graph built last run is not built again: {said}"
     );
     assert_eq!(enrich["loaded"], "0");
     assert!(seconds(&enrich, "enrich_s") > 0.0);

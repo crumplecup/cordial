@@ -49,7 +49,12 @@ pub(super) fn build_apply_ir(
         )?;
         loaded.push((target, source));
     }
-    crate::session::prepare_workspace_call_graph(&mut workspace, &session, &enrichers)?;
+    crate::session::prepare_workspace_call_graph(
+        &mut workspace,
+        loaded.first().map(|(_, source)| source),
+        &session,
+        &enrichers,
+    )?;
     for (target, source) in &loaded {
         if by_file.is_some_and(|files| !files.keys().any(|(name, _)| name == target.crate_name())) {
             continue;

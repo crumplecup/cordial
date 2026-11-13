@@ -222,6 +222,44 @@ impl CacheToken {
         Ok(facts)
     }
 
+    /// The workspace call-graph facts under `policy`: cached when this run's
+    /// results hold them, otherwise computed by `compute` and recorded.
+    #[cfg(feature = "tracing")]
+    #[tracing::instrument(level = "debug", skip(self, compute), err(level = "warn"))]
+    #[hotpath::measure(impl_type = "CacheToken")]
+    pub(super) fn call_graph(
+        &self,
+        policy: &str,
+        compute: impl FnOnce() -> CordialResult<crate::etiquettes::tracing::CallGraphFacts>,
+    ) -> CordialResult<crate::etiquettes::tracing::CallGraphFacts> {
+        let cache = locked(&self.cache).clone();
+        if let Some(cache) = &cache {
+            match cache.read_call_graph(policy) {
+                Ok(Some(facts)) => {
+                    crate::host::cache_hit();
+                    crate::host::event("call graph: reused from the run cache".to_owned());
+                    return Ok(facts);
+                }
+                Ok(None) => {
+                    crate::host::event("call graph: not cached; building it".to_owned());
+                }
+                Err(error) => {
+                    crate::host::event("call graph: cache unreadable; building it".to_owned());
+                    tracing::warn!(target: "cordial::cache", error = ?error, "cached call graph unreadable; building it");
+                }
+            }
+        } else {
+            crate::host::event("call graph: no cache key; building it".to_owned());
+        }
+        let facts = compute()?;
+        if let Some(cache) = &cache
+            && let Err(error) = cache.write_call_graph(policy, &facts)
+        {
+            tracing::warn!(target: "cordial::cache", error = ?error, "could not record the call graph");
+        }
+        Ok(facts)
+    }
+
     /// Say why the cached results do not apply, naming the inputs that changed.
     #[tracing::instrument(level = "debug", skip(self, cache))]
     fn explain_miss(&self, cache: &RunCache, crate_name: &str) {

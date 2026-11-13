@@ -16,6 +16,14 @@ use tracing::instrument;
 /// Bump when the IR or what the analysis records changes shape.
 pub(crate) const SCHEMA: u32 = 11;
 
+/// A short digest of a serialisable policy, to name an artifact that depends on
+/// it as well as on the entry's key.
+#[instrument(level = "debug", skip(policy), err(level = "warn"))]
+pub(crate) fn policy_digest<T: serde::Serialize>(policy: &T) -> CordialResult<String> {
+    let bytes = serde_json::to_vec(policy)?;
+    Ok(hex(&Sha256::digest(bytes))[..16].to_owned())
+}
+
 /// Directory names never hashed: build output and version control.
 const SKIPPED_DIRECTORIES: &[&str] = &["target", ".git", "node_modules"];
 

@@ -82,6 +82,37 @@ impl RunCache {
         write_json(&self.directory.join("path_inclusions.json.zst"), facts)
     }
 
+    /// The workspace call-graph facts evaluated under `policy`, if this entry
+    /// has them. The graph is a function of the crate IRs and path inclusions,
+    /// which the entry's key already covers, and of the policy, which `policy`
+    /// names.
+    #[cfg(feature = "tracing")]
+    #[instrument(level = "debug", skip(self), err(level = "warn"))]
+    pub(crate) fn read_call_graph(
+        &self,
+        policy: &str,
+    ) -> CordialResult<Option<crate::etiquettes::tracing::CallGraphFacts>> {
+        read_json(&self.call_graph_path(policy))
+    }
+
+    /// Record the workspace call-graph facts evaluated under `policy`.
+    #[cfg(feature = "tracing")]
+    #[instrument(level = "debug", skip(self, facts), err(level = "warn"))]
+    pub(crate) fn write_call_graph(
+        &self,
+        policy: &str,
+        facts: &crate::etiquettes::tracing::CallGraphFacts,
+    ) -> CordialResult<()> {
+        self.begin_write()?;
+        write_json(&self.call_graph_path(policy), facts)
+    }
+
+    #[cfg(feature = "tracing")]
+    #[instrument(level = "trace", skip(self))]
+    fn call_graph_path(&self, policy: &str) -> PathBuf {
+        self.directory.join(format!("call_graph-{policy}.json.zst"))
+    }
+
     /// Inputs that differ from the most recent other entry, for a miss message.
     /// Empty when there is no earlier entry to compare with.
     #[instrument(level = "debug", skip(self))]
