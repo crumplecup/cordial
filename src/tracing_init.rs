@@ -2,6 +2,8 @@
 
 use tracing_subscriber::EnvFilter;
 
+mod profile;
+
 /// Cordial's own events at `info`; dependencies only at `warn`.
 const TEST_DEFAULT_FILTER: &str = "warn,cordial=info";
 
@@ -17,6 +19,7 @@ const TEST_DEFAULT_FILTER: &str = "warn,cordial=info";
 /// `main` and each `#[test]` under `tests/` should call this.
 #[tracing::instrument(level = "debug")]
 pub fn init_tracing() {
+    profile::start();
     init_tracing_with_default(TEST_DEFAULT_FILTER);
 }
 

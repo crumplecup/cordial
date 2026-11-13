@@ -27,6 +27,18 @@ pub struct NextestRequest {
     no_default_features: bool,
     #[getter(copy)]
     threads: u32,
+    /// Extra environment for the test processes (a profile run names its output).
+    #[new(default)]
+    env: Vec<(String, String)>,
+}
+
+impl NextestRequest {
+    /// The same request with one more environment variable for the tests.
+    #[instrument(level = "trace", skip(self, value))]
+    pub fn with_env(mut self, name: &str, value: String) -> Self {
+        self.env.push((name.to_owned(), value));
+        self
+    }
 }
 
 /// Read the events nextest prints with `--message-format libtest-json-plus`.
@@ -79,6 +91,7 @@ pub fn run(root: &Path, request: &NextestRequest, raw: &Path) -> CordialResult<V
         .args(["--message-format", "libtest-json-plus"])
         .args(["--features", request.features()])
         .args(["-E", request.filter()])
+        .envs(request.env().iter().cloned())
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit());
