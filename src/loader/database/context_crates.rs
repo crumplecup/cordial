@@ -127,6 +127,16 @@ impl SourceDatabase {
         let mut registered: Vec<InputCrate> = all_crates(&self.db).iter().copied().collect();
         registered.extend(shadows.iter().map(|(_, copy)| *copy));
         set_all_crates_with_durability(&mut self.db, registered, Durability::MEDIUM);
+        let bytes: usize = files
+            .values()
+            .map(|copy| self.db.file_text(*copy).text(&self.db).len())
+            .sum();
+        crate::storage::record_context_copy(
+            &context.to_string(),
+            files.len(),
+            bytes,
+            shadows.len(),
+        );
         let added = ContextCrates {
             context: context.clone(),
             crates: shadows,

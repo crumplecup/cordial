@@ -109,6 +109,10 @@ impl SourceDatabase {
             self.project_leaves(&mut graph)?;
             self.project_observability_calls(&outline, &mut graph)?;
         }
+        // What the database now holds, for a profile; it needs the database
+        // exclusively, which it has here.
+        #[cfg(feature = "hotpath")]
+        crate::storage::record_database(&mut self.db);
         Ok(graph)
     }
 

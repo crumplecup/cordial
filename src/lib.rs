@@ -52,6 +52,7 @@ pub mod rustdoc;
 mod rustdoc_loader;
 mod session;
 mod source_write;
+mod storage;
 mod store;
 mod store_lock;
 mod sync;
@@ -413,6 +414,7 @@ pub use reporter::{
 pub use session::{
     RunAll, RunFilter, RunOutcome, RuntimeSession, STAGES, Session, SessionBuilder, SessionView,
 };
+pub use storage::{StoreUsage, store_usage};
 pub use store::{StoreLayout, SysrootCache, default_store_home, project_slug_from_path};
 pub use store_lock::{SysrootLock, WorklistLock};
 pub use tier::{
