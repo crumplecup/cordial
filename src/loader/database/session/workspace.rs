@@ -62,6 +62,7 @@ impl SourceDatabase {
             external_packages,
             cargo_options: Some(options.clone()),
             proc_macro_server: server,
+            context_crates: Vec::new(),
             reporter: reporter.clone(),
             #[cfg(feature = "cfg_hygiene")]
             workspace_root: Some(root),

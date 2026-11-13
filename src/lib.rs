@@ -379,8 +379,8 @@ pub use ir::{
 #[cfg(any(feature = "_quality_support", feature = "verus_ir"))]
 pub use loader::path_has_fixtures;
 pub use loader::{
-    CfgPlanning, CrateTarget, LoadView, SemanticCargoOptions, SourceDatabase, SourceFile,
-    SourceLoadView, SourceLoader, SourceSyntax, SyncOutcome, module_path_from_src_file,
+    CfgPlanning, ContextCrates, CrateTarget, LoadView, SemanticCargoOptions, SourceDatabase,
+    SourceFile, SourceLoadView, SourceLoader, SourceSyntax, SyncOutcome, module_path_from_src_file,
     quality_scan_trees,
 };
 pub use objects::{

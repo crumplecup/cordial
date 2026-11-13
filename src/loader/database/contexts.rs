@@ -54,18 +54,36 @@ pub(super) struct LocalCfgs {
 }
 
 impl LocalCfgs {
-    /// Record the ordinary cfg set of every local crate.
-    #[instrument(level = "debug", skip(db))]
+    /// Record the ordinary cfg set of every local crate, leaving out the crates a
+    /// context added: they hold their own cfg and are never toggled.
+    #[instrument(level = "debug", skip(db, excluded))]
     #[hotpath::measure(impl_type = "LocalCfgs")]
-    pub(super) fn capture(db: &RootDatabase) -> Self {
+    pub(super) fn capture_excluding(
+        db: &RootDatabase,
+        excluded: &std::collections::BTreeSet<InputCrate>,
+    ) -> Self {
         let ordinary = attach_db(db, || {
             Crate::all(db)
                 .into_iter()
-                .filter(|krate| krate.origin(db).is_local())
+                .filter(|krate| krate.origin(db).is_local() && !excluded.contains(&krate.base()))
                 .map(|krate| (krate.base(), krate.cfg(db).clone()))
                 .collect()
         });
         Self { ordinary }
+    }
+
+    /// The crates this captured, with their ordinary cfg sets.
+    #[instrument(level = "trace", skip(self))]
+    pub(super) fn cfgs(&self) -> impl Iterator<Item = (&InputCrate, &CfgOptions)> {
+        self.ordinary
+            .iter()
+            .map(|(krate, options)| (krate, options))
+    }
+
+    /// The change to a cfg set that `context` makes.
+    #[instrument(level = "trace", skip(context))]
+    pub(super) fn diff_of(context: &SemanticContextKey) -> CfgDiff {
+        Self::diff(context)
     }
 
     /// Make `context` the active cfg set of every local crate.

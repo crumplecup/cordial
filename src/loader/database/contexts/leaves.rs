@@ -84,7 +84,7 @@ impl SourceDatabase {
         for path in files {
             only.insert(self.file_id(path)?);
         }
-        let cfgs = LocalCfgs::capture(&self.db);
+        let cfgs = LocalCfgs::capture_excluding(&self.db, &self.shadow_crates());
         let base = SemanticContextKey::enabling(["test"]);
         let mut covered = Covered::default();
         let mut seen = vec![base.clone()];

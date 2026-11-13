@@ -1,5 +1,6 @@
 //! Canonical source inputs, tracked queries, and shared IR projection.
 use tracing::instrument;
+mod context_crates;
 mod contexts;
 mod external;
 mod identity;
@@ -16,6 +17,7 @@ mod session;
 mod types;
 
 pub(super) use super::native_syntax::DatabaseSource;
+pub use context_crates::ContextCrates;
 pub use options::{CfgPlanning, SemanticCargoOptions};
 #[cfg(any(
     feature = "tracing",
@@ -68,6 +70,8 @@ pub struct SourceDatabase {
     vfs: ra_ap_vfs::Vfs,
     revision: u64,
     workspace: Option<crate::SemanticWorkspaceContext>,
+    // Contexts added as crates of their own beside the ordinary ones.
+    context_crates: Vec<ContextCrates>,
     // Dependency packages of the loaded Cargo graph, kept out of the context
     // identity so snapshots do not carry the whole dependency tree.
     external_packages: Vec<crate::SemanticPackageContext>,

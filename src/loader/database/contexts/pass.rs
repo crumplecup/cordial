@@ -97,7 +97,7 @@ impl SourceDatabase {
         nodes: &FunctionNodes,
         graph: &mut CrateIr,
     ) -> CordialResult<()> {
-        let cfgs = LocalCfgs::capture(&self.db);
+        let cfgs = LocalCfgs::capture_excluding(&self.db, &self.shadow_crates());
         let mut analysed = Vec::new();
         let outcome = self.analyse_contexts(&cfgs, paths, nodes, graph, &mut analysed);
         cfgs.restore(&mut self.db);

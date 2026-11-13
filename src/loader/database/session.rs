@@ -35,6 +35,7 @@ impl SourceDatabase {
             external_packages: Vec::new(),
             cargo_options: None,
             proc_macro_server: None,
+            context_crates: Vec::new(),
             reporter: Reporter::default(),
             #[cfg(feature = "cfg_hygiene")]
             workspace_root: None,
