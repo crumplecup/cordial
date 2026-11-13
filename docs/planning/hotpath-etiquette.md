@@ -138,23 +138,35 @@ Tier: `quick`. It is a static scan over the per-file queries and builds nothing.
 
 ## Dogfood on cordial, before the etiquette exists
 
-The same checks run on cordial first, as scan tests in `tests/`, in this order.
-Each is the scanner the etiquette will later own.
+The same checks run on cordial first, as scan tests in `tests/`. Each is the
+scanner the etiquette will later own. Built, 2026-11-13:
 
-1. `hotpath_coverage` (done): every operation is measured.
-2. The allocator and the `hotpath-alloc` feature; a test that it is declared once.
-3. `crate::sync`: route the 27 mutex sites and 5 channel sites through it; a test
-   that nothing else names `std::sync::Mutex` or `mpsc`.
-4. Named threads: the 9 spawn sites; a test.
-5. `crate::storage`: one function per kind of persisted artifact; a test that
-   each persisting function calls it.
-6. The tracked-query convention: every tracked function measured and delegating;
-   a test.
-7. `crate::profiling::guard`: one guard for the CLI and the tests, every
-   section; the profile reader and run record carry the new sections.
+1. `hotpath_coverage`: every operation is measured.
+2. `hotpath_allocator`: one counting allocator, in `profiling.rs`, behind the
+   `hotpath-alloc` feature; the manifest forwards the feature; one function,
+   `profiling::guard`, builds every profile guard with every section unlimited.
+3. `hotpath_sync`: every `Mutex` and channel comes from `crate::sync` and has a
+   distinct label; raw `std::sync::Mutex` and `mpsc` fail the scan.
+4. `hotpath_threads`: every thread is a named `thread::Builder`, `cordial-...`.
+5. `storage_usage`: the store is counted by its top-level entries from one walk
+   of its root; a context's copy and the Salsa database report their own sizes.
+6. `hotpath_queries`: every tracked query is measured and calls a measured
+   function, so its reuse is the difference between the two call counts.
 
-When all seven hold on cordial, the scanners move into the etiquette and the
-tests become its fixtures.
+Findings that came out of building it, each now a rule above or in the module
+docs: the literal-label form of `mutex!` and `channel!` emits an `export_name`
+attribute, which `forbid(unsafe_code)` rejects, so labels are passed as block
+expressions and uniqueness is a scan; the instrumented `Mutex` fixes its value
+type, so a trait-object coercion has to be written out; a `static` lock cannot
+use the macro (it is not `const`), so it becomes a `LazyLock`.
+
+Not yet done: the report reader and the run record carry only the timing section.
+`functions_alloc`, `threads`, `mutexes`, `channels` and the values in `debug`
+need reading into the record, and the pre-merge comparison needs to gate on the
+counts. That is wiring, and comes after the etiquette's scanners are extracted.
+
+When the reader carries the sections, the scanners move into the etiquette and
+the tests become its fixtures.
 
 ## Phases
 
