@@ -1,36 +1,33 @@
 //! Collect error type relationships from canonical database inputs.
 
 use super::SourceDatabase;
-use crate::{CordialResult, ir::SourceErrorTypes, loader::DatabaseSource};
+use crate::loader::database::scan_queries::{self, ScanKey};
+use crate::{CordialResult, ir::SourceErrorTypes};
 use ra_ap_hir::Semantics;
-use ra_ap_ide_db::base_db::SourceDatabase as RaSourceDatabase;
 use std::path::Path;
 
 impl SourceDatabase {
     #[tracing::instrument(level = "debug", skip(self), err(level = "warn"))]
     #[hotpath::measure(impl_type = "SourceDatabase")]
     pub(super) fn project_error_types(&self, root: &Path) -> CordialResult<SourceErrorTypes> {
-        let sema = Semantics::new(&self.db);
         SourceErrorTypes::collect_with(root, |path, tree| {
-            let file = self.file_id(path)?;
-            let edition = sema.attach_first_edition(file);
-            if let Some(error) = edition.parse(&self.db).errors().first() {
-                return Err(anyhow::Error::new(error.clone()).into());
-            }
-            let source = DatabaseSource::new(
-                #[cfg(any(
-                    feature = "tracing",
-                    feature = "internal_error_chain",
-                    feature = "verus_ir",
-                    feature = "panics"
-                ))]
+            let key = ScanKey::new(
                 &self.db,
-                path,
-                self.db.file_text(file).text(&self.db),
-                sema.parse(edition),
-                ra_ap_ide_db::line_index(&self.db, file),
+                self.file_id(path)?,
+                path.to_path_buf(),
+                tree.to_path_buf(),
+                root.to_path_buf(),
             );
-            SourceErrorTypes::native_file(&source, tree)
+            match scan_queries::error_types_file(&self.db, key) {
+                Some(found) => Ok(found.clone()),
+                // The query declines a file that does not parse or that the
+                // collector refuses; the direct path reports why.
+                None => {
+                    let sema = Semantics::new(&self.db);
+                    let (_, source) = self.declaration_source(&sema, path)?;
+                    SourceErrorTypes::native_file(&source, tree)
+                }
+            }
         })
     }
 }

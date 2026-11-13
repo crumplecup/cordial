@@ -11,6 +11,7 @@ mod prime;
 mod projection;
 mod queries;
 mod recording;
+mod scan_queries;
 mod session;
 mod types;
 

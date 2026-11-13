@@ -281,7 +281,7 @@ fn assert_edit_invalidates_only_dependents(
     let facts_of = |counts: &BTreeMap<String, usize>| -> BTreeMap<String, usize> {
         counts
             .iter()
-            .filter(|(key, _)| key.starts_with("file_facts:"))
+            .filter(|(key, _)| key.starts_with("file_facts:") || key.contains("_file:"))
             .map(|(key, count)| (key.clone(), *count))
             .collect()
     };
