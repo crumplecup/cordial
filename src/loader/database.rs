@@ -6,6 +6,7 @@ mod external;
 mod identity;
 #[cfg(feature = "tracing")]
 mod islands;
+mod items;
 mod options;
 mod populate;
 mod prime;

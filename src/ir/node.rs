@@ -123,6 +123,8 @@ impl NodeKind {
 #[derive(
     Debug,
     Clone,
+    PartialEq,
+    Eq,
     Serialize,
     Deserialize,
     derive_getters::Getters,

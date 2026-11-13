@@ -281,7 +281,11 @@ fn assert_edit_invalidates_only_dependents(
     let facts_of = |counts: &BTreeMap<String, usize>| -> BTreeMap<String, usize> {
         counts
             .iter()
-            .filter(|(key, _)| key.starts_with("file_facts:") || key.contains("_file:"))
+            .filter(|(key, _)| {
+                key.starts_with("file_facts:")
+                    || key.starts_with("file_items:")
+                    || key.contains("_file:")
+            })
             .map(|(key, count)| (key.clone(), *count))
             .collect()
     };
@@ -290,10 +294,37 @@ fn assert_edit_invalidates_only_dependents(
         !facts_before.is_empty(),
         "file facts are queries: {before:?}"
     );
+    // Each per-file query ran at all, so the check below is not about nothing.
+    for query in [
+        "file_facts:",
+        "file_items:",
+        "error_sites_file:",
+        "error_chains_file:",
+        "error_types_file:",
+        "error_compliance_file:",
+        "error_apply_file:",
+        "observability_file:",
+        "visibility_file:",
+        "policy_file:",
+        "verus_file:",
+    ] {
+        assert!(
+            facts_before.keys().any(|key| key.starts_with(query)),
+            "{query} ran as a query: {before:?}"
+        );
+    }
     for (file, count) in &facts_after {
         let was = facts_before.get(file).copied().unwrap_or(0);
+        // The items of a file hold its functions' evidence, which includes the
+        // errors they reach. So the files of the callers of the edited function
+        // (`root` in lib.rs, `middle` in middle.rs) are rebuilt too, as they
+        // should be; no other file's items are.
+        let callers = file.starts_with("file_items:")
+            && (file.ends_with("src/lib.rs") || file.ends_with("src/middle.rs"));
         if file.ends_with("src/leaf.rs") {
             assert!(*count > was, "the edited file's facts were reused: {file}");
+        } else if callers {
+            assert!(*count >= was, "{file}");
         } else {
             assert_eq!(*count, was, "another file's facts were recomputed: {file}");
         }

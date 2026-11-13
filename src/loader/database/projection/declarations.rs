@@ -2,7 +2,6 @@
 
 use super::SourceDatabase;
 use crate::loader::database::{DatabaseSource, contexts::FunctionNodes, populate::Projection};
-use crate::loader::module_path_from_src_file;
 use crate::{CordialResult, CrateIr, FileSnapshot};
 use ra_ap_hir::Semantics;
 use ra_ap_ide_db::{RootDatabase, base_db::SourceDatabase as RaSourceDatabase};
@@ -46,30 +45,12 @@ impl SourceDatabase {
         let mut projection = Projection::default();
         let sema = Semantics::new(&self.db);
         for path in paths {
-            let (file, source) = self.declaration_source(&sema, path)?;
+            let (file, _source) = self.declaration_source(&sema, path)?;
             snapshots.push(FileSnapshot::new(
                 path.canonicalize()?,
                 Sha256::digest(self.db.file_text(file).text(&self.db).as_bytes()).into(),
             ));
-            let module_path = sema
-                .file_to_module_defs(file)
-                .next()
-                .map(|module| {
-                    module
-                        .path_to_root(&self.db)
-                        .into_iter()
-                        .rev()
-                        .filter_map(|module| module.name(&self.db))
-                        .map(|name| name.as_str().to_owned())
-                        .collect::<Vec<_>>()
-                        .join("::")
-                })
-                // A file outside the module tree (a stray or unreferenced source)
-                // still gets the path its location implies, as the policy scans
-                // always gave it.
-                .unwrap_or_else(|| module_path_from_src_file(&src, path).join("::"));
-            let module =
-                projection.populate(&self.db, &sema, (file, &source), &module_path, graph)?;
+            let module = projection.populate(&self.db, file, path, &src, graph)?;
             #[cfg(feature = "tracing")]
             modules.push((path.clone(), module));
             #[cfg(not(feature = "tracing"))]
