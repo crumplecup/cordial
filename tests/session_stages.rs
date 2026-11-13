@@ -91,6 +91,10 @@ fn a_run_stops_after_the_stage_it_is_asked_to_and_says_what_it_reused() -> Resul
         said.contains("call graph: reused from the run cache"),
         "the graph built last run is not built again: {said}"
     );
+    assert!(
+        said.contains("cargo doc mini: started ahead of the scan"),
+        "rustdoc runs alongside the analysis: {said}"
+    );
     assert_eq!(enrich["loaded"], "0");
     assert!(seconds(&enrich, "enrich_s") > 0.0);
     assert_eq!(seconds(&enrich, "assess_s"), 0.0);

@@ -106,6 +106,24 @@ pub(super) fn load_and_probe(
     timings: &mut HookTimings,
 ) -> CordialResult<LoadedWorkspace> {
     let parsed_source_session = begin_database(session, store, hooks.gated_semantics, timings)?;
+    // rustdoc needs nothing from the analysis below, so it runs alongside it.
+    #[cfg(feature = "doc_warnings")]
+    if session.reaches("enrich")
+        && hooks.enrichers.iter().any(|enricher| {
+            enricher.id() == crate::etiquettes::doc_warnings::DocWarningInventoryEnricher::ID
+        })
+    {
+        let policy = crate::config::load_session_config(session)
+            .doc_warnings()
+            .clone();
+        for target in targets {
+            crate::etiquettes::doc_warnings::prefetch_doc_output(
+                target.crate_root(),
+                target.crate_name(),
+                &policy,
+            );
+        }
+    }
     let LoadingHooks {
         loaders,
         enrichers,

@@ -371,6 +371,17 @@ impl RuntimeSession {
             _ => Ok(()),
         }
     }
+    /// Whether the run goes on to `stage`, or is asked to stop before it.
+    #[cfg(feature = "doc_warnings")]
+    #[instrument(level = "trace", skip(self))]
+    pub(super) fn reaches(&self, stage: &str) -> bool {
+        let position = |name: &str| STAGES.iter().position(|known| *known == name);
+        match (&self.stop_after, position(stage)) {
+            (Some(wanted), Some(stage)) => position(wanted).is_none_or(|wanted| wanted >= stage),
+            _ => true,
+        }
+    }
+
     #[instrument(level = "trace", skip(self))]
     pub(super) fn registered_plugins(&self) -> &[&'static dyn Plugin] {
         &self.plugins

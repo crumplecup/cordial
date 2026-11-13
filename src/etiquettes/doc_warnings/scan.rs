@@ -11,6 +11,63 @@ use super::types::{DocWarningRecord, DocWarningRuleId};
 
 use tracing::instrument;
 
+/// `cargo doc` runs that were started ahead of the scan that wants them, by the
+/// directory they run in, the package and the options that shape them.
+static PREFETCHED: std::sync::Mutex<
+    std::collections::BTreeMap<String, std::thread::JoinHandle<CordialResult<String>>>,
+> = std::sync::Mutex::new(std::collections::BTreeMap::new());
+
+fn prefetched() -> std::sync::MutexGuard<
+    'static,
+    std::collections::BTreeMap<String, std::thread::JoinHandle<CordialResult<String>>>,
+> {
+    PREFETCHED
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+#[instrument(level = "trace", skip(policy))]
+fn prefetch_key(crate_root: &Path, crate_name: &str, policy: &DocWarningsThresholds) -> String {
+    format!(
+        "{}|{crate_name}|{}|{}",
+        crate_root.display(),
+        policy.all_features(),
+        policy.document_private_items()
+    )
+}
+
+/// Start `cargo doc` for a crate now, on its own thread, so the scan that needs
+/// its output finds it done: the run spends minutes analysing the project, and
+/// rustdoc needs nothing from that analysis. A later run replaces any output
+/// left from an earlier one, so a scan never reads a stale result.
+#[instrument(level = "debug", skip(policy))]
+#[hotpath::measure]
+pub fn prefetch_doc_output(crate_root: &Path, crate_name: &str, policy: &DocWarningsThresholds) {
+    if policy.skip(crate_name) || !crate_root.join("Cargo.toml").is_file() {
+        return;
+    }
+    let Some(cargo) = resolve_cargo_binary() else {
+        return;
+    };
+    let (root, name, thresholds) = (
+        crate_root.to_path_buf(),
+        crate_name.to_owned(),
+        policy.clone(),
+    );
+    let started = std::thread::Builder::new()
+        .name("cargo-doc".to_owned())
+        .spawn(move || run_cargo_doc(&cargo, &root, &name, &thresholds));
+    match started {
+        Ok(handle) => {
+            crate::host::event(format!("cargo doc {crate_name}: started ahead of the scan"));
+            prefetched().insert(prefetch_key(crate_root, crate_name, policy), handle);
+        }
+        Err(error) => {
+            tracing::warn!(error = ?error, "could not start cargo doc ahead of the scan");
+        }
+    }
+}
+
 /// Scan a crate: run `cargo doc` unless this package is skipped or cargo
 /// is not on `PATH`.
 ///
@@ -47,7 +104,17 @@ pub fn scan_crate_doc_warnings(
         );
         return Ok(Vec::new());
     };
-    let output = run_cargo_doc(&cargo, crate_root, crate_name, policy)?;
+    let ahead = prefetched().remove(&prefetch_key(crate_root, crate_name, policy));
+    let output = match ahead.map(std::thread::JoinHandle::join) {
+        Some(Ok(output)) => {
+            crate::host::event(format!(
+                "cargo doc {crate_name}: collected from the run started ahead"
+            ));
+            output?
+        }
+        // No run was started ahead, or its thread panicked: run it now.
+        _ => run_cargo_doc(&cargo, crate_root, crate_name, policy)?,
+    };
     parse_doc_compiler_output(&output, resolve_root)
 }
 

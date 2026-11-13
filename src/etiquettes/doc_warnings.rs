@@ -34,7 +34,7 @@ pub use assessor::DocWarningAssessor;
 pub use enricher::DocWarningInventoryEnricher;
 pub use probe::DocWarningSiteProbe;
 pub use reporter::{DocWarningChecklistReporter, DocWarningCsvReporter, DocWarningSummaryReporter};
-pub use scan::{parse_doc_compiler_output, scan_crate_doc_warnings};
+pub use scan::{parse_doc_compiler_output, prefetch_doc_output, scan_crate_doc_warnings};
 pub use types::{DocWarningRecord, DocWarningRuleId};
 
 use std::sync::LazyLock;
