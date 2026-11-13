@@ -24,6 +24,13 @@ use ra_ap_hir::Semantics;
     feature = "verus_ir"
 ))]
 use ra_ap_ide_db::RootDatabase;
+#[cfg(any(
+    feature = "error_sites",
+    feature = "error_chain",
+    feature = "internal_error_chain",
+    feature = "tracing",
+    feature = "verus_ir"
+))]
 use tracing::instrument;
 
 #[cfg(any(
