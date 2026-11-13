@@ -24,7 +24,8 @@ impl SourceDatabase {
     #[instrument(level = "debug", skip(self))]
     #[hotpath::measure(impl_type = "SourceDatabase")]
     pub(super) fn prime_function_evidence(&self) {
-        let functions = attach_db(&self.db, || local_functions(&self.db));
+        let excluded = self.shadow_crates();
+        let functions = attach_db(&self.db, || local_functions(&self.db, &excluded));
         self.prime_functions("workspace", &functions);
     }
 
@@ -92,10 +93,13 @@ fn evaluate(db: &RootDatabase, functions: &[Function], next: &AtomicUsize) {
 /// methods with their default bodies, and the methods of every impl.
 #[instrument(level = "debug", skip(db))]
 #[hotpath::measure]
-fn local_functions(db: &RootDatabase) -> Vec<Function> {
+fn local_functions(
+    db: &RootDatabase,
+    excluded: &std::collections::BTreeSet<ra_ap_ide_db::base_db::Crate>,
+) -> Vec<Function> {
     let mut functions = Vec::new();
     for krate in Crate::all(db) {
-        if !krate.origin(db).is_local() {
+        if !krate.origin(db).is_local() || excluded.contains(&krate.base()) {
             continue;
         }
         for module in krate.modules(db) {

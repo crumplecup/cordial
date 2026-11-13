@@ -89,11 +89,17 @@ impl SourceDatabase {
         }
         let mut change = ChangeWithProcMacros::default();
         let mut changed = Vec::with_capacity(changes.len());
+        let mut texts = Vec::with_capacity(changes.len());
         for (path, file, text) in changes {
-            change.change_file(file, Some(text));
+            change.change_file(file, Some(text.clone()));
+            texts.push((file, text));
             changed.push(path);
         }
         change.apply(&mut self.db);
+        // Every context's copy of a changed file follows it.
+        for (file, text) in texts {
+            self.change_context_copies(file, &text);
+        }
         self.revision += 1;
         Ok(SyncOutcome::Updated(changed))
     }

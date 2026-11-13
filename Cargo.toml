@@ -39,6 +39,7 @@ proc-macro2 = { version = "1", features = ["span-locations"], optional = true }
 tracing = "0.1"
 rustdoc-types = { version = "0.61", optional = true }
 nom = { version = "8", optional = true }
+triomphe = "0.1"
 walkdir = "2"
 zstd = "0.13"
 cargo_metadata = "0.23"

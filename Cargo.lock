@@ -385,6 +385,7 @@ dependencies = [
  "toml",
  "tracing",
  "tracing-subscriber",
+ "triomphe",
  "verus_syn",
  "walkdir",
  "zstd",

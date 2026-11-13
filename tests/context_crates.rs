@@ -1,7 +1,7 @@
-//! A cfg context added as crates of its own coexists with the ordinary build in
-//! one database: its functions are the ones its cfg activates, the ordinary
-//! crates keep what they had, and nothing Salsa memoised for them is computed
-//! again.
+//! A cfg context added as a copy of the workspace coexists with the ordinary build
+//! in one database: its functions are the ones its cfg activates, the ordinary
+//! crates and files keep what they had, and nothing Salsa memoised for them is
+//! computed again.
 
 mod support {
     pub mod semantic_metrics;
@@ -140,28 +140,13 @@ fn a_context_is_crates_beside_the_ordinary_ones_and_leaves_them_alone() -> Resul
         first_difference(&left.to_string(), &right.to_string())
     );
 
-    // What the ordinary build had computed for a function only it has is not
-    // computed again: the context's crates invalidated none of it.
+    // The context has files and crates of its own, so adding it cost the ordinary
+    // build nothing: not one query, of any file or function, ran again.
     let after = metrics.snapshot();
-    for query in ["direct:ordinary_only", "reachable:ordinary_only"] {
-        assert_eq!(
-            after.get(query),
-            before.get(query),
-            "{query} was recomputed for the ordinary build"
-        );
-    }
-    // The crates the context added are new functions to evaluate, once each.
-    assert!(after.contains_key("direct:harness"), "{after:?}");
-    // A file's queries read which crates the file belongs to, and that changed
-    // once, so each re-verifies once. Nothing after that does.
-    for (query, count) in &after {
-        if query.contains("_file:") || query.starts_with("file_facts:") {
-            assert!(
-                *count <= before.get(query).copied().unwrap_or(0) + 1,
-                "{query} ran more than once for the new crates: {before:?} -> {after:?}"
-            );
-        }
-    }
+    assert_eq!(
+        after, before,
+        "adding a context's crates re-ran queries for the ordinary build"
+    );
 
     // A later projection, with the context already added, computes nothing.
     session.project(&target, &paths).into_diagnostic()?;
@@ -169,6 +154,75 @@ fn a_context_is_crates_beside_the_ordinary_ones_and_leaves_them_alone() -> Resul
         metrics.snapshot(),
         after,
         "a context already added costs nothing on the next projection"
+    );
+    Ok(())
+}
+
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn an_edit_reaches_the_contexts_copy_of_the_file() -> Result<()> {
+    cordial::init_tracing();
+    let root = fixture()?;
+    let options = SemanticCargoOptions::default().with_cfg_planning(CfgPlanning::Explicit);
+    let mut session = SourceDatabase::load_with(root.path(), &options).into_diagnostic()?;
+    let added = session.add_context_crates(&kani()).into_diagnostic()?;
+    let lib = root.path().join("src/lib.rs");
+    let marker = "#[cfg(kani)]\npub fn second_harness() {}";
+    let edited = format!("{LIBRARY}\n{marker}\n");
+    let at = (
+        lib.clone(),
+        u32::try_from(
+            edited
+                .find(marker)
+                .ok_or_else(|| miette::miette!("no marker"))?,
+        )
+        .into_diagnostic()?,
+    );
+    assert!(!spots(session.context_functions(&added)).contains(&at));
+
+    session.change_file(&lib, edited).into_diagnostic()?;
+
+    assert!(
+        spots(session.context_functions(&added)).contains(&at),
+        "the context's copy of lib.rs did not follow the edit"
+    );
+    assert!(
+        !spots(session.ordinary_functions()).contains(&at),
+        "the ordinary build must not see code gated on kani"
+    );
+    Ok(())
+}
+
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn an_edit_synced_from_disk_reaches_the_contexts_copy_too() -> Result<()> {
+    cordial::init_tracing();
+    let root = fixture()?;
+    let options = SemanticCargoOptions::default().with_cfg_planning(CfgPlanning::Explicit);
+    let mut session = SourceDatabase::load_with(root.path(), &options).into_diagnostic()?;
+    let added = session.add_context_crates(&kani()).into_diagnostic()?;
+    let lib = root.path().join("src/lib.rs");
+    let marker = "#[cfg(kani)]\npub fn synced_harness() {}";
+    let edited = format!("{LIBRARY}\n{marker}\n");
+    let at = (
+        lib.clone(),
+        u32::try_from(
+            edited
+                .find(marker)
+                .ok_or_else(|| miette::miette!("no marker"))?,
+        )
+        .into_diagnostic()?,
+    );
+    std::fs::write(&lib, &edited).into_diagnostic()?;
+
+    let outcome = session.sync_from_disk().into_diagnostic()?;
+    assert!(
+        matches!(outcome, cordial::SyncOutcome::Updated(_)),
+        "{outcome:?}"
+    );
+    assert!(
+        spots(session.context_functions(&added)).contains(&at),
+        "the context's copy did not follow the file the session synced from disk"
     );
     Ok(())
 }

@@ -67,7 +67,13 @@ impl SourceDatabase {
         ra_ap_hir::attach_db(&self.db, || {
             let mut files = rust_files(&package.root().join("src"));
             files.extend(package.source_entries().iter().cloned());
+            let shadows = self.shadow_crates();
             for krate in ra_ap_hir::Crate::all(&self.db) {
+                // A context's copy of a crate has the same root and must not
+                // add the modules only its cfg activates.
+                if shadows.contains(&krate.base()) {
+                    continue;
+                }
                 let Some(root) = self.vfs.file_path(krate.root_file(&self.db)).as_path() else {
                     continue;
                 };

@@ -101,11 +101,14 @@ pub(super) fn group(keys: Vec<SemanticContextKey>) -> Vec<Pending> {
 /// that exclude each other.
 #[instrument(level = "debug", skip(db))]
 #[hotpath::measure]
-pub(super) fn declares_a_name_twice(db: &RootDatabase) -> bool {
+pub(super) fn declares_a_name_twice(
+    db: &RootDatabase,
+    crates: &BTreeSet<ra_ap_ide_db::base_db::Crate>,
+) -> bool {
     attach_db(db, || {
         Crate::all(db)
             .into_iter()
-            .filter(|krate| krate.origin(db).is_local())
+            .filter(|krate| krate.origin(db).is_local() && crates.contains(&krate.base()))
             .flat_map(|krate| krate.modules(db))
             .any(|module| {
                 let mut seen: BTreeSet<(Namespace, String)> = BTreeSet::new();

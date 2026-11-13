@@ -5,7 +5,6 @@
 //! context once, reads each leaf function's calls, and restores the ordinary
 //! build. Nothing here adds a node to the library's graph.
 
-use super::LocalCfgs;
 use super::plan::{Covered, asked};
 use crate::loader::database::{
     SourceDatabase, populate::expanded_definition, queries::FunctionKey, queries::function_evidence,
@@ -84,7 +83,6 @@ impl SourceDatabase {
         for path in files {
             only.insert(self.file_id(path)?);
         }
-        let cfgs = LocalCfgs::capture_excluding(&self.db, &self.shadow_crates());
         let base = SemanticContextKey::enabling(["test"]);
         let mut covered = Covered::default();
         let mut seen = vec![base.clone()];
@@ -99,28 +97,45 @@ impl SourceDatabase {
                 );
                 break;
             }
-            cfgs.enter(&mut self.db, &context);
+            let added = match self.add_context_crates(&context) {
+                Ok(added) => added,
+                Err(error) => {
+                    outcome = Err(error);
+                    break;
+                }
+            };
             let mut found = Vec::new();
-            outcome = self.read_leaves(files, &mut found);
+            outcome = self.read_leaves(files, &added, &mut found);
             tracing::debug!(target: "cordial::semantic::leaves", %context, found = found.len(), "leaf context read");
             merge(leaves, found);
             if outcome.is_err() {
                 break;
             }
-            for next in asked(&self.db, &context, &mut covered, Some(&only)) {
+            for next in asked(
+                &self.db,
+                &context,
+                &mut covered,
+                Some(&only),
+                &added.crate_set(),
+                &added.originals(),
+            ) {
                 if !seen.contains(&next) {
                     seen.push(next.clone());
                     queue.push_back(next);
                 }
             }
         }
-        cfgs.restore(&mut self.db);
         outcome
     }
 
     #[instrument(level = "debug", skip(self, files, leaves), err(level = "warn"))]
     #[hotpath::measure]
-    fn read_leaves(&self, files: &[PathBuf], leaves: &mut Vec<LeafFunction>) -> CordialResult<()> {
+    fn read_leaves(
+        &self,
+        files: &[PathBuf],
+        context: &crate::ContextCrates,
+        leaves: &mut Vec<LeafFunction>,
+    ) -> CordialResult<()> {
         attach_db(&self.db, || {
             let sema = Semantics::new(&self.db);
             let roots = self
@@ -134,7 +149,9 @@ impl SourceDatabase {
             // evaluate the leaf functions together, then read them below.
             let mut definitions = Vec::new();
             for path in files {
-                let file = self.file_id(path)?;
+                let Some(file) = context.copy_of(self.file_id(path)?) else {
+                    continue;
+                };
                 let tree = sema.parse(sema.attach_first_edition(file));
                 definitions.extend(
                     tree.syntax()
@@ -148,7 +165,9 @@ impl SourceDatabase {
             }
             self.prime_functions("leaf files", &definitions);
             for path in files {
-                let file = self.file_id(path)?;
+                let Some(file) = context.copy_of(self.file_id(path)?) else {
+                    continue;
+                };
                 let tree = sema.parse(sema.attach_first_edition(file));
                 for function in tree.syntax().descendants().filter_map(ast::Fn::cast) {
                     let Some(definition) = sema

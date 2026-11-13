@@ -117,8 +117,11 @@ impl SourceDatabase {
         self.check_virtual_input(path)?;
         let file = self.file_id(path)?;
         let mut change = ChangeWithProcMacros::default();
-        change.change_file(file, Some(text));
+        change.change_file(file, Some(text.clone()));
         change.apply(&mut self.db);
+        // Every context's copy of the file follows, so the contexts read the
+        // same revision of the sources the ordinary build does.
+        self.change_context_copies(file, &text);
         self.revision += 1;
         Ok(())
     }

@@ -15,6 +15,7 @@ use crate::SemanticContextKey;
 use ra_ap_cfg::{CfgAtom, CfgExpr, CfgOptions};
 use ra_ap_hir::{Crate, Semantics, attach_db};
 use ra_ap_ide_db::RootDatabase;
+use ra_ap_ide_db::base_db::Crate as InputCrate;
 use ra_ap_syntax::{
     AstNode,
     ast::{self, HasAttrs},
@@ -127,13 +128,15 @@ pub(in crate::loader::database) fn asked(
     current: &SemanticContextKey,
     covered: &mut Covered,
     only: Option<&BTreeSet<FileId>>,
+    crates: &BTreeSet<InputCrate>,
+    originals: &std::collections::HashMap<FileId, FileId>,
 ) -> Vec<SemanticContextKey> {
     attach_db(db, || {
         let sema = Semantics::new(db);
         let mut active: BTreeMap<FileId, Vec<&CfgOptions>> = BTreeMap::new();
         for krate in Crate::all(db)
             .into_iter()
-            .filter(|krate| krate.origin(db).is_local())
+            .filter(|krate| krate.origin(db).is_local() && crates.contains(&krate.base()))
         {
             let files: BTreeSet<_> = krate
                 .modules(db)
@@ -151,7 +154,10 @@ pub(in crate::loader::database) fn asked(
         }
         let mut asked: BTreeSet<SemanticContextKey> = BTreeSet::new();
         for (file, crates) in active {
-            if only.is_some_and(|only| !only.contains(&file)) {
+            // A context's copy of a file stands for the original in what is
+            // covered and what is asked about.
+            let original = originals.get(&file).copied().unwrap_or(file);
+            if only.is_some_and(|only| !only.contains(&original)) {
                 continue;
             }
             let tree = sema.parse(sema.attach_first_edition(file));
@@ -163,14 +169,14 @@ pub(in crate::loader::database) fn asked(
             for host in hosts {
                 for clause in clauses(&guard(&host), false) {
                     if crates.iter().any(|cfg| clause.holds(cfg)) {
-                        covered.0.insert((file, clause));
+                        covered.0.insert((original, clause));
                         continue;
                     }
-                    if covered.0.contains(&(file, clause.clone())) {
+                    if covered.0.contains(&(original, clause.clone())) {
                         continue;
                     }
                     if let Some(next) = crates.iter().find_map(|cfg| apply(current, cfg, &clause)) {
-                        covered.0.insert((file, clause));
+                        covered.0.insert((original, clause));
                         asked.insert(next);
                     }
                 }

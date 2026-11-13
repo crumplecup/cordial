@@ -1,9 +1,10 @@
 //! Harvest each cfg context's facts into the IR.
 //!
-//! Contexts are visited one at a time. Entering one changes the workspace
-//! crates' cfg input, so only that context's variant is resident; its facts are
-//! copied into the IR before the next diff replaces them, and the ordinary cfg
-//! is restored at the end whatever happens.
+//! Each context is a copy of the workspace's crates under its cfg, added beside
+//! the ordinary ones (see `context_crates`). Nothing is toggled: the ordinary
+//! crates' inputs are never written, so what the database computed for them
+//! stays valid, and a context's facts are read from its own crates and copied
+//! into the IR.
 
 use super::LocalCfgs;
 use super::flips::Flips;
@@ -100,7 +101,6 @@ impl SourceDatabase {
         let cfgs = LocalCfgs::capture_excluding(&self.db, &self.shadow_crates());
         let mut analysed = Vec::new();
         let outcome = self.analyse_contexts(&cfgs, paths, nodes, graph, &mut analysed);
-        cfgs.restore(&mut self.db);
         // Gated code is extra evidence: failing to analyse it must not fail a run
         // that asked for nothing else. The plan says it is incomplete, and the log
         // carries the whole error chain.
@@ -145,7 +145,14 @@ impl SourceDatabase {
         wanted.add_exact(options.cfg_contexts().clone());
         if automatic {
             let _watch = crate::process_memory::Watch::start("planning scan".to_owned());
-            wanted.add(asked(&self.db, &ordinary, &mut covered, None));
+            wanted.add(asked(
+                &self.db,
+                &ordinary,
+                &mut covered,
+                None,
+                &self.ordinary_crates(),
+                &HashMap::new(),
+            ));
             crate::process_memory::log("planning scan done");
         }
         while let Some(pending) = wanted.queue.pop_front() {
@@ -167,9 +174,9 @@ impl SourceDatabase {
             ));
             let watch =
                 crate::process_memory::Watch::start(format!("cfg context {}", analysed.len() + 1));
-            cfgs.enter(&mut self.db, &context);
+            let added = self.add_context_crates(&context)?;
             crate::process_memory::log("cfg context entered");
-            if pending.is_merged() && declares_a_name_twice(&self.db) {
+            if pending.is_merged() && declares_a_name_twice(&self.db, &added.crate_set()) {
                 tracing::debug!(
                     target: "cordial::semantic::contexts",
                     %context,
@@ -184,7 +191,11 @@ impl SourceDatabase {
             let index = u32::try_from(analysed.len()).unwrap_or(u32::MAX);
             analysed.push(context.clone());
             let pairs = cfgs.pairs(&context);
-            let files = Files { paths, nodes };
+            let files = Files {
+                paths,
+                nodes,
+                context: &added,
+            };
             let finished = self.harvest(&context, index, &pairs, &budget, &files, graph)?;
             crate::process_memory::log("cfg context harvested");
             #[cfg(feature = "tracing")]
@@ -198,7 +209,14 @@ impl SourceDatabase {
                 return Ok(false);
             }
             if automatic {
-                wanted.add(asked(&self.db, &context, &mut covered, None));
+                wanted.add(asked(
+                    &self.db,
+                    &context,
+                    &mut covered,
+                    None,
+                    &added.crate_set(),
+                    &added.originals(),
+                ));
             }
             drop(watch);
             tracing::debug!(
@@ -248,7 +266,11 @@ impl SourceDatabase {
                     finished = false;
                     break;
                 }
-                let file = self.file_id(path)?;
+                // The context's copy of the file, which has the same text.
+                let original = self.file_id(path)?;
+                let Some(file) = files.context.copy_of(original) else {
+                    continue;
+                };
                 let tree = sema.parse(sema.attach_first_edition(file));
                 let flips = Flips::collect(&tree, pairs);
                 for function in tree.syntax().descendants().filter_map(ast::Fn::cast) {
@@ -324,10 +346,12 @@ impl SourceDatabase {
     }
 }
 
-/// The files of one projection and the graph node of each function in them.
+/// The files of one projection, the graph node of each function in them, and the
+/// context's copy of the workspace they are read through.
 struct Files<'a> {
     paths: &'a [PathBuf],
     nodes: &'a FunctionNodes,
+    context: &'a crate::ContextCrates,
 }
 
 /// How much more resident memory the context passes may use than the ordinary

@@ -22,7 +22,6 @@ use ra_ap_cfg::{CfgAtom, CfgDiff, CfgOptions};
 use ra_ap_hir::{Crate, attach_db};
 use ra_ap_hir_expand::intern::Symbol;
 use ra_ap_ide_db::{RootDatabase, base_db::Crate as InputCrate};
-use salsa::{Durability, Setter};
 use tracing::instrument;
 
 /// The cfg atom named by `text`: a flag, or `key="value"`.
@@ -86,18 +85,6 @@ impl LocalCfgs {
         Self::diff(context)
     }
 
-    /// Make `context` the active cfg set of every local crate.
-    #[instrument(level = "debug", skip(self, db, context), fields(crates = self.ordinary.len()))]
-    #[hotpath::measure(impl_type = "LocalCfgs")]
-    pub(super) fn enter(&self, db: &mut RootDatabase, context: &SemanticContextKey) {
-        let diff = Self::diff(context);
-        for (krate, ordinary) in &self.ordinary {
-            let mut options = ordinary.clone();
-            options.apply_diff(diff.clone());
-            Self::set(db, *krate, options);
-        }
-    }
-
     /// Each local crate's ordinary cfg set beside the one `context` gives it,
     /// computed without touching the database.
     #[instrument(level = "trace", skip(self, context))]
@@ -121,26 +108,5 @@ impl LocalCfgs {
             context.enabled().iter().map(|text| atom(text)).collect(),
             context.disabled().iter().map(|text| atom(text)).collect(),
         )
-    }
-
-    /// Return every local crate to its ordinary cfg set.
-    #[instrument(level = "debug", skip(self, db))]
-    #[hotpath::measure(impl_type = "LocalCfgs")]
-    pub(super) fn restore(&self, db: &mut RootDatabase) {
-        for (krate, ordinary) in &self.ordinary {
-            Self::set(db, *krate, ordinary.clone());
-        }
-    }
-
-    #[instrument(level = "trace", skip(db, krate, options))]
-    fn set(db: &mut RootDatabase, krate: InputCrate, options: CfgOptions) {
-        // Same durability the workspace loader gave the input, so the change does
-        // not reclassify what depends on it.
-        if krate.cfg_options(db) != &options {
-            krate
-                .set_cfg_options(db)
-                .with_durability(Durability::MEDIUM)
-                .to(options);
-        }
     }
 }
