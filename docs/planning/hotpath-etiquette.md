@@ -1,8 +1,9 @@
 # `hotpath` etiquette
 
-Status: **Active (plan only).** Nothing below is built. The order of work is
-dogfood first: apply every rule to cordial by hand, using scan tests, then
-extract the scanners into an etiquette and wire it in.
+Status: **Active.** The etiquette itself is not built. Its scanners exist on
+cordial as scan tests (see "Dogfood"), and the run record reads every section they
+feed. The remaining work is to extract the scanners into an etiquette and wire it
+in.
 
 A quality etiquette that checks a Rust codebase for **complete performance
 instrumentation with [`hotpath`](https://docs.rs/hotpath)**: every operation
@@ -46,7 +47,7 @@ all, and an apply can fix the common one.
 | Locks | `Mutex` and `RwLock` come from one module that re-exports hotpath's | `mutexes`, `rw_locks` |
 | Channels | `mpsc` comes from the same module | `channels` |
 | I/O bytes | The readers and writers of persisted artifacts are wrapped | `io` |
-| Storage values | Each persisted or kept artifact reports its size through one module | values (`val!` / `gauge!`) |
+| Storage values | The store is walked once from its root, and the in-memory stores (a context's copy, the Salsa database) report themselves, all through one module | values (`val!`), in the report's `debug` section |
 | Query reuse | Every `#[salsa::tracked]` function is measured and delegates to a measured inner function | the outer function counts requests, the inner counts executions |
 | The guard | One place builds the guard, with every section enabled | all sections |
 
@@ -88,6 +89,8 @@ Rule ids are stable and each resolves through `cordial explain`.
 | `HOTPATH-THREAD-UNNAMED` | `thread::spawn`, or a `thread::Builder` with no `.name(..)` | Rewrite to a named builder, taking the name from the enclosing function |
 | `HOTPATH-ALLOCATOR` | No counting allocator is declared, or more than one | Advisory (it changes the whole program) |
 | `HOTPATH-STORAGE-UNRECORDED` | A function that writes or reads a persisted artifact does not report its size through the storage module | Advisory |
+| `HOTPATH-LITERAL-LABEL` | `mutex!` or `channel!` given a string-literal `label` in a crate that forbids unsafe code. With the feature on, hotpath's uniqueness check for a literal label expands to an `export_name` attribute, which `forbid(unsafe_code)` rejects, so the build breaks only in the instrumented configuration | Rewrite the label to a block expression (`label = { "name" }`), which hotpath accepts without the check |
+| `HOTPATH-STATIC-LOCK` | A `static` `Mutex` or channel built with the plain constructor, which the instrumented wrapper cannot replace because its constructor is not `const` | Rewrite to `LazyLock<Mutex<..>>` built with the macro |
 | `HOTPATH-SHADOW` | A module, import or item named `hotpath` that shadows the crate inside a macro's expansion | Advisory, with the rename |
 | `HOTPATH-GUARD` | A guard is built outside the central function, or without every section | Advisory |
 | `HOTPATH-FEATURE` | The manifest does not forward the `hotpath` and `hotpath-alloc` features to the dependency | Advisory |
@@ -126,6 +129,28 @@ the pre-merge comparison the performance plan already describes.
 
 Tier: `quick`. It is a static scan over the per-file queries and builds nothing.
 
+## Reading profiles back
+
+The static check says the instrumentation exists; `cordial perf` reads what it
+recorded. The run record carries, besides function timing: bytes allocated per
+function, each thread's processor use and heap traffic, each named lock's wait,
+each channel's traffic, and the values the program reported. Three points matter
+to the etiquette's design:
+
+- **Counts gate, sizes trend.** hotpath prints byte figures with one decimal of
+  their unit (a figure just above a kilobyte steps by about a tenth of itself), so
+  bytes allocated and bytes stored are listed when they move and do not fail a
+  comparison. The values that count things (`.files`, `.crates`, `.memos`,
+  `.count`) are exact numbers and become counters, which the comparison does gate
+  on. A value's key says which it is, so the storage module names values by that
+  convention, and the etiquette checks it.
+- **Sections are data-driven.** A section appears in the report when something fed
+  it, so a missing `mutexes` section means no instrumented lock was taken, not a
+  failure. The static checks, not the profile, decide whether a lock is
+  instrumented.
+- **Unnamed things are unreadable.** A thread with no name and a lock with no
+  label cannot be told apart in the report, which is why both are rules.
+
 ## What it does not do
 
 - It does not read profiles. Whether a measured function is slow, or a stored
@@ -160,13 +185,12 @@ expressions and uniqueness is a scan; the instrumented `Mutex` fixes its value
 type, so a trait-object coercion has to be written out; a `static` lock cannot
 use the macro (it is not `const`), so it becomes a `LazyLock`.
 
-Not yet done: the report reader and the run record carry only the timing section.
-`functions_alloc`, `threads`, `mutexes`, `channels` and the values in `debug`
-need reading into the record, and the pre-merge comparison needs to gate on the
-counts. That is wiring, and comes after the etiquette's scanners are extracted.
+The report reader and run record carry every section (built 2026-11-13,
+`perf/usage.rs`): allocation, threads, locks, channels and values read into typed
+fields, merged across tests, with the exact counts as gated counters and the bytes as
+trends in the comparison. `cordial perf tests profile` prints them.
 
-When the reader carries the sections, the scanners move into the etiquette and
-the tests become its fixtures.
+The scanners now move into the etiquette and the tests become its fixtures.
 
 ## Phases
 
@@ -190,6 +214,9 @@ the tests become its fixtures.
   accept their instrumented equivalents; the list of accepted modules is config.
 - An `async fn` is measured by a different attribute (`future_fn`). The scan
   needs the right attribute per function kind.
+- Allocation is attributed to the thread that allocates, so a function that hands
+  work to others (the priming workers) looks cheaper than it is; the thread section
+  gives the true totals. The etiquette should say so wherever it shows allocation.
 - Overhead: allocation counting and lock wrappers slow a run. The etiquette
   checks that the instrumentation exists, not that it is enabled; the features
   stay off in release builds.
