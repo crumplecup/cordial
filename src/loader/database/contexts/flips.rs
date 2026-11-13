@@ -24,6 +24,7 @@ impl Flips {
     /// Gates of `tree` whose predicate differs between any `(ordinary, context)`
     /// cfg pair, with the names defined or used inside them.
     #[instrument(level = "debug", skip_all)]
+    #[hotpath::measure(impl_type = "Flips")]
     pub(super) fn collect(tree: &SourceFile, pairs: &[(CfgOptions, CfgOptions)]) -> Self {
         let mut flips = Self::default();
         for attr in tree.syntax().descendants().filter_map(ast::Attr::cast) {

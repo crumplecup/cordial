@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use tracing::instrument;
 /// Source trees scanned by quality etiquettes (`src/` and `tests/` when present).
 #[instrument(level = "debug")]
+#[hotpath::measure]
 pub fn quality_scan_trees(crate_root: &Path) -> Vec<PathBuf> {
     ["src", "tests"]
         .into_iter()

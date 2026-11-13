@@ -56,6 +56,7 @@ pub(super) struct LocalCfgs {
 impl LocalCfgs {
     /// Record the ordinary cfg set of every local crate.
     #[instrument(level = "debug", skip(db))]
+    #[hotpath::measure(impl_type = "LocalCfgs")]
     pub(super) fn capture(db: &RootDatabase) -> Self {
         let ordinary = attach_db(db, || {
             Crate::all(db)
@@ -82,6 +83,7 @@ impl LocalCfgs {
     /// Each local crate's ordinary cfg set beside the one `context` gives it,
     /// computed without touching the database.
     #[instrument(level = "trace", skip(self, context))]
+    #[hotpath::measure(impl_type = "LocalCfgs")]
     pub(super) fn pairs(&self, context: &SemanticContextKey) -> Vec<(CfgOptions, CfgOptions)> {
         let diff = Self::diff(context);
         self.ordinary
@@ -104,6 +106,7 @@ impl LocalCfgs {
 
     /// Return every local crate to its ordinary cfg set.
     #[instrument(level = "debug", skip(self, db))]
+    #[hotpath::measure(impl_type = "LocalCfgs")]
     pub(super) fn restore(&self, db: &mut RootDatabase) {
         for (krate, ordinary) in &self.ordinary {
             Self::set(db, *krate, ordinary.clone());

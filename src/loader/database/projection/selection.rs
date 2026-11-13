@@ -94,6 +94,7 @@ impl SourceDatabase {
 }
 
 #[tracing::instrument(level = "debug", skip(root))]
+#[hotpath::measure]
 fn rust_files(root: &Path) -> BTreeSet<PathBuf> {
     walkdir::WalkDir::new(root)
         .into_iter()

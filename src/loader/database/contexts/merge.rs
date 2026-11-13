@@ -97,6 +97,7 @@ pub(super) fn group(keys: Vec<SemanticContextKey>) -> Vec<Pending> {
 /// which no real build can: it means the active cfg set combines alternatives
 /// that exclude each other.
 #[instrument(level = "debug", skip(db))]
+#[hotpath::measure]
 pub(super) fn declares_a_name_twice(db: &RootDatabase) -> bool {
     attach_db(db, || {
         Crate::all(db)

@@ -106,6 +106,7 @@ impl SourceDatabase {
     }
 
     #[instrument(level = "trace", skip(self), err(level = "warn"))]
+    #[hotpath::measure(impl_type = "SourceDatabase")]
     pub(in crate::loader::database) fn projection_context(
         &self,
     ) -> CordialResult<crate::SemanticWorkspaceContext> {

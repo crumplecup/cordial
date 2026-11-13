@@ -25,6 +25,7 @@ impl SourceDatabase {
     /// database is in and add it to the one the ordinary build produced, so a
     /// print or event in code only this context activates is seen.
     #[instrument(level = "debug", skip_all, err(level = "warn"))]
+    #[hotpath::measure(impl_type = "SourceDatabase")]
     pub(in crate::loader::database) fn merge_context_observability(
         &self,
         graph: &mut CrateIr,

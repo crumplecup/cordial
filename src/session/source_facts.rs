@@ -12,6 +12,7 @@ use crate::session::SessionView;
     skip(workspace, session, enrichers, probe_ids),
     err(level = "warn")
 )]
+#[hotpath::measure]
 pub(crate) fn prepare_workspace_proof_harness(
     workspace: &mut WorkspaceIr,
     session: &dyn SessionView,
@@ -54,6 +55,7 @@ pub(crate) fn prepare_workspace_proof_harness(
     skip(workspace, source, session, enrichers),
     err(level = "warn")
 )]
+#[hotpath::measure]
 pub(crate) fn prepare_workspace_source_facts(
     workspace: &mut WorkspaceIr,
     source: &SourceLoadView,
@@ -103,6 +105,7 @@ pub(crate) fn prepare_workspace_source_facts(
 /// workspace: a call can leave one crate for another, so no crate can be judged
 /// before all of them are present.
 #[tracing::instrument(level = "debug", skip_all, err(level = "warn"))]
+#[hotpath::measure]
 pub(crate) fn prepare_workspace_call_graph(
     workspace: &mut WorkspaceIr,
     session: &dyn SessionView,

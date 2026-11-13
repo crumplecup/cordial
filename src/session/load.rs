@@ -159,12 +159,14 @@ pub(super) fn load_and_probe(
         }
     }
     #[cfg(any(feature = "impl_coverage", feature = "amenable_std"))]
-    crate::session::prepare_workspace_proof_harness(
-        &mut workspace,
-        session,
-        enrichers,
-        &probes.iter().map(|probe| probe.id()).collect::<Vec<_>>(),
-    )?;
+    timings.measure("pipeline", "proof_harness", || {
+        crate::session::prepare_workspace_proof_harness(
+            &mut workspace,
+            session,
+            enrichers,
+            &probes.iter().map(|probe| probe.id()).collect::<Vec<_>>(),
+        )
+    })?;
     let mut load_views: HashMap<String, Box<dyn LoadView>> = HashMap::new();
     let mut markers_by_crate: HashMap<String, Vec<Box<dyn Marker>>> = HashMap::new();
 
@@ -245,16 +247,20 @@ pub(super) fn load_and_probe(
             .get(&format!("{}:{}", target.crate_name(), SourceLoader::ID))
             .and_then(|view| view.as_any().downcast_ref::<SourceLoadView>())
         {
-            crate::session::prepare_workspace_source_facts(
-                &mut workspace,
-                source,
-                session,
-                enrichers,
-            )?;
+            timings.measure("pipeline", "source_facts", || {
+                crate::session::prepare_workspace_source_facts(
+                    &mut workspace,
+                    source,
+                    session,
+                    enrichers,
+                )
+            })?;
         }
     }
     #[cfg(any(feature = "derives", feature = "antipatterns", feature = "tracing"))]
-    crate::session::prepare_workspace_call_graph(&mut workspace, session, enrichers)?;
+    timings.measure("pipeline", "call_graph", || {
+        crate::session::prepare_workspace_call_graph(&mut workspace, session, enrichers)
+    })?;
     for target in targets {
         for enricher in enrichers {
             progress.set_message(format!(
