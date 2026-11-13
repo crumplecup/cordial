@@ -239,7 +239,11 @@ Measured by `cordial perf workflow` against the baselines recorded 2026-11-12
   `file_facts` (module scope and attributes), `error_sites_file`, `error_chains_file`,
   `error_types_file`, `error_compliance_file`, `observability_file`, `verus_file`,
   `error_apply_file`, `visibility_file`, `policy_file` (the allows/cfg/glob/inline-test/
-  modularity/pageantry/derive bundle). Remaining there, by recorded cost on cordial:
+  modularity/pageantry/derive bundle). And `file_items`: the IR assembly itself. A file's
+  items (node weights, qualified paths, function syntax facts, evidence as JSON, macro
+  islands) are a query, and `populate` only inserts them in the order they were built, so
+  node ids are unchanged. An edit rebuilds the edited file's items and those of files whose
+  functions' evidence changed (callers), and no other file's. Remaining there, by recorded cost on cordial:
   antipatterns 2.9 s, panics 2.4 s, architecture 1.1 s, signatures 0.7 s, then the
   per-function syntax facts in `populate` and the tracing inventories (4.7 s). CLI layout
   (0.8 s) is left alone: its per-file value holds syntax nodes, which cannot be a query value.
