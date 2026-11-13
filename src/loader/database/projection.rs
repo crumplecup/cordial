@@ -5,6 +5,7 @@ mod antipatterns;
 #[cfg(feature = "cli_layout")]
 mod cli_layout;
 mod declarations;
+pub(super) use declarations::source_of;
 #[cfg(feature = "internal_error_chain")]
 mod error_apply;
 #[cfg(feature = "internal_error_chain")]

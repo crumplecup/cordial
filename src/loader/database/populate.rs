@@ -36,18 +36,22 @@ impl Projection {
         &mut self,
         db: &RootDatabase,
         sema: &Semantics<'_, RootDatabase>,
-        source: &DatabaseSource<'_>,
+        (file, source): (ra_ap_vfs::FileId, &DatabaseSource<'_>),
         module_path: &str,
         graph: &mut CrateIr,
     ) -> CordialResult<NodeId> {
         let mut module = source_weight(source, NodeKind::Module, module_path, 1);
+        let facts = queries::file_facts(
+            db,
+            queries::FileKey::new(db, file, source.path().to_path_buf()),
+        )
+        .as_ref()
+        .ok_or_else(|| crate::CordialError::workspace_source_facts_missing("file facts"))?;
         module.set_attr(
             crate::ir::ATTR_SOURCE_MODULE_SCOPE,
-            serde_json::to_value(crate::ir::SourceModuleScope::collect(source))?,
+            serde_json::to_value(facts.scope())?,
         );
-        let attributes = crate::ir::SourceFileAttributes::collect(source, &|path, scope| {
-            super::identity::macro_at(sema, scope, path)
-        });
+        let attributes = facts.attributes();
         let declaration_paths: HashMap<_, _> = attributes
             .items()
             .iter()
@@ -55,7 +59,7 @@ impl Projection {
             .collect();
         module.set_attr(
             crate::ir::ATTR_SOURCE_FILE_ATTRIBUTES,
-            serde_json::to_value(&attributes)?,
+            serde_json::to_value(attributes)?,
         );
         module.set_attr("qualified_path", module_path.into());
         let module = graph.insert_node(module);

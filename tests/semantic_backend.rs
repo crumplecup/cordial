@@ -276,6 +276,28 @@ fn assert_edit_invalidates_only_dependents(
         );
     }
     assert!(after.get("reachable:root") > before.get("reachable:root"));
+    // The per-file facts follow the same rule: the edited file's are computed
+    // again, and no other file's are.
+    let facts_of = |counts: &BTreeMap<String, usize>| -> BTreeMap<String, usize> {
+        counts
+            .iter()
+            .filter(|(key, _)| key.starts_with("file_facts:"))
+            .map(|(key, count)| (key.clone(), *count))
+            .collect()
+    };
+    let (facts_before, facts_after) = (facts_of(before), facts_of(&after));
+    assert!(
+        !facts_before.is_empty(),
+        "file facts are queries: {before:?}"
+    );
+    for (file, count) in &facts_after {
+        let was = facts_before.get(file).copied().unwrap_or(0);
+        if file.ends_with("src/leaf.rs") {
+            assert!(*count > was, "the edited file's facts were reused: {file}");
+        } else {
+            assert_eq!(*count, was, "another file's facts were recomputed: {file}");
+        }
+    }
     assert_eq!(
         std::fs::read_to_string(leaf_path).into_diagnostic()?,
         LEAF,

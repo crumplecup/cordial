@@ -28,28 +28,7 @@ impl SourceDatabase {
         path: &'a Path,
     ) -> CordialResult<(ra_ap_vfs::FileId, DatabaseSource<'a>)> {
         let file = self.file_id(path)?;
-        let text = self.db.file_text(file).text(&self.db);
-        let edition = sema.attach_first_edition(file);
-        // Semantics consults this same memoized parse. Recovery cannot
-        // authorize a complete declaration or edit inventory.
-        if let Some(error) = edition.parse(&self.db).errors().first() {
-            return Err(anyhow::Error::new(error.clone()).into());
-        }
-        let source = DatabaseSource::new(
-            #[cfg(any(
-                feature = "tracing",
-                feature = "internal_error_chain",
-                feature = "verus_ir",
-                feature = "panics",
-                feature = "antipatterns"
-            ))]
-            &self.db,
-            path,
-            text,
-            sema.parse(edition),
-            ra_ap_ide_db::line_index(&self.db, file),
-        );
-        Ok((file, source))
+        Ok((file, source_of(&self.db, sema, file, path)?))
     }
 
     #[tracing::instrument(level = "debug", skip_all, err(level = "warn"))]
@@ -89,7 +68,8 @@ impl SourceDatabase {
                 // still gets the path its location implies, as the policy scans
                 // always gave it.
                 .unwrap_or_else(|| module_path_from_src_file(&src, path).join("::"));
-            let module = projection.populate(&self.db, &sema, &source, &module_path, graph)?;
+            let module =
+                projection.populate(&self.db, &sema, (file, &source), &module_path, graph)?;
             #[cfg(feature = "tracing")]
             modules.push((path.clone(), module));
             #[cfg(not(feature = "tracing"))]
@@ -161,4 +141,38 @@ impl SourceDatabase {
             Ok(())
         })
     }
+}
+
+/// The carrier of `file`'s text, parse and line index, refusing a file that did
+/// not parse. The same one serves the projection and the per-file queries, so
+/// both read the file as the database holds it.
+#[tracing::instrument(level = "debug", skip(db, sema, path), err(level = "warn"))]
+#[hotpath::measure]
+pub(in crate::loader::database) fn source_of<'a>(
+    db: &'a RootDatabase,
+    sema: &Semantics<'a, RootDatabase>,
+    file: ra_ap_vfs::FileId,
+    path: &'a Path,
+) -> CordialResult<DatabaseSource<'a>> {
+    let text = db.file_text(file).text(db);
+    let edition = sema.attach_first_edition(file);
+    // Semantics consults this same memoized parse. Recovery cannot
+    // authorize a complete declaration or edit inventory.
+    if let Some(error) = edition.parse(db).errors().first() {
+        return Err(anyhow::Error::new(error.clone()).into());
+    }
+    Ok(DatabaseSource::new(
+        #[cfg(any(
+            feature = "tracing",
+            feature = "internal_error_chain",
+            feature = "verus_ir",
+            feature = "panics",
+            feature = "antipatterns"
+        ))]
+        db,
+        path,
+        text,
+        sema.parse(edition),
+        ra_ap_ide_db::line_index(db, file),
+    ))
 }

@@ -42,6 +42,70 @@ pub(super) struct FunctionKey<'db> {
     function: Function,
 }
 
+/// A source file the per-file queries read, by the database's id for it and the
+/// path the IR names it by.
+#[salsa::interned]
+pub(super) struct FileKey<'db> {
+    #[returns(copy)]
+    file: ra_ap_vfs::FileId,
+    #[returns(ref)]
+    path: std::path::PathBuf,
+}
+
+/// What the projection derives from one file alone: its module scope and its
+/// attribute evidence. Both are functions of the file's text and what its
+/// macros resolve to, so Salsa recomputes them only for a file whose own text,
+/// or whose macros' resolution, changed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct FileFacts {
+    scope: crate::ir::SourceModuleScope,
+    attributes: crate::ir::SourceFileAttributes,
+}
+
+impl FileFacts {
+    /// The file's conservative namespace constraints.
+    #[instrument(level = "trace", skip(self))]
+    pub(super) fn scope(&self) -> &crate::ir::SourceModuleScope {
+        &self.scope
+    }
+
+    /// The file's attribute evidence.
+    #[instrument(level = "trace", skip(self))]
+    pub(super) fn attributes(&self) -> &crate::ir::SourceFileAttributes {
+        &self.attributes
+    }
+}
+
+/// The file's facts, or `None` for a file that did not parse (the projection
+/// has already refused it by then).
+#[salsa::tracked(returns(ref))]
+#[instrument(level = "debug", skip(db, key))]
+#[hotpath::measure]
+pub(super) fn file_facts<'db>(
+    db: &'db dyn SemanticDatabase,
+    key: FileKey<'db>,
+) -> Option<FileFacts> {
+    collect_file_facts(db.root_database(), key.file(db), key.path(db))
+}
+
+#[instrument(level = "debug", skip(db, path))]
+#[hotpath::measure]
+fn collect_file_facts(
+    db: &RootDatabase,
+    file: ra_ap_vfs::FileId,
+    path: &std::path::Path,
+) -> Option<FileFacts> {
+    let sema = Semantics::new(db);
+    let source = super::projection::source_of(db, &sema, file, path).ok()?;
+    tracing::debug!(target: "cordial::semantic::queries", function = %path.display(), query = "file_facts", "semantic query executed");
+    Some(FileFacts {
+        scope: crate::ir::SourceModuleScope::collect(&source),
+        attributes: crate::ir::SourceFileAttributes::collect(&source, &|path, scope| {
+            identity::macro_at(&sema, scope, path)
+        }),
+    })
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct DirectFacts {
     facts: SemanticFunction,
