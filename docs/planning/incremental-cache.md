@@ -1,0 +1,101 @@
+# Incremental analysis: Salsa tracks the facts, and invalidation follows
+
+**Status:** Active, 2026-11-12. Design agreed; nothing built yet. The measurements
+that motivate it are in [performance-metrics.md](performance-metrics.md).
+
+## Problem
+
+A run on cordial itself costs about 590 s cold, and **676 s after adding one
+comment line**: the incremental state is slower than cold. The cache we have is
+one digest over every input (the cordial binary, every file under every package,
+the toolchain, the environment); when it changes, the whole entry is thrown away
+and the run is analysed from scratch. Nothing is reused across inputs, so a
+change anywhere costs everything, and every command is a new process, so
+nothing survives between `open`, `done` and `submit`.
+
+Two avoidable causes, independent of the design below:
+
+- the key includes a fingerprint of the **cordial binary**, so every edit to
+  cordial while it analyses itself is a miss, including edits to code that cannot
+  affect analysis (`perf/`, `cli/`);
+- the key hashes **raw bytes** of every file under every package, tests and
+  fixtures included, so a comment, a reformat, or an edit to a test file
+  invalidates the analysis of `src/`.
+
+## Design
+
+Salsa already does what a correct cache has to do: it records what each result
+read, invalidates only the results that read something that changed, and stops
+propagation when a recomputed result equals the old one (early cutoff). We use it
+for that instead of building a second invalidation scheme.
+
+- **Facts are tracked queries.** Per-function and per-file facts (the
+  collectors in the migration inventory of
+  [salsa-rust-analyzer.md](salsa-rust-analyzer.md)) become `#[salsa::tracked]`
+  queries over the session database, keyed by item identity, not by position.
+  Today `harvest`, the per-file collectors and the enrichers are plain loops
+  over files: nothing is tracked, so nothing is reused. `dialect_facts` is the
+  one existing example of the shape.
+- **Facts carry no positions.** A fact is the same before and after a comment
+  line is inserted above it; line numbers and byte ranges are anchors attached
+  from a fresh parse. That is what lets a comment edit reuse the whole tree.
+- **Whole-crate passes are queries over facts.** The call graph, `error-ir-scan`
+  and `source-calls` read function facts through queries, so an edit that leaves
+  a function's facts equal leaves every pass that read them untouched.
+- **Cfg contexts are query arguments.** The context pass today mutates the one
+  database's cfg inputs for each context (`LocalCfgs::enter`), which invalidates
+  what the previous context computed. A context key as a query argument lets
+  contexts coexist.
+- **The session survives between commands.** Salsa memoizes in memory, and each
+  command is a process. The session database is kept by a persistent session
+  process, so `open`, `done` and `submit` reuse it, and a file change reaches it
+  as an input change. rust-analyzer's database is not persistable (its inputs
+  and queries are not `persist`), so a daemon is the route that works with it as
+  it is. Salsa 0.28.5's experimental `persistence` feature may later save the
+  cordial-owned layer across restarts; that is untested and is not on the path.
+- **What a cold start still pays.** A fresh process has an empty database and
+  loads the workspace once. After that, only what an edit invalidates is
+  recomputed.
+
+## Order
+
+The profile of a cold run (hotpath, 2026-11-12) decides the detail; the order is:
+
+1. **Cache key hygiene.** Replace the binary fingerprint with a digest of the
+   analysis sources plus the schema version; hash tokens, not bytes, so
+   comments and whitespace do not count (doc comments do); leave out files the
+   analysis does not read. Small, and removes most spurious misses today. It
+   still discards the entry when a real edit occurs.
+2. **Counters that show reuse.** Queries executed and reused per run, so every
+   later step has a number to move (P4 of the performance plan).
+3. **The persistent session.** A process that owns the session database across
+   commands, with changed files fed in as input changes. This is what makes
+   anything else visible to a user: an edit-then-`submit` loop that revalidates
+   instead of reloading.
+4. **Facts as tracked queries,** the costliest collectors first (decided by the
+   profile and the per-stage times), each with position-free output and
+   re-anchoring.
+5. **Whole-crate passes and cfg contexts as queries.**
+
+## Acceptance
+
+Measured by `cordial perf workflow` against the baselines recorded 2026-11-12
+(cold 591 s, warm 155 s, incremental 676 s):
+
+- [ ] adding a `//` comment line anywhere reuses every fact: the executed-query
+  counter does not rise, and the incremental state costs about as much as warm;
+- [ ] editing one function body recomputes that function's file and the passes
+  that read its changed facts, and nothing else;
+- [ ] a signature edit recomputes its callers' facts and no more;
+- [ ] the incremental state costs a fraction of cold, with the fraction recorded
+  in the baseline;
+- [ ] `done` after `open` reloads nothing.
+
+## Checklist
+
+- [ ] C1. Cache key hygiene.
+- [ ] C2. Reuse counters in the run record.
+- [ ] C3. Persistent session process.
+- [ ] C4. Facts as tracked queries, in order of measured cost.
+- [ ] C5. Whole-crate passes and cfg contexts as queries.
+- [ ] C6. Re-baseline and record the acceptance numbers.

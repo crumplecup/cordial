@@ -28,6 +28,7 @@ user-facing guidance lives in `README.md`, `docs/running-cordial.md`,
 | [Etiquette API and pipeline review](docs/planning/etiquette-api-review.md) | **Active** | Ordered review checklist: caller-location correctness, repeated source work, probe contract, typed plugin facts, tutorial corrections, and registration ergonomics |
 | [Gate tiers](docs/planning/gate-tiers.md) | **Active** | Named cost tiers (`quick`, `build`, `deep`, plus user-defined) for etiquettes, partitioned from measured cold/warm timings; `--tier` selection |
 | [Performance metrics](docs/planning/performance-metrics.md) | **Active** | Repeatable cost measurement: cordial-on-cordial workflow records (cold/warm/incremental) and a per-test profile that separates fixed cost from work; stored run records, counters that gate and times that trend, and a pre-merge diff against the baseline |
+| [Incremental cache](docs/planning/incremental-cache.md) | **Active** | Replace the whole-run cache with Salsa-tracked facts so an edit recomputes only what it invalidates (a comment line reuses everything); a persistent session database across commands; reuse counters in the perf record |
 | [Clean command](docs/planning/clean-command.md) | **Active** | `cordial clean` removes a project's regenerable store artifacts (cache, reports); `--all` covers every store and the shared sysroot cache; curated exceptions and config are never touched |
 
 ## Plugin families
