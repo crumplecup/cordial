@@ -53,7 +53,12 @@ fn a_session_reuses_its_database_after_an_edit_and_agrees_with_a_plain_run() -> 
 
     // Nothing changed: the run cache answers, with no database at all.
     let unchanged = submit_and_check(&project, "unchanged")?;
-    assert_eq!(unchanged["cache_hits"], "1", "{unchanged:?}");
+    let said = &unchanged["cache"];
+    assert!(
+        said.contains("crate IR mini: reused from the run cache")
+            && said.contains("call graph: reused from the run cache"),
+        "{unchanged:?}"
+    );
     assert_eq!(unchanged["loaded"], "0");
 
     let cold: f64 = first["wall_s"].parse().into_diagnostic()?;

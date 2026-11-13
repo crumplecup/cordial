@@ -7,6 +7,7 @@ mod identity;
 mod islands;
 mod options;
 mod populate;
+mod prime;
 mod projection;
 mod queries;
 mod recording;

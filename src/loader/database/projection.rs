@@ -73,6 +73,7 @@ impl SourceDatabase {
             })?;
             inventory
         };
+        self.prime_function_evidence();
         let ordinary_watch = crate::process_memory::Watch::start("ordinary projection".to_owned());
         let (mut graph, outline) = attach_db(&self.db, || {
             self.project_attached(
