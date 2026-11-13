@@ -12,4 +12,4 @@ pub use databases::{keep, keep_between_runs, keeping, key_of, take_current};
 pub use output::{FrameSink, Out, Stream, stderr, stdout, with_sink};
 pub use protocol::{Frame, PROTOCOL, Request, read_frame, write_frame};
 #[cfg(feature = "cli")]
-pub use transport::{build_environment, forward, serve, socket_path, stop};
+pub use transport::{build_environment, forward, serve, socket_path, start_session, stop};

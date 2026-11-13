@@ -2,18 +2,18 @@
 
 use clap::Subcommand;
 use std::io::Write;
-use std::time::{Duration, Instant};
 use tracing::instrument;
 
+use crate::CordialResult;
 use crate::host::{self, socket_path};
-use crate::{CordialError, CordialResult};
 
 use super::commands::ActCtx;
 
 /// Subcommands of `cordial session`.
 #[derive(Subcommand)]
 pub enum SessionCommands {
-    /// Start a session for this project in the background.
+    /// Start a fresh session now, replacing one that is running. `open` starts
+    /// one by itself when none is.
     Start,
     /// Ask this project's session to exit.
     Stop,
@@ -36,44 +36,22 @@ impl SessionCommands {
     }
 }
 
-/// Launch `session serve` detached and wait until it answers.
+/// Start a fresh session for this project, replacing one that is running.
 #[instrument(level = "debug", skip(ctx), err(level = "warn"))]
 fn start(ctx: &ActCtx, socket: &std::path::Path) -> CordialResult<()> {
-    use std::os::unix::process::CommandExt;
-    if std::os::unix::net::UnixStream::connect(socket).is_ok() {
-        writeln!(host::stdout(), "A session is already running.")?;
-        return Ok(());
+    if host::stop(socket)? {
+        writeln!(host::stdout(), "Stopped the running session.")?;
     }
-    let mut command = std::process::Command::new(std::env::current_exe()?);
-    command
-        .arg("--project")
-        .arg(ctx.project_root())
-        .arg("--store-home")
-        .arg(
-            ctx.store_home()
-                .clone()
-                .unwrap_or_else(crate::default_store_home),
-        )
-        .args(["session", "serve"])
-        .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::null())
-        .stderr(std::fs::File::create(
-            ctx.store().root().join("session.log"),
-        )?)
-        .process_group(0);
-    let child = command.spawn()?;
-    let deadline = Instant::now() + Duration::from_secs(15);
-    while Instant::now() < deadline {
-        if std::os::unix::net::UnixStream::connect(socket).is_ok() {
-            writeln!(host::stdout(), "Session started (pid {}).", child.id())?;
-            return Ok(());
-        }
-        std::thread::sleep(Duration::from_millis(50));
-    }
-    Err(CordialError::perf(
-        socket.to_path_buf(),
-        "the session did not start; see session.log in the store",
-    ))
+    let store_home = ctx
+        .store_home()
+        .clone()
+        .unwrap_or_else(crate::default_store_home);
+    let pid = host::start_session(ctx.project_root(), &store_home, ctx.store().root())?;
+    writeln!(
+        host::stdout(),
+        "Session started (pid {pid}); it ends when this terminal does."
+    )?;
+    Ok(())
 }
 
 /// Ask the session to exit.

@@ -39,6 +39,10 @@ pub enum PerfCommands {
         /// The cordial executable to measure (default: this one).
         #[arg(long)]
         program: Option<PathBuf>,
+        /// Run through a session server that keeps the database between commands,
+        /// and measure a second edit as well.
+        #[arg(long)]
+        session: bool,
     },
     /// Compare a record against its baseline (or any other record) and say what
     /// moved: exact counters, timings beyond noise and tolerance, changed inputs.
@@ -144,7 +148,8 @@ impl PerfCommands {
                 repeat,
                 top,
                 program,
-            } => workflow(ctx, &name, repeat, top, program),
+                session,
+            } => workflow(ctx, &name, (repeat, top), (program, session)),
             Self::Tests { command } => command.act(ctx),
         }
     }
@@ -304,9 +309,8 @@ fn timing(ctx: &ActCtx, name: &str, options: TimingOptions) -> CordialResult<()>
 fn workflow(
     ctx: &ActCtx,
     name: &str,
-    repeat: u32,
-    top: usize,
-    program: Option<PathBuf>,
+    (repeat, top): (u32, usize),
+    (program, session): (Option<PathBuf>, bool),
 ) -> CordialResult<()> {
     let store_home = ctx
         .store_home()
@@ -327,6 +331,7 @@ fn workflow(
         .program(program)
         .repeat(repeat)
         .edit(edit)
+        .session(session)
         .build()?;
     let store = PerfStore::new(ctx.store());
     let work = ctx.store().perf_dir().join("work");

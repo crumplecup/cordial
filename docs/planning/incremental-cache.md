@@ -99,8 +99,11 @@ Measured by `cordial perf workflow` against the baselines recorded 2026-11-12
 
 ## Checklist
 
-- [x] C3. Persistent session process (first). `cordial session start|stop|status`
-  runs a server per project (`{store}/session.sock`). Clients forward `open`,
+- [x] C3. Persistent session process (first). `open` starts a session when none is running (set `CORDIAL_NO_SESSION` to
+  opt out); it ends with the terminal that started it (the server polls for its
+  process-session leader), and `cordial session start|stop|status` is the
+  explicit control, `start` meaning a fresh session. A server per project
+  (`{store}/session.sock`). Clients forward `open`,
   `peek`, `done`, `skip`, `submit`, `next` and `stats`; the server runs them in
   its own process with output routed back, keeps the run's loaded database, and
   on the next run brings it up to date with `SourceDatabase::sync_from_disk`

@@ -43,8 +43,12 @@ pub fn serve(socket: &Path) -> CordialResult<()> {
         Err(error) if error.kind() != std::io::ErrorKind::NotFound => return Err(error.into()),
         _ => {}
     }
+    if let Some(parent) = socket.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
     let listener = UnixListener::bind(socket)?;
     keep_between_runs();
+    watch_owner(socket.to_path_buf());
     tracing::info!(socket = %socket.display(), "session serving");
     for connection in listener.incoming() {
         match connection {
@@ -60,6 +64,54 @@ pub fn serve(socket: &Path) -> CordialResult<()> {
     drop(listener);
     std::fs::remove_file(socket)?;
     Ok(())
+}
+
+/// The process session this process belongs to, which is the terminal's (or the
+/// tool's) that started it. `None` where `/proc` does not say.
+#[instrument(level = "debug")]
+fn own_session() -> Option<u32> {
+    session_of("self")
+}
+
+/// The session id in `/proc/<pid>/stat`: the fourth field after the command name.
+#[instrument(level = "trace")]
+fn session_of(pid: &str) -> Option<u32> {
+    let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
+    let after_command = stat.rsplit_once(')')?.1;
+    after_command.split_whitespace().nth(3)?.parse().ok()
+}
+
+/// Whether the leader of session `id` (the shell a terminal started) still runs.
+/// A session id is its leader's process id, so a leader that is gone, or a number
+/// reused by a process in another session, means the terminal has ended.
+#[instrument(level = "trace")]
+fn leader_alive(id: u32) -> bool {
+    session_of(&id.to_string()) == Some(id)
+}
+
+/// Exit when the terminal that started this session ends, removing the socket.
+/// A server is somebody's working state, not a daemon to leave behind.
+#[instrument(level = "debug")]
+fn watch_owner(socket: std::path::PathBuf) {
+    let Some(owner) = own_session() else {
+        return;
+    };
+    let spawned = std::thread::Builder::new()
+        .name("cordial-session-owner".to_owned())
+        .spawn(move || {
+            while leader_alive(owner) {
+                std::thread::sleep(std::time::Duration::from_secs(2));
+            }
+            tracing::info!(
+                owner,
+                "the terminal that started this session ended; exiting"
+            );
+            let _ = std::fs::remove_file(&socket);
+            std::process::exit(0);
+        });
+    if let Err(error) = spawned {
+        tracing::warn!(error = ?error, "could not watch the terminal; this session ends only when stopped");
+    }
 }
 
 /// The first build-shaping variable on which the client and this server differ.

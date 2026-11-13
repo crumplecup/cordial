@@ -3,5 +3,5 @@
 mod client;
 mod server;
 
-pub use client::{build_environment, forward, socket_path, stop};
+pub use client::{build_environment, forward, socket_path, start_session, stop};
 pub use server::serve;

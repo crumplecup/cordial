@@ -13,9 +13,11 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --project) project="$2"; shift 2 ;;
     --store-home) home="$2"; shift 2 ;;
+    session) verb="$2"; shift 2 ;;
     *) shift ;;
   esac
 done
+if [ -n "$verb" ]; then echo "$verb" >> "$home.control.log"; exit 0; fi
 dir="$home/$(basename "$project")"
 if grep -q "perf edit" "$project/edited.rs"; then load=3000
 elif [ -f "$dir/ledger.json" ]; then load=1000
@@ -164,5 +166,51 @@ fn a_run_that_did_not_rewrite_the_ledger_does_not_borrow_the_last_runs_stages() 
     );
     assert!(has(1, "process"));
     assert_eq!(records[1].counters().get("pipeline_ran"), Some(&0));
+    Ok(())
+}
+
+#[test]
+fn a_session_run_brackets_each_round_and_adds_a_followup_edit() -> Result<()> {
+    cordial::init_tracing();
+    let scratch = tempfile::tempdir().into_diagnostic()?;
+    let project = scratch.path().join("example");
+    fs::create_dir_all(&project).into_diagnostic()?;
+    fs::write(project.join("edited.rs"), "fn main() {}\n").into_diagnostic()?;
+    let request = WorkflowRequestBuilder::default()
+        .name("example")
+        .program(fake_cordial(scratch.path())?)
+        .repeat(2u32)
+        .edit(Some("edited.rs".into()))
+        .session(true)
+        .build()
+        .into_diagnostic()?;
+    let work = scratch.path().join("work");
+    let records = measure_workflow(&project, &work, &request).into_diagnostic()?;
+    let states: Vec<_> = records.iter().map(|record| record.state()).collect();
+    assert_eq!(
+        states,
+        vec![
+            Some(PerfState::Cold),
+            Some(PerfState::Warm),
+            Some(PerfState::Incremental),
+            Some(PerfState::Followup)
+        ]
+    );
+    assert!(
+        records
+            .iter()
+            .all(|record| record.subject().to_string() == "workflow:example+session")
+    );
+    // A session is not started by the harness (`open` does that); each round only
+    // makes sure none is left over before it and none after.
+    let log = fs::read_to_string(scratch.path().join("work.control.log")).into_diagnostic()?;
+    assert_eq!(
+        log.lines().collect::<Vec<_>>(),
+        ["stop", "stop", "stop", "stop"]
+    );
+    assert_eq!(
+        fs::read_to_string(project.join("edited.rs")).into_diagnostic()?,
+        "fn main() {}\n"
+    );
     Ok(())
 }

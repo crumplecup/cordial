@@ -43,6 +43,52 @@ fn forwardable(command: &crate::Commands) -> bool {
     }
 }
 
+/// Whether `command` begins a stretch of work, and so starts a session when none
+/// is running.
+#[instrument(level = "trace", skip(command))]
+fn starts_a_session(command: &crate::Commands) -> bool {
+    #[cfg(feature = "quality")]
+    {
+        matches!(command, crate::Commands::Open { .. })
+    }
+    #[cfg(not(feature = "quality"))]
+    {
+        let _ = command;
+        false
+    }
+}
+
+/// Launch `session serve` for the project, detached, and wait until it answers.
+/// The server keeps the process session of whoever starts it, which is how it
+/// knows when the terminal that wanted it has gone. Returns its process id.
+#[instrument(level = "debug", err(level = "warn"))]
+pub fn start_session(project: &Path, store_home: &Path, store_root: &Path) -> std::io::Result<u32> {
+    use std::os::unix::process::CommandExt;
+    std::fs::create_dir_all(store_root)?;
+    let socket = socket_path(store_root);
+    let child = std::process::Command::new(std::env::current_exe()?)
+        .arg("--project")
+        .arg(project)
+        .arg("--store-home")
+        .arg(store_home)
+        .args(["session", "serve"])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::fs::File::create(store_root.join("session.log"))?)
+        .process_group(0)
+        .spawn()?;
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(15);
+    while std::time::Instant::now() < deadline {
+        if UnixStream::connect(&socket).is_ok() {
+            return Ok(child.id());
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    Err(std::io::Error::other(
+        "the session did not start; see session.log in the store",
+    ))
+}
+
 /// The variables the server compares against its own environment.
 #[instrument(level = "trace")]
 pub fn build_environment() -> BTreeMap<String, String> {
@@ -63,7 +109,7 @@ pub fn forward(args: &[OsString]) -> Option<i32> {
         .map(|arg| arg.to_str().map(str::to_owned))
         .collect::<Option<_>>()?;
     let cli = crate::Cli::try_parse_from(&argv).ok()?;
-    if !forwardable(&cli.command) {
+    if !forwardable(&cli.command) || std::env::var_os("CORDIAL_NO_SESSION").is_some() {
         return None;
     }
     let project = match &cli.project {
@@ -74,8 +120,22 @@ pub fn forward(args: &[OsString]) -> Option<i32> {
         .store_home
         .clone()
         .unwrap_or_else(crate::default_store_home);
-    let socket = socket_path(&store_home.join(crate::project_slug_from_path(&project)));
-    let mut stream = UnixStream::connect(&socket).ok()?;
+    let store_root = store_home.join(crate::project_slug_from_path(&project));
+    let socket = socket_path(&store_root);
+    let mut stream = match UnixStream::connect(&socket) {
+        Ok(stream) => stream,
+        // `open` is where work begins: with no session running it starts one, so
+        // the commands after it find the database already loaded.
+        Err(_) if starts_a_session(&cli.command) => {
+            start_session(&project, &store_home, &store_root).ok()?;
+            let _ = writeln!(
+                std::io::stderr(),
+                "Started a session; it ends when this terminal does (cordial session stop ends it sooner)."
+            );
+            UnixStream::connect(&socket).ok()?
+        }
+        Err(_) => return None,
+    };
     let mut argv = argv;
     if cli.project.is_none() {
         argv.push("--project".to_owned());

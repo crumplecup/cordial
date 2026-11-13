@@ -69,6 +69,8 @@ pub enum PerfState {
     Warm,
     /// One named file edited since the last run.
     Incremental,
+    /// A second edit after an earlier one, on whatever the first left behind.
+    Followup,
 }
 
 impl Display for PerfState {
@@ -78,6 +80,7 @@ impl Display for PerfState {
             Self::Cold => "cold",
             Self::Warm => "warm",
             Self::Incremental => "incremental",
+            Self::Followup => "followup",
         })
     }
 }
