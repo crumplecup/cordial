@@ -65,6 +65,7 @@ pub use index::{ContractRecordDump, ContractRecordDumpBuilder};
 pub use registry::fetch_contract_records;
 
 #[instrument(level = "debug", skip(clauses, registry))]
+#[hotpath::measure]
 pub(super) fn assess_contracts(
     clauses: &[ContractClause],
     registry: &[ContractRecordDump],
@@ -77,6 +78,7 @@ pub(super) fn assess_contracts(
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 pub(super) fn site_context(module_prefix: &[String], leaf: &str) -> String {
     let mut parts = module_prefix.to_vec();
     parts.push(leaf.to_string());
@@ -84,6 +86,7 @@ pub(super) fn site_context(module_prefix: &[String], leaf: &str) -> String {
 }
 
 #[instrument(level = "debug", skip(file), err(level = "warn"))]
+#[hotpath::measure]
 pub(super) fn make_finding(
     context: String,
     file: &Path,
@@ -102,6 +105,7 @@ pub(super) fn make_finding(
 /// Scan one Creusot source string (used by tests, mirroring
 /// `scan_antipatterns_rust_source`'s shape for the other three rules).
 #[instrument(level = "debug", skip(source, file, registry), err(level = "warn"))]
+#[hotpath::measure]
 pub fn scan_creusot_contract_bounds_source(
     source: &str,
     file: &Path,
@@ -119,6 +123,7 @@ pub fn scan_creusot_contract_bounds_source(
 
 /// Scan one Verus source string (used by tests).
 #[instrument(level = "debug", skip(source, file, registry), err(level = "warn"))]
+#[hotpath::measure]
 pub fn scan_verus_contract_bounds_source(
     source: &str,
     file: &Path,
@@ -136,6 +141,7 @@ pub fn scan_verus_contract_bounds_source(
 
 /// Scan one Kani source string (used by tests).
 #[instrument(level = "debug", skip(source, file, registry), err(level = "warn"))]
+#[hotpath::measure]
 pub fn scan_kani_contract_bounds_source(
     source: &str,
     file: &Path,

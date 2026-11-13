@@ -181,6 +181,7 @@ impl StaticPlugin {
 
     /// Build a plugin definition from runtime-owned metadata.
     #[instrument(level = "debug", skip(id, name, category, etiquettes))]
+    #[hotpath::measure]
     pub fn owned(
         id: impl Into<String>,
         name: impl Into<String>,
@@ -279,6 +280,7 @@ impl<I: Copy + 'static> StrategicPlugin<I> {
 
     /// Build a strategic plugin definition from runtime-owned metadata.
     #[instrument(level = "debug", skip(id, name, category, indicator, portfolios))]
+    #[hotpath::measure]
     pub fn owned(
         id: impl Into<String>,
         name: impl Into<String>,
@@ -351,6 +353,7 @@ where
 
 /// Flatten plugins into a deduplicated etiquette list (stable registration order).
 #[instrument(level = "debug", skip(plugins, session))]
+#[hotpath::measure]
 pub fn etiquettes_from_plugins(
     plugins: &[&'static dyn Plugin],
     session: &dyn SessionView,
@@ -368,6 +371,7 @@ pub fn etiquettes_from_plugins(
 
 /// Select plugins whose ids match `filter`, or all when `filter` is empty.
 #[instrument(level = "debug", skip(registered))]
+#[hotpath::measure]
 pub fn selected_plugins(
     registered: &[&'static dyn Plugin],
     filter: Option<&[String]>,
@@ -384,6 +388,7 @@ pub fn selected_plugins(
 
 /// Select plugins by category.
 #[instrument(level = "debug", skip(plugins, category))]
+#[hotpath::measure]
 pub fn plugins_in_category(
     plugins: &[&'static dyn Plugin],
     category: PluginCategory,

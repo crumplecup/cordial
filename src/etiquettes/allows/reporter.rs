@@ -19,6 +19,7 @@ struct AllowRow {
 
 impl AllowRow {
     #[instrument(level = "debug", skip(finding), ret)]
+    #[hotpath::measure]
     fn from_finding(finding: &dyn Finding) -> Self {
         let mut sink = MapFindingSink::default();
         finding.emit(&mut sink);
@@ -42,6 +43,7 @@ impl AllowRow {
 }
 
 #[instrument(level = "debug", skip(findings))]
+#[hotpath::measure]
 fn allow_rows(findings: &[&dyn Finding]) -> Vec<AllowRow> {
     findings
         .iter()
@@ -51,6 +53,7 @@ fn allow_rows(findings: &[&dyn Finding]) -> Vec<AllowRow> {
 }
 
 #[instrument(level = "debug", skip(rows))]
+#[hotpath::measure]
 fn open_rows(rows: &[AllowRow]) -> impl Iterator<Item = &AllowRow> {
     rows.iter().filter(|row| row.disposition == "open")
 }
@@ -61,6 +64,7 @@ fn open_rows(rows: &[AllowRow]) -> impl Iterator<Item = &AllowRow> {
 /// artifact must derive its own crate breakdown from `row.crate_name`
 /// instead (the same pattern `modularity::reporter::rows::crate_names` uses).
 #[instrument(level = "debug", skip(rows))]
+#[hotpath::measure]
 fn crate_names(rows: &[&AllowRow]) -> Vec<String> {
     let mut names: Vec<String> = rows.iter().map(|row| row.crate_name.clone()).collect();
     names.sort();

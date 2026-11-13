@@ -30,6 +30,7 @@ pub enum ModularityKind {
 impl ModularityKind {
     /// Stable string form of this value.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::File => "MODULARITY-FILE",
@@ -44,6 +45,7 @@ impl ModularityKind {
 
     /// Parse from the stable identifier string.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn from_attr(value: &str) -> Option<Self> {
         match value {
             "MODULARITY-FILE" => Some(Self::File),
@@ -185,6 +187,7 @@ pub struct ModularityFinding {
 impl ModularityFinding {
     /// Start a builder for this value.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> ModularityFindingBuilder {
         ModularityFindingBuilder::default()
     }
@@ -258,6 +261,7 @@ pub struct ModularitySiteRecord {
 impl ModularitySiteRecord {
     /// Start a builder for this value.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> ModularitySiteRecordBuilder {
         ModularitySiteRecordBuilder::default()
     }
@@ -280,6 +284,7 @@ pub struct ModuleSizeStats {
 impl ModuleSizeStats {
     /// Compute mean and standard deviation from a slice of line counts.
     #[instrument(level = "debug", ret)]
+    #[hotpath::measure]
     pub fn from_lines(lines: &[u32]) -> Self {
         let n = lines.len();
         if n == 0 {
@@ -302,6 +307,7 @@ impl ModuleSizeStats {
 
     /// Zscore.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn zscore(self, lines: u32) -> Option<f64> {
         if self.n < 2 || self.stddev <= 0.0 {
             None

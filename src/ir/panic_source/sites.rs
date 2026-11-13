@@ -5,6 +5,7 @@ use ra_ap_syntax::{AstNode, ast, ast::HasArgList};
 
 impl Scanner<'_, '_> {
     #[tracing::instrument(level = "debug", skip(self, context, call), err(level = "warn"))]
+    #[hotpath::measure]
     pub(super) fn method(
         &mut self,
         call: &ast::MethodCallExpr,
@@ -47,6 +48,7 @@ impl Scanner<'_, '_> {
     }
 
     #[tracing::instrument(level = "debug", skip(self, invocation, context), err(level = "warn"))]
+    #[hotpath::measure]
     pub(super) fn invocation(
         &mut self,
         invocation: &ast::MacroCall,
@@ -91,6 +93,7 @@ impl Scanner<'_, '_> {
     }
 
     #[tracing::instrument(level = "debug", skip(self, context, kind), err(level = "warn"))]
+    #[hotpath::measure]
     fn push(
         &mut self,
         kind: PanicKind,

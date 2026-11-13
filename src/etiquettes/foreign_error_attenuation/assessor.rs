@@ -138,6 +138,7 @@ impl Assessor for ForeignErrorAttenuationAssessor {
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn parse_handling_class(value: &str) -> ForeignErrorHandlingClass {
     if value.contains("CHAIN-PRESERVED") {
         ForeignErrorHandlingClass::ChainPreserved
@@ -151,6 +152,7 @@ fn parse_handling_class(value: &str) -> ForeignErrorHandlingClass {
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn parse_resolution_id(value: &str) -> ErrorHandlingResolutionId {
     if value.contains("MAINTAIN-EXEMPLAR") {
         ErrorHandlingResolutionId::MaintainExemplar
@@ -164,6 +166,7 @@ fn parse_resolution_id(value: &str) -> ErrorHandlingResolutionId {
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn parse_confidence(value: &str) -> ForeignTypeConfidence {
     if value.contains("MEDIUM") {
         ForeignTypeConfidence::Medium

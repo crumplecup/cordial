@@ -104,6 +104,7 @@ struct ParsedFn {
 
 impl ParsedFn {
     #[instrument(level = "debug", skip(marker, ir, session), err(level = "warn"))]
+    #[hotpath::measure]
     fn from_marker(
         marker: &dyn Marker,
         ir: &dyn IrView,
@@ -174,6 +175,7 @@ impl ParsedFn {
     }
 
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     fn forbidden_kind(&self) -> TracingRuleKind {
         if self.proof_only {
             TracingRuleKind::ProofInstrument
@@ -185,6 +187,7 @@ impl ParsedFn {
     }
 
     #[instrument(level = "debug", skip(self, kind), err(level = "warn"))]
+    #[hotpath::measure]
     fn into_finding(self, kind: TracingRuleKind) -> CordialResult<Box<dyn Finding>> {
         Ok(Box::new(
             TracingFinding::builder()
@@ -206,6 +209,7 @@ impl ParsedFn {
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn csv_list(value: &str) -> Vec<String> {
     if value.is_empty() {
         return Vec::new();
@@ -219,6 +223,7 @@ fn csv_list(value: &str) -> Vec<String> {
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn parse_function_kind(value: &str) -> FunctionKind {
     match value {
         "inherent" => FunctionKind::InherentMethod,
@@ -228,6 +233,7 @@ fn parse_function_kind(value: &str) -> FunctionKind {
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn parse_visibility(value: &str) -> VisibilityLabel {
     match value {
         "pub" => VisibilityLabel::Public,

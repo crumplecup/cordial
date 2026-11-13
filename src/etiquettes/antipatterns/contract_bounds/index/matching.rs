@@ -22,6 +22,7 @@ type ContractRecordMap = HashMap<(String, String), Vec<(String, String)>>;
 
 impl ContractIndex {
     #[instrument(level = "debug", skip(records))]
+    #[hotpath::measure]
     pub(in crate::etiquettes::antipatterns::contract_bounds) fn build(
         records: &[ContractRecordDump],
     ) -> Self {
@@ -37,6 +38,7 @@ impl ContractIndex {
 
     /// Match source-derived shapes; source syntax is never reconstructed here.
     #[instrument(level = "debug", skip(self, clause))]
+    #[hotpath::measure]
     pub(in crate::etiquettes::antipatterns::contract_bounds) fn matches_clause(
         &self,
         clause: &ContractClause,

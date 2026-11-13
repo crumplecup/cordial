@@ -31,6 +31,7 @@ impl crate::session::RunFilter for TimingFilter<'_> {
 }
 
 #[instrument(level = "info", skip(ctx), err(level = "warn"))]
+#[hotpath::measure]
 pub(super) fn run_child(
     ctx: &ActCtx,
     label: &str,
@@ -84,6 +85,7 @@ pub(super) fn run_child(
 
 /// Hidden process entry point; writes one JSON object to a private file.
 #[instrument(level = "debug", skip(ctx), err(level = "warn"))]
+#[hotpath::measure]
 pub(in crate::cli) fn execute_timings_pass(
     ctx: &ActCtx,
     label: &str,

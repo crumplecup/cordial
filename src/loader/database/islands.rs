@@ -43,6 +43,7 @@ pub(super) struct IslandFunction {
 
 /// The functions in `invocation`'s tokens, nested invocations included.
 #[tracing::instrument(level = "debug", skip(macros, invocation))]
+#[hotpath::measure]
 pub(super) fn functions(
     macros: &DatabaseMacroSyntax,
     invocation: &ast::MacroCall,
@@ -85,6 +86,7 @@ pub(super) fn resolve(
 }
 
 #[tracing::instrument(level = "debug", skip(macros, items, out))]
+#[hotpath::measure]
 fn walk(
     macros: &DatabaseMacroSyntax,
     items: impl Iterator<Item = ast::Item>,
@@ -163,6 +165,7 @@ fn walk(
 }
 
 #[tracing::instrument(level = "debug", skip(macros, function, path))]
+#[hotpath::measure]
 fn function_facts(
     macros: &DatabaseMacroSyntax,
     function: &ast::Fn,
@@ -247,6 +250,7 @@ fn assert_arguments(name: &str) -> usize {
 }
 
 #[tracing::instrument(level = "debug", skip(macros, body, out))]
+#[hotpath::measure]
 fn body_calls(
     macros: &DatabaseMacroSyntax,
     body: &ra_ap_syntax::SyntaxNode,

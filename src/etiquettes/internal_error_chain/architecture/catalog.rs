@@ -129,6 +129,7 @@ pub(crate) struct Catalog {
 
 impl Catalog {
     #[instrument(level = "debug", fields(crate_name = crate_name))]
+    #[hotpath::measure]
     pub(crate) fn new(crate_name: &str) -> Self {
         Self {
             crate_name: crate_name.to_string(),
@@ -145,6 +146,7 @@ impl Catalog {
     }
 
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub(super) fn last_ident(label: &str) -> &str {
         last_ident(label)
     }
@@ -185,6 +187,7 @@ impl Catalog {
     }
 
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub(super) fn kind_payload_idents(&self) -> BTreeSet<String> {
         let mut idents = BTreeSet::new();
         for item in self.enums.values() {

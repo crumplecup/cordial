@@ -17,6 +17,7 @@ use super::super::plan::{FieldScope, plan_struct_fields};
 use super::{CrateTypeIndex, Declarations, ErrorEdgeTarget, ErrorGraphPlan, GraphDeclaration};
 
 #[instrument(level = "debug", skip(declarations, files, strategy, index))]
+#[hotpath::measure]
 pub(super) fn plan(
     declarations: &Declarations<'_>,
     files: &[SourceEditView],

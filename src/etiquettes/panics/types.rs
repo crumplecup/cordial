@@ -26,6 +26,7 @@ pub enum PanicKind {
 impl PanicKind {
     /// Rule id.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn rule_id(self) -> &'static str {
         match self {
             Self::Panic => "PANIC-SOURCE-PANIC",
@@ -38,6 +39,7 @@ impl PanicKind {
 
     /// Parse from the stable identifier string.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn from_attr(value: &str) -> Option<Self> {
         match value {
             "panic" => Some(Self::Panic),
@@ -51,6 +53,7 @@ impl PanicKind {
 
     /// Stable identifier string for IR attributes.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn as_attr(self) -> &'static str {
         match self {
             Self::Panic => "panic",
@@ -142,6 +145,7 @@ pub struct PanicFinding {
 impl PanicFinding {
     /// Start a builder for this finding.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> PanicFindingBuilder {
         PanicFindingBuilder::default()
     }
@@ -204,6 +208,7 @@ pub struct PanicSiteRecord {
 impl PanicSiteRecord {
     /// Start a builder for this scan row.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> PanicSiteRecordBuilder {
         PanicSiteRecordBuilder::default()
     }

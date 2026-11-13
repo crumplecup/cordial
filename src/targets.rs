@@ -15,6 +15,7 @@ use crate::session::{RunAll, RunFilter, SessionView};
 /// A project is a Cargo crate or workspace, so the root must contain a
 /// manifest; `cargo metadata` supplies the targets.
 #[instrument(level = "debug", skip(filter), err(level = "warn"))]
+#[hotpath::measure]
 pub fn discover_crate_targets(
     project_root: &Path,
     filter: &dyn RunFilter,
@@ -41,6 +42,7 @@ pub fn discover_crate_targets(
     skip(registered_plugins, session, filter),
     err(level = "warn")
 )]
+#[hotpath::measure]
 pub fn discover_run_crate_targets(
     registered_plugins: &[&'static dyn crate::plugin::Plugin],
     project_root: &Path,
@@ -92,6 +94,7 @@ pub fn discover_run_crate_targets(
 }
 
 #[instrument(level = "debug", err(level = "warn"))]
+#[hotpath::measure]
 fn workspace_targets(project_root: &Path) -> CordialResult<Vec<CrateTarget>> {
     let metadata = cargo_metadata::MetadataCommand::new()
         .current_dir(project_root)
@@ -140,6 +143,7 @@ fn workspace_targets(project_root: &Path) -> CordialResult<Vec<CrateTarget>> {
 /// variants) into a `proc-macro` target kind, so no manifest parsing is
 /// needed here.
 #[instrument(level = "debug", skip(package))]
+#[hotpath::measure]
 fn package_kinds(package: &cargo_metadata::Package) -> Vec<CrateKind> {
     use cargo_metadata::TargetKind;
 
@@ -164,6 +168,7 @@ fn package_kinds(package: &cargo_metadata::Package) -> Vec<CrateKind> {
 }
 
 #[instrument(level = "debug", skip(targets, filter))]
+#[hotpath::measure]
 fn apply_target_filter(targets: Vec<CrateTarget>, filter: &dyn RunFilter) -> Vec<CrateTarget> {
     if let Some(name) = filter.crate_name() {
         return targets

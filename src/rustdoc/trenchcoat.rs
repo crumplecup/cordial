@@ -25,6 +25,7 @@ impl TrenchcoatPair {
 
 /// Collect `(wrapper, foreign)` pairs from `From` impls on elicitation-style wrappers.
 #[instrument(level = "debug", skip(inventory))]
+#[hotpath::measure]
 pub fn collect_trenchcoat_pairs(inventory: &RustdocInventory) -> Vec<TrenchcoatPair> {
     let mut pairs = Vec::new();
     let mut seen = HashSet::new();
@@ -63,6 +64,7 @@ pub fn collect_trenchcoat_pairs(inventory: &RustdocInventory) -> Vec<TrenchcoatP
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn from_foreign_path(trait_: &rustdoc_types::Path) -> Option<String> {
     let GenericArgs::AngleBracketed { args, .. } = trait_.args.as_deref()? else {
         return None;

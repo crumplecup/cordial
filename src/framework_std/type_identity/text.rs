@@ -45,6 +45,7 @@ pub fn normalize_type_text(text: &str) -> String {
 /// Parse normalized type text into a [`TypeText`]. `None` when the angle
 /// brackets are unbalanced.
 #[instrument(level = "debug")]
+#[hotpath::measure]
 pub fn parse_type_text(text: &str) -> Option<TypeText> {
     let text = text.trim();
     if text.is_empty() {

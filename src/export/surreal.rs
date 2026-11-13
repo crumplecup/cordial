@@ -44,6 +44,7 @@ pub struct SurrealEdge {
 impl SurrealGraphExport {
     /// Rebuild from a serialized snapshot.
     #[instrument(level = "debug", skip(snapshot), ret)]
+    #[hotpath::measure]
     pub fn from_snapshot(snapshot: &CrateIrSnapshot) -> Self {
         let nodes = snapshot
             .nodes()
@@ -76,23 +77,27 @@ impl SurrealGraphExport {
 
     /// Build an export from a crate IR graph.
     #[instrument(level = "debug", skip(ir), err(level = "warn"))]
+    #[hotpath::measure]
     pub fn from_crate_ir(ir: &CrateIr) -> CordialResult<Self> {
         Ok(Self::from_snapshot(&ir.snapshot()?))
     }
 
     /// Pretty-printed JSON for this export.
     #[instrument(level = "debug", skip(self), err(level = "warn"))]
+    #[hotpath::measure]
     pub fn to_json_pretty(&self) -> CordialResult<String> {
         Ok(serde_json::to_string_pretty(self)?)
     }
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn node_id(crate_name: &str, index: usize) -> String {
     format!("{crate_name}:node:{index}")
 }
 
 #[instrument(level = "debug", skip(kind))]
+#[hotpath::measure]
 fn format_node_kind(kind: &NodeKind) -> String {
     match kind {
         NodeKind::Item(item) => format!("Item::{item:?}"),
@@ -102,11 +107,13 @@ fn format_node_kind(kind: &NodeKind) -> String {
 }
 
 #[instrument(level = "debug", skip(kind))]
+#[hotpath::measure]
 fn format_edge_kind(kind: EdgeKind) -> String {
     format!("{kind:?}")
 }
 
 #[instrument(level = "debug", skip(attrs))]
+#[hotpath::measure]
 fn attrs_to_json(attrs: &[(String, Value)]) -> Value {
     if attrs.is_empty() {
         Value::Null
@@ -121,6 +128,7 @@ fn attrs_to_json(attrs: &[(String, Value)]) -> Value {
 
 /// Build SurrealDB-oriented CREATE statements for scripted import.
 #[instrument(level = "debug", skip(export))]
+#[hotpath::measure]
 pub fn surreal_statements(export: &SurrealGraphExport) -> Vec<String> {
     let mut statements = Vec::new();
     for node in export.nodes() {
@@ -152,6 +160,7 @@ pub fn surreal_statements(export: &SurrealGraphExport) -> Vec<String> {
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn escape_surreal(value: &str) -> String {
     value.replace('\'', "\\'")
 }

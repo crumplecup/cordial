@@ -36,12 +36,14 @@ use crate::store::StoreLayout;
 /// kept separate paths, and the coverage copy went months stale while the
 /// other was refreshed, so rows for newer registrations read `Missing`.
 #[instrument(level = "debug", skip(store))]
+#[hotpath::measure]
 pub fn registry_dump_path(store: &StoreLayout) -> PathBuf {
     store.cache_dir().join("amenable-registry.dump.json")
 }
 
 /// Sidecar recording the feature set a dump was built with.
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn features_sidecar(dump_path: &Path) -> PathBuf {
     dump_path.with_extension("features")
 }
@@ -49,6 +51,7 @@ fn features_sidecar(dump_path: &Path) -> PathBuf {
 /// Newest mtime among the workspace's Rust sources and manifests,
 /// skipping `target/` and hidden directories.
 #[instrument(level = "debug", skip(workspace))]
+#[hotpath::measure]
 fn newest_source_mtime(workspace: &Path) -> Option<SystemTime> {
     WalkDir::new(workspace)
         .into_iter()
@@ -72,6 +75,7 @@ fn newest_source_mtime(workspace: &Path) -> Option<SystemTime> {
 /// Whether the dump at `dump_path` exists, was built with the current
 /// feature set, and is newer than every source file in `workspace`.
 #[instrument(level = "debug", skip(workspace))]
+#[hotpath::measure]
 pub fn registry_dump_is_fresh(workspace: &Path, dump_path: &Path) -> bool {
     let Ok(dump_mtime) = std::fs::metadata(dump_path).and_then(|meta| meta.modified()) else {
         return false;
@@ -84,6 +88,7 @@ pub fn registry_dump_is_fresh(workspace: &Path, dump_path: &Path) -> bool {
 /// Run `cargo run -p amenable -- dump-registry` in `workspace`, writing
 /// `out_path` and recording the feature set beside it.
 #[instrument(level = "info", skip(workspace), err(level = "warn"))]
+#[hotpath::measure]
 pub fn run_amenable_dump_registry(workspace: &Path, out_path: &Path) -> CordialResult<()> {
     if let Some(parent) = out_path.parent() {
         std::fs::create_dir_all(parent)?;

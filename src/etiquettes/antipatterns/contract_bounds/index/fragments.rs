@@ -7,6 +7,7 @@ use tracing::instrument;
 /// `fragment`'s own source text, without requiring the text to parse as
 /// a complete, valid Rust item.
 #[instrument(level = "debug")]
+#[hotpath::measure]
 pub(super) fn fragment_fn_name(fragment: &str) -> Option<String> {
     let tokens = parse(fragment)?;
     tokens.windows(2).find_map(|pair| {
@@ -20,6 +21,7 @@ pub(super) fn fragment_fn_name(fragment: &str) -> Option<String> {
 /// `fn <name>` pair in `fragment`'s own source text, normalized the same
 /// way a clause's own tokens are.
 #[instrument(level = "debug")]
+#[hotpath::measure]
 pub(super) fn fragment_fn_body_text(fragment: &str) -> Option<String> {
     let tokens = parse(fragment)?;
     let fn_idx = tokens

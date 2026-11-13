@@ -45,6 +45,7 @@ pub(crate) enum StaticFieldShape {
 
 impl AntipatternCatalog {
     #[tracing::instrument(level = "debug", skip_all, err(level = "warn"))]
+    #[hotpath::measure]
     pub(crate) fn assess(
         &self,
         crate_name: &str,
@@ -70,6 +71,7 @@ impl AntipatternCatalog {
 
 impl AntipatternSyntaxFacts {
     #[tracing::instrument(level = "debug", skip_all, err(level = "warn"))]
+    #[hotpath::measure]
     pub(super) fn assess(
         &self,
         static_strategy: StaticRefStrategy,
@@ -113,6 +115,7 @@ impl AntipatternSyntaxFacts {
 
 impl StaticField {
     #[tracing::instrument(level = "debug", skip(self, strategy))]
+    #[hotpath::measure]
     fn guidance(&self, strategy: StaticRefStrategy) -> String {
         let found = self.site.snippet();
         if self.shape == StaticFieldShape::Location {

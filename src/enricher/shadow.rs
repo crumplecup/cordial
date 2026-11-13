@@ -63,6 +63,7 @@ impl IrEnricher for ShadowLinkEnricher {
 
 /// Resolve shadow item pairs: optional `shadow-map.json`, then same-crate `{name}Shadow` discovery.
 #[instrument(level = "debug", skip(session, ir), err(level = "warn"))]
+#[hotpath::measure]
 pub fn resolve_shadow_entries(
     session: &dyn SessionView,
     ir: &dyn IrView,
@@ -76,6 +77,7 @@ pub fn resolve_shadow_entries(
 
 /// Pair public items with a sibling whose last path segment adds the `Shadow` suffix.
 #[instrument(level = "debug", skip(ir))]
+#[hotpath::measure]
 pub fn discover_same_crate_shadow_pairs(ir: &dyn IrView) -> Vec<ShadowMapEntry> {
     let all_nodes = BasicQuery::all_nodes();
     let mut entries = Vec::new();
@@ -101,6 +103,7 @@ pub fn discover_same_crate_shadow_pairs(ir: &dyn IrView) -> Vec<ShadowMapEntry> 
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn shadow_path_for(target_path: &str) -> Option<String> {
     let (prefix, name) = target_path.rsplit_once("::")?;
     if name.ends_with("Shadow") {
@@ -111,6 +114,7 @@ fn shadow_path_for(target_path: &str) -> Option<String> {
 
 /// Load shadow map.
 #[instrument(level = "info", skip(path), err(level = "warn"))]
+#[hotpath::measure]
 pub fn load_shadow_map(path: &Path) -> CordialResult<Vec<ShadowMapEntry>> {
     let bytes = std::fs::read(path)?;
     Ok(serde_json::from_slice(&bytes)?)

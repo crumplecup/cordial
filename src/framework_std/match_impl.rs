@@ -11,6 +11,7 @@ use crate::rustdoc::{RustdocInventory, parse_rustdoc_json};
 
 /// Collect canonical type paths that have `impl {trait_name} for T` in a crate's rustdoc JSON.
 #[instrument(level = "debug", err(level = "warn"))]
+#[hotpath::measure]
 pub fn collect_trait_impl_paths_from_json(
     json_path: &Path,
     crate_name: &str,
@@ -22,6 +23,7 @@ pub fn collect_trait_impl_paths_from_json(
 
 /// Collect trait impl type paths from parsed rustdoc inventory.
 #[instrument(level = "debug", skip(inventory))]
+#[hotpath::measure]
 pub fn collect_trait_impl_paths(inventory: &RustdocInventory, trait_name: &str) -> HashSet<String> {
     let mut paths = HashSet::new();
     for item in inventory.krate().index.values() {
@@ -42,6 +44,7 @@ pub fn collect_trait_impl_paths(inventory: &RustdocInventory, trait_name: &str) 
 }
 
 #[instrument(level = "debug", skip(krate, ty))]
+#[hotpath::measure]
 fn impl_type_path(krate: &Crate, ty: &Type) -> Option<String> {
     match ty {
         Type::ResolvedPath(path) => {
@@ -55,6 +58,7 @@ fn impl_type_path(krate: &Crate, ty: &Type) -> Option<String> {
 
 /// Strip generic/lifetime arguments from a type path string for inventory matching.
 #[instrument(level = "debug")]
+#[hotpath::measure]
 pub fn type_path_without_generics(type_str: &str) -> String {
     let mut depth = 0i32;
     for (index, ch) in type_str.char_indices() {
@@ -70,6 +74,7 @@ pub fn type_path_without_generics(type_str: &str) -> String {
 
 /// Whether `type_path` from a std inventory row has a matching trait impl path.
 #[instrument(level = "debug", skip(impl_paths))]
+#[hotpath::measure]
 pub fn type_has_trait_impl(impl_paths: &HashSet<String>, type_path: &str) -> bool {
     if impl_paths.contains(type_path) {
         return true;
@@ -93,6 +98,7 @@ pub fn type_has_trait_impl(impl_paths: &HashSet<String>, type_path: &str) -> boo
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn compound_primitive_shape(text: &str) -> Option<&'static str> {
     let text = text.trim();
     if text == "()" {
@@ -128,6 +134,7 @@ fn compound_primitive_shape(text: &str) -> Option<&'static str> {
 }
 
 #[instrument(level = "debug", skip(path))]
+#[hotpath::measure]
 fn path_without_crate_root(path: &str) -> &str {
     path.split_once("::").map_or(path, |(_root, rest)| rest)
 }

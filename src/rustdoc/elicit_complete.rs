@@ -46,6 +46,7 @@ impl ElicitCompleteSet {
 
 /// Scan rustdoc JSON on disk for concrete and factory `ElicitComplete` impls.
 #[instrument(level = "debug", err(level = "warn"))]
+#[hotpath::measure]
 pub fn collect_elicit_complete_paths(
     json_path: &Path,
     local_crate_name: &str,
@@ -56,6 +57,7 @@ pub fn collect_elicit_complete_paths(
 
 /// Collect types that impl `ElicitComplete` (concrete vs factory) from an inventory.
 #[instrument(level = "debug", skip(inventory))]
+#[hotpath::measure]
 pub fn collect_elicit_complete_from_inventory(inventory: &RustdocInventory) -> ElicitCompleteSet {
     let local_crate_name = inventory.crate_name().replace('-', "_");
     let mut concrete = HashSet::new();

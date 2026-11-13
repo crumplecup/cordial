@@ -13,6 +13,7 @@ use tracing::instrument;
 pub(super) type LockfileIndex = BTreeMap<String, Vec<String>>;
 
 #[instrument(level = "debug", err(level = "warn"))]
+#[hotpath::measure]
 pub(super) fn lockfile_index(project_root: &Path) -> CordialResult<LockfileIndex> {
     let lockfile_path = project_root.join("Cargo.lock");
     if !lockfile_path.is_file() {
@@ -46,6 +47,7 @@ pub(super) fn lockfile_index(project_root: &Path) -> CordialResult<LockfileIndex
 }
 
 #[instrument(level = "debug", skip(entry, lockfile_index))]
+#[hotpath::measure]
 pub(super) fn locked_versions_for_entry(
     entry: &DependencyEntry,
     lockfile_index: &LockfileIndex,
@@ -77,6 +79,7 @@ pub(super) fn locked_versions_for_entry(
 }
 
 #[instrument(level = "debug", skip(version_spec))]
+#[hotpath::measure]
 fn version_requirement(version_spec: &ManifestVersionSpec) -> Option<&str> {
     match version_spec {
         ManifestVersionSpec::Requirement(requirement)

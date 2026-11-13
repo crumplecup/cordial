@@ -110,6 +110,7 @@ impl CrateTypeIndex {
     }
 
     #[instrument(level = "debug", skip(self, file, expected))]
+    #[hotpath::measure]
     pub(in crate::etiquettes::internal_error_chain::apply) fn paths_resolve_to_graph(
         &self,
         file: &impl SourceSnapshot,

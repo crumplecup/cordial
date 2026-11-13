@@ -28,6 +28,7 @@ pub struct CrateAttrsThresholds {
 
 impl Default for CrateAttrsThresholds {
     #[instrument(level = "debug", ret)]
+    #[hotpath::measure]
     fn default() -> Self {
         Self {
             forbid_unsafe: true,
@@ -79,6 +80,7 @@ pub struct DocWarningsThresholds {
 
 impl Default for DocWarningsThresholds {
     #[instrument(level = "debug", ret)]
+    #[hotpath::measure]
     fn default() -> Self {
         Self {
             document_private_items: false,
@@ -140,6 +142,7 @@ fn default_private_feature_threshold() -> usize {
 
 impl Default for FeatureWarningsThresholds {
     #[instrument(level = "debug", ret)]
+    #[hotpath::measure]
     fn default() -> Self {
         Self {
             depth: default_feature_depth(),
@@ -175,6 +178,7 @@ pub struct CreusotDiagnosticsThresholds {
 
 impl Default for CreusotDiagnosticsThresholds {
     #[instrument(level = "debug", ret)]
+    #[hotpath::measure]
     fn default() -> Self {
         Self {
             skip_crates: Vec::new(),
@@ -234,6 +238,7 @@ pub struct DependencyFreshnessThresholds {
 
 impl Default for DependencyFreshnessThresholds {
     #[instrument(level = "debug", ret)]
+    #[hotpath::measure]
     fn default() -> Self {
         Self {
             patch: true,
@@ -252,6 +257,7 @@ impl Default for DependencyFreshnessThresholds {
 impl DependencyFreshnessThresholds {
     /// Whether a dependency freshness rule should emit a finding.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn rule_enabled(&self, rule_id: &str) -> bool {
         match rule_id {
             "DEPENDENCY-FRESHNESS-PATCH" => self.patch,
@@ -298,17 +304,20 @@ pub struct DerivesThresholds {
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn default_max_constructor_args() -> usize {
     3
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn default_min_fluent_setters() -> usize {
     2
 }
 
 impl Default for DerivesThresholds {
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     fn default() -> Self {
         Self {
             max_constructor_args: default_max_constructor_args(),

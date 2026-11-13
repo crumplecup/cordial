@@ -10,6 +10,7 @@ use crate::etiquette::quality::QualityEtiquette;
 
 /// Stable topological sort of quality etiquettes: `After` edges become area edges.
 #[instrument(level = "debug", skip(etiquettes, order))]
+#[hotpath::measure]
 pub(crate) fn sort_quality_etiquettes<'a>(
     etiquettes: &[&'a dyn QualityEtiquette],
     order: &LintOrder,
@@ -79,6 +80,7 @@ pub(crate) fn sort_quality_etiquettes<'a>(
 /// Areas reachable from Error handling sit immediately after that
 /// hardcoded first row: foreign error types through proof patterns.
 #[instrument(level = "debug", skip(ordered, order))]
+#[hotpath::measure]
 fn lift_error_handling_cluster<'a>(
     ordered: Vec<&'a dyn QualityEtiquette>,
     order: &LintOrder,
@@ -98,6 +100,7 @@ fn lift_error_handling_cluster<'a>(
 }
 
 #[instrument(level = "debug", skip(order, seeds))]
+#[hotpath::measure]
 fn reachable_successors(order: &LintOrder, seeds: &[&str]) -> BTreeSet<&'static str> {
     let mut seen = BTreeSet::new();
     let mut stack: Vec<&str> = seeds.iter().flat_map(|id| order.successors(id)).collect();
@@ -110,6 +113,7 @@ fn reachable_successors(order: &LintOrder, seeds: &[&str]) -> BTreeSet<&'static 
 }
 
 #[instrument(level = "debug", skip(order, earlier, later))]
+#[hotpath::measure]
 fn area_precedes(order: &LintOrder, earlier: &[&str], later: &[&str]) -> bool {
     earlier.iter().any(|id| {
         order

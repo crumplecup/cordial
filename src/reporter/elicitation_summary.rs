@@ -30,6 +30,7 @@ impl ElicitationCoverageRollup {
     skip(session, filter, findings, workspace),
     err(level = "warn")
 )]
+#[hotpath::measure]
 pub fn build_elicitation_coverage_rollup(
     session: &dyn SessionView,
     filter: &dyn RunFilter,
@@ -54,6 +55,7 @@ pub fn build_elicitation_coverage_rollup(
 }
 
 #[instrument(level = "info", skip(workspace, findings), err(level = "warn"))]
+#[hotpath::measure]
 fn write_impl_coverage_section(
     workspace: &WorkspaceIr,
     findings: &[&dyn Finding],
@@ -143,6 +145,7 @@ fn write_impl_coverage_section(
 }
 
 #[instrument(level = "info", skip(findings), err(level = "warn"))]
+#[hotpath::measure]
 fn write_impl_gaps_section(findings: &[&dyn Finding], out: &mut String) -> CordialResult<()> {
     let mut missing_our = 0usize;
     let mut ready = 0usize;
@@ -188,6 +191,7 @@ fn write_impl_gaps_section(findings: &[&dyn Finding], out: &mut String) -> Cordi
 }
 
 #[instrument(level = "info", skip(workspace, findings), err(level = "warn"))]
+#[hotpath::measure]
 fn write_shadow_coverage_section(
     workspace: &WorkspaceIr,
     findings: &[&dyn Finding],
@@ -328,6 +332,7 @@ struct ImplCrateMetrics {
 
 impl ImplCrateMetrics {
     #[instrument(level = "debug", skip(self, other))]
+    #[hotpath::measure]
     fn merge(&mut self, other: &Self) {
         self.types += other.types;
         self.our_traits_done += other.our_traits_done;
@@ -353,6 +358,7 @@ struct ShadowPairMetrics {
 }
 
 #[instrument(level = "debug", skip(workspace))]
+#[hotpath::measure]
 fn lookup_crate_version(workspace: &WorkspaceIr, crate_name: &str) -> String {
     workspace
         .crate_version(crate_name)
@@ -360,6 +366,7 @@ fn lookup_crate_version(workspace: &WorkspaceIr, crate_name: &str) -> String {
 }
 
 #[instrument(level = "debug", skip(finding))]
+#[hotpath::measure]
 fn finding_row(finding: &dyn Finding) -> BTreeMap<String, String> {
     let mut sink = MapFindingSink::default();
     finding.emit(&mut sink);
@@ -367,16 +374,19 @@ fn finding_row(finding: &dyn Finding) -> BTreeMap<String, String> {
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn truthy(value: Option<&String>) -> bool {
     matches!(value.map(String::as_str), Some("true" | "1" | "yes"))
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn percent(numerator: usize, denominator: usize) -> f64 {
     percent_f64(numerator, denominator)
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn percent_f64(numerator: usize, denominator: usize) -> f64 {
     if denominator == 0 {
         0.0

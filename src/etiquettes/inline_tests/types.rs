@@ -23,6 +23,7 @@ pub enum InlineTestRuleId {
 impl InlineTestRuleId {
     /// Stable string form of this value.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Mod001 => "INLINE-TEST-MOD",
@@ -33,6 +34,7 @@ impl InlineTestRuleId {
 
     /// Parse from the stable identifier string.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn from_attr(value: &str) -> Option<Self> {
         match value {
             "INLINE-TEST-MOD" => Some(Self::Mod001),
@@ -116,6 +118,7 @@ pub struct InlineTestFinding {
 
 impl InlineTestFinding {
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> InlineTestFindingBuilder {
         InlineTestFindingBuilder::default()
     }
@@ -174,6 +177,7 @@ pub struct InlineTestSiteRecord {
 impl InlineTestSiteRecord {
     /// Construct loader-owned inline-test evidence.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> InlineTestSiteRecordBuilder {
         InlineTestSiteRecordBuilder::default()
     }

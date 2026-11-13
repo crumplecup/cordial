@@ -87,6 +87,7 @@ pub struct CoverageTarget {
 impl CoverageTarget {
     /// Coverage target for a framework std inventory source.
     #[instrument(level = "debug", skip(crate_name))]
+    #[hotpath::measure]
     pub fn std_inventory(crate_name: impl Into<String>) -> Self {
         Self {
             kind: CoverageTargetKind::StdInventory,
@@ -97,6 +98,7 @@ impl CoverageTarget {
 
     /// Coverage target for a workspace member crate.
     #[instrument(level = "debug", skip(crate_name))]
+    #[hotpath::measure]
     pub fn workspace_member(crate_name: impl Into<String>) -> Self {
         Self {
             kind: CoverageTargetKind::WorkspaceMember,
@@ -107,6 +109,7 @@ impl CoverageTarget {
 
     /// Coverage target for an upstream dependency crate.
     #[instrument(level = "debug", skip(crate_name))]
+    #[hotpath::measure]
     pub fn upstream_dep(crate_name: impl Into<String>) -> Self {
         Self {
             kind: CoverageTargetKind::UpstreamDep,
@@ -117,6 +120,7 @@ impl CoverageTarget {
 
     /// Coverage target pairing an upstream crate with its shadow.
     #[instrument(level = "debug", skip(upstream, shadow))]
+    #[hotpath::measure]
     pub fn shadow_pair(upstream: impl Into<String>, shadow: impl Into<String>) -> Self {
         Self {
             kind: CoverageTargetKind::ShadowPair,
@@ -133,6 +137,7 @@ impl CoverageTarget {
 
     /// Crate names that need per-crate IR built for this coverage target.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn ir_crate_names(&self) -> Vec<String> {
         match self.kind {
             CoverageTargetKind::StdInventory => Vec::new(),
@@ -212,6 +217,7 @@ mod impl_gap_classification {
 
     /// Classify elicit complete gap.
     #[instrument(level = "debug", skip(prereqs))]
+    #[hotpath::measure]
     pub fn classify_elicit_complete_gap(prereqs: &TraitPrereqs) -> Option<ImplGapKind> {
         if prereqs.elicit_complete() {
             return None;

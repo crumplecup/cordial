@@ -98,6 +98,7 @@ pub static DOC_WARNINGS_ETIQUETTE: LazyLock<StaticQualityEtiquette> = LazyLock::
 });
 
 #[instrument(level = "debug", skip(findings))]
+#[hotpath::measure]
 fn quality_area_compute(findings: &[&dyn Finding]) -> (usize, String) {
     let doc_warnings = count_open_category(findings, "doc_warnings");
     (doc_warnings, format!("rustdoc warnings **{doc_warnings}**"))

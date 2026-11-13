@@ -51,6 +51,7 @@ fn git(root: &Path, arguments: &[&str]) -> Option<String> {
 impl PerfIdentity {
     /// Describe the checkout at `root`; outside a repository the sha is `unknown`.
     #[instrument(level = "debug", skip(root), err(level = "warn"))]
+    #[hotpath::measure]
     pub fn capture(root: &Path) -> CordialResult<Self> {
         Ok(Self {
             sha: git(root, &["rev-parse", "HEAD"]).unwrap_or_else(|| "unknown".to_owned()),

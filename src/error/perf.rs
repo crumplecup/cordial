@@ -18,6 +18,7 @@ pub struct PerfSource {
 impl PerfSource {
     #[track_caller]
     #[instrument(level = "debug", skip(path, reason))]
+    #[hotpath::measure]
     pub fn new(path: PathBuf, reason: impl Into<String>) -> Self {
         let location = Location::caller();
         Self {
@@ -47,6 +48,7 @@ impl super::CordialError {
     /// A performance record could not be written, read or understood.
     #[track_caller]
     #[instrument(level = "debug", skip(path, reason))]
+    #[hotpath::measure]
     pub fn perf(path: PathBuf, reason: impl Into<String>) -> Self {
         Self::from_kind(super::CordialErrorKind::Perf(PerfSource::new(path, reason)))
     }

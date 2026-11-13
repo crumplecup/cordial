@@ -47,6 +47,7 @@ use crate::targets::discover_crate_targets;
 
 /// Build rustdoc JSON for workspace members and cache it under the store.
 #[instrument(level = "debug", skip(store), err(level = "warn"))]
+#[hotpath::measure]
 pub fn build_workspace_members(
     project_root: &Path,
     store: &StoreLayout,
@@ -57,6 +58,7 @@ pub fn build_workspace_members(
 }
 
 #[instrument(level = "debug", skip(store, progress), err(level = "warn"))]
+#[hotpath::measure]
 pub(crate) fn build_workspace_members_with_progress(
     project_root: &Path,
     store: &StoreLayout,
@@ -137,6 +139,7 @@ pub(crate) fn build_workspace_members_with_progress(
 
 /// Whether cached rustdoc JSON is newer than the Rust inputs that feed it.
 #[instrument(level = "debug", skip(project_root, crate_root, cached_json))]
+#[hotpath::measure]
 pub fn rustdoc_cache_is_fresh(project_root: &Path, crate_root: &Path, cached_json: &Path) -> bool {
     let Some(cache_modified) = modified_at(cached_json) else {
         return false;
@@ -179,6 +182,7 @@ fn modified_at(path: &Path) -> Option<SystemTime> {
 }
 
 #[instrument(level = "debug", err(level = "warn"))]
+#[hotpath::measure]
 pub(crate) fn copy_rustdoc_json(from: &Path, to: &Path) -> CordialResult<()> {
     if let Some(parent) = to.parent() {
         std::fs::create_dir_all(parent)?;
@@ -188,6 +192,7 @@ pub(crate) fn copy_rustdoc_json(from: &Path, to: &Path) -> CordialResult<()> {
 }
 
 #[instrument(level = "debug", skip(path), err(level = "warn"))]
+#[hotpath::measure]
 pub(crate) fn hash_file(path: &Path) -> CordialResult<String> {
     let bytes = std::fs::read(path)?;
     let mut hasher = Sha256::new();
@@ -197,6 +202,7 @@ pub(crate) fn hash_file(path: &Path) -> CordialResult<String> {
 }
 
 #[instrument(level = "info")]
+#[hotpath::measure]
 pub(crate) fn read_crate_version(json_path: &Path) -> Option<String> {
     let content = std::fs::read_to_string(json_path).ok()?;
     let krate: rustdoc_types::Crate = serde_json::from_str(&content).ok()?;
@@ -204,12 +210,14 @@ pub(crate) fn read_crate_version(json_path: &Path) -> Option<String> {
 }
 
 #[instrument(level = "info", skip(path), err(level = "warn"))]
+#[hotpath::measure]
 pub(crate) fn read_build_artifact(path: &Path) -> CordialResult<BuildArtifact> {
     let bytes = std::fs::read(path)?;
     Ok(serde_json::from_slice(&bytes)?)
 }
 
 #[instrument(level = "info", skip(path, artifact), err(level = "warn"))]
+#[hotpath::measure]
 pub(crate) fn write_build_artifact(path: &Path, artifact: &BuildArtifact) -> CordialResult<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;

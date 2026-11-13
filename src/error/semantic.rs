@@ -16,6 +16,7 @@ pub struct SemanticLoadSource {
 impl SemanticLoadSource {
     #[track_caller]
     #[instrument(level = "debug", skip(source))]
+    #[hotpath::measure]
     fn new(source: anyhow::Error) -> Self {
         let location = Location::caller();
         Self {
@@ -29,6 +30,7 @@ impl SemanticLoadSource {
 impl From<anyhow::Error> for super::CordialError {
     #[track_caller]
     #[instrument(level = "debug", skip(source))]
+    #[hotpath::measure]
     fn from(source: anyhow::Error) -> Self {
         Self::from_kind(super::CordialErrorKind::SemanticLoad(
             SemanticLoadSource::new(source),
@@ -66,6 +68,7 @@ pub struct SemanticContextInputSource {
 impl SemanticContextInputSource {
     #[track_caller]
     #[instrument(level = "debug", skip(path))]
+    #[hotpath::measure]
     fn new(path: std::path::PathBuf) -> Self {
         let location = Location::caller();
         Self {
@@ -80,6 +83,7 @@ impl super::CordialError {
     /// Reload the workspace driver before changing this Cargo context input.
     #[track_caller]
     #[instrument(level = "debug", skip(path))]
+    #[hotpath::measure]
     pub fn semantic_context_input(path: std::path::PathBuf) -> Self {
         Self::from_kind(super::CordialErrorKind::SemanticContextInput(
             SemanticContextInputSource::new(path),

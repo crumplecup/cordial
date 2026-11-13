@@ -17,6 +17,7 @@ pub struct EtiquetteGate {
 
 impl Default for EtiquetteGate {
     #[instrument(level = "debug", ret)]
+    #[hotpath::measure]
     fn default() -> Self {
         Self { enabled: true }
     }

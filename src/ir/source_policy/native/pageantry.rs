@@ -11,6 +11,7 @@ use ra_ap_syntax::{
 };
 
 #[tracing::instrument(level = "debug", skip(file, prefix), err(level = "warn"))]
+#[hotpath::measure]
 pub(super) fn collect(
     file: &DatabaseSource<'_>,
     root: &Path,
@@ -22,6 +23,7 @@ pub(super) fn collect(
 }
 
 #[tracing::instrument(level = "debug", skip(iter, file, prefix, out), err(level = "warn"))]
+#[hotpath::measure]
 fn items(
     iter: impl Iterator<Item = ast::Item>,
     file: &DatabaseSource<'_>,

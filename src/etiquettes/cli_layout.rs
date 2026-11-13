@@ -106,6 +106,7 @@ pub static CLI_LAYOUT_ETIQUETTE: LazyLock<StaticQualityEtiquette> = LazyLock::ne
 });
 
 #[instrument(level = "debug", skip(findings))]
+#[hotpath::measure]
 fn quality_area_compute(findings: &[&dyn Finding]) -> (usize, String) {
     let cli_island = count_open_rule(findings, "CLI-ISLAND-001");
     let cli_act = count_open_rule(findings, "CLI-ACT-001");

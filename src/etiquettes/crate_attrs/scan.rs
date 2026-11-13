@@ -15,6 +15,7 @@ use tracing::instrument;
 
 /// Scan the crate's library root for missing crate-level lint attributes.
 #[instrument(level = "debug", skip(policy), err(level = "warn"))]
+#[hotpath::measure]
 pub fn scan_crate_attrs(
     crate_root: &Path,
     crate_name: &str,
@@ -42,6 +43,7 @@ pub fn scan_crate_attrs(
 }
 
 #[instrument(level = "debug", skip(ir, policy), err(level = "warn"))]
+#[hotpath::measure]
 pub(super) fn scan_shared_crate_attrs(
     ir: &dyn IrView,
     crate_root: &Path,
@@ -61,6 +63,7 @@ pub(super) fn scan_shared_crate_attrs(
 }
 
 #[instrument(level = "debug", skip(policy, presence), err(level = "warn"))]
+#[hotpath::measure]
 fn records_for_presence(
     crate_root: &Path,
     crate_name: &str,
@@ -159,6 +162,7 @@ mod verus_exemption {
 
 /// Read the library's collected facts; an existing file without evidence is an error.
 #[instrument(level = "debug", skip(ir), err(level = "warn"))]
+#[hotpath::measure]
 pub(super) fn library_facts(
     ir: &dyn IrView,
     lib: &Path,

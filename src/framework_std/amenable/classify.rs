@@ -18,6 +18,7 @@ use super::{AmenableStdEntry, AmenableStdReport, AmenableStdStatus};
 /// [`build_amenable_ext_report`], which differ only in which wrapper
 /// type's evidence/witness/proof-test lookups `classify_row` uses.
 #[instrument(level = "debug", skip(args, classify_row), err(level = "warn"))]
+#[hotpath::measure]
 fn build_wrapped_report(
     args: BuildWrappedReportArgs<'_>,
     classify_row: impl Fn(&str, ClassifyRowArgs<'_>) -> CordialResult<AmenableStdEntry>,
@@ -68,6 +69,7 @@ fn build_wrapped_report(
     skip(items, registry, skip_map, proof_chain_subjects),
     err(level = "warn")
 )]
+#[hotpath::measure]
 pub fn build_amenable_std_report(
     source_crate: &str,
     items: &[StdInventoryItem],
@@ -97,6 +99,7 @@ pub fn build_amenable_std_report(
     skip(items, registry, skip_map, proof_chain_subjects),
     err(level = "warn")
 )]
+#[hotpath::measure]
 pub fn build_amenable_ext_report(
     source_crate: &str,
     items: &[StdInventoryItem],
@@ -161,6 +164,7 @@ pub struct ClassifyRowArgs<'a> {
     ),
     err(level = "warn")
 )]
+#[hotpath::measure]
 fn classify_wrapped_row(
     type_path: &str,
     args: ClassifyRowArgs<'_>,
@@ -218,6 +222,7 @@ pub(crate) struct RowFacts<'a> {
 /// a witness, and `Partial` otherwise. Shared by inventory rows and by the
 /// per-instantiation rows built from them.
 #[instrument(level = "debug", skip(facts), err(level = "warn"))]
+#[hotpath::measure]
 pub(crate) fn entry_from_facts(facts: RowFacts<'_>) -> CordialResult<AmenableStdEntry> {
     let RowFacts {
         type_path,
@@ -290,6 +295,7 @@ pub(crate) fn entry_from_facts(facts: RowFacts<'_>) -> CordialResult<AmenableStd
 
 /// Classify one std inventory row for amenable registry coverage.
 #[instrument(level = "debug", skip(args), err(level = "warn"))]
+#[hotpath::measure]
 pub fn classify_amenable_std_row(
     type_path: &str,
     args: ClassifyRowArgs<'_>,
@@ -306,6 +312,7 @@ pub fn classify_amenable_std_row(
 /// Classify one third-party (`amenable_ext`) inventory row for amenable
 /// registry coverage.
 #[instrument(level = "debug", skip(args), err(level = "warn"))]
+#[hotpath::measure]
 pub fn classify_amenable_ext_row(
     type_path: &str,
     args: ClassifyRowArgs<'_>,
@@ -321,6 +328,7 @@ pub fn classify_amenable_ext_row(
 
 /// Resolve alias chain.
 #[instrument(level = "debug", skip(items))]
+#[hotpath::measure]
 pub fn resolve_alias_chain(items: &[StdInventoryItem], start: &str, max_hops: usize) -> String {
     let mut current = start.to_string();
     for _ in 0..max_hops {

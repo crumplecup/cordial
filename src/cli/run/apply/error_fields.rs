@@ -7,6 +7,7 @@ use crate::{CordialResult, ErrorFieldApplySummary};
 use tracing::instrument;
 
 #[instrument(level = "debug", skip(summary), err(level = "warn"))]
+#[hotpath::measure]
 pub(super) fn report(
     project_root: &Path,
     summary: &ErrorFieldApplySummary,
@@ -59,6 +60,7 @@ pub(super) fn report(
 
 #[cfg(feature = "quality")]
 #[instrument(level = "debug", skip(store, summary), err(level = "warn"))]
+#[hotpath::measure]
 pub(super) fn report_worklist(
     project_root: &Path,
     store: &crate::StoreLayout,

@@ -19,6 +19,7 @@ pub enum ShadowStatus {
 impl ShadowStatus {
     /// Stable string form of this value.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Covered => "Covered",
@@ -60,6 +61,7 @@ pub struct ShadowRow {
 impl ShadowRow {
     /// Start a builder for this row.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> ShadowRowBuilder {
         ShadowRowBuilder::default()
     }
@@ -104,6 +106,7 @@ pub struct ShadowReport {
 impl ShadowReport {
     /// Start a builder for this report.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> ShadowReportBuilder {
         ShadowReportBuilder::default()
     }
@@ -163,6 +166,7 @@ pub struct ShadowBuildMaps<'a> {
 impl ShadowBuildMaps<'static> {
     /// Empty.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn empty() -> Self {
         static EMPTY: std::sync::OnceLock<
             std::collections::HashMap<String, std::collections::BTreeSet<String>>,
@@ -190,6 +194,7 @@ pub enum ShadowGapKind {
 impl ShadowGapKind {
     /// Stable string form of this value.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Missing => "Missing",
@@ -237,6 +242,7 @@ pub struct ShadowGapEntry {
 impl ShadowGapEntry {
     /// Start a builder for this gap.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> ShadowGapEntryBuilder {
         ShadowGapEntryBuilder::default()
     }

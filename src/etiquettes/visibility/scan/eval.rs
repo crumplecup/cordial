@@ -19,6 +19,7 @@ pub(super) enum VisibilityEval {
 
 impl VisibilityEval {
     #[instrument(level = "debug", skip(self, thresholds))]
+    #[hotpath::measure]
     pub(super) fn thin_floor(self, thresholds: VisibilityThresholds) -> usize {
         match self {
             Self::Normal => thresholds.min_module_names(),
@@ -28,6 +29,7 @@ impl VisibilityEval {
 }
 
 #[instrument(level = "debug", skip(root, thresholds))]
+#[hotpath::measure]
 pub(super) fn resolve_eval(root: &ModuleNode, thresholds: VisibilityThresholds) -> VisibilityEval {
     if thresholds.prefer_root() {
         return VisibilityEval::Normal;
@@ -41,6 +43,7 @@ pub(super) fn resolve_eval(root: &ModuleNode, thresholds: VisibilityThresholds) 
 /// Modules that already meet `min_module_names` stay put and do not move the
 /// floor. The thin floor follows each peeled module's size (10 → 9 → 7 → 6).
 #[instrument(level = "debug", skip(root, thresholds))]
+#[hotpath::measure]
 fn peel_branching_floor(root: &ModuleNode, thresholds: VisibilityThresholds) -> usize {
     let mut floor = thresholds.min_module_names();
     let mods = public_path_mods(root);

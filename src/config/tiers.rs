@@ -19,12 +19,14 @@ pub struct TierConfig {
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn default_tiers() -> Vec<String> {
     vec![Tier::BUILD.to_string()]
 }
 
 impl Default for TierConfig {
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     fn default() -> Self {
         Self {
             default: default_tiers(),

@@ -8,6 +8,7 @@ use crate::error::{CordialError, CordialResult};
 pub(super) const MAX_NODES: usize = 256;
 
 #[instrument(level = "debug", skip(constraints), err(level = "warn"))]
+#[hotpath::measure]
 pub(super) fn validate(known_ids: &[&str], constraints: &[LintConstraint]) -> CordialResult<()> {
     if !table_is_valid(known_ids, constraints) {
         if known_ids.len() > MAX_NODES {
@@ -107,6 +108,7 @@ const fn kahn_completes(known_ids: &[&str], constraints: &[LintConstraint]) -> b
 }
 
 #[instrument(level = "debug", skip(constraints))]
+#[hotpath::measure]
 pub(super) fn ranked_ids(
     known_ids: &[std::borrow::Cow<'static, str>],
     constraints: &[LintConstraint],

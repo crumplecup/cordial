@@ -24,6 +24,7 @@ pub struct TypeFeatureProbe {
 
 /// Hub crate name for feature-probe dependency resolution.
 #[instrument(level = "debug", skip(hub))]
+#[hotpath::measure]
 pub fn hub_crate_name(hub: WorkspaceHub) -> Option<&'static str> {
     match hub {
         WorkspaceHub::Elicitation => Some("elicitation"),
@@ -35,6 +36,7 @@ pub fn hub_crate_name(hub: WorkspaceHub) -> Option<&'static str> {
 
 /// Load per-type feature probes for a report crate, using cached or live probe rustdoc when available.
 #[instrument(level = "info", skip(filter), err(level = "warn"))]
+#[hotpath::measure]
 pub fn load_crate_feature_probes(
     project_root: &Path,
     store_root: &Path,
@@ -80,6 +82,7 @@ pub fn load_crate_feature_probes(
 
 /// Build type feature probes.
 #[instrument(level = "debug", err(level = "warn"))]
+#[hotpath::measure]
 pub fn build_type_feature_probes(
     project_root: &Path,
     store_root: &Path,
@@ -139,6 +142,7 @@ pub fn build_type_feature_probes(
 }
 
 #[instrument(level = "debug", err(level = "warn"))]
+#[hotpath::measure]
 fn resolve_probe_prereqs(
     project_root: &Path,
     store_root: &Path,
@@ -177,6 +181,7 @@ fn resolve_probe_prereqs(
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn probe_rustdoc_cache_path(store_root: &Path, crate_name: &str) -> PathBuf {
     let normalized = crate_name.replace('-', "_");
     store_root
@@ -185,6 +190,7 @@ fn probe_rustdoc_cache_path(store_root: &Path, crate_name: &str) -> PathBuf {
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn should_build_probe_rustdoc() -> bool {
     std::env::var("CORDIAL_PROBE_FEATURES")
         .ok()

@@ -30,17 +30,20 @@ pub struct CfgScatterThresholds {
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn default_min_distinct_kinds() -> usize {
     2
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn default_min_occurrences() -> usize {
     5
 }
 
 impl Default for CfgScatterThresholds {
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     fn default() -> Self {
         Self {
             min_distinct_kinds: default_min_distinct_kinds(),
@@ -83,6 +86,7 @@ pub struct CfgHygieneThresholds {
 
 impl Default for CfgHygieneThresholds {
     #[instrument(level = "debug", ret)]
+    #[hotpath::measure]
     fn default() -> Self {
         Self {
             extra_known_names: Vec::new(),

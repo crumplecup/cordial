@@ -13,6 +13,7 @@ pub(crate) use crate::ir::ErrorTypeSourceNode as RawTypeNode;
 pub(crate) use walk::{is_foreign_type_label, last_ident, type_path_is_error_related};
 
 #[instrument(level = "debug", skip(raw_nodes), err(level = "warn"))]
+#[hotpath::measure]
 pub(crate) fn finalize_type_graph(
     raw_nodes: Vec<RawTypeNode>,
     crate_name: &str,
@@ -56,6 +57,7 @@ pub(crate) fn finalize_type_graph(
 }
 
 #[instrument(level = "debug", skip(raw))]
+#[hotpath::measure]
 fn classify_node(raw: &RawTypeNode) -> InternalErrorNodeClass {
     if raw.type_path() == "CordialError" {
         return InternalErrorNodeClass::UmbrellaWrapper;
@@ -76,6 +78,7 @@ fn classify_node(raw: &RawTypeNode) -> InternalErrorNodeClass {
 }
 
 #[instrument(level = "debug", skip(edges))]
+#[hotpath::measure]
 fn graph_metrics(start: &str, edges: &BTreeMap<String, BTreeSet<String>>) -> (bool, u32) {
     let mut visited = BTreeSet::new();
     let mut queue = vec![(start.to_string(), 0u32)];

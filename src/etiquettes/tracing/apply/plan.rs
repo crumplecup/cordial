@@ -34,6 +34,7 @@ pub(super) struct FilePlanner<'a> {
 
 impl FilePlanner<'_> {
     #[tracing::instrument(level = "debug", skip(self, file_gaps, summary), err(level = "warn"))]
+    #[hotpath::measure]
     pub(super) fn plan_file(
         &self,
         crate_name: &str,

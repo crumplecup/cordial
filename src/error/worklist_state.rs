@@ -15,6 +15,7 @@ pub struct DistinctScoringKeysShareDigestSource {
 impl DistinctScoringKeysShareDigestSource {
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn new() -> Self {
         let loc = Location::caller();
         Self {
@@ -47,6 +48,7 @@ pub struct MissingWorklistIdPrefixSource {
 impl MissingWorklistIdPrefixSource {
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn new() -> Self {
         let loc = Location::caller();
         Self {
@@ -85,6 +87,7 @@ pub struct AreaOpenItemCountMismatchSource {
 impl AreaOpenItemCountMismatchSource {
     #[track_caller]
     #[instrument(level = "debug", skip(area_title))]
+    #[hotpath::measure]
     pub fn new(area_title: impl Into<String>, report_open: usize, checklist_count: usize) -> Self {
         let loc = Location::caller();
         Self {
@@ -120,6 +123,7 @@ pub struct StarMustBeAloneSource {
 impl StarMustBeAloneSource {
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn new() -> Self {
         let loc = Location::caller();
         Self {
@@ -152,6 +156,7 @@ pub struct NoCurrentItemSource {
 impl NoCurrentItemSource {
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn new() -> Self {
         let loc = Location::caller();
         Self {
@@ -182,6 +187,7 @@ pub struct NoItemOnListSource {
 impl NoItemOnListSource {
     #[track_caller]
     #[instrument(level = "debug", skip(id))]
+    #[hotpath::measure]
     pub fn new(id: impl Into<String>) -> Self {
         let loc = Location::caller();
         Self {
@@ -217,6 +223,7 @@ pub struct ItemAlreadyDoneCannotSkipSource {
 impl ItemAlreadyDoneCannotSkipSource {
     #[track_caller]
     #[instrument(level = "debug", skip(id))]
+    #[hotpath::measure]
     pub fn new(id: impl Into<String>) -> Self {
         let loc = Location::caller();
         Self {
@@ -263,6 +270,7 @@ pub struct WorklistStateError {
 impl WorklistStateError {
     #[track_caller]
     #[instrument(level = "debug", skip(kind))]
+    #[hotpath::measure]
     fn new(kind: WorklistStateErrorKind) -> Self {
         let loc = Location::caller();
         Self {
@@ -308,6 +316,7 @@ impl super::CordialError {
     /// Two distinct worklist scoring keys hashed to the same full digest.
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn distinct_scoring_keys_share_digest() -> Self {
         Self::from_kind(super::CordialErrorKind::WorklistState(
             WorklistStateError::new(WorklistStateErrorKind::DistinctScoringKeysShareDigest(
@@ -319,6 +328,7 @@ impl super::CordialError {
     /// A worklist item's id prefix was not computed before use.
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn missing_worklist_id_prefix() -> Self {
         Self::from_kind(super::CordialErrorKind::WorklistState(
             WorklistStateError::new(WorklistStateErrorKind::MissingWorklistIdPrefix(
@@ -330,6 +340,7 @@ impl super::CordialError {
     /// A quality report area's open-item count did not match its checklist.
     #[track_caller]
     #[instrument(level = "debug", skip(area_title))]
+    #[hotpath::measure]
     pub fn area_open_item_count_mismatch(
         area_title: impl Into<String>,
         report_open: usize,
@@ -345,6 +356,7 @@ impl super::CordialError {
     /// `cordial done '*'` was combined with other item ids.
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn star_must_be_alone() -> Self {
         Self::from_kind(super::CordialErrorKind::WorklistState(
             WorklistStateError::new(WorklistStateErrorKind::StarMustBeAlone(
@@ -356,6 +368,7 @@ impl super::CordialError {
     /// `cordial done`/`skip` ran with no ids and no current item.
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn no_current_item() -> Self {
         Self::from_kind(super::CordialErrorKind::WorklistState(
             WorklistStateError::new(WorklistStateErrorKind::NoCurrentItem(
@@ -367,6 +380,7 @@ impl super::CordialError {
     /// A named worklist item id was not found on the current list.
     #[track_caller]
     #[instrument(level = "debug", skip(id))]
+    #[hotpath::measure]
     pub fn no_item_on_list(id: impl Into<String>) -> Self {
         Self::from_kind(super::CordialErrorKind::WorklistState(
             WorklistStateError::new(WorklistStateErrorKind::NoItemOnList(
@@ -378,6 +392,7 @@ impl super::CordialError {
     /// `cordial skip` was used on an item already marked done.
     #[track_caller]
     #[instrument(level = "debug", skip(id))]
+    #[hotpath::measure]
     pub fn item_already_done_cannot_skip(id: impl Into<String>) -> Self {
         Self::from_kind(super::CordialErrorKind::WorklistState(
             WorklistStateError::new(WorklistStateErrorKind::ItemAlreadyDoneCannotSkip(

@@ -11,6 +11,7 @@ static WORKSPACE_SCOPES: WorkspaceMembersErrorScopeProvider = WorkspaceMembersEr
 static STANDARD_POLICY: StandardErrorHandlingPolicy = StandardErrorHandlingPolicy;
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn collect_error_handling_etiquettes() -> Vec<&'static dyn Etiquette> {
     let items: [Option<&'static dyn Etiquette>; 6] = [
         #[cfg(feature = "panics")]
@@ -85,6 +86,7 @@ pub static STANDARD_ERROR_HANDLING: StandardErrorHandling = StandardErrorHandlin
 
 /// Etiquette bundles contributed by [`STANDARD_ERROR_HANDLING`] for the current feature set.
 #[instrument(level = "debug")]
+#[hotpath::measure]
 pub fn standard_error_handling_etiquettes() -> Vec<&'static dyn Etiquette> {
     collect_error_handling_etiquettes()
 }

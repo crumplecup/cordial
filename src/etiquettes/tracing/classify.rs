@@ -7,6 +7,7 @@ use super::types::{FunctionComplexity, FunctionKind, FunctionRole};
 use tracing::instrument;
 
 #[instrument(level = "debug", skip(receiver, kind, peek))]
+#[hotpath::measure]
 pub(crate) fn classify_role(
     ident: &str,
     receiver: &ReceiverShape,
@@ -71,6 +72,7 @@ fn is_getter(ident: &str, receiver: &ReceiverShape, peek: &BodyPeek, returns_res
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn getter_name(ident: &str) -> bool {
     ident.starts_with("as_")
         || ident.starts_with("to_")
@@ -112,6 +114,7 @@ fn has_prefix(ident: &str, prefixes: &[&str]) -> bool {
 }
 
 #[instrument(level = "debug", skip(peek))]
+#[hotpath::measure]
 pub(crate) fn classify_complexity(
     body_lines: u32,
     returns_result: bool,

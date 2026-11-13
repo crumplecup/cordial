@@ -31,6 +31,7 @@ pub struct QualifiedPath {
 impl QualifiedPath {
     /// Build a path from path segments.
     #[instrument(level = "debug", skip(segments), ret)]
+    #[hotpath::measure]
     pub fn from_segments(segments: impl IntoIterator<Item = impl Into<String>>) -> Self {
         Self {
             segments: segments.into_iter().map(Into::into).collect(),
@@ -46,6 +47,7 @@ impl QualifiedPath {
 
 impl From<&str> for QualifiedPath {
     #[instrument(level = "debug", ret)]
+    #[hotpath::measure]
     fn from(value: &str) -> Self {
         Self::from_segments(value.split("::"))
     }
@@ -69,6 +71,7 @@ impl IrIndexes {
     /// Callers that perform structural rewrites should rebuild indexes instead
     /// of relying only on incremental updates.
     #[instrument(level = "debug", skip(self, node, weight))]
+    #[hotpath::measure]
     pub fn index_node(&mut self, node: NodeId, weight: &NodeWeight) {
         let kind_key = format!("{:?}", weight.kind());
         self.by_kind.entry(kind_key).or_default().push(node);
@@ -89,6 +92,7 @@ impl IrIndexes {
     ///
     /// When multiple nodes share a path, prefer rustdoc inventory nodes over source nodes.
     #[instrument(level = "debug", skip(self, graph))]
+    #[hotpath::measure]
     pub fn rebuild_by_path(
         &mut self,
         graph: &petgraph::stable_graph::StableDiGraph<NodeWeight, EdgeWeight>,

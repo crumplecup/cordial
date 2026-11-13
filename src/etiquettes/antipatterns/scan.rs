@@ -8,6 +8,7 @@ use std::path::Path;
 use tracing::instrument;
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 pub(crate) fn truncate_snippet(text: &str, max: usize) -> String {
     if text.chars().count() <= max {
         return text.to_string();
@@ -18,6 +19,7 @@ pub(crate) fn truncate_snippet(text: &str, max: usize) -> String {
 
 /// Scan one Rust source file and return records.
 #[instrument(level = "debug", skip(source, file), err(level = "warn"))]
+#[hotpath::measure]
 pub fn scan_rust_source(
     source: &str,
     file: &Path,
@@ -39,6 +41,7 @@ pub fn scan_rust_source(
     skip(source, file, static_ref_strategy),
     err(level = "warn")
 )]
+#[hotpath::measure]
 pub fn scan_rust_source_with_static_ref_strategy(
     source: &str,
     file: &Path,
@@ -62,6 +65,7 @@ pub fn scan_rust_source_with_static_ref_strategy(
     skip(source, file, static_ref_strategy, error_field_strategy),
     err(level = "warn")
 )]
+#[hotpath::measure]
 pub fn scan_rust_source_with_strategies(
     source: &str,
     file: &Path,
@@ -89,6 +93,7 @@ pub fn scan_rust_source_with_strategies(
     skip(source, file, static_ref_strategy, error_field_strategy, skip_paths),
     err(level = "warn")
 )]
+#[hotpath::measure]
 pub fn scan_rust_source_with_skip_paths(
     source: &str,
     file: &Path,

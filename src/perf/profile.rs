@@ -45,6 +45,7 @@ pub fn parse_duration(text: &str) -> Option<u64> {
 
 /// The functions of one `hotpath` JSON report and the report's total lifetime.
 #[instrument(level = "debug", skip(text), err(level = "warn"))]
+#[hotpath::measure]
 pub fn parse_report(text: &str) -> CordialResult<(u64, Vec<FunctionTiming>)> {
     let report: serde_json::Value = serde_json::from_str(text)?;
     let timing = &report["functions_timing"];
@@ -70,6 +71,7 @@ pub fn parse_report(text: &str) -> CordialResult<(u64, Vec<FunctionTiming>)> {
 
 /// Every profile in `dir`, one per file named `{binary}${test}.json`.
 #[instrument(level = "debug", err(level = "warn"))]
+#[hotpath::measure]
 pub fn read_profiles(dir: &Path) -> CordialResult<Vec<TestProfile>> {
     let mut profiles = Vec::new();
     for entry in std::fs::read_dir(dir)? {
@@ -114,6 +116,7 @@ pub fn fixed_ns(functions: &[FunctionTiming]) -> u64 {
 /// Give each test the profile recorded for it: its slowest functions as stages
 /// and its setup time as fixed cost. Tests without a profile are unchanged.
 #[instrument(level = "debug", skip(tests, profiles))]
+#[hotpath::measure]
 pub fn attach(tests: Vec<TestTiming>, profiles: &[TestProfile]) -> Vec<TestTiming> {
     let by_test: BTreeMap<(&str, &str), &TestProfile> = profiles
         .iter()
@@ -157,6 +160,7 @@ pub fn attach(tests: Vec<TestTiming>, profiles: &[TestProfile]) -> Vec<TestTimin
 /// The functions of all profiles added together: calls and totals sum, the
 /// slowest p95 wins.
 #[instrument(level = "debug", skip(profiles))]
+#[hotpath::measure]
 pub fn aggregate(profiles: &[TestProfile]) -> Vec<FunctionTiming> {
     let mut sums: BTreeMap<&str, (u64, u64, u64)> = BTreeMap::new();
     for function in profiles.iter().flat_map(|profile| profile.functions()) {
@@ -179,6 +183,7 @@ pub fn aggregate(profiles: &[TestProfile]) -> Vec<FunctionTiming> {
 /// cost, and the whole run's functions. It is a different subject from the
 /// unprofiled set (`<set>+profile`), because profiling slows what it measures.
 #[instrument(level = "debug", skip(record, profiles), err(level = "warn"))]
+#[hotpath::measure]
 pub fn profiled(
     record: &RunRecord,
     set: &str,

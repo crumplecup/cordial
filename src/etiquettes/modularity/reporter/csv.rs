@@ -65,6 +65,7 @@ impl Reporter for ModularityCsvReporter {
 }
 
 #[instrument(level = "debug", skip(all_rows))]
+#[hotpath::measure]
 fn branches_csv_artifact(all_rows: &[ModularityRow]) -> Box<dyn Artifact> {
     let open: Vec<&ModularityRow> = open_rows(all_rows).collect();
     let mut body =

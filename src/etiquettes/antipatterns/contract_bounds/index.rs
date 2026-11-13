@@ -14,6 +14,7 @@ pub(super) use matching::ContractIndex;
 /// Which verifier a crate name maps to, if any -- the only crates this rule
 /// applies to.
 #[tracing::instrument(level = "debug")]
+#[hotpath::measure]
 pub(crate) fn verifier_for_crate(crate_name: &str) -> Option<&'static str> {
     match crate_name {
         "amenable_creusot" => Some("creusot"),

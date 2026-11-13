@@ -95,6 +95,7 @@ impl ExceptionUpdate {
     }
 
     #[instrument(level = "debug", skip(self, entry), err(level = "warn"))]
+    #[hotpath::measure]
     fn apply_to(&self, entry: &ExceptionEntry) -> CordialResult<ExceptionEntry> {
         let file = self.file.clone().unwrap_or_else(|| entry.file().clone());
         let reason = self
@@ -155,6 +156,7 @@ struct Located {
 /// Errors when the selector is empty, matches no row, or matches several. A
 /// file left with no rows is deleted rather than kept as an empty array.
 #[instrument(level = "debug", skip(store, selector), err(level = "warn"))]
+#[hotpath::measure]
 pub fn remove_exception(
     store: &StoreLayout,
     etiquette_id: &str,
@@ -186,6 +188,7 @@ pub fn remove_exception(
 /// Errors when the selector is empty, matches no row or several, the update
 /// sets nothing, or the edited row would duplicate another row.
 #[instrument(level = "debug", skip(store, selector, update), err(level = "warn"))]
+#[hotpath::measure]
 pub fn update_exception(
     store: &StoreLayout,
     etiquette_id: &str,
@@ -225,6 +228,7 @@ pub fn update_exception(
 }
 
 #[instrument(level = "debug", skip(store, selector), err(level = "warn"))]
+#[hotpath::measure]
 fn locate(
     store: &StoreLayout,
     etiquette_id: &str,
@@ -297,6 +301,7 @@ fn locate(
 }
 
 #[instrument(level = "debug", skip(path), err(level = "warn"))]
+#[hotpath::measure]
 fn delete_file_and_empty_parent(path: &Path) -> CordialResult<()> {
     fs::remove_file(path)?;
     if let Some(parent) = path.parent()

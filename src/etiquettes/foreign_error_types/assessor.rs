@@ -173,6 +173,7 @@ impl Assessor for ForeignErrorTypeAssessor {
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn parse_confidence(value: &str) -> ForeignTypeConfidence {
     if value.contains("MEDIUM") {
         ForeignTypeConfidence::Medium
@@ -182,6 +183,7 @@ fn parse_confidence(value: &str) -> ForeignTypeConfidence {
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn parse_origin_class(value: &str) -> ErrorOriginClass {
     if value.contains("OTHER") {
         ErrorOriginClass::Other

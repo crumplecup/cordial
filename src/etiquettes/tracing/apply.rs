@@ -52,6 +52,7 @@ pub struct InstrumentGap {
 impl InstrumentGap {
     /// Start a builder for this value.
     #[tracing::instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> InstrumentGapBuilder {
         InstrumentGapBuilder::default()
     }
@@ -85,6 +86,7 @@ pub struct InstrumentApplySummary {
 
 /// Patch source files listed in the tracing instrument checklist.
 #[tracing::instrument(level = "info", err(level = "warn"))]
+#[hotpath::measure]
 pub fn run_tracing_instrument_apply(
     project_root: &Path,
     checklist_path: &Path,
@@ -122,6 +124,7 @@ impl<'a> ApplyTargets<'a> {
 
 /// Apply the selected tracing recipes using the configured store home.
 #[tracing::instrument(level = "debug", skip(targets_mode), err(level = "warn"))]
+#[hotpath::measure]
 pub(crate) fn run_apply(
     project_root: &Path,
     store_home: &Path,
@@ -255,6 +258,7 @@ pub(crate) fn run_apply(
 }
 
 #[tracing::instrument(level = "debug", skip(gaps))]
+#[hotpath::measure]
 fn dedupe_gaps(gaps: &mut Vec<InstrumentGap>) {
     gaps.sort_by(|left, right| {
         left.qualified_name()

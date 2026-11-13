@@ -18,6 +18,7 @@ pub struct RustParseSource {
 impl RustParseSource {
     #[track_caller]
     #[instrument(level = "debug", skip_all)]
+    #[hotpath::measure]
     fn new(path: String, source: ra_ap_syntax::SyntaxError) -> Self {
         let caller = Location::caller();
         Self {
@@ -51,6 +52,7 @@ impl super::CordialError {
     /// Preserve the native syntax error and the input it came from.
     #[track_caller]
     #[instrument(level = "debug", skip_all)]
+    #[hotpath::measure]
     pub fn rust_parse(path: impl Into<String>, source: ra_ap_syntax::SyntaxError) -> Self {
         Self::from_kind(super::CordialErrorKind::RustParse(RustParseSource::new(
             path.into(),

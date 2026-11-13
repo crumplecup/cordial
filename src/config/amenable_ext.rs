@@ -82,6 +82,7 @@ fn default_max_type_nodes() -> usize {
 
 impl Default for AmenableExtConfig {
     #[instrument(level = "debug", ret)]
+    #[hotpath::measure]
     fn default() -> Self {
         Self {
             targets: Vec::new(),

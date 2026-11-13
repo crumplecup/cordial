@@ -26,6 +26,7 @@ impl SoftStaleness {
 impl Worklist {
     /// Count Rust sources and Cargo manifests modified after this list was built.
     #[instrument(level = "debug", skip(self, project_root))]
+    #[hotpath::measure]
     pub fn staleness(&self, project_root: &Path) -> SoftStaleness {
         let built_at =
             UNIX_EPOCH + std::time::Duration::from_secs(*self.record().built_at_unix_secs());

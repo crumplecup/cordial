@@ -37,6 +37,7 @@ pub fn sample() -> Option<MemorySample> {
 /// Emit the current memory beside the phase that just finished, as a
 /// `cordial::metrics` event, so a run's log shows where memory grew.
 #[instrument(level = "debug")]
+#[hotpath::measure]
 pub(crate) fn log(phase: &str) {
     if let Some(memory) = sample() {
         tracing::debug!(
@@ -62,6 +63,7 @@ pub(crate) struct Watch {
 impl Watch {
     /// Start sampling for `phase` until the returned value is dropped.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub(crate) fn start(phase: String) -> Self {
         let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
         let flag = stop.clone();

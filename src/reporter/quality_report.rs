@@ -72,6 +72,7 @@ pub struct QualityReport {
 
 /// Build the unified report from session findings (open items only).
 #[instrument(level = "debug", skip(findings), err(level = "warn"))]
+#[hotpath::measure]
 pub fn build_quality_report(findings: &[&dyn Finding]) -> CordialResult<QualityReport> {
     let error = error_handling_metrics(findings);
     let box_dyn_error = count_open_rule(findings, "ANTIPATTERN-BOX-DYN-ERROR-001");
@@ -166,6 +167,7 @@ struct ChecklistSelection<'a> {
 }
 
 #[instrument(level = "debug", skip(checklist, extra_checklists))]
+#[hotpath::measure]
 fn quality_area(
     priority: u8,
     title: &str,
@@ -218,6 +220,7 @@ impl QualityReportReporter {
         skip(self, findings, config, ledger, fresh_artifacts),
         err(level = "warn")
     )]
+    #[hotpath::measure]
     pub(crate) fn render_run(
         &self,
         findings: &[&dyn Finding],

@@ -33,6 +33,7 @@ struct Metrics {
 }
 
 #[instrument(level = "debug", skip(findings))]
+#[hotpath::measure]
 fn metrics(findings: &[&dyn Finding]) -> Metrics {
     let mut metrics = Metrics::default();
     for finding in findings {
@@ -90,6 +91,7 @@ fn metrics(findings: &[&dyn Finding]) -> Metrics {
 }
 
 #[instrument(level = "debug", skip(findings))]
+#[hotpath::measure]
 pub(super) fn quality_area_compute(findings: &[&dyn Finding]) -> (usize, String) {
     let metrics = metrics(findings);
     let mut parts: Vec<String> = ROLE_ORDER

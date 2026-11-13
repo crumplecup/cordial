@@ -28,6 +28,7 @@ use super::verification::{
     skip(target, shadow, shadow_complete, shadow_prereqs, maps),
     err(level = "warn")
 )]
+#[hotpath::measure]
 pub fn build_shadow_report(
     target: &RustdocInventory,
     shadow: &RustdocInventory,
@@ -72,6 +73,7 @@ struct ShadowItemIndex<'a> {
 }
 
 #[instrument(level = "debug", skip(shadow))]
+#[hotpath::measure]
 fn index_shadow_items(shadow: &RustdocInventory) -> ShadowItemIndex<'_> {
     let mut by_name: HashMap<&str, Vec<&RustdocItem>> = HashMap::new();
     let mut normalized: HashMap<String, Vec<&RustdocItem>> = HashMap::new();
@@ -96,6 +98,7 @@ fn index_shadow_items(shadow: &RustdocInventory) -> ShadowItemIndex<'_> {
     skip(target, shadow, shadow_complete, shadow_prereqs),
     err(level = "warn")
 )]
+#[hotpath::measure]
 fn match_target_rows(
     target: &RustdocInventory,
     shadow: &ShadowItemIndex<'_>,
@@ -147,6 +150,7 @@ fn match_target_rows(
 }
 
 #[instrument(level = "debug", skip(target_item), err(level = "warn"))]
+#[hotpath::measure]
 fn missing_row(target_item: &crate::rustdoc::RustdocItem) -> CordialResult<ShadowRow> {
     ShadowRow::builder()
         .item_path(target_item.path().clone())
@@ -163,6 +167,7 @@ fn missing_row(target_item: &crate::rustdoc::RustdocItem) -> CordialResult<Shado
 }
 
 #[instrument(level = "debug", skip(shadow, rows), err(level = "warn"))]
+#[hotpath::measure]
 fn append_extra_shadow_rows(
     shadow: &RustdocInventory,
     rows: &mut Vec<ShadowRow>,
@@ -195,6 +200,7 @@ fn append_extra_shadow_rows(
 }
 
 #[instrument(level = "debug", skip(rows, target))]
+#[hotpath::measure]
 fn tally_coverage(
     rows: &[ShadowRow],
     target: &RustdocInventory,
@@ -235,6 +241,7 @@ fn tally_coverage(
 }
 
 #[instrument(level = "debug", skip(rows, maps))]
+#[hotpath::measure]
 fn collect_method_coverage(
     rows: &[ShadowRow],
     maps: &ShadowBuildMaps<'_>,
@@ -252,6 +259,7 @@ fn collect_method_coverage(
 }
 
 #[instrument(level = "debug", skip(rows, maps))]
+#[hotpath::measure]
 fn collect_missing_type_methods(
     rows: &[ShadowRow],
     maps: &ShadowBuildMaps<'_>,
@@ -280,6 +288,7 @@ fn collect_missing_type_methods(
 }
 
 #[instrument(level = "debug", skip(rows, maps))]
+#[hotpath::measure]
 fn collect_trait_coverage(
     rows: &[ShadowRow],
     maps: &ShadowBuildMaps<'_>,
@@ -327,6 +336,7 @@ fn collect_trait_coverage(
 }
 
 #[instrument(level = "debug", skip(maps))]
+#[hotpath::measure]
 fn diff_type_methods(
     upstream_type: &str,
     shadow_type: &str,
@@ -351,6 +361,7 @@ fn diff_type_methods(
 
 /// Convenience wrapper that derives shadow complete/prereqs from the shadow inventory.
 #[instrument(level = "debug", skip(target, shadow), err(level = "warn"))]
+#[hotpath::measure]
 pub fn build_shadow_report_from_inventories(
     target: &RustdocInventory,
     shadow: &RustdocInventory,
@@ -360,6 +371,7 @@ pub fn build_shadow_report_from_inventories(
 
 /// Build shadow report from inventories with maps.
 #[instrument(level = "debug", skip(target, shadow, maps), err(level = "warn"))]
+#[hotpath::measure]
 pub fn build_shadow_report_from_inventories_with_maps(
     target: &RustdocInventory,
     shadow: &RustdocInventory,
@@ -375,6 +387,7 @@ pub fn build_shadow_report_from_inventories_with_maps(
     skip(target_item, shadow_item, status, shadow_complete, shadow_prereqs),
     err(level = "warn")
 )]
+#[hotpath::measure]
 fn row_for_match(
     target_item: &crate::rustdoc::RustdocItem,
     shadow_item: &crate::rustdoc::RustdocItem,

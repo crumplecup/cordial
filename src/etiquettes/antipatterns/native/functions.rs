@@ -8,6 +8,7 @@ use ra_ap_syntax::{
 use std::collections::{HashMap, HashSet};
 
 #[tracing::instrument(level = "debug", skip(node))]
+#[hotpath::measure]
 pub(super) fn siblings(node: &SyntaxNode) -> HashMap<String, HashSet<String>> {
     let mut groups: HashMap<String, Vec<ast::Fn>> = HashMap::new();
     for function in node.children().filter_map(ast::Fn::cast) {
@@ -50,6 +51,7 @@ pub(super) fn siblings(node: &SyntaxNode) -> HashMap<String, HashSet<String>> {
 
 impl Collector<'_, '_> {
     #[tracing::instrument(level = "debug", skip_all, err(level = "warn"))]
+    #[hotpath::measure]
     pub(super) fn function(&mut self, function: &ast::Fn, context: &Context) -> CordialResult<()> {
         if context.foreign
             || function.attrs().any(|attr| {

@@ -72,6 +72,7 @@ impl TraitPrereqs {
 
     /// Missing our traits.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn missing_our_traits(&self) -> Vec<&'static str> {
         let mut missing = Vec::new();
         if !self.elicitation_trait {
@@ -100,6 +101,7 @@ impl TraitPrereqs {
 
     /// External blockers.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn external_blockers(&self) -> Vec<&'static str> {
         let mut blockers = Vec::new();
         if !self.serialize {
@@ -116,6 +118,7 @@ impl TraitPrereqs {
 
     /// Set prerequisite flags from a short trait name (`Serialize`, …).
     #[instrument(level = "debug", ret)]
+    #[hotpath::measure]
     pub fn from_trait_short(trait_short: &str) -> Self {
         let mut prereqs = Self::default();
         prereqs.apply_trait_short(trait_short);
@@ -124,6 +127,7 @@ impl TraitPrereqs {
 
     /// OR this type's flags with the prerequisites implied by `trait_short`.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn apply_trait_short(&mut self, trait_short: &str) {
         match trait_short {
             "Serialize" => self.serialize = true,
@@ -141,6 +145,7 @@ impl TraitPrereqs {
 
     /// Merge another value into this one.
     #[instrument(level = "debug", skip(self, other))]
+    #[hotpath::measure]
     pub fn merge(&mut self, other: &Self) {
         self.serialize |= other.serialize;
         self.deserialize |= other.deserialize;
@@ -156,6 +161,7 @@ impl TraitPrereqs {
 
 /// Scan rustdoc JSON for trait prereqs on inventory type paths.
 #[instrument(level = "debug", skip(inventory))]
+#[hotpath::measure]
 pub fn collect_trait_prereqs_for_inventory(
     inventory: &RustdocInventory,
 ) -> HashMap<String, TraitPrereqs> {
@@ -204,6 +210,7 @@ pub fn collect_trait_prereqs_for_inventory(
 
 /// Merge prereqs from [`crate::EdgeKind::Implements`] trait short names.
 #[instrument(level = "debug")]
+#[hotpath::measure]
 pub fn prereqs_from_trait_shorts(trait_shorts: &[String]) -> TraitPrereqs {
     let mut prereqs = TraitPrereqs::default();
     for short in trait_shorts {

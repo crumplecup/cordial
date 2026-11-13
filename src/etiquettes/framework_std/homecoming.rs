@@ -99,6 +99,7 @@ pub struct FrameworkStdRowFinding {
 impl FrameworkStdRowFinding {
     /// Start a builder for this finding.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> FrameworkStdRowFindingBuilder {
         FrameworkStdRowFindingBuilder::default()
     }
@@ -146,6 +147,7 @@ impl Finding for FrameworkStdRowFinding {
 }
 
 #[instrument(level = "debug", skip(status))]
+#[hotpath::measure]
 pub fn homecoming_row_disposition(status: FrameworkTraitStatus) -> Disposition {
     match status {
         FrameworkTraitStatus::Missing => Disposition::Open,
@@ -155,6 +157,7 @@ pub fn homecoming_row_disposition(status: FrameworkTraitStatus) -> Disposition {
 }
 
 #[instrument(level = "debug", skip(findings), err(level = "warn"))]
+#[hotpath::measure]
 pub fn framework_report_from_findings(
     findings: &[&dyn Finding],
     include_nightly: bool,
@@ -232,6 +235,7 @@ pub fn framework_report_from_findings(
 }
 
 #[instrument(level = "debug", skip(findings))]
+#[hotpath::measure]
 pub fn framework_gaps_from_findings(findings: &[&dyn Finding]) -> Vec<FrameworkGapEntry> {
     findings
         .iter()

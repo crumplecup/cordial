@@ -35,6 +35,7 @@ pub struct WorkspaceInternalErrorChainSummary {
 impl WorkspaceInternalErrorChainSummary {
     /// Start a builder for this value.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> WorkspaceInternalErrorChainSummaryBuilder {
         WorkspaceInternalErrorChainSummaryBuilder::default()
     }
@@ -42,6 +43,7 @@ impl WorkspaceInternalErrorChainSummary {
 
 /// Build workspace internal error chain summary.
 #[instrument(level = "debug", skip(reports), err(level = "warn"))]
+#[hotpath::measure]
 pub fn build_workspace_internal_error_chain_summary(
     reports: &[InternalErrorChainScanReport],
 ) -> CordialResult<WorkspaceInternalErrorChainSummary> {

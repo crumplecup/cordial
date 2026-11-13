@@ -25,6 +25,7 @@ type Declarations<'a> =
 /// or source declaration. Rejected components carry no edits, preventing a
 /// fallback field conversion from bypassing the graph's atomicity.
 #[instrument(level = "debug", skip(root_file, files, strategy, index))]
+#[hotpath::measure]
 pub(super) fn plan(
     root_file: &SourceEditView,
     files: &[SourceEditView],

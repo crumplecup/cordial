@@ -144,6 +144,7 @@ pub struct LintOrder {
 
 impl LintOrder {
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub(crate) fn empty() -> Self {
         Self {
             known_ids: Vec::new(),
@@ -153,6 +154,7 @@ impl LintOrder {
 
     /// Validate `constraints` against `known_ids` and keep owned rows.
     #[instrument(level = "debug", skip(constraints), err(level = "warn"))]
+    #[hotpath::measure]
     pub fn try_from(
         known_ids: &'static [&'static str],
         constraints: &[LintConstraint],
@@ -190,6 +192,7 @@ impl LintOrder {
 
     /// `Before` view for a predecessor id, when any `After` names it.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn before_mirror(&self, id: &str) -> Option<BeforeMirror> {
         let explain = self
             .constraints
@@ -206,6 +209,7 @@ impl LintOrder {
 
     /// Unique written `After` rows that apply to any id in `ids`.
     #[instrument(level = "debug", skip(self, ids))]
+    #[hotpath::measure]
     pub fn constraints_for(&self, ids: &[&str]) -> Vec<&LintConstraint> {
         let mut rows = Vec::new();
         for row in &self.constraints {

@@ -4,6 +4,7 @@ use ra_ap_syntax::ast::{self, HasGenericArgs};
 
 use tracing::instrument;
 #[instrument(level = "debug", skip(ty))]
+#[hotpath::measure]
 pub(crate) fn type_key(ty: &ast::Type) -> String {
     match ty {
         ast::Type::PathType(ty) => {
@@ -65,11 +66,13 @@ pub(crate) fn type_key(ty: &ast::Type) -> String {
 }
 
 #[instrument(level = "debug", skip(ty))]
+#[hotpath::measure]
 fn optional_type(ty: Option<ast::Type>) -> String {
     ty.map(|ty| type_key(&ty)).unwrap_or_else(|| "?".into())
 }
 
 #[instrument(level = "debug", skip(arg))]
+#[hotpath::measure]
 fn const_key(arg: &ast::ConstArg) -> String {
     match arg.expr() {
         Some(ast::Expr::Literal(literal)) => match literal.kind() {

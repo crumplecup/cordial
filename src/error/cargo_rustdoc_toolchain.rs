@@ -19,6 +19,7 @@ pub struct RustcVvExitedSource {
 impl RustcVvExitedSource {
     #[track_caller]
     #[instrument(level = "debug", skip(status))]
+    #[hotpath::measure]
     pub fn new(status: ExitStatus) -> Self {
         let loc = Location::caller();
         Self {
@@ -52,6 +53,7 @@ pub struct RustcVvMissingHostTargetSource {
 impl RustcVvMissingHostTargetSource {
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn new() -> Self {
         let loc = Location::caller();
         Self {
@@ -84,6 +86,7 @@ pub struct NightlyCargoMissingRustcSource {
 impl NightlyCargoMissingRustcSource {
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn new() -> Self {
         let loc = Location::caller();
         Self {
@@ -116,6 +119,7 @@ pub struct NightlyToolchainRequiredSource {
 impl NightlyToolchainRequiredSource {
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn new() -> Self {
         let loc = Location::caller();
         Self {
@@ -148,6 +152,7 @@ pub struct NightlyToolchainRootUnresolvedSource {
 impl NightlyToolchainRootUnresolvedSource {
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn new() -> Self {
         let loc = Location::caller();
         Self {
@@ -184,6 +189,7 @@ pub struct SysrootManifestNotFoundSource {
 impl SysrootManifestNotFoundSource {
     #[track_caller]
     #[instrument(level = "debug", skip(crate_name, manifest))]
+    #[hotpath::measure]
     pub fn new(crate_name: impl Into<String>, manifest: PathBuf) -> Self {
         let loc = Location::caller();
         Self {
@@ -223,6 +229,7 @@ pub struct SysrootBuildRequestedForNonStdFamilyCrateSource {
 impl SysrootBuildRequestedForNonStdFamilyCrateSource {
     #[track_caller]
     #[instrument(level = "debug", skip(name))]
+    #[hotpath::measure]
     pub fn new(name: impl Into<String>) -> Self {
         let loc = Location::caller();
         Self {
@@ -260,6 +267,7 @@ pub struct SysrootCargoRustdocExitedSource {
 impl SysrootCargoRustdocExitedSource {
     #[track_caller]
     #[instrument(level = "debug", skip(crate_name, status))]
+    #[hotpath::measure]
     pub fn new(crate_name: impl Into<String>, status: ExitStatus) -> Self {
         let loc = Location::caller();
         Self {
@@ -308,6 +316,7 @@ pub struct CargoRustdocToolchainError {
 impl CargoRustdocToolchainError {
     #[track_caller]
     #[instrument(level = "debug", skip(kind))]
+    #[hotpath::measure]
     fn new(kind: CargoRustdocToolchainErrorKind) -> Self {
         let loc = Location::caller();
         Self {
@@ -371,6 +380,7 @@ impl super::CordialError {
     /// `rustc -vV` exited with a non-zero status.
     #[track_caller]
     #[instrument(level = "debug", skip(status))]
+    #[hotpath::measure]
     pub fn rustc_vv_exited(status: ExitStatus) -> Self {
         Self::from_kind(super::CordialErrorKind::CargoRustdocToolchain(
             CargoRustdocToolchainError::new(CargoRustdocToolchainErrorKind::RustcVvExited(
@@ -382,6 +392,7 @@ impl super::CordialError {
     /// `rustc -vV` output had no `host:` line.
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn rustc_vv_missing_host_target() -> Self {
         Self::from_kind(super::CordialErrorKind::CargoRustdocToolchain(
             CargoRustdocToolchainError::new(
@@ -395,6 +406,7 @@ impl super::CordialError {
     /// A resolved nightly `cargo` binary has no sibling `rustc`.
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn nightly_cargo_missing_rustc() -> Self {
         Self::from_kind(super::CordialErrorKind::CargoRustdocToolchain(
             CargoRustdocToolchainError::new(
@@ -408,6 +420,7 @@ impl super::CordialError {
     /// No nightly toolchain is available for std-family rustdoc JSON.
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn nightly_toolchain_required() -> Self {
         Self::from_kind(super::CordialErrorKind::CargoRustdocToolchain(
             CargoRustdocToolchainError::new(
@@ -421,6 +434,7 @@ impl super::CordialError {
     /// The nightly toolchain root could not be resolved from the cargo binary path.
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn nightly_toolchain_root_unresolved() -> Self {
         Self::from_kind(super::CordialErrorKind::CargoRustdocToolchain(
             CargoRustdocToolchainError::new(
@@ -434,6 +448,7 @@ impl super::CordialError {
     /// A std-family sysroot library's manifest was not found.
     #[track_caller]
     #[instrument(level = "debug", skip(crate_name, manifest))]
+    #[hotpath::measure]
     pub fn sysroot_manifest_not_found(crate_name: impl Into<String>, manifest: PathBuf) -> Self {
         Self::from_kind(super::CordialErrorKind::CargoRustdocToolchain(
             CargoRustdocToolchainError::new(
@@ -447,6 +462,7 @@ impl super::CordialError {
     /// A sysroot build was requested for a crate that is not std-family.
     #[track_caller]
     #[instrument(level = "debug", skip(name))]
+    #[hotpath::measure]
     pub fn sysroot_build_requested_for_non_std_family_crate(name: impl Into<String>) -> Self {
         Self::from_kind(super::CordialErrorKind::CargoRustdocToolchain(
             CargoRustdocToolchainError::new(
@@ -460,6 +476,7 @@ impl super::CordialError {
     /// `cargo rustdoc` for a sysroot library exited with a non-zero status.
     #[track_caller]
     #[instrument(level = "debug", skip(crate_name, status))]
+    #[hotpath::measure]
     pub fn sysroot_cargo_rustdoc_exited(crate_name: impl Into<String>, status: ExitStatus) -> Self {
         Self::from_kind(super::CordialErrorKind::CargoRustdocToolchain(
             CargoRustdocToolchainError::new(

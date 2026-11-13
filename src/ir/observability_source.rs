@@ -90,6 +90,7 @@ pub(crate) struct ObservabilityBody {
 
 impl SourceObservability {
     #[tracing::instrument(level = "debug", skip(collect), err(level = "warn"))]
+    #[hotpath::measure]
     pub(crate) fn collect_with(
         root: &Path,
         mut collect: impl FnMut(&Path, &Path) -> CordialResult<ObservabilityFile>,
@@ -117,6 +118,7 @@ impl SourceObservability {
 
 impl SourceObservability {
     #[tracing::instrument(level = "debug", skip(text, path))]
+    #[hotpath::measure]
     pub(crate) fn invalid_file(path: &Path, root: &Path, text: &str) -> ObservabilityFile {
         use sha2::{Digest, Sha256};
         ObservabilityFile {
@@ -132,6 +134,7 @@ impl SourceObservability {
 
 impl ObservabilityFileKind {
     #[tracing::instrument(level = "debug", skip(path))]
+    #[hotpath::measure]
     fn for_path(path: &Path, root: &Path) -> Self {
         let relative = path.strip_prefix(root).unwrap_or(path);
         if relative.starts_with("tests") {
@@ -161,6 +164,7 @@ impl ObservabilityFunction {
 }
 
 #[tracing::instrument(level = "debug")]
+#[hotpath::measure]
 fn print_rule(name: &str) -> Option<crate::etiquettes::tracing::PrintRuleId> {
     use crate::etiquettes::tracing::PrintRuleId;
     match name {
@@ -174,6 +178,7 @@ fn print_rule(name: &str) -> Option<crate::etiquettes::tracing::PrintRuleId> {
 }
 
 #[tracing::instrument(level = "debug")]
+#[hotpath::measure]
 fn cargo_protocol(tokens: &str) -> bool {
     let Some(start) = tokens.find('"') else {
         return false;

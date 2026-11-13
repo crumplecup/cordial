@@ -32,6 +32,7 @@ thread_local! {
 /// Run `action` with this thread's output going to `sink`, restoring the
 /// previous destination afterwards.
 #[instrument(level = "debug", skip(sink, action))]
+#[hotpath::measure]
 pub fn with_sink<T>(sink: Arc<dyn FrameSink>, action: impl FnOnce() -> T) -> T {
     let previous = SINK.with(|slot| slot.replace(Some(sink)));
     let result = action();

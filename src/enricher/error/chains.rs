@@ -61,6 +61,7 @@ impl IrEnricher for ErrorChainInventoryEnricher {
 }
 
 #[instrument(level = "debug", skip(file))]
+#[hotpath::measure]
 fn site_key(file: &std::path::Path, line: u32) -> (String, u32) {
     (file.display().to_string(), line)
 }
@@ -76,6 +77,7 @@ mod chain {
     use tracing::instrument;
 
     #[instrument(level = "debug", skip(ir, node, record), err(level = "warn"))]
+    #[hotpath::measure]
     pub(super) fn apply_chain_attrs(
         ir: &mut dyn IrMut,
         node: crate::ir::NodeId,
@@ -107,6 +109,7 @@ mod chain {
     }
 
     #[instrument(level = "debug", skip(ir, record), err(level = "warn"))]
+    #[hotpath::measure]
     pub(super) fn insert_error_chain_node(
         ir: &mut dyn IrMut,
         crate_root: &std::path::Path,

@@ -99,6 +99,7 @@ pub static VISIBILITY_ETIQUETTE: LazyLock<StaticQualityEtiquette> = LazyLock::ne
 });
 
 #[instrument(level = "debug", skip(findings))]
+#[hotpath::measure]
 fn quality_area_compute(findings: &[&dyn Finding]) -> (usize, String) {
     let visibility_flat = count_open_rule(findings, "VIS-CRATE-FLAT-001");
     let visibility_thin = count_open_rule(findings, "VIS-MOD-THIN-001");

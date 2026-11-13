@@ -15,6 +15,7 @@ use crate::shadow::{
 
 /// Build one upstream ↔ shadow mirror report by re-parsing rustdoc JSON (oracle).
 #[instrument(level = "debug", skip(session), err(level = "warn"))]
+#[hotpath::measure]
 pub fn build_shadow_pair_report(
     session: &dyn SessionView,
     upstream: &str,
@@ -26,6 +27,7 @@ pub fn build_shadow_pair_report(
 }
 
 #[instrument(level = "debug", skip(target, shadow), err(level = "warn"))]
+#[hotpath::measure]
 pub fn build_shadow_pair_report_from_inventories(
     target: &RustdocInventory,
     shadow: &RustdocInventory,
@@ -44,6 +46,7 @@ pub fn build_shadow_pair_report_from_inventories(
 }
 
 #[instrument(level = "info", skip(session), fields(crate_name = crate_name), err(level = "warn"))]
+#[hotpath::measure]
 fn load_crate_inventory(
     session: &dyn SessionView,
     crate_name: &str,
@@ -58,6 +61,7 @@ fn load_crate_inventory(
 }
 
 #[instrument(level = "info", skip(session), err(level = "warn"))]
+#[hotpath::measure]
 fn load_upstream_inventory(
     session: &dyn SessionView,
     upstream: &str,
@@ -70,6 +74,7 @@ fn load_upstream_inventory(
 }
 
 #[instrument(level = "info", skip(session), err(level = "warn"))]
+#[hotpath::measure]
 fn load_shadow_dep_upstream_inventory(
     session: &dyn SessionView,
     shadow: &str,

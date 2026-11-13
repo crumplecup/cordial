@@ -26,6 +26,7 @@ impl NameAudit {
 
 impl NameAudit {
     #[instrument(level = "debug", skip(self, path))]
+    #[hotpath::measure]
     fn check_binding(&mut self, binding: &str, path: &[String]) {
         self.imported_names.insert(binding.to_string());
         if let Some(target) = path.last()
@@ -47,6 +48,7 @@ impl NameAudit {
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn protected_name(name: &str) -> bool {
     matches!(
         name,

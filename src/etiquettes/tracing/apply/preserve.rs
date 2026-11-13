@@ -12,6 +12,7 @@ use crate::ir::{SourceAttribute, SourceAttributeArguments, SourceByteRange};
 type Edit = (std::ops::Range<usize>, String);
 
 #[tracing::instrument(level = "debug", skip(lines, source, attr, recipe, policy, controls))]
+#[hotpath::measure]
 pub(super) fn repair(
     lines: &mut Vec<String>,
     source: &str,
@@ -179,6 +180,7 @@ pub(super) fn repair(
 }
 
 #[tracing::instrument(level = "debug", skip(args, values, additions, edits))]
+#[hotpath::measure]
 fn merge_list(
     args: &SourceAttributeArguments,
     key: &str,
@@ -227,6 +229,7 @@ fn append(args: &SourceAttributeArguments, values: Vec<String>, edits: &mut Vec<
 }
 
 #[tracing::instrument(level = "debug", skip(lines, source, range, edits))]
+#[hotpath::measure]
 fn replace_located_block(
     lines: &mut Vec<String>,
     source: &str,
@@ -280,6 +283,7 @@ fn replace_located_block(
 
 /// Remove only an attribute whose entire syntax is owned by instrumentation.
 #[tracing::instrument(level = "debug", skip(lines, source, attribute))]
+#[hotpath::measure]
 pub(super) fn strip(
     lines: &mut Vec<String>,
     source: &str,

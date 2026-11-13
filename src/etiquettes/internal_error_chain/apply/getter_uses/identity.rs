@@ -20,6 +20,7 @@ pub(super) struct Identities {
 
 impl Identities {
     #[instrument(level = "debug", skip(files, source), err(level = "warn"))]
+    #[hotpath::measure]
     pub(super) fn collect(
         files: &[FileSnapshot],
         source: &crate::ir::SourceErrorApply,

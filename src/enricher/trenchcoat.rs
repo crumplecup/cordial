@@ -72,6 +72,7 @@ fn has_wraps_edge(
 }
 
 #[instrument(level = "debug", skip(ir, path), err(level = "warn"))]
+#[hotpath::measure]
 fn ensure_type_node(ir: &mut dyn IrMut, path: &str) -> CordialResult<crate::ir::NodeId> {
     if let Some(existing) = ir.node_by_path(path) {
         return Ok(existing);

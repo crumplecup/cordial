@@ -57,6 +57,7 @@ impl EtiquetteExplain {
     /// This text is user-facing through `cordial explain`, so keep it specific
     /// enough to explain the standard without requiring source-code context.
     #[instrument(level = "debug", skip(summary, why, logic, opt_out, rules))]
+    #[hotpath::measure]
     pub fn new(
         summary: impl Into<String>,
         why: impl Into<String>,
@@ -76,6 +77,7 @@ impl EtiquetteExplain {
 
 /// First etiquette whose id or rule id equals `query`.
 #[instrument(level = "debug", skip(etiquettes))]
+#[hotpath::measure]
 pub fn lookup_etiquette<'a>(
     etiquettes: &[&'a dyn Etiquette],
     query: &str,
@@ -94,6 +96,7 @@ pub fn lookup_etiquette<'a>(
 
 /// One line per etiquette: id, then the one-line summary, sorted by id.
 #[instrument(level = "debug", skip(etiquettes))]
+#[hotpath::measure]
 pub fn render_explain_list(etiquettes: &[&dyn Etiquette]) -> String {
     let mut rows: Vec<(&str, String)> = etiquettes
         .iter()
@@ -110,6 +113,7 @@ pub fn render_explain_list(etiquettes: &[&dyn Etiquette]) -> String {
 
 /// Full explain page for one etiquette.
 #[instrument(level = "debug", skip(etiquette))]
+#[hotpath::measure]
 pub fn render_explain_page(etiquette: &dyn Etiquette) -> String {
     let explain = etiquette.explain();
     let mut body = format!(
@@ -133,6 +137,7 @@ pub fn render_explain_page(etiquette: &dyn Etiquette) -> String {
 }
 
 #[instrument(level = "debug", skip(body, etiquette))]
+#[hotpath::measure]
 fn append_configuration(body: &mut String, etiquette: &dyn Etiquette) {
     let key = etiquette.configuration_key();
     let _ = writeln!(
@@ -150,6 +155,7 @@ fn append_configuration(body: &mut String, etiquette: &dyn Etiquette) {
 }
 
 #[instrument(level = "debug", skip(body, etiquette))]
+#[hotpath::measure]
 fn append_resolution_order(body: &mut String, etiquette: &dyn Etiquette) {
     let explain = etiquette.explain();
     let rule_ids: Vec<&str> = explain

@@ -8,6 +8,7 @@ use super::names::Names;
 use super::{GetterFiles, GetterStorageFacts};
 
 #[instrument(level = "debug", skip(files, uses, source), err(level = "warn"))]
+#[hotpath::measure]
 pub(in crate::etiquettes::internal_error_chain::apply) fn collect_getter_storage(
     files: &[crate::FileSnapshot],
     uses: &[super::super::getter_uses::GetterUseFact],

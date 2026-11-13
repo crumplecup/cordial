@@ -36,6 +36,7 @@ pub fn is_shadow_infrastructure_name(bare_name: &str) -> bool {
 
 /// Build the consolidated shadow gaps list from multiple per-pair reports.
 #[instrument(level = "debug", skip(pairs), err(level = "warn"))]
+#[hotpath::measure]
 pub fn build_shadow_gaps(
     pairs: &[(&str, &str, &ShadowReport)],
 ) -> CordialResult<Vec<ShadowGapEntry>> {
@@ -84,6 +85,7 @@ pub fn build_shadow_gaps(
 }
 
 #[instrument(level = "debug", skip(row, gap_kind), err(level = "warn"))]
+#[hotpath::measure]
 fn gap_entry(
     target_crate: &str,
     shadow_crate: &str,
@@ -114,6 +116,7 @@ struct ShadowRowAssessment {
 }
 
 #[instrument(level = "debug", skip(row))]
+#[hotpath::measure]
 fn assess_shadow_row(row: &ShadowRow) -> ShadowRowAssessment {
     let coverage_kind = classify_shadow_coverage_kind(row);
     let primary_gap_kind = primary_gap_for_coverage(&coverage_kind);
@@ -134,6 +137,7 @@ fn assess_shadow_row(row: &ShadowRow) -> ShadowRowAssessment {
 }
 
 #[instrument(level = "debug", skip(row))]
+#[hotpath::measure]
 fn classify_shadow_coverage_kind(row: &ShadowRow) -> ShadowCoverageKind {
     match row.status() {
         ShadowStatus::Covered => ShadowCoverageKind::Covered,
@@ -155,6 +159,7 @@ fn classify_shadow_coverage_kind(row: &ShadowRow) -> ShadowCoverageKind {
 }
 
 #[instrument(level = "debug", skip(coverage_kind))]
+#[hotpath::measure]
 fn primary_gap_for_coverage(coverage_kind: &ShadowCoverageKind) -> Option<ShadowGapKind> {
     match coverage_kind {
         ShadowCoverageKind::Covered => None,
@@ -166,6 +171,7 @@ fn primary_gap_for_coverage(coverage_kind: &ShadowCoverageKind) -> Option<Shadow
 }
 
 #[instrument(level = "debug", skip(row, coverage_kind))]
+#[hotpath::measure]
 fn shadow_coverage_action(row: &ShadowRow, coverage_kind: &ShadowCoverageKind) -> String {
     match coverage_kind {
         ShadowCoverageKind::Covered => String::new(),
@@ -199,6 +205,7 @@ fn shadow_coverage_action(row: &ShadowRow, coverage_kind: &ShadowCoverageKind) -
 }
 
 #[instrument(level = "debug", skip(kind))]
+#[hotpath::measure]
 fn shadow_gap_order(kind: &ShadowGapKind) -> u8 {
     match kind {
         ShadowGapKind::Missing => 0,
@@ -210,6 +217,7 @@ fn shadow_gap_order(kind: &ShadowGapKind) -> u8 {
 }
 
 #[instrument(level = "debug", skip(row))]
+#[hotpath::measure]
 fn build_shadow_verification_action(row: &ShadowRow) -> String {
     let missing_our = row.shadow_missing_our_traits().as_str();
     let missing_external = row.shadow_missing_external_traits().as_str();
@@ -252,6 +260,7 @@ pub struct ShadowRowRender {
 }
 
 #[instrument(level = "debug", skip(row))]
+#[hotpath::measure]
 pub fn render_shadow_row(row: &ShadowRow) -> ShadowRowRender {
     let assessment = assess_shadow_row(row);
     let coverage_kind = match classify_shadow_coverage_kind(row) {
@@ -277,6 +286,7 @@ pub fn render_shadow_row(row: &ShadowRow) -> ShadowRowRender {
 }
 
 #[instrument(level = "debug", skip(path))]
+#[hotpath::measure]
 pub fn api_family(path: &str) -> String {
     let mut parts = path.split("::");
     let mut family = Vec::with_capacity(3);

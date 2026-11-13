@@ -33,6 +33,7 @@ impl DependencyFreshnessObservation {
     ///
     /// Invalid semver inputs and non-newer versions return `None`.
     #[instrument(level = "debug", skip(package_name, locked_version, available_version))]
+    #[hotpath::measure]
     pub fn from_versions(
         package_name: impl Into<String>,
         locked_version: impl Into<String>,

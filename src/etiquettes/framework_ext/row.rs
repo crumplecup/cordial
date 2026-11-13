@@ -42,6 +42,7 @@ impl ExtRowRule {
     /// Build the row rule for `target` (e.g. `"jiff"`), deriving
     /// id/category/description the same way every amenable-ext target does.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn new(target: &str) -> Self {
         Self {
             id: format!("AMENABLE-EXT-{}-ROW", target.to_uppercase()),
@@ -113,6 +114,7 @@ pub struct ExtRowFinding {
 impl ExtRowFinding {
     /// Start a builder for this finding.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> ExtRowFindingBuilder {
         ExtRowFindingBuilder::default()
     }
@@ -227,6 +229,7 @@ impl Finding for ExtRowFinding {
 /// How a row's status maps to a finding disposition: Missing and Partial are
 /// open, Skipped is suppressed, Complete is an exemplar.
 #[instrument(level = "debug", skip(status))]
+#[hotpath::measure]
 pub fn ext_row_disposition(status: AmenableStdStatus) -> Disposition {
     match status {
         AmenableStdStatus::Missing | AmenableStdStatus::Partial => Disposition::Open,
@@ -245,6 +248,7 @@ fn non_empty(text: String) -> Option<String> {
 /// emitted, with instantiation rows and notes intact. `None` when there are
 /// no findings in that category.
 #[instrument(level = "debug", skip(findings), err(level = "warn"))]
+#[hotpath::measure]
 pub fn ext_report_from_findings(
     findings: &[&dyn Finding],
     category: &str,
@@ -344,6 +348,7 @@ pub fn ext_report_from_findings(
 /// The open rows of `category` as gap entries. An aggregate generic row is
 /// left out: it is open only because its instantiation rows are.
 #[instrument(level = "debug", skip(findings))]
+#[hotpath::measure]
 pub fn ext_gaps_from_findings(
     findings: &[&dyn Finding],
     category: &str,

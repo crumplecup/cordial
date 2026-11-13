@@ -10,11 +10,13 @@ use tracing::instrument;
 
 /// Render quality report markdown.
 #[instrument(level = "debug", skip(report), err(level = "warn"))]
+#[hotpath::measure]
 pub fn render_quality_report_markdown(report: &QualityReport) -> CordialResult<String> {
     render_quality_report_with_coverage(report, None)
 }
 
 #[instrument(level = "debug", skip(report, coverage), err(level = "warn"))]
+#[hotpath::measure]
 pub(super) fn render_quality_report_with_coverage(
     report: &QualityReport,
     coverage: Option<&ReportRunCoverage>,
@@ -94,11 +96,13 @@ pub(super) fn render_quality_report_with_coverage(
 
 /// Render quality workspace summary markdown.
 #[instrument(level = "debug", skip(report), err(level = "warn"))]
+#[hotpath::measure]
 pub fn render_quality_workspace_summary_markdown(report: &QualityReport) -> CordialResult<String> {
     render_quality_workspace_summary_with_coverage(report, None)
 }
 
 #[instrument(level = "debug", skip(report, coverage), err(level = "warn"))]
+#[hotpath::measure]
 pub(super) fn render_quality_workspace_summary_with_coverage(
     report: &QualityReport,
     coverage: Option<&ReportRunCoverage>,
@@ -149,6 +153,7 @@ pub(super) fn render_quality_workspace_summary_with_coverage(
 }
 
 #[instrument(level = "debug", skip(area, coverage))]
+#[hotpath::measure]
 fn display_count(area: &QualityAreaSummary, coverage: Option<&ReportRunCoverage>) -> String {
     match coverage.and_then(|coverage| coverage.area(area.title())) {
         Some(status) if status.ran() => match status.previous_open() {
@@ -164,6 +169,7 @@ fn display_count(area: &QualityAreaSummary, coverage: Option<&ReportRunCoverage>
 }
 
 #[instrument(level = "debug", skip(coverage))]
+#[hotpath::measure]
 fn checklist_link(name: &str, coverage: Option<&ReportRunCoverage>) -> String {
     let stale = coverage.is_some_and(|coverage| coverage.checklist_is_stale(name));
     if stale {

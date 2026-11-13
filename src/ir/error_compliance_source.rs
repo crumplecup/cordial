@@ -29,6 +29,7 @@ pub struct ErrorComplianceFile {
 
 impl SourceErrorCompliance {
     #[tracing::instrument(level = "debug", skip(collect), err(level = "warn"))]
+    #[hotpath::measure]
     pub(crate) fn collect_with(
         root: &Path,
         mut collect: impl FnMut(&Path, &Path) -> CordialResult<ErrorComplianceFile>,
@@ -55,6 +56,7 @@ impl SourceErrorCompliance {
 
     /// Read compliance using only retained graph evidence.
     #[tracing::instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn findings(&self, relative_paths: bool) -> Vec<InternalErrorComplianceFinding> {
         let mut findings: Vec<_> = self
             .files

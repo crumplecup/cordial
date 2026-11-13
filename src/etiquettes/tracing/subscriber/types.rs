@@ -27,6 +27,7 @@ pub enum SubscriberRuleId {
 impl SubscriberRuleId {
     /// Stable string form of this value.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Main => "TRACING-SUBSCRIBER-MAIN",
@@ -39,6 +40,7 @@ impl SubscriberRuleId {
 
     /// Parse from the stable identifier string.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn from_attr(value: &str) -> Option<Self> {
         match value {
             "TRACING-SUBSCRIBER-MAIN" => Some(Self::Main),
@@ -57,6 +59,7 @@ impl SubscriberRuleId {
     }
 
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     fn description(self) -> &'static str {
         match self {
             Self::Main => {
@@ -154,6 +157,7 @@ pub struct SubscriberFinding {
 impl SubscriberFinding {
     /// Start a builder for this value.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> SubscriberFindingBuilder {
         SubscriberFindingBuilder::default()
     }
@@ -209,6 +213,7 @@ pub struct SubscriberSiteRecord {
 impl SubscriberSiteRecord {
     /// Start a builder for this value.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> SubscriberSiteRecordBuilder {
         SubscriberSiteRecordBuilder::default()
     }

@@ -15,6 +15,7 @@ use super::{FindingSite, SiteClassifier};
 
 impl Catalog {
     #[instrument(level = "debug", skip(self, findings), err(level = "warn"))]
+    #[hotpath::measure]
     pub(super) fn emit_kind_variant_findings(
         &self,
         findings: &mut Vec<InternalErrorComplianceFinding>,
@@ -42,6 +43,7 @@ impl Catalog {
         skip(self, findings, item, variant, parent_idents),
         err(level = "warn")
     )]
+    #[hotpath::measure]
     fn lint_variant_payloads(
         &self,
         findings: &mut Vec<InternalErrorComplianceFinding>,
@@ -94,6 +96,7 @@ impl Catalog {
         skip(self, findings, item, variant, context, payload, payload_ident),
         err(level = "warn")
     )]
+    #[hotpath::measure]
     fn emit_invalid_payload_shape(
         &self,
         findings: &mut Vec<InternalErrorComplianceFinding>,
@@ -134,6 +137,7 @@ impl Catalog {
         skip(self, findings, item, variant, context, payload_ident, parent_idents),
         err(level = "warn")
     )]
+    #[hotpath::measure]
     fn emit_invalid_payload_identity(
         &self,
         findings: &mut Vec<InternalErrorComplianceFinding>,
@@ -164,6 +168,7 @@ impl Catalog {
         skip(self, findings, item, variant, context),
         err(level = "warn")
     )]
+    #[hotpath::measure]
     fn emit_unregistered_payload_finding(
         &self,
         findings: &mut Vec<InternalErrorComplianceFinding>,
@@ -203,6 +208,7 @@ impl Catalog {
         skip(self, item, variant, snippet, classifier),
         err(level = "warn")
     )]
+    #[hotpath::measure]
     fn kind_variant_finding(
         &self,
         context: String,

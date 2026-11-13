@@ -40,6 +40,7 @@ fn marked(item: &ast::TypeAlias, owner: &str, field: &str) -> bool {
 }
 
 #[tracing::instrument(level = "debug", skip(file, item, field))]
+#[hotpath::measure]
 pub(super) fn forward(
     file: &DatabaseSource<'_>,
     item: &ast::Struct,
@@ -68,6 +69,7 @@ pub(super) fn forward(
 }
 
 #[tracing::instrument(level = "debug", skip(file, owner, item, field))]
+#[hotpath::measure]
 pub(super) fn reverse(
     file: &DatabaseSource<'_>,
     owner: &ast::Struct,

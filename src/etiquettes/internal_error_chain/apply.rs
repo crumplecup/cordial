@@ -104,6 +104,7 @@ pub struct ErrorFieldApplyBlocker {
 
 impl ErrorFieldApplyBlocker {
     #[instrument(level = "debug", skip(path, reason))]
+    #[hotpath::measure]
     fn new(
         path: &Path,
         type_name: &str,
@@ -146,6 +147,7 @@ pub use ErrorFieldApplySummary as ErrorFileApplySummary;
 /// Add the strategy-independent conversion facts and the selected graph plan
 /// to the same crate IR used by the normal error scan and by apply.
 #[instrument(level = "debug", skip(ir, source, strategy), err(level = "warn"))]
+#[hotpath::measure]
 pub(crate) fn enrich_error_apply_evidence(
     ir: &mut dyn IrMut,
     source: &SourceLoadView,
@@ -158,6 +160,7 @@ pub(crate) fn enrich_error_apply_evidence(
 
 /// Load only the text for the exact files represented by required IR evidence.
 #[instrument(level = "debug", skip(ir, source), err(level = "warn"))]
+#[hotpath::measure]
 fn edit_files(ir: &dyn IrView, source: &SourceLoadView) -> CordialResult<Vec<SourceEditView>> {
     ir.source_error_apply()?
         .files()
@@ -180,6 +183,7 @@ fn edit_files(ir: &dyn IrView, source: &SourceLoadView) -> CordialResult<Vec<Sou
 /// with a named constructor anchor and proven origins. More complex caller
 /// constraints remain manual work.
 #[instrument(level = "info", err(level = "warn"))]
+#[hotpath::measure]
 pub fn run_error_field_apply(
     project_root: &Path,
     store_home: &Path,

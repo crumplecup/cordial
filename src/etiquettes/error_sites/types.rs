@@ -21,6 +21,7 @@ pub enum ForeignErrorRecordKind {
 
 impl ForeignErrorRecordKind {
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn as_attr(self) -> &'static str {
         match self {
             Self::Typed => "typed",
@@ -30,6 +31,7 @@ impl ForeignErrorRecordKind {
 
     #[cfg(any(feature = "foreign_error_types", feature = "foreign_error_attenuation"))]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn from_attr(value: &str) -> Option<Self> {
         match value {
             "typed" => Some(Self::Typed),
@@ -59,6 +61,7 @@ pub enum ErrorSiteKind {
 impl ErrorSiteKind {
     /// Stable identifier string for IR attributes.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn as_attr(self) -> &'static str {
         match self {
             Self::QuestionMark => "question_mark",
@@ -72,6 +75,7 @@ impl ErrorSiteKind {
 
     /// Parse from the stable identifier string.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn from_attr(value: &str) -> Option<Self> {
         match value {
             "question_mark" => Some(Self::QuestionMark),
@@ -88,6 +92,7 @@ impl ErrorSiteKind {
     /// foreign error (and optional caller context: path, span). That site
     /// kind is not itself a chain break — only an un-preserved converter is.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn map_err_is_chain_break(self, chain_preserved: bool) -> bool {
         matches!(self, Self::MapErr) && !chain_preserved
     }
@@ -210,6 +215,7 @@ pub struct ErrorSiteFinding {
 impl ErrorSiteFinding {
     /// Start a builder for this value.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> ErrorSiteFindingBuilder {
         ErrorSiteFindingBuilder::default()
     }
@@ -273,6 +279,7 @@ pub struct ErrorSiteRecord {
 impl ErrorSiteRecord {
     /// Start a builder for this value.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> ErrorSiteRecordBuilder {
         ErrorSiteRecordBuilder::default()
     }
@@ -303,6 +310,7 @@ pub struct ErrorSiteScanRow {
 impl ErrorSiteScanRow {
     /// Start a builder for this value.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> ErrorSiteScanRowBuilder {
         ErrorSiteScanRowBuilder::default()
     }

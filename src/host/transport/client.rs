@@ -76,6 +76,7 @@ fn starts_a_session(command: &crate::Commands) -> bool {
 /// The server keeps the process session of whoever starts it, which is how it
 /// knows when the terminal that wanted it has gone. Returns its process id.
 #[instrument(level = "debug", err(level = "warn"))]
+#[hotpath::measure]
 pub fn start_session(
     project: &Path,
     store_home: &Path,
@@ -218,6 +219,7 @@ enum Relayed {
 /// that says nothing before it goes, returns `None`; one that goes mid-command
 /// has already printed, so that is an error exit rather than a second run.
 #[instrument(level = "debug", skip(stream))]
+#[hotpath::measure]
 fn relay(stream: &mut UnixStream) -> Relayed {
     let mut started = false;
     loop {
@@ -249,6 +251,7 @@ fn relay(stream: &mut UnixStream) -> Relayed {
 
 /// Ask the session at `socket` to exit. Returns whether one answered.
 #[instrument(level = "debug", err(level = "warn"))]
+#[hotpath::measure]
 pub fn stop(socket: &Path) -> std::io::Result<bool> {
     let Ok(mut stream) = UnixStream::connect(socket) else {
         return Ok(false);

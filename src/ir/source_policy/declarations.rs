@@ -7,6 +7,7 @@ use std::path::Path;
 
 impl SourcePolicyInventory {
     #[tracing::instrument(level = "debug", skip(self, input), err(level = "warn"))]
+    #[hotpath::measure]
     pub(crate) fn collect_declarations(
         &mut self,
         crate_root: &Path,

@@ -29,6 +29,7 @@ pub struct ExpectedInstantiations {
 
 impl Default for ExpectedInstantiations {
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     fn default() -> Self {
         Self::new(BTreeMap::new())
     }

@@ -29,6 +29,7 @@ pub struct ErrorSignatureAssessment {
 
 impl SourceErrorSignatures {
     #[tracing::instrument(level = "debug", skip(collect), err(level = "warn"))]
+    #[hotpath::measure]
     pub(crate) fn collect_with(
         root: &Path,
         mut collect: impl FnMut(&mut SignatureChainIndex, &Path, &Path) -> CordialResult<FileSnapshot>,

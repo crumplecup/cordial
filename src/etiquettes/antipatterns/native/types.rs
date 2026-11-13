@@ -80,6 +80,7 @@ pub(super) fn bounds(ty: &ast::DynTraitType) -> Vec<String> {
 
 impl Collector<'_, '_> {
     #[tracing::instrument(level = "debug", skip_all, err(level = "warn"))]
+    #[hotpath::measure]
     pub(super) fn error_type(&mut self, ty: &ast::Type, context: &Context) -> CordialResult<()> {
         let Some(path) = path(ty) else {
             return Ok(());

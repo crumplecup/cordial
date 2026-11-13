@@ -47,6 +47,7 @@ pub struct AmenableRegistryEvidence {
 impl AmenableRegistryEvidence {
     /// Resolve `registry` and the proof-chain test `subjects` with `resolver`.
     #[instrument(level = "debug", skip(registry, subjects, resolver))]
+    #[hotpath::measure]
     pub fn resolve(
         registry: &RegistryDump,
         subjects: &HashSet<String>,
@@ -100,6 +101,7 @@ impl InstantiationEvidence for AmenableRegistryEvidence {
 /// ext claims and are skipped. Nothing is dropped silently: a link whose type
 /// cannot be identified is returned with its [`Unresolved`] reason.
 #[instrument(level = "debug", skip(registry, resolver))]
+#[hotpath::measure]
 pub fn resolve_ext_evidence(
     registry: &RegistryDump,
     resolver: &dyn TypeResolver,
@@ -112,6 +114,7 @@ pub fn resolve_ext_evidence(
 }
 
 #[instrument(level = "debug", skip(link, resolver))]
+#[hotpath::measure]
 fn resolve_link(link: &EvidenceLinkDump, resolver: &dyn TypeResolver) -> Option<EvidenceKey> {
     // Recognize an ext claim from the wrapper alone, before parsing: a link we
     // recognize but cannot parse must still be reported.
@@ -135,6 +138,7 @@ fn resolve_link(link: &EvidenceLinkDump, resolver: &dyn TypeResolver) -> Option<
 
 /// Resolve every proof record whose evidence is an `ExtStandard<..>` claim.
 #[instrument(level = "debug", skip(registry, resolver))]
+#[hotpath::measure]
 pub fn resolve_ext_proofs(registry: &RegistryDump, resolver: &dyn TypeResolver) -> Vec<ProofKey> {
     registry
         .proof_records()
@@ -156,6 +160,7 @@ pub fn resolve_ext_proofs(registry: &RegistryDump, resolver: &dyn TypeResolver) 
 /// source names, whether wrapped in `ExtStandard<..>` or written bare.
 /// Subjects that cannot be identified are left out; they witness nothing.
 #[instrument(level = "debug", skip(subjects, resolver))]
+#[hotpath::measure]
 pub fn resolve_proof_subjects(
     subjects: &HashSet<String>,
     resolver: &dyn TypeResolver,

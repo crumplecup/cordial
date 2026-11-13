@@ -33,6 +33,7 @@ pub enum CrateKind {
 impl CrateKind {
     /// Stable string form of this value.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Lib => "lib",
@@ -43,6 +44,7 @@ impl CrateKind {
 
     /// Parse from the stable identifier string.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn from_attr(value: &str) -> Option<Self> {
         match value {
             "lib" => Some(Self::Lib),

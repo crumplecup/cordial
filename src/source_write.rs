@@ -32,6 +32,7 @@ struct StagedEdit<'a> {
 }
 
 #[instrument(level = "debug", skip(planned, validate), err(level = "warn"))]
+#[hotpath::measure]
 pub(crate) fn write_sources(
     planned: &[SourceWrite],
     dry_run: bool,
@@ -108,6 +109,7 @@ pub(crate) fn write_sources(
     skip(path, contents, permissions),
     err(level = "warn")
 )]
+#[hotpath::measure]
 fn stage(path: &Path, contents: &[u8], permissions: &fs::Permissions) -> io::Result<NamedTempFile> {
     let parent = path.parent().ok_or(io::ErrorKind::InvalidInput)?;
     let mut staged = NamedTempFile::new_in(parent)?;
@@ -117,6 +119,7 @@ fn stage(path: &Path, contents: &[u8], permissions: &fs::Permissions) -> io::Res
 }
 
 #[instrument(level = "debug", skip(committed), err(level = "warn"))]
+#[hotpath::measure]
 fn restore(committed: Vec<(&Path, NamedTempFile)>) -> CordialResult<()> {
     let mut first_error = None;
     for (path, original) in committed.into_iter().rev() {

@@ -41,6 +41,7 @@ pub struct DocFingerprint {
 impl BuildArtifact {
     /// Artifact for a workspace-member rustdoc build.
     #[instrument(level = "debug", skip(crate_name, fingerprint))]
+    #[hotpath::measure]
     pub fn workspace_member(
         crate_name: impl Into<String>,
         rustdoc_json: PathBuf,
@@ -62,6 +63,7 @@ impl BuildArtifact {
 
     /// Artifact for a sysroot library rustdoc build.
     #[instrument(level = "debug", skip(crate_name, fingerprint))]
+    #[hotpath::measure]
     pub fn sysroot_library(
         crate_name: impl Into<String>,
         rustdoc_json: PathBuf,
@@ -83,6 +85,7 @@ impl BuildArtifact {
 
     /// Artifact for a shadow-crate dependency rustdoc build.
     #[instrument(level = "debug", skip(shadow_crate, upstream_crate, fingerprint))]
+    #[hotpath::measure]
     pub fn shadow_dep(
         shadow_crate: impl Into<String>,
         upstream_crate: impl Into<String>,
@@ -110,6 +113,7 @@ impl BuildArtifact {
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn chrono_like_timestamp() -> String {
     use std::time::{SystemTime, UNIX_EPOCH};
     let secs = SystemTime::now()

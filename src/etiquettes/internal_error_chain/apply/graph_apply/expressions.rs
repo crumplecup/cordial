@@ -41,6 +41,7 @@ pub(super) struct GraphExprPlanner<'a> {
 
 impl<'a> GraphExprPlanner<'a> {
     #[instrument(level = "debug", skip(source, facts, strategy, changes, variants))]
+    #[hotpath::measure]
     pub(super) fn new(
         source: &'a str,
         facts: &'a GraphExprFacts,
@@ -77,6 +78,7 @@ impl<'a> GraphExprPlanner<'a> {
     }
 
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub(super) fn finish(self) -> ExpressionOutcome {
         (
             self.edits,
@@ -87,6 +89,7 @@ impl<'a> GraphExprPlanner<'a> {
     }
 
     #[instrument(level = "debug", skip(self, range))]
+    #[hotpath::measure]
     fn edit(&mut self, range: Option<Range>, replacement: String) {
         if let Some((start, end)) = range {
             self.edits.push(Edit {
@@ -100,6 +103,7 @@ impl<'a> GraphExprPlanner<'a> {
     }
 
     #[instrument(level = "debug", skip(self, range))]
+    #[hotpath::measure]
     fn allow(&mut self, range: Option<Range>) {
         if let Some(range) = range {
             self.allowed_uses.insert(range);
@@ -116,6 +120,7 @@ impl<'a> GraphExprPlanner<'a> {
     }
 
     #[instrument(level = "debug", skip(self, value, shape))]
+    #[hotpath::measure]
     fn expression(&self, value: &GraphValueFact, shape: Shape) -> Option<String> {
         let range = value.range()?;
         let text = self.source.get(range.0..range.1)?;
@@ -137,6 +142,7 @@ impl<'a> GraphExprPlanner<'a> {
     }
 
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub(super) fn run(&mut self) {
         for event in self.facts.events() {
             match event {
@@ -349,6 +355,7 @@ pub(super) struct GraphValueFact {
 impl GraphExprFacts {
     /// Select candidate names from already collected evidence, without syntax access.
     #[instrument(level = "debug", skip(self, tracked_names, tracked_fields))]
+    #[hotpath::measure]
     pub(in crate::etiquettes::internal_error_chain::apply) fn select(
         &self,
         tracked_names: &BTreeSet<String>,

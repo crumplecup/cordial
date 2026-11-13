@@ -9,6 +9,7 @@ use std::{collections::BTreeSet, path::PathBuf};
 use tracing::instrument;
 /// Apply the layout rules to the loader-projected CLI catalog.
 #[instrument(level = "debug", skip(facts), err(level = "warn"))]
+#[hotpath::measure]
 pub fn select_records(
     facts: &CliLayoutFacts,
     crate_name: &str,
@@ -80,6 +81,7 @@ pub fn select_records(
     skip(item, catalog, clap_idents, findings),
     err(level = "warn")
 )]
+#[hotpath::measure]
 fn lint_act(
     crate_name: &str,
     item: &TypeRec,
@@ -125,6 +127,7 @@ fn lint_act(
 }
 
 #[instrument(level = "debug", skip(rule_id, file), err(level = "warn"))]
+#[hotpath::measure]
 fn finding(
     crate_name: &str,
     rule_id: CliLayoutId,
@@ -144,6 +147,7 @@ fn finding(
 }
 
 #[instrument(level = "debug", skip(entry, findings), err(level = "warn"))]
+#[hotpath::measure]
 fn lint_entry(
     crate_name: &str,
     entry: &EntryItem,

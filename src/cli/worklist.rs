@@ -15,6 +15,7 @@ use crate::{
 
 impl Commands {
     #[instrument(level = "debug", skip(self, ctx), err(level = "warn"))]
+    #[hotpath::measure]
     pub(super) fn act_worklist(self, ctx: &ActCtx) -> CordialResult<()> {
         let json_command = match &self {
             Self::Open { json: true } => Some("open"),
@@ -64,6 +65,7 @@ fn write_json(value: serde_json::Value) -> CordialResult<()> {
 }
 
 #[instrument(level = "debug", skip(ctx), err(level = "warn"))]
+#[hotpath::measure]
 pub(super) fn execute_submit(
     ctx: &ActCtx,
     deny_open: bool,
@@ -104,6 +106,7 @@ pub(super) fn execute_submit(
 }
 
 #[instrument(level = "debug", skip(ctx), err(level = "warn"))]
+#[hotpath::measure]
 pub(super) fn execute_open(ctx: &ActCtx, json: bool) -> CordialResult<()> {
     let home = ctx.store_home().clone().unwrap_or_else(default_store_home);
     let config = load_cordial_config(ctx.project_root(), &home);
@@ -172,6 +175,7 @@ pub(super) fn execute_open(ctx: &ActCtx, json: bool) -> CordialResult<()> {
 }
 
 #[instrument(level = "debug", skip(ctx), err(level = "warn"))]
+#[hotpath::measure]
 pub(super) fn execute_peek(ctx: &ActCtx, json: bool) -> CordialResult<()> {
     let home = ctx.store_home().clone().unwrap_or_else(default_store_home);
     let config = load_cordial_config(ctx.project_root(), &home);
@@ -235,6 +239,7 @@ pub(super) fn execute_peek(ctx: &ActCtx, json: bool) -> CordialResult<()> {
 }
 
 #[instrument(level = "debug", skip(ctx, ids, reason), err(level = "warn"))]
+#[hotpath::measure]
 pub(super) fn execute_claim(
     ctx: &ActCtx,
     ids: &[String],
@@ -320,6 +325,7 @@ pub(super) fn execute_claim(
 }
 
 #[instrument(level = "debug", skip(ctx), err(level = "warn"))]
+#[hotpath::measure]
 pub(super) fn execute_stats(
     ctx: &ActCtx,
     verbose: bool,
@@ -398,6 +404,7 @@ fn staleness_line(stale: &SoftStaleness) -> String {
 }
 
 #[instrument(level = "debug", skip(reason))]
+#[hotpath::measure]
 fn invalid_reason(reason: Validity) -> &'static str {
     match reason {
         Validity::Current => "current",

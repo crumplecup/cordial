@@ -42,6 +42,7 @@ pub struct AssessView<'a> {
 impl<'a> AssessView<'a> {
     /// Consume the view into its hook inputs.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn into_parts(self) -> (&'a dyn IrView, &'a [&'a dyn Marker], &'a dyn SessionView) {
         (self.ir, self.markers, self.session)
     }

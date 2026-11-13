@@ -59,6 +59,7 @@ pub(super) enum ExtractedItemKind {
 
 impl ExtractedItemKind {
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub(super) fn to_inventory(self) -> InventoryItemKind {
         match self {
             Self::Struct => InventoryItemKind::Struct,
@@ -73,6 +74,7 @@ impl ExtractedItemKind {
 
 /// Extract public items.
 #[instrument(level = "debug", skip(krate))]
+#[hotpath::measure]
 pub fn extract_public_items(
     krate: &Crate,
     own_crate: &str,
@@ -92,6 +94,7 @@ pub fn extract_public_items(
 /// **starts with** `own_crate` (e.g. `"bevy"` accepts `bevy_ecs::*`, `bevy_math::*`).
 /// When `false`, the first segment must equal `own_crate` exactly.
 #[instrument(level = "debug", skip(krate))]
+#[hotpath::measure]
 #[doc(hidden)]
 pub fn extract_items(
     krate: &rustdoc_types::Crate,
@@ -167,6 +170,7 @@ pub fn extract_items(
 }
 
 #[instrument(level = "debug", skip(path))]
+#[hotpath::measure]
 pub(super) fn path_matches_scope(path: &[String], own_crate_key: &str, prefix_match: bool) -> bool {
     path.first()
         .map(|segment| {
@@ -180,6 +184,7 @@ pub(super) fn path_matches_scope(path: &[String], own_crate_key: &str, prefix_ma
 }
 
 #[instrument(level = "debug", skip(krate))]
+#[hotpath::measure]
 fn collect_public_module_paths(
     krate: &rustdoc_types::Crate,
     own_crate_key: &str,
@@ -201,6 +206,7 @@ fn collect_public_module_paths(
 }
 
 #[instrument(level = "debug", skip(item, public_module_paths))]
+#[hotpath::measure]
 fn item_path_is_publicly_reachable(
     item: &ExtractedItem,
     public_module_paths: &HashSet<String>,
@@ -225,6 +231,7 @@ fn item_path_is_publicly_reachable(
 }
 
 #[instrument(level = "debug", skip(item))]
+#[hotpath::measure]
 pub(super) fn item_is_public(item: &rustdoc_types::Item) -> bool {
     matches!(item.visibility, rustdoc_types::Visibility::Public)
 }

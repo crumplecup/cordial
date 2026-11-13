@@ -9,6 +9,7 @@ use tracing::instrument;
 /// The names the parameters bind, `self` first. Whether each can be recorded is
 /// the database's verdict, not anything read from its written type.
 #[instrument(level = "debug", skip(function))]
+#[hotpath::measure]
 pub(super) fn parameter_names(function: &ast::Fn) -> Vec<String> {
     let mut names = Vec::new();
     if let Some(list) = function.param_list() {

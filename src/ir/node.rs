@@ -22,6 +22,7 @@ pub struct NodeId(u32);
 impl NodeId {
     /// Build a node id from its stable numeric value.
     #[instrument(level = "debug", ret)]
+    #[hotpath::measure]
     pub fn new(value: u32) -> Self {
         Self(value)
     }
@@ -33,11 +34,13 @@ impl NodeId {
     }
 
     #[instrument(level = "debug", skip(index), ret)]
+    #[hotpath::measure]
     pub(crate) fn from_index(index: NodeIndex) -> Self {
         Self(index.index() as u32)
     }
 
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub(crate) fn to_index(self) -> NodeIndex {
         NodeIndex::new(self.0 as usize)
     }

@@ -17,6 +17,7 @@ use ra_ap_syntax::{
 use std::path::Path;
 
 #[tracing::instrument(level = "debug", skip(file, prefix), err(level = "warn"))]
+#[hotpath::measure]
 pub(super) fn collect(
     file: &DatabaseSource<'_>,
     root: &Path,
@@ -30,6 +31,7 @@ pub(super) fn collect(
 }
 
 #[tracing::instrument(level = "debug", skip(input, file), err(level = "warn"))]
+#[hotpath::measure]
 fn items(
     input: impl Iterator<Item = ast::Item>,
     file: &DatabaseSource<'_>,

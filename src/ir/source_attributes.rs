@@ -69,6 +69,7 @@ pub struct SourceFileAttributes {
 
 /// Canonical spacing for syntax tokens, without parsing a rendered attribute.
 #[tracing::instrument(level = "debug")]
+#[hotpath::measure]
 fn render_tokens(parts: Vec<String>) -> String {
     let mut parts = parts.into_iter().peekable();
     let mut rendered = Vec::new();

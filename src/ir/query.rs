@@ -68,6 +68,7 @@ pub struct BasicQuery {
 impl QueryBuilder {
     /// Start an unconstrained query builder.
     #[instrument(level = "debug", ret)]
+    #[hotpath::measure]
     pub fn new() -> Self {
         Self::default()
     }
@@ -104,6 +105,7 @@ impl QueryBuilder {
 
     /// Finish the builder and return a reusable query value.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn build(self) -> BasicQuery {
         BasicQuery {
             node_kinds: self.node_kinds.unwrap_or_default(),
@@ -141,6 +143,7 @@ impl Query for BasicQuery {
 impl BasicQuery {
     /// Query function item nodes.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn items() -> Self {
         QueryBuilder::new()
             .node_kinds([NodeKind::Item(crate::ir::ItemKind::Fn)])
@@ -157,6 +160,7 @@ impl BasicQuery {
 
     /// Query every node in the graph.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn all_nodes() -> Self {
         Self::ALL_NODES
     }

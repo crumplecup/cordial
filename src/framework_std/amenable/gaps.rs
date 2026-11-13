@@ -4,12 +4,14 @@ use super::{AmenableStdEntry, AmenableStdGapEntry, AmenableStdReport, AmenableSt
 
 /// Gap metadata for one amenable std row.
 #[instrument(level = "debug", skip(entry))]
+#[hotpath::measure]
 pub fn amenable_gap_fields(entry: &AmenableStdEntry, impl_crate: &str) -> (String, String) {
     wrapped_gap_fields(entry, impl_crate, "RustStdStandard")
 }
 
 /// Gap metadata for one amenable ext (third-party crate) row.
 #[instrument(level = "debug", skip(entry))]
+#[hotpath::measure]
 pub fn amenable_ext_gap_fields(entry: &AmenableStdEntry, impl_crate: &str) -> (String, String) {
     wrapped_gap_fields(entry, impl_crate, "ExtStandard")
 }
@@ -20,6 +22,7 @@ pub fn amenable_ext_gap_fields(entry: &AmenableStdEntry, impl_crate: &str) -> (S
 /// (`RustStdStandard` or `ExtStandard`) the "register evidence" action
 /// names.
 #[instrument(level = "debug", skip(entry))]
+#[hotpath::measure]
 fn wrapped_gap_fields(
     entry: &AmenableStdEntry,
     impl_crate: &str,
@@ -35,6 +38,7 @@ fn wrapped_gap_fields(
 /// each "register evidence" action -- shared by
 /// [`build_amenable_std_gaps`] and [`build_amenable_ext_gaps`].
 #[instrument(level = "debug", skip(report))]
+#[hotpath::measure]
 fn build_wrapped_gaps(report: &AmenableStdReport, wrapper_name: &str) -> Vec<AmenableStdGapEntry> {
     report
         .entries()
@@ -62,17 +66,20 @@ fn build_wrapped_gaps(report: &AmenableStdReport, wrapper_name: &str) -> Vec<Ame
 
 /// Build consolidated gap rows from an amenable std report.
 #[instrument(level = "debug", skip(report))]
+#[hotpath::measure]
 pub fn build_amenable_std_gaps(report: &AmenableStdReport) -> Vec<AmenableStdGapEntry> {
     build_wrapped_gaps(report, "RustStdStandard")
 }
 
 /// Build consolidated gap rows from an amenable ext report.
 #[instrument(level = "debug", skip(report))]
+#[hotpath::measure]
 pub fn build_amenable_ext_gaps(report: &AmenableStdReport) -> Vec<AmenableStdGapEntry> {
     build_wrapped_gaps(report, "ExtStandard")
 }
 
 #[instrument(level = "debug", skip(entry))]
+#[hotpath::measure]
 fn missing_layer_labels(entry: &AmenableStdEntry) -> Vec<&'static str> {
     let mut missing = Vec::new();
     if !entry.evidence_link() {
@@ -94,6 +101,7 @@ fn missing_layer_labels(entry: &AmenableStdEntry) -> Vec<&'static str> {
 }
 
 #[instrument(level = "debug", skip(entry))]
+#[hotpath::measure]
 fn gap_action(entry: &AmenableStdEntry, impl_crate: &str, wrapper_name: &str) -> String {
     if !entry.evidence_link() {
         let type_name = entry

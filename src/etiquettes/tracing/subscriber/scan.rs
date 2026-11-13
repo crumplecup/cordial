@@ -25,6 +25,7 @@ struct FnSite {
 
 /// Apply the subscriber-init policy to the loader-projected functions.
 #[instrument(level = "debug", skip(inventory, policy), err(level = "warn"))]
+#[hotpath::measure]
 pub fn findings_from_inventory(
     inventory: &crate::ir::SourceObservability,
     crate_name: &str,
@@ -53,6 +54,7 @@ pub fn findings_from_inventory(
 }
 
 #[instrument(level = "debug", skip(sites, policy, inventory), err(level = "warn"))]
+#[hotpath::measure]
 fn findings_for_sites(
     sites: &[FnSite],
     inventory: &crate::ir::SourceObservability,
@@ -135,6 +137,7 @@ fn findings_for_sites(
 /// The functions that install a subscriber, and those that call one of them,
 /// found by the definitions their calls resolved to.
 #[instrument(level = "debug", skip(sites))]
+#[hotpath::measure]
 fn trusted_helpers(sites: &[FnSite]) -> Vec<crate::FunctionLocation> {
     let mut helpers: Vec<crate::FunctionLocation> = sites
         .iter()
@@ -159,6 +162,7 @@ fn trusted_helpers(sites: &[FnSite]) -> Vec<crate::FunctionLocation> {
 }
 
 #[instrument(level = "debug", skip(rule_id, site), err(level = "warn"))]
+#[hotpath::measure]
 fn record(
     rule_id: SubscriberRuleId,
     site: &FnSite,

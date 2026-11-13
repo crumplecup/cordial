@@ -20,6 +20,7 @@ pub enum AllowRuleId {
 impl AllowRuleId {
     /// Stable string form of this value.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Attr001 => "ALLOW-ATTR-001",
@@ -29,6 +30,7 @@ impl AllowRuleId {
 
     /// Parse from the stable identifier string.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn from_attr(value: &str) -> Option<Self> {
         match value {
             "ALLOW-ATTR-001" => Some(Self::Attr001),
@@ -119,6 +121,7 @@ pub struct AllowFinding {
 impl AllowFinding {
     /// Start a builder for this value.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> AllowFindingBuilder {
         AllowFindingBuilder::default()
     }
@@ -182,6 +185,7 @@ pub struct AllowSiteRecord {
 impl AllowSiteRecord {
     /// Start a builder for this value.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> AllowSiteRecordBuilder {
         AllowSiteRecordBuilder::default()
     }

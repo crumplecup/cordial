@@ -95,6 +95,7 @@ impl CrateTarget {
 
 /// Map a file under `src/` to its module path segments.
 #[instrument(level = "debug", skip(file))]
+#[hotpath::measure]
 pub fn module_path_from_src_file(src_root: &Path, file: &Path) -> Vec<String> {
     let Ok(rel) = file.strip_prefix(src_root) else {
         return Vec::new();

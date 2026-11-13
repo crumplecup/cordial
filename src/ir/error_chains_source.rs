@@ -31,6 +31,7 @@ pub struct ErrorChainsFile {
 
 impl SourceErrorChains {
     #[tracing::instrument(level = "debug", skip(collect), err(level = "warn"))]
+    #[hotpath::measure]
     pub(crate) fn collect_with(
         root: &Path,
         mut collect: impl FnMut(&Path, &Path) -> CordialResult<ErrorChainsFile>,
@@ -56,6 +57,7 @@ impl SourceErrorChains {
     }
 
     #[tracing::instrument(level = "debug", skip(file), err(level = "warn"))]
+    #[hotpath::measure]
     pub(crate) fn native_file(
         file: &DatabaseSource<'_>,
         tree: &Path,
@@ -69,6 +71,7 @@ impl SourceErrorChains {
 
     /// Read deterministic rows without consulting syntax or the filesystem.
     #[tracing::instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn records(&self) -> Vec<ErrorChainRecord> {
         let mut records: Vec<_> = self
             .files

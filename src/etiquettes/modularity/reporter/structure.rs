@@ -9,6 +9,7 @@ use super::rows::{ModularityRow, SUMMARY_RANK_ROWS, crate_names, file_module_inp
 use tracing::instrument;
 
 #[instrument(level = "debug", skip(modules, thresholds))]
+#[hotpath::measure]
 pub(super) fn append_hierarchy_sections(
     body: &mut String,
     modules: &[&ModularityRow],
@@ -56,6 +57,7 @@ pub(super) fn append_hierarchy_sections(
 }
 
 #[instrument(level = "debug", skip(modules))]
+#[hotpath::measure]
 fn crate_tree(modules: &[&ModularityRow], crate_name: &str) -> Vec<ModuleHierarchyNode> {
     let crate_rows: Vec<_> = modules
         .iter()
@@ -66,6 +68,7 @@ fn crate_tree(modules: &[&ModularityRow], crate_name: &str) -> Vec<ModuleHierarc
 }
 
 #[instrument(level = "debug", skip(modules, thresholds))]
+#[hotpath::measure]
 fn append_ranked_branches(
     body: &mut String,
     modules: &[&ModularityRow],
@@ -116,6 +119,7 @@ fn append_ranked_branches(
 }
 
 #[instrument(level = "debug", skip(modules))]
+#[hotpath::measure]
 fn append_fat_leaves(body: &mut String, modules: &[&ModularityRow], names: &[String]) {
     body.push_str("## Fat leaves\n\n");
     body.push_str(
@@ -157,6 +161,7 @@ fn append_fat_leaves(body: &mut String, modules: &[&ModularityRow], names: &[Str
 }
 
 #[instrument(level = "debug", skip(modules, thresholds))]
+#[hotpath::measure]
 fn append_top_heavy_parents(
     body: &mut String,
     modules: &[&ModularityRow],
@@ -216,6 +221,7 @@ fn append_top_heavy_parents(
 }
 
 #[instrument(level = "debug", skip(modules, thresholds))]
+#[hotpath::measure]
 fn append_lopsided(
     body: &mut String,
     modules: &[&ModularityRow],
@@ -279,6 +285,7 @@ fn append_lopsided(
 }
 
 #[instrument(level = "debug", skip(modules, thresholds))]
+#[hotpath::measure]
 fn append_unary_nests(
     body: &mut String,
     modules: &[&ModularityRow],

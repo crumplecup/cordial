@@ -33,6 +33,7 @@ pub struct FrameworkStdOptions {
     skip(session, store, sysroot, options),
     err(level = "warn")
 )]
+#[hotpath::measure]
 pub fn assess_homecoming_std_coverage(
     session: &dyn SessionView,
     store: &StoreLayout,

@@ -26,6 +26,7 @@ pub struct PresentInstrument {
 impl PresentInstrument {
     /// Interpret shared argument facts, without parsing rendered attribute text.
     #[instrument(level = "debug", skip(syntax))]
+    #[hotpath::measure]
     pub(crate) fn from_syntax(syntax: &SourceInstrumentSyntax) -> Self {
         let args = syntax.arguments().as_ref();
         let err = args.and_then(|args| args.entries().iter().find(|arg| arg.name() == "err"));
@@ -102,6 +103,7 @@ fn list_names(args: Option<&SourceAttributeArguments>, key: &str) -> Vec<String>
 /// Load typed attribute evidence. A missing snapshot is a structural failure;
 /// unsupported syntax remains visible as an unresolved policy finding.
 #[instrument(level = "debug", skip(ir, node_id), err(level = "warn"))]
+#[hotpath::measure]
 pub fn present_instrument(
     ir: &dyn IrView,
     node_id: NodeId,

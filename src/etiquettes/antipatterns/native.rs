@@ -20,6 +20,7 @@ mod types;
 
 /// Shared selection for production collection and Cargo-backed projection.
 #[tracing::instrument(level = "debug", skip(root), err(level = "warn"))]
+#[hotpath::measure]
 pub(crate) fn input_paths(root: &Path, contracts: bool) -> CordialResult<Vec<(PathBuf, PathBuf)>> {
     let mut paths = Vec::new();
     for tree in crate::loader::quality_scan_trees(root) {
@@ -119,6 +120,7 @@ impl AntipatternCatalog {
 
 /// Single-file adapters retain fixture behavior without excluding fixture paths.
 #[tracing::instrument(level = "debug", skip_all, err(level = "warn"))]
+#[hotpath::measure]
 pub(super) fn collect_file(
     source: &DatabaseSource<'_>,
     tree: &Path,
@@ -158,6 +160,7 @@ impl Context {
 
 impl Collector<'_, '_> {
     #[tracing::instrument(level = "debug", skip_all, err(level = "warn"))]
+    #[hotpath::measure]
     fn walk(&mut self, node: &SyntaxNode, inherited: &Context) -> CordialResult<()> {
         // Closures and trait methods have never participated in this policy.
         if ast::ClosureExpr::can_cast(node.kind()) {

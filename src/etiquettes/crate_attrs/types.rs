@@ -21,6 +21,7 @@ pub enum CrateAttrsRuleId {
 impl CrateAttrsRuleId {
     /// Stable string form of this value.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::ForbidUnsafe001 => "CRATE-FORBID-UNSAFE-001",
@@ -30,6 +31,7 @@ impl CrateAttrsRuleId {
 
     /// Parse from the stable identifier string.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn from_attr(value: &str) -> Option<Self> {
         match value {
             "CRATE-FORBID-UNSAFE-001" => Some(Self::ForbidUnsafe001),
@@ -119,6 +121,7 @@ pub struct CrateAttrsFinding {
 
 impl CrateAttrsFinding {
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> CrateAttrsFindingBuilder {
         CrateAttrsFindingBuilder::default()
     }
@@ -182,6 +185,7 @@ pub struct CrateAttrsSiteRecord {
 impl CrateAttrsSiteRecord {
     /// Start a builder for this value.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> CrateAttrsSiteRecordBuilder {
         CrateAttrsSiteRecordBuilder::default()
     }

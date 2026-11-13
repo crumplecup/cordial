@@ -13,6 +13,7 @@ use super::types::{
 use tracing::instrument;
 
 #[tracing::instrument(level = "debug", skip(blocks), err(level = "warn"))]
+#[hotpath::measure]
 pub(super) fn collect_crate_ir(
     blocks: Vec<VerusBlock>,
 ) -> crate::error::CordialResult<VerusCrateIr> {

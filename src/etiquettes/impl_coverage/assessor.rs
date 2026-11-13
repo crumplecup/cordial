@@ -127,6 +127,7 @@ struct CoverageFindingArgs<'a> {
 }
 
 #[instrument(level = "debug", skip(node_id, args), err(level = "warn"))]
+#[hotpath::measure]
 fn coverage_finding(
     node_id: crate::ir::NodeId,
     args: CoverageFindingArgs<'_>,

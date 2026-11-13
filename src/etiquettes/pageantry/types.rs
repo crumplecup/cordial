@@ -23,6 +23,7 @@ pub enum PageantryRuleId {
 impl PageantryRuleId {
     /// Stable string form of this value.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Trait001 => "PAGEANTRY-TRAIT-001",
@@ -33,6 +34,7 @@ impl PageantryRuleId {
 
     /// Parse from the stable identifier string.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn from_attr(value: &str) -> Option<Self> {
         match value {
             "PAGEANTRY-TRAIT-001" => Some(Self::Trait001),
@@ -126,6 +128,7 @@ pub struct PageantryFinding {
 
 impl PageantryFinding {
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> PageantryFindingBuilder {
         PageantryFindingBuilder::default()
     }
@@ -183,6 +186,7 @@ pub struct PageantrySiteRecord {
 
 impl PageantrySiteRecord {
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> PageantrySiteRecordBuilder {
         PageantrySiteRecordBuilder::default()
     }
@@ -210,6 +214,7 @@ pub struct PageantrySourceSite {
 impl PageantrySourceSite {
     /// Apply rule switches and shim limits to already collected facts.
     #[tracing::instrument(level = "debug", skip(self, thresholds))]
+    #[hotpath::measure]
     pub fn selected(&self, thresholds: &crate::PageantryThresholds) -> Option<PageantrySiteRecord> {
         if !thresholds.rule_enabled(self.site.rule_id().as_str()) {
             return None;

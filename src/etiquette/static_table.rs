@@ -50,6 +50,7 @@ impl StaticEtiquette {
     /// Keep `id`, rule ids, marker labels, and artifact names stable after
     /// users have generated reports or exceptions.
     #[instrument(level = "debug", skip(id, name, hooks, explain))]
+    #[hotpath::measure]
     pub fn new(
         id: impl Into<String>,
         name: impl Into<String>,

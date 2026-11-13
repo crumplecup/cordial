@@ -68,6 +68,7 @@ pub static STALE_EXCEPTIONS_ETIQUETTE: LazyLock<StaticQualityEtiquette> = LazyLo
 });
 
 #[instrument(level = "debug", skip(findings))]
+#[hotpath::measure]
 fn quality_area_compute(findings: &[&dyn Finding]) -> (usize, String) {
     let stale = count_open_category(findings, "stale_exceptions");
     (stale, format!("stale exception rows **{stale}**"))

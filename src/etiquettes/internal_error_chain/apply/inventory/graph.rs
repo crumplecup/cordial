@@ -19,6 +19,7 @@ const ERROR_DECLARATION_ATTR: &str = "error_apply_declaration";
 
 /// Collect conversion evidence before apply and materialize it in the shared IR.
 #[instrument(level = "debug", skip(ir), err(level = "warn"))]
+#[hotpath::measure]
 pub(crate) fn enrich_conversion_units(ir: &mut dyn IrMut) -> CordialResult<()> {
     let source = ir.source_error_apply()?;
     let files: Vec<_> = source
@@ -31,6 +32,7 @@ pub(crate) fn enrich_conversion_units(ir: &mut dyn IrMut) -> CordialResult<()> {
 }
 
 #[instrument(level = "debug", skip(ir, files, index), err(level = "warn"))]
+#[hotpath::measure]
 pub(in crate::etiquettes::internal_error_chain::apply) fn enrich_conversion_units_with_index(
     ir: &mut dyn IrMut,
     files: &[FileSnapshot],
@@ -90,6 +92,7 @@ pub(in crate::etiquettes::internal_error_chain::apply) fn enrich_conversion_unit
 
 /// Read conversion evidence from the graph, rejecting malformed facts.
 #[instrument(level = "debug", skip(ir), err(level = "warn"))]
+#[hotpath::measure]
 pub(crate) fn conversion_units_from_ir(ir: &dyn IrView) -> CordialResult<Vec<ErrorConversionUnit>> {
     let query = QueryBuilder::new().has_attr(CONVERSION_UNIT_ATTR).build();
     ir.nodes_matching(&query)

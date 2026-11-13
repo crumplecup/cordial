@@ -49,6 +49,7 @@ pub struct PanicProofGraph {
 impl PanicProofGraph {
     /// Compute the fixed-point proof exemption from persisted graph facts.
     #[tracing::instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn reachable(&self) -> BTreeSet<String> {
         let mut reachable = self.roots.clone();
         let mut frontier: Vec<_> = self.roots.iter().cloned().collect();

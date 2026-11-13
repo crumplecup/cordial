@@ -3,6 +3,7 @@
 use tracing::instrument;
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 pub(crate) fn type_labels_match(a: &str, b: &str) -> bool {
     a == b || a.ends_with(&format!("::{b}")) || b.ends_with(&format!("::{a}"))
 }

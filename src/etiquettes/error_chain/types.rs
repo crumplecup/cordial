@@ -28,6 +28,7 @@ pub enum ErrorChainProbeId {
 impl ErrorChainProbeId {
     /// Stable string form of this value.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::WrapperSourceField001 => "ERROR-CHAIN-WRAPPER-SOURCE-001",
@@ -40,6 +41,7 @@ impl ErrorChainProbeId {
 
     /// Parse from the stable identifier string.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn from_attr(value: &str) -> Option<Self> {
         match value {
             "ERROR-CHAIN-WRAPPER-SOURCE-001" => Some(Self::WrapperSourceField001),
@@ -127,6 +129,7 @@ pub struct ErrorChainFinding {
 impl ErrorChainFinding {
     /// Start a builder for this value.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> ErrorChainFindingBuilder {
         ErrorChainFindingBuilder::default()
     }
@@ -196,6 +199,7 @@ pub struct ErrorChainRecord {
 impl ErrorChainRecord {
     /// Start a builder for this value.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> ErrorChainRecordBuilder {
         ErrorChainRecordBuilder::default()
     }
@@ -218,6 +222,7 @@ pub struct ErrorChainProbeCounts {
 
 impl ErrorChainProbeCounts {
     #[instrument(level = "debug", skip(self, probe_id))]
+    #[hotpath::measure]
     fn record_probe(&mut self, probe_id: ErrorChainProbeId) {
         match probe_id {
             ErrorChainProbeId::WrapperSourceField001 => self.wrapper_source += 1,
@@ -272,6 +277,7 @@ impl ErrorChainProbeCounts {
 
 /// Probe counts.
 #[instrument(level = "debug", skip(records))]
+#[hotpath::measure]
 pub fn probe_counts(records: &[ErrorChainRecord]) -> ErrorChainProbeCounts {
     let mut counts = ErrorChainProbeCounts::default();
     for record in records {

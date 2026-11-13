@@ -11,6 +11,7 @@ use crate::{
 use tracing::instrument;
 
 #[instrument(level = "debug", skip(ctx, selection, plugins), err(level = "warn"))]
+#[hotpath::measure]
 pub(in crate::cli) fn execute_run_plugins(
     ctx: &ActCtx,
     selection: &GateSelectionArgs,
@@ -41,6 +42,7 @@ pub(in crate::cli) struct RunOptions {
 
 /// Run after the caller has acquired the worklist lock.
 #[instrument(level = "debug", skip(ctx, plugins, options), err(level = "warn"))]
+#[hotpath::measure]
 pub(in crate::cli) fn execute_run_plugins_locked(
     ctx: &ActCtx,
     tiers: Option<&[String]>,
@@ -165,6 +167,7 @@ pub(in crate::cli) fn execute_run_plugins_locked(
 }
 
 #[instrument(level = "info", fields(crate_name = crate_name))]
+#[hotpath::measure]
 fn run_filter(
     crate_name: Option<&str>,
     tiers: Option<&[String]>,
@@ -202,6 +205,7 @@ impl RunFilterChoice {
 }
 
 #[instrument(level = "debug", skip(outcome), err(level = "warn"))]
+#[hotpath::measure]
 fn print_run_summary(outcome: &dyn RunOutcome) -> CordialResult<RunSummary> {
     let findings = outcome.findings().collect::<Vec<_>>();
     let mut open = 0usize;
@@ -228,12 +232,14 @@ fn print_run_summary(outcome: &dyn RunOutcome) -> CordialResult<RunSummary> {
 
 #[cfg(feature = "quality")]
 #[instrument(level = "debug", skip(findings), err(level = "warn"))]
+#[hotpath::measure]
 fn open_action_items(findings: &[&dyn Finding]) -> CordialResult<usize> {
     Ok(crate::build_quality_report(findings)?.total_open_items())
 }
 
 #[cfg(not(feature = "quality"))]
 #[instrument(level = "debug", skip(findings), err(level = "warn"))]
+#[hotpath::measure]
 fn open_action_items(findings: &[&dyn Finding]) -> CordialResult<usize> {
     Ok(findings
         .iter()

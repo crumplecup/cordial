@@ -44,6 +44,7 @@ pub fn preload_shadow_pair_crates(
 
 /// Build shadow mirror reports for every active tracked pair in the workspace.
 #[instrument(level = "info", skip(workspace, session, filter), err(level = "warn"))]
+#[hotpath::measure]
 pub fn load_workspace_shadow_reports(
     workspace: &WorkspaceIr,
     session: &dyn SessionView,
@@ -61,6 +62,7 @@ pub fn load_workspace_shadow_reports(
 
 /// Build one upstream ↔ shadow mirror report from workspace graph IR.
 #[instrument(level = "debug", skip(workspace), err(level = "warn"))]
+#[hotpath::measure]
 pub fn build_shadow_pair_report_from_workspace(
     workspace: &WorkspaceIr,
     upstream: &str,

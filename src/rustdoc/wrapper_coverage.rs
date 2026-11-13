@@ -27,6 +27,7 @@ pub type WrapperCoverageMap = HashMap<String, Vec<WrapperCoverage>>;
 
 /// Lookup wrapper coverage.
 #[instrument(level = "debug", skip(map))]
+#[hotpath::measure]
 pub fn lookup_wrapper_coverage<'a>(
     map: &'a WrapperCoverageMap,
     type_path: &str,
@@ -47,6 +48,7 @@ pub fn lookup_wrapper_coverage<'a>(
 
 /// Build wrapper coverage map.
 #[instrument(level = "debug", skip(complete_paths, wrapper_prereqs))]
+#[hotpath::measure]
 pub fn build_wrapper_coverage_map(
     pairs: &[(String, String)],
     complete_paths: &ElicitCompleteSet,
@@ -75,6 +77,7 @@ pub fn build_wrapper_coverage_map(
 
 /// Join wrapper paths.
 #[instrument(level = "debug", skip(wrappers))]
+#[hotpath::measure]
 pub fn join_wrapper_paths(wrappers: Option<&[WrapperCoverage]>) -> String {
     wrappers
         .unwrap_or(&[])
@@ -85,6 +88,7 @@ pub fn join_wrapper_paths(wrappers: Option<&[WrapperCoverage]>) -> String {
 }
 
 #[instrument(level = "debug", skip(wrappers))]
+#[hotpath::measure]
 fn merge_wrapper_prereqs(wrappers: Option<&[WrapperCoverage]>) -> TraitPrereqs {
     let mut merged = TraitPrereqs::default();
     for wrapper in wrappers.unwrap_or(&[]) {
@@ -95,6 +99,7 @@ fn merge_wrapper_prereqs(wrappers: Option<&[WrapperCoverage]>) -> TraitPrereqs {
 
 /// Effective missing our traits.
 #[instrument(level = "debug", skip(wrappers))]
+#[hotpath::measure]
 pub fn effective_missing_our_traits(
     direct_missing: &[&'static str],
     wrappers: Option<&[WrapperCoverage]>,
@@ -116,6 +121,7 @@ pub fn effective_missing_our_traits(
 
 /// Covered indirectly.
 #[instrument(level = "debug", skip(wrappers))]
+#[hotpath::measure]
 pub fn covered_indirectly(wrappers: Option<&[WrapperCoverage]>) -> bool {
     wrappers.is_some_and(|known| {
         known.iter().any(|wrapper| {
@@ -126,6 +132,7 @@ pub fn covered_indirectly(wrappers: Option<&[WrapperCoverage]>) -> bool {
 
 /// Indirect elicit complete.
 #[instrument(level = "debug", skip(wrappers))]
+#[hotpath::measure]
 pub fn indirect_elicit_complete(wrappers: Option<&[WrapperCoverage]>) -> bool {
     wrappers
         .unwrap_or(&[])
@@ -135,6 +142,7 @@ pub fn indirect_elicit_complete(wrappers: Option<&[WrapperCoverage]>) -> bool {
 
 /// Coverage provider label.
 #[instrument(level = "debug")]
+#[hotpath::measure]
 pub fn coverage_provider_label(
     direct_our_traits_complete: bool,
     indirect_elicit_complete: bool,

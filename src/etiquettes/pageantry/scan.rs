@@ -5,6 +5,7 @@ use std::path::Path;
 
 /// Scan supplied source through the loader-owned native database.
 #[tracing::instrument(level = "debug", skip(source, thresholds, file), err(level = "warn"))]
+#[hotpath::measure]
 pub fn scan_rust_source(
     source: &str,
     file: &Path,

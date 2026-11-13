@@ -8,6 +8,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use tracing::instrument;
 
 #[instrument(level = "debug", skip(function))]
+#[hotpath::measure]
 pub(in crate::etiquettes::internal_error_chain::apply::graph_apply) fn parameters(
     function: &ast::Fn,
 ) -> BTreeMap<String, BTreeSet<String>> {

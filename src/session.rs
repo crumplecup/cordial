@@ -201,6 +201,7 @@ impl SessionBuilder {
     /// The builder derives the default project store from the project path and
     /// the default cordial home.
     #[instrument(level = "debug", skip(project_root), ret)]
+    #[hotpath::measure]
     pub fn new(project_root: impl Into<PathBuf>) -> Self {
         let project_root = project_root.into();
         let slug = crate::store::project_slug_from_path(&project_root);
@@ -288,6 +289,7 @@ impl SessionBuilder {
 
     /// Finish the builder and return a runtime session.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn build(self) -> RuntimeSession {
         let project_root = self.project_root.unwrap_or_default();
         let store_home = self

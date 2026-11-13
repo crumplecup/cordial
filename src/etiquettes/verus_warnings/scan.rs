@@ -13,6 +13,7 @@ use tracing::instrument;
 /// Run Verus when this crate is a Verus target and the compiler is on `PATH`,
 /// dropping warnings that Verus's own synthesized accessors explain.
 #[instrument(level = "debug", skip(verus), err(level = "warn"))]
+#[hotpath::measure]
 pub(super) fn scan_crate_verus_warnings_with_ir(
     crate_root: &Path,
     #[cfg(feature = "verus_ir")] verus: &crate::VerusCrateIr,
@@ -53,6 +54,7 @@ mod warning_filter {
     /// compiled in (kept independently toggleable, matching every other
     /// cross-etiquette signal reuse in this codebase).
     #[instrument(level = "debug", skip(records, verus), err(level = "warn"))]
+    #[hotpath::measure]
     pub(super) fn retain_real_warnings(
         records: Vec<VerusWarningRecord>,
         verus: &crate::VerusCrateIr,
@@ -75,6 +77,7 @@ mod warning_filter {
     use tracing::instrument;
 
     #[instrument(level = "debug", skip(records))]
+    #[hotpath::measure]
     pub(super) fn retain_real_warnings(
         records: Vec<VerusWarningRecord>,
     ) -> CordialResult<Vec<VerusWarningRecord>> {
@@ -84,6 +87,7 @@ mod warning_filter {
 
 /// True when this member is meant to be compiled with the Verus rustc fork.
 #[instrument(level = "debug")]
+#[hotpath::measure]
 pub fn crate_is_verus_target(crate_root: &Path) -> bool {
     if crate_root
         .file_name()
@@ -99,6 +103,7 @@ pub fn crate_is_verus_target(crate_root: &Path) -> bool {
 }
 
 #[instrument(level = "debug", skip(manifest))]
+#[hotpath::measure]
 fn manifest_names_verus_dep(manifest: &str) -> bool {
     let mut in_deps = false;
     for raw in manifest.lines() {
@@ -130,6 +135,7 @@ fn manifest_names_verus_dep(manifest: &str) -> bool {
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn verus_crate_entry(crate_root: &Path) -> Option<VerusEntry> {
     if crate_root.join("src/lib.rs").is_file() {
         return Some(VerusEntry {
@@ -168,6 +174,7 @@ impl VerusCrateType {
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn resolve_verus_binary() -> Option<PathBuf> {
     for key in ["CORDIAL_VERUS", "VERUS", "VERUS_PATH"] {
         if let Ok(value) = std::env::var(key) {
@@ -181,6 +188,7 @@ fn resolve_verus_binary() -> Option<PathBuf> {
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn which_verus() -> Option<PathBuf> {
     let Ok(path) = std::env::var("PATH") else {
         return None;
@@ -195,6 +203,7 @@ fn which_verus() -> Option<PathBuf> {
 }
 
 #[instrument(level = "info", skip(verus, entry), err(level = "warn"))]
+#[hotpath::measure]
 fn run_verus(verus: &Path, crate_root: &Path, entry: &VerusEntry) -> CordialResult<String> {
     let output = Command::new(verus)
         .current_dir(crate_root)
@@ -215,6 +224,7 @@ fn run_verus(verus: &Path, crate_root: &Path, entry: &VerusEntry) -> CordialResu
 /// Parse rustc-style Verus diagnostics. Summary lines (`N warnings emitted`)
 /// are dropped; the same span+message is kept once.
 #[instrument(level = "debug", skip(output), err(level = "warn"))]
+#[hotpath::measure]
 pub fn parse_verus_compiler_output(
     output: &str,
     crate_root: &Path,
@@ -309,6 +319,7 @@ fn parse_arrow_span(line: &str) -> Option<(String, u32)> {
 }
 
 #[instrument(level = "debug", skip(file))]
+#[hotpath::measure]
 fn resolve_diagnostic_file(crate_root: &Path, file: &str) -> PathBuf {
     let path = PathBuf::from(file);
     if path.is_absolute() {

@@ -17,6 +17,7 @@ pub enum InternalErrorTypeProbeId {
 impl InternalErrorTypeProbeId {
     /// Stable string form of this value.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::InternalLeaf001 => "ERROR-CHAIN-INTERNAL-LEAF-001",
@@ -27,6 +28,7 @@ impl InternalErrorTypeProbeId {
 
     /// Parse from the stable identifier string.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn from_attr(value: &str) -> Option<Self> {
         match value {
             "ERROR-CHAIN-INTERNAL-LEAF-001" => Some(Self::InternalLeaf001),

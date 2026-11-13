@@ -33,6 +33,7 @@ pub fn resolve_parent(ir: &dyn IrMut, context: &str) -> CordialResult<crate::ir:
 
 /// Crate root directory for a source-loaded member, given its `src/` root.
 #[instrument(level = "debug", skip(source, session))]
+#[hotpath::measure]
 pub fn member_crate_root(source: &SourceLoadView, session: &dyn SessionView) -> PathBuf {
     source
         .src_root()

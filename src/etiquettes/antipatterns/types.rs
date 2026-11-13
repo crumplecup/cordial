@@ -29,6 +29,7 @@ pub enum AntipatternRuleId {
 impl AntipatternRuleId {
     /// Stable string form of this value.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::BoxDynError001 => "ANTIPATTERN-BOX-DYN-ERROR-001",
@@ -42,6 +43,7 @@ impl AntipatternRuleId {
 
     /// Parse from the stable identifier string.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn from_attr(value: &str) -> Option<Self> {
         match value {
             "ANTIPATTERN-BOX-DYN-ERROR-001" => Some(Self::BoxDynError001),
@@ -150,6 +152,7 @@ pub struct AntipatternFinding {
 impl AntipatternFinding {
     /// Start a builder for this value.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> AntipatternFindingBuilder {
         AntipatternFindingBuilder::default()
     }
@@ -220,6 +223,7 @@ impl AntipatternSiteRecord {
 
     /// Start a builder for this value.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> AntipatternSiteRecordBuilder {
         AntipatternSiteRecordBuilder::default()
     }
@@ -244,6 +248,7 @@ pub struct AntipatternRuleCounts {
 
 impl AntipatternRuleCounts {
     #[instrument(level = "debug", skip(self, rule_id))]
+    #[hotpath::measure]
     pub fn accumulate(&mut self, rule_id: AntipatternRuleId) {
         match rule_id {
             AntipatternRuleId::BoxDynError001 => self.box_dyn_error += 1,
@@ -280,6 +285,7 @@ pub struct AntipatternCrateSummary {
 impl AntipatternCrateSummary {
     /// Start a builder for this value.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> AntipatternCrateSummaryBuilder {
         AntipatternCrateSummaryBuilder::default()
     }
@@ -309,6 +315,7 @@ pub struct WorkspaceAntipatternsSummary {
 impl WorkspaceAntipatternsSummary {
     /// Start a builder for this value.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> WorkspaceAntipatternsSummaryBuilder {
         WorkspaceAntipatternsSummaryBuilder::default()
     }
@@ -333,6 +340,7 @@ pub struct WorkspaceVersionInMemberSummary {
 }
 
 #[instrument(level = "debug", skip(findings), err(level = "warn"))]
+#[hotpath::measure]
 pub fn build_workspace_antipatterns_summary(
     findings: &[&dyn Finding],
 ) -> CordialResult<WorkspaceAntipatternsSummary> {
@@ -412,6 +420,7 @@ pub fn build_workspace_antipatterns_summary(
 }
 
 #[instrument(level = "debug", skip(findings))]
+#[hotpath::measure]
 pub fn build_workspace_version_in_member_summary(
     findings: &[&dyn Finding],
 ) -> WorkspaceVersionInMemberSummary {

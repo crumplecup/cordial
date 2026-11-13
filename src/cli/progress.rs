@@ -15,6 +15,7 @@ pub(super) struct IndicatifProgress {
 
 impl IndicatifProgress {
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub(super) fn new() -> Self {
         Self {
             multi: MultiProgress::with_draw_target(ProgressDrawTarget::stderr()),
@@ -22,6 +23,7 @@ impl IndicatifProgress {
     }
 
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub(super) fn hidden() -> Self {
         Self {
             multi: MultiProgress::with_draw_target(ProgressDrawTarget::hidden()),
@@ -61,6 +63,7 @@ struct IndicatifTask {
 
 impl IndicatifTask {
     #[instrument(level = "debug", skip(bar))]
+    #[hotpath::measure]
     fn new(bar: ProgressBar) -> Self {
         Self {
             bar,
@@ -97,6 +100,7 @@ impl Drop for IndicatifTask {
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn spinner_style() -> ProgressStyle {
     ProgressStyle::with_template("{spinner:.green} {msg}")
         .unwrap_or_else(|_| ProgressStyle::default_spinner())
@@ -104,6 +108,7 @@ fn spinner_style() -> ProgressStyle {
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn bar_style() -> ProgressStyle {
     ProgressStyle::with_template("{wide_bar:.cyan/blue} {pos}/{len} {msg}")
         .unwrap_or_else(|_| ProgressStyle::default_bar())

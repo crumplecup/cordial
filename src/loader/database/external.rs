@@ -70,6 +70,7 @@ impl Locator<'_> {
     /// implements one. The declaration's location is recorded when the trait is
     /// the workspace's; otherwise the fact says the declaration is foreign.
     #[tracing::instrument(level = "debug", skip(self, id, graph, node), err(level = "warn"))]
+    #[hotpath::measure]
     pub(super) fn record_trait_implementation(
         &self,
         graph: &mut CrateIr,

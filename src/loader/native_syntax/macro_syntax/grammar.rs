@@ -13,6 +13,7 @@ impl DatabaseSource<'_> {
     }
 
     #[tracing::instrument(level = "debug", skip(self, invocation))]
+    #[hotpath::measure]
     pub(super) fn try_macro_arguments(
         &self,
         invocation: &ast::MacroCall,
@@ -40,6 +41,7 @@ impl DatabaseSource<'_> {
         feature = "antipatterns"
     ))]
     #[tracing::instrument(level = "debug", skip(self, invocation))]
+    #[hotpath::measure]
     pub(in crate::loader::native_syntax) fn macro_items(
         &self,
         invocation: &ast::MacroCall,

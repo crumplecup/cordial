@@ -110,6 +110,7 @@ pub static CFG_HYGIENE_ETIQUETTE: LazyLock<StaticQualityEtiquette> = LazyLock::n
 });
 
 #[instrument(level = "debug", skip(findings))]
+#[hotpath::measure]
 fn quality_area_compute(findings: &[&dyn Finding]) -> (usize, String) {
     let unexpected = count_open_rule(findings, "UNEXPECTED-CFG-001");
     let verifier_mismatch = count_open_rule(findings, "CFG-VERIFIER-MISMATCH-001");

@@ -8,6 +8,7 @@ use ra_ap_syntax::{
 use std::collections::{BTreeMap, BTreeSet};
 
 #[tracing::instrument(level = "debug", skip(file))]
+#[hotpath::measure]
 pub(super) fn collect(file: &DatabaseSource<'_>) -> BTreeSet<String> {
     let mut declarations: BTreeMap<String, Vec<bool>> = BTreeMap::new();
     for item in file.tree().items() {

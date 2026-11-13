@@ -19,6 +19,7 @@ pub enum GlobImportRuleId {
 impl GlobImportRuleId {
     /// Stable string form of this value.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Import001 => "GLOB-IMPORT-001",
@@ -27,6 +28,7 @@ impl GlobImportRuleId {
 
     /// Parse from the stable identifier string.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn from_attr(value: &str) -> Option<Self> {
         match value {
             "GLOB-IMPORT-001" => Some(Self::Import001),
@@ -108,6 +110,7 @@ pub struct GlobImportFinding {
 
 impl GlobImportFinding {
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> GlobImportFindingBuilder {
         GlobImportFindingBuilder::default()
     }
@@ -166,6 +169,7 @@ pub struct GlobImportSiteRecord {
 impl GlobImportSiteRecord {
     /// Construct loader-owned glob-import evidence.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> GlobImportSiteRecordBuilder {
         GlobImportSiteRecordBuilder::default()
     }

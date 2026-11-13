@@ -25,6 +25,7 @@ pub(super) enum Derived {
 
 /// Derive the instantiations of the generic type `head`, at most `cap` of them.
 #[instrument(level = "debug", skip(head, resolver))]
+#[hotpath::measure]
 pub(super) fn derive(head: &TypeKey, resolver: &dyn TypeResolver, cap: usize) -> Derived {
     let params = resolver.parameters(head);
     if params.is_empty() {

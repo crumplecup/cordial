@@ -8,6 +8,7 @@ pub enum InternalErrorRecordKind {
 
 impl InternalErrorRecordKind {
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::TypeGraph => "type_graph",
@@ -16,6 +17,7 @@ impl InternalErrorRecordKind {
     }
 
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn from_attr(value: &str) -> Option<Self> {
         match value {
             "type_graph" => Some(Self::TypeGraph),

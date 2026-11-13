@@ -39,6 +39,7 @@ struct DirectFacts {
 
 #[salsa::tracked(returns(ref))]
 #[instrument(level = "debug", skip(db, key))]
+#[hotpath::measure]
 fn direct_facts<'db>(db: &'db dyn SemanticDatabase, key: FunctionKey<'db>) -> Option<DirectFacts> {
     collect_direct(db.root_database(), key.function(db))
 }
@@ -119,6 +120,7 @@ impl BodyWalk<'_, '_> {
     /// whose expansion `root` is, when it is one: ranges inside an expansion are
     /// not file coordinates, so its calls take the invocation's range.
     #[instrument(level = "debug", skip(self, root, invocation))]
+    #[hotpath::measure]
     fn node(
         &mut self,
         root: &ra_ap_syntax::SyntaxNode,
@@ -220,6 +222,7 @@ fn call_contract(
 
 #[salsa::tracked(returns(ref))]
 #[instrument(level = "debug", skip(db, key))]
+#[hotpath::measure]
 pub(super) fn function_evidence<'db>(
     db: &'db dyn SemanticDatabase,
     key: FunctionKey<'db>,

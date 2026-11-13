@@ -110,6 +110,7 @@ pub static PAGEANTRY_ETIQUETTE: LazyLock<StaticQualityEtiquette> = LazyLock::new
 });
 
 #[instrument(level = "debug", skip(findings))]
+#[hotpath::measure]
 fn quality_area_compute(findings: &[&dyn Finding]) -> (usize, String) {
     let traits = count_open_rule(findings, "PAGEANTRY-TRAIT-001");
     let barrels = count_open_rule(findings, "PAGEANTRY-BARREL-001");

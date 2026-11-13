@@ -17,6 +17,7 @@ struct StaleRow {
 
 impl StaleRow {
     #[instrument(level = "debug", skip(finding))]
+    #[hotpath::measure]
     fn from_finding(finding: &dyn Finding) -> Self {
         let mut sink = MapFindingSink::default();
         finding.emit(&mut sink);
@@ -38,6 +39,7 @@ impl StaleRow {
 }
 
 #[instrument(level = "debug", skip(findings))]
+#[hotpath::measure]
 fn open_rows(findings: &[&dyn Finding]) -> Vec<StaleRow> {
     findings
         .iter()

@@ -53,6 +53,7 @@ pub(super) fn result_recording(
 /// type is a reference or raw pointer. Both read the resolved type, so an alias
 /// that hides a reference, `Self`, and `impl Trait` are judged as what they are.
 #[tracing::instrument(level = "debug", skip(sema, function))]
+#[hotpath::measure]
 pub(super) fn return_recording(
     sema: &Semantics<'_, RootDatabase>,
     function: Function,
@@ -84,6 +85,7 @@ pub(super) fn return_recording(
 /// Whether the return type is the impl's own `Self` (through references and
 /// aliases) and whether a `bool` occurs anywhere in it.
 #[tracing::instrument(level = "debug", skip(sema, function))]
+#[hotpath::measure]
 pub(super) fn return_shape(
     sema: &Semantics<'_, RootDatabase>,
     function: Function,
@@ -115,6 +117,7 @@ pub(super) fn return_shape(
 /// judged on the binding's own type in the function's environment: a derived
 /// `Debug`, a `Vec` of one, and a `T: Debug` parameter are all recordable.
 #[tracing::instrument(level = "debug", skip(sema, function, source))]
+#[hotpath::measure]
 pub(super) fn parameters(
     sema: &Semantics<'_, RootDatabase>,
     function: Function,

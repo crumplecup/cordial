@@ -17,6 +17,7 @@ pub fn format_nanos(nanos: u64) -> String {
 
 /// The slowest tests and the per-binary totals of a timing record, `top` tests long.
 #[instrument(level = "debug", skip(record))]
+#[hotpath::measure]
 pub fn render_timing(record: &RunRecord, top: usize) -> String {
     let mut out = String::new();
     let total: u64 = record.tests().iter().map(|test| test.wall().median()).sum();
@@ -69,6 +70,7 @@ pub fn render_timing(record: &RunRecord, top: usize) -> String {
 
 /// The stages of a workflow record, slowest first, with the counters beneath.
 #[instrument(level = "debug", skip(record))]
+#[hotpath::measure]
 pub fn render_stages(record: &RunRecord, top: usize) -> String {
     let mut out = String::new();
     let state = record
@@ -101,6 +103,7 @@ pub fn render_stages(record: &RunRecord, top: usize) -> String {
 /// Where a profiled run's time went: the setup share of all test time, the tests
 /// with the most setup, and the functions that took the most in total.
 #[instrument(level = "debug", skip(record))]
+#[hotpath::measure]
 pub fn render_profile(record: &RunRecord, top: usize) -> String {
     let mut out = String::new();
     let wall: u64 = record.tests().iter().map(|test| test.wall().median()).sum();

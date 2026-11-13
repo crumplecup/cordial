@@ -5,6 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use super::Ty;
 
 #[tracing::instrument(level = "debug")]
+#[hotpath::measure]
 pub(super) fn scoped(scope: &[String], name: &str) -> String {
     if scope.is_empty() {
         name.to_string()
@@ -14,6 +15,7 @@ pub(super) fn scoped(scope: &[String], name: &str) -> String {
 }
 
 #[tracing::instrument(level = "debug", skip(formal, actual, generics, bindings))]
+#[hotpath::measure]
 pub(super) fn bind_generics(
     formal: &super::facts::Type,
     actual: &Ty,

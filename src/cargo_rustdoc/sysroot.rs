@@ -22,6 +22,7 @@ pub fn is_std_family_crate(crate_name: &str) -> bool {
 
 /// Path to `{toolchain}/lib/rustlib/src/rust/library/{crate}/Cargo.toml`.
 #[instrument(level = "debug", err(level = "warn"))]
+#[hotpath::measure]
 pub fn resolve_sysroot_library_manifest(crate_name: &str) -> CordialResult<PathBuf> {
     let cargo =
         resolve_nightly_cargo_binary().ok_or_else(|| CordialError::nightly_toolchain_required())?;
@@ -43,6 +44,7 @@ pub fn resolve_sysroot_library_manifest(crate_name: &str) -> CordialResult<PathB
 
 /// Build rustdoc JSON for std-family sysroot libraries and cache under [`SysrootCache`].
 #[instrument(level = "debug", skip(sysroot), err(level = "warn"))]
+#[hotpath::measure]
 pub fn build_sysroot_libraries(
     sysroot: &SysrootCache,
     only_crate: Option<&str>,
@@ -53,6 +55,7 @@ pub fn build_sysroot_libraries(
 
 /// Build rustdoc JSON for std-family sysroot libraries with progress reporting.
 #[instrument(level = "debug", skip(sysroot, progress), err(level = "warn"))]
+#[hotpath::measure]
 pub fn build_sysroot_libraries_with_progress(
     sysroot: &SysrootCache,
     only_crate: Option<&str>,
@@ -124,6 +127,7 @@ pub fn build_sysroot_libraries_with_progress(
 }
 
 #[instrument(level = "info", skip(sysroot), fields(crate_name = crate_name), err(level = "warn"))]
+#[hotpath::measure]
 fn run_sysroot_rustdoc(sysroot: &SysrootCache, crate_name: &str) -> CordialResult<PathBuf> {
     let manifest = resolve_sysroot_library_manifest(crate_name)?;
     let host_target = nightly_host_target()?;

@@ -26,6 +26,7 @@ struct TracingRow {
 
 impl TracingRow {
     #[instrument(level = "debug", skip(finding), ret)]
+    #[hotpath::measure]
     fn from_finding(finding: &dyn Finding) -> Self {
         let mut sink = MapFindingSink::default();
         finding.emit(&mut sink);
@@ -54,6 +55,7 @@ impl TracingRow {
 }
 
 #[instrument(level = "debug", skip(findings))]
+#[hotpath::measure]
 fn tracing_rows(findings: &[&dyn Finding]) -> Vec<TracingRow> {
     findings
         .iter()
@@ -66,11 +68,13 @@ fn tracing_rows(findings: &[&dyn Finding]) -> Vec<TracingRow> {
 }
 
 #[instrument(level = "debug", skip(rows))]
+#[hotpath::measure]
 fn open_rows(rows: &[TracingRow]) -> impl Iterator<Item = &TracingRow> {
     rows.iter().filter(|row| row.disposition == "open")
 }
 
 #[instrument(level = "debug", skip(rows))]
+#[hotpath::measure]
 fn crate_names(rows: &[&TracingRow]) -> Vec<String> {
     let mut names: Vec<String> = rows.iter().map(|row| row.crate_name.clone()).collect();
     names.sort();
@@ -303,6 +307,7 @@ impl Reporter for TracingSummaryReporter {
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn module_key(qualified_name: &str) -> String {
     let Some((module, _)) = qualified_name.rsplit_once("::") else {
         return String::new();

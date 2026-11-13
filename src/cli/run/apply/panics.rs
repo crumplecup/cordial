@@ -5,6 +5,7 @@ use std::io::Write;
 use std::path::Path;
 
 #[tracing::instrument(level = "debug", skip(summary), err(level = "warn"))]
+#[hotpath::measure]
 pub(super) fn report(
     project_root: &Path,
     summary: &PanicApplySummary,
@@ -72,6 +73,7 @@ pub(super) fn report(
 
 #[cfg(feature = "quality")]
 #[tracing::instrument(level = "debug", skip(store, summary), err(level = "warn"))]
+#[hotpath::measure]
 pub(super) fn report_worklist(
     project_root: &Path,
     store: &crate::StoreLayout,

@@ -97,6 +97,7 @@ pub static ALLOWS_ETIQUETTE: LazyLock<StaticQualityEtiquette> = LazyLock::new(||
 });
 
 #[instrument(level = "debug", skip(findings))]
+#[hotpath::measure]
 fn quality_area_compute(findings: &[&dyn Finding]) -> (usize, String) {
     let allows = count_open_category(findings, "allows");
     (allows, format!("allow attributes **{allows}**"))

@@ -113,6 +113,7 @@ pub static DERIVES_ETIQUETTE: LazyLock<StaticQualityEtiquette> = LazyLock::new(|
 });
 
 #[instrument(level = "debug", skip(findings))]
+#[hotpath::measure]
 fn quality_area_compute(findings: &[&dyn Finding]) -> (usize, String) {
     let builder = count_open_rule(findings, "DERIVE-BUILDER-001");
     let use_builder = count_open_rule(findings, "DERIVE-USE-BUILDER-001");

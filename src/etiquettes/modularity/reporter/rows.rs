@@ -25,6 +25,7 @@ pub(super) struct ModularityRow {
 
 impl ModularityRow {
     #[instrument(level = "debug", skip(finding), ret)]
+    #[hotpath::measure]
     pub(super) fn from_finding(finding: &dyn Finding) -> Self {
         let mut sink = MapFindingSink::default();
         finding.emit(&mut sink);
@@ -75,6 +76,7 @@ pub(super) fn is_inventory_row(
 }
 
 #[instrument(level = "debug", skip(findings))]
+#[hotpath::measure]
 pub(super) fn modularity_rows(findings: &[&dyn Finding]) -> Vec<ModularityRow> {
     findings
         .iter()
@@ -84,11 +86,13 @@ pub(super) fn modularity_rows(findings: &[&dyn Finding]) -> Vec<ModularityRow> {
 }
 
 #[instrument(level = "debug", skip(rows))]
+#[hotpath::measure]
 pub(super) fn open_rows(rows: &[ModularityRow]) -> impl Iterator<Item = &ModularityRow> {
     rows.iter().filter(|row| row.disposition() == "open")
 }
 
 #[instrument(level = "debug", skip(rows))]
+#[hotpath::measure]
 pub(super) fn crate_names(rows: &[&ModularityRow]) -> Vec<String> {
     let mut names: Vec<String> = rows.iter().map(|row| row.crate_name().clone()).collect();
     names.sort();
@@ -97,6 +101,7 @@ pub(super) fn crate_names(rows: &[&ModularityRow]) -> Vec<String> {
 }
 
 #[instrument(level = "debug", skip(rows))]
+#[hotpath::measure]
 pub(super) fn sort_by_lines_desc(rows: &mut [&ModularityRow]) {
     rows.sort_by(|left, right| {
         right
@@ -108,11 +113,13 @@ pub(super) fn sort_by_lines_desc(rows: &mut [&ModularityRow]) {
 }
 
 #[instrument(level = "debug", skip(rows))]
+#[hotpath::measure]
 pub(super) fn count_kind(rows: &[&ModularityRow], kind: &str) -> usize {
     rows.iter().filter(|row| row.kind() == kind).count()
 }
 
 #[instrument(level = "debug", skip(rows))]
+#[hotpath::measure]
 pub(super) fn max_lines(rows: &[&ModularityRow], kind: &str) -> u32 {
     rows.iter()
         .filter(|row| row.kind() == kind)
@@ -122,6 +129,7 @@ pub(super) fn max_lines(rows: &[&ModularityRow], kind: &str) -> u32 {
 }
 
 #[instrument(level = "debug", skip(rows))]
+#[hotpath::measure]
 pub(super) fn file_module_inputs(rows: &[&ModularityRow]) -> Vec<ModuleSizeInput> {
     rows.iter()
         .filter(|row| row.kind() == "MODULARITY-MODULE-SIZE" && row.inline() != "true")

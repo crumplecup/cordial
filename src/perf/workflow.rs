@@ -51,6 +51,7 @@ impl StageSample {
     /// holds an earlier run's timings, which are not this run's: only the process
     /// time is kept, and `pipeline_ran` is 0 so the difference is visible.
     #[instrument(level = "debug", skip(ledger))]
+    #[hotpath::measure]
     pub fn from_ledger(ledger: &GateLedger, process_nanos: u64, fresh: bool) -> Self {
         let mut stages = BTreeMap::from([("process".to_owned(), process_nanos)]);
         let mut counters = BTreeMap::from([("pipeline_ran".to_owned(), u64::from(fresh))]);
@@ -72,6 +73,7 @@ impl StageSample {
 /// Fold repeated samples into one timing per stage, and take the counters of
 /// the last sample (they are the same on every repeat of an unchanged tree).
 #[instrument(level = "debug", skip(samples))]
+#[hotpath::measure]
 pub fn fold(samples: &[StageSample]) -> (Vec<StageTiming>, BTreeMap<String, u64>) {
     let mut by_stage: BTreeMap<&String, Vec<u64>> = BTreeMap::new();
     for sample in samples {
@@ -118,6 +120,7 @@ impl Step {
 /// Run `step` once against `root` with `work_home` as the store home, and read
 /// the ledger it wrote.
 #[instrument(level = "debug", skip(request), err(level = "warn"))]
+#[hotpath::measure]
 fn run_once(
     request: &WorkflowRequest,
     root: &Path,
@@ -169,6 +172,7 @@ fn run_once(
 
 /// `session start` or `session stop` for the work store, with output discarded.
 #[instrument(level = "debug", skip(request), err(level = "warn"))]
+#[hotpath::measure]
 fn control(
     request: &WorkflowRequest,
     root: &Path,
@@ -197,6 +201,7 @@ fn control(
 
 /// Edit `file`, run `submit`, and put the file back whatever happened.
 #[instrument(level = "debug", skip(request), err(level = "warn"))]
+#[hotpath::measure]
 fn edited_run(
     request: &WorkflowRequest,
     root: &Path,
@@ -213,6 +218,7 @@ fn edited_run(
 
 /// Append one comment line to `file` and return the original bytes to restore.
 #[instrument(level = "debug", skip(file), err(level = "warn"))]
+#[hotpath::measure]
 fn edit_file(file: &Path, round: u32) -> CordialResult<Vec<u8>> {
     let original = std::fs::read(file)?;
     let mut edited = original.clone();
@@ -225,6 +231,7 @@ fn edit_file(file: &Path, round: u32) -> CordialResult<Vec<u8>> {
 /// `submit` straight after, and (when an edit file is named) an incremental run after
 /// one edit. Returns one record per state. The edited file is always restored.
 #[instrument(level = "debug", skip(root, work_home), err(level = "warn"))]
+#[hotpath::measure]
 pub fn measure_workflow(
     root: &Path,
     work_home: &Path,

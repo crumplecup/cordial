@@ -64,6 +64,7 @@ impl Hook for dyn Reporter + '_ {
 }
 
 #[instrument(level = "debug", skip(plugins, direct_etiquettes, filter, session))]
+#[hotpath::measure]
 pub(super) fn resolved_etiquettes(
     plugins: &[&'static dyn Plugin],
     direct_etiquettes: &[Arc<dyn Etiquette>],
@@ -101,6 +102,7 @@ pub(super) fn resolved_etiquettes(
 }
 
 #[instrument(level = "debug", skip(etiquettes))]
+#[hotpath::measure]
 pub(super) fn dedupe_loaders(etiquettes: &[Arc<dyn Etiquette>]) -> Vec<&dyn Loader> {
     dedupe_hooks(
         etiquettes
@@ -110,6 +112,7 @@ pub(super) fn dedupe_loaders(etiquettes: &[Arc<dyn Etiquette>]) -> Vec<&dyn Load
 }
 
 #[instrument(level = "debug", skip(etiquettes, loaders))]
+#[hotpath::measure]
 pub(super) fn dedupe_enrichers<'a>(
     etiquettes: &'a [Arc<dyn Etiquette>],
     loaders: &[&dyn Loader],
@@ -171,6 +174,7 @@ pub(super) fn dedupe_enrichers<'a>(
 }
 
 #[instrument(level = "debug", skip(loaders))]
+#[hotpath::measure]
 fn loaders_include_source_and_rustdoc(loaders: &[&dyn Loader]) -> bool {
     #[cfg(feature = "rustdoc")]
     {
@@ -196,6 +200,7 @@ fn loaders_include_source_and_rustdoc(loaders: &[&dyn Loader]) -> bool {
 }
 
 #[instrument(level = "debug", skip(enricher, load_views))]
+#[hotpath::measure]
 pub(super) fn select_load_view<'a>(
     enricher: &dyn IrEnricher,
     load_views: &'a HashMap<String, Box<dyn LoadView>>,
@@ -219,6 +224,7 @@ pub(super) fn select_load_view<'a>(
 }
 
 #[instrument(level = "debug", skip(etiquettes))]
+#[hotpath::measure]
 pub(super) fn dedupe_probes(etiquettes: &[Arc<dyn Etiquette>]) -> Vec<&dyn Probe> {
     dedupe_hooks(
         etiquettes
@@ -228,6 +234,7 @@ pub(super) fn dedupe_probes(etiquettes: &[Arc<dyn Etiquette>]) -> Vec<&dyn Probe
 }
 
 #[instrument(level = "debug", skip(etiquettes))]
+#[hotpath::measure]
 pub(super) fn dedupe_assessors(etiquettes: &[Arc<dyn Etiquette>]) -> Vec<&dyn Assessor> {
     dedupe_hooks(
         etiquettes
@@ -237,6 +244,7 @@ pub(super) fn dedupe_assessors(etiquettes: &[Arc<dyn Etiquette>]) -> Vec<&dyn As
 }
 
 #[instrument(level = "debug", skip(etiquettes))]
+#[hotpath::measure]
 pub(super) fn dedupe_workspace_assessors(
     etiquettes: &[Arc<dyn Etiquette>],
 ) -> Vec<&dyn WorkspaceAssessor> {
@@ -248,6 +256,7 @@ pub(super) fn dedupe_workspace_assessors(
 }
 
 #[instrument(level = "debug", skip(etiquettes))]
+#[hotpath::measure]
 pub(super) fn dedupe_reporters(etiquettes: &[Arc<dyn Etiquette>]) -> Vec<&dyn Reporter> {
     dedupe_hooks(
         etiquettes
@@ -257,6 +266,7 @@ pub(super) fn dedupe_reporters(etiquettes: &[Arc<dyn Etiquette>]) -> Vec<&dyn Re
 }
 
 #[instrument(level = "debug", skip(items))]
+#[hotpath::measure]
 fn dedupe_hooks<'a, T: Hook + ?Sized>(items: impl Iterator<Item = &'a T>) -> Vec<&'a T> {
     let mut seen = HashSet::new();
     let mut out = Vec::new();

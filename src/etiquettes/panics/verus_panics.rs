@@ -22,6 +22,7 @@ use super::{PanicKind, PanicSiteRecord};
 use tracing::instrument;
 
 #[instrument(level = "debug", skip(ir), err(level = "warn"))]
+#[hotpath::measure]
 pub(crate) fn findings(
     ir: &crate::verus_ir::VerusCrateIr,
     crate_root: &Path,
@@ -62,6 +63,7 @@ pub(crate) fn findings(
 }
 
 #[instrument(level = "debug", skip(kind))]
+#[hotpath::measure]
 fn panic_kind(kind: crate::verus_ir::VerusPanicKind) -> PanicKind {
     match kind {
         crate::verus_ir::VerusPanicKind::Panic => PanicKind::Panic,

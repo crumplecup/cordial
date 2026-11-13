@@ -26,6 +26,7 @@ use crate::store::StoreLayout;
 /// The crates the resolver may read for a target: the target itself first,
 /// then its configured extras, each once.
 #[instrument(level = "debug", skip(target))]
+#[hotpath::measure]
 pub fn resolver_crates(
     upstream_crate: &str,
     target: Option<&AmenableExtTargetConfig>,
@@ -45,6 +46,7 @@ pub fn resolver_crates(
 /// Build (or reuse the cache for) each crate's rustdoc JSON through
 /// `shadow_crate`'s dependency on it, and read them into one resolver.
 #[instrument(level = "info", skip(store, config), err(level = "warn"))]
+#[hotpath::measure]
 pub fn load_ext_resolver(
     project_root: &Path,
     store: &StoreLayout,
@@ -81,6 +83,7 @@ pub struct ExtExpansionInputs<'a> {
 
 /// Expand the generic rows among `entries` into parents and instantiations.
 #[instrument(level = "debug", skip(entries, inputs), err(level = "warn"))]
+#[hotpath::measure]
 pub fn expand_ext_entries(
     entries: &[AmenableStdEntry],
     inputs: &ExtExpansionInputs<'_>,
@@ -93,6 +96,7 @@ pub fn expand_ext_entries(
 
 /// The same expansion over a whole report, recounted.
 #[instrument(level = "debug", skip(report, inputs), err(level = "warn"))]
+#[hotpath::measure]
 pub fn expand_ext_report(
     report: &AmenableStdReport,
     inputs: &ExtExpansionInputs<'_>,

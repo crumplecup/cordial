@@ -64,6 +64,7 @@ impl Reporter for AmenableStdReporter {
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn artifact(name: &str, media_type: &str, body: String) -> Box<dyn Artifact> {
     Box::new(TextArtifact::new(
         name.to_string(),

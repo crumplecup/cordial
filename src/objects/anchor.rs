@@ -14,6 +14,7 @@ pub struct NodeAnchor(NodeId);
 impl NodeAnchor {
     /// Create an anchor for a graph node.
     #[instrument(level = "debug", skip(node_id))]
+    #[hotpath::measure]
     pub fn new(node_id: NodeId) -> Self {
         Self(node_id)
     }

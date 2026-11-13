@@ -146,12 +146,14 @@ struct CategoryCounts {
 
 impl CategoryCounts {
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     fn total(self) -> usize {
         self.open + self.exemplar + self.suppressed
     }
 }
 
 #[instrument(level = "debug", skip(sink))]
+#[hotpath::measure]
 fn field(sink: &MapFindingSink, name: &str) -> Option<String> {
     sink.fields()
         .iter()

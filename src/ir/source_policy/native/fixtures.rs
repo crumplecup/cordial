@@ -9,6 +9,7 @@ use std::path::Path;
 /// Collect allows evidence from explicitly supplied source.
 #[cfg(feature = "allows")]
 #[tracing::instrument(level = "debug", skip(source, file), err(level = "warn"))]
+#[hotpath::measure]
 pub fn scan_allows_source(
     source: &str,
     file: &Path,
@@ -27,6 +28,7 @@ pub fn scan_allows_source(
 /// Collect cfg hygiene evidence from explicitly supplied source.
 #[cfg(feature = "cfg_hygiene")]
 #[tracing::instrument(level = "debug", skip(source, file), err(level = "warn"))]
+#[hotpath::measure]
 pub fn scan_cfg_hygiene_source(
     source: &str,
     file: &Path,
@@ -45,6 +47,7 @@ pub fn scan_cfg_hygiene_source(
 /// Collect cfg scatter evidence from explicitly supplied source.
 #[cfg(feature = "cfg_scatter")]
 #[tracing::instrument(level = "debug", skip(source, file), err(level = "warn"))]
+#[hotpath::measure]
 pub fn scan_cfg_scatter_source(
     source: &str,
     file: &Path,
@@ -63,6 +66,7 @@ pub fn scan_cfg_scatter_source(
 /// Collect glob imports evidence from explicitly supplied source.
 #[cfg(feature = "glob_imports")]
 #[tracing::instrument(level = "debug", skip(source, file), err(level = "warn"))]
+#[hotpath::measure]
 pub fn scan_glob_imports_source(
     source: &str,
     file: &Path,
@@ -81,6 +85,7 @@ pub fn scan_glob_imports_source(
 /// Collect inline tests evidence from explicitly supplied source.
 #[cfg(feature = "inline_tests")]
 #[tracing::instrument(level = "debug", skip(source, file), err(level = "warn"))]
+#[hotpath::measure]
 pub fn scan_inline_tests_source(
     source: &str,
     file: &Path,
@@ -99,6 +104,7 @@ pub fn scan_inline_tests_source(
 /// Collect modularity evidence from explicitly supplied source.
 #[cfg(feature = "modularity")]
 #[tracing::instrument(level = "debug", skip(source, file), err(level = "warn"))]
+#[hotpath::measure]
 pub fn scan_modularity_source(
     source: &str,
     file: &Path,
@@ -117,6 +123,7 @@ pub fn scan_modularity_source(
 /// Collect pageantry evidence from explicitly supplied source.
 #[cfg(feature = "pageantry")]
 #[tracing::instrument(level = "debug", skip(source, file), err(level = "warn"))]
+#[hotpath::measure]
 pub fn scan_pageantry_source(
     source: &str,
     file: &Path,
@@ -135,6 +142,7 @@ pub fn scan_pageantry_source(
 /// Collect derives evidence from explicitly supplied source.
 #[cfg(feature = "derives")]
 #[tracing::instrument(level = "debug", skip(source, file), err(level = "warn"))]
+#[hotpath::measure]
 pub fn scan_derives_source(
     source: &str,
     file: &Path,

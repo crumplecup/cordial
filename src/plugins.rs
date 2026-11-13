@@ -40,12 +40,14 @@ mod error_handling_plugin_wiring {
 
     /// Built-in error-handling plugins.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn error_handling_plugins() -> Vec<&'static dyn Plugin> {
         vec![&STANDARD_ERROR_HANDLING as &dyn Plugin]
     }
 
     /// Error-handling plugins only.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn error_handling_only_plugins() -> Vec<&'static dyn Plugin> {
         error_handling_plugins()
     }
@@ -69,6 +71,7 @@ pub use coverage_targets::ir_crate_names_for_coverage_plugins;
 /// Built-in quality plugins (source scanners). Includes the error-handling
 /// family so panicking APIs and Result-chain analysis run together.
 #[instrument(level = "debug")]
+#[hotpath::measure]
 pub fn quality_plugins() -> Vec<&'static dyn Plugin> {
     let out: Vec<&'static dyn Plugin> = quality_etiquette_plugins()
         .into_iter()
@@ -81,6 +84,7 @@ pub fn quality_plugins() -> Vec<&'static dyn Plugin> {
 
 /// Built-in coverage plugins.
 #[instrument(level = "debug")]
+#[hotpath::measure]
 pub fn coverage_plugins() -> Vec<&'static dyn Plugin> {
     #[cfg(feature = "rustdoc")]
     {
@@ -94,6 +98,7 @@ pub fn coverage_plugins() -> Vec<&'static dyn Plugin> {
 
 /// Coverage plugins appropriate for a detected workspace hub.
 #[instrument(level = "debug", skip(hub))]
+#[hotpath::measure]
 #[cfg(any(feature = "homecoming_std", feature = "impl_coverage"))]
 pub fn coverage_plugins_for_hub(hub: crate::plugin::WorkspaceHub) -> Vec<&'static dyn Plugin> {
     coverage_targets::coverage_plugins_for_hub(hub)
@@ -101,6 +106,7 @@ pub fn coverage_plugins_for_hub(hub: crate::plugin::WorkspaceHub) -> Vec<&'stati
 
 /// All built-in plugins for the current feature set.
 #[instrument(level = "debug")]
+#[hotpath::measure]
 pub fn all_plugins() -> Vec<&'static dyn Plugin> {
     let mut out = quality_plugins();
     out.extend(coverage_plugins());
@@ -109,18 +115,21 @@ pub fn all_plugins() -> Vec<&'static dyn Plugin> {
 
 /// Quality plugins only.
 #[instrument(level = "debug")]
+#[hotpath::measure]
 pub fn quality_only_plugins() -> Vec<&'static dyn Plugin> {
     plugins_in_category(&all_plugins(), PluginCategory::Quality)
 }
 
 /// Coverage plugins only.
 #[instrument(level = "debug")]
+#[hotpath::measure]
 pub fn coverage_only_plugins() -> Vec<&'static dyn Plugin> {
     plugins_in_category(&all_plugins(), PluginCategory::Coverage)
 }
 
 /// Static quality plugins wrapping each enabled etiquette.
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn quality_etiquette_plugins() -> Vec<&'static EtiquettePlugin> {
     let items: [Option<&'static EtiquettePlugin>; 20] = [
         #[cfg(feature = "tracing")]
@@ -318,6 +327,7 @@ etiquette_plugin_fn!(
 
 /// Legacy etiquette list — flatten of all registered quality + coverage plugins.
 #[instrument(level = "debug", skip(session))]
+#[hotpath::measure]
 pub fn all_etiquettes_from_plugins(
     session: &dyn crate::SessionView,
 ) -> Vec<std::sync::Arc<dyn Etiquette>> {

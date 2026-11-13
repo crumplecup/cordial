@@ -204,6 +204,7 @@ pub struct VerusFnFacts {
 impl VerusFnFacts {
     /// Start a builder for this value.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> VerusFnFactsBuilder {
         VerusFnFactsBuilder::default()
     }
@@ -322,6 +323,7 @@ pub struct VerusCrateIr {
 impl VerusCrateIr {
     /// Bind memoized payload facts to the canonical invocation that issued them.
     #[tracing::instrument(level = "debug", skip(self, file))]
+    #[hotpath::measure]
     pub(crate) fn in_context(&self, file: &Path, module_path: &str, cfg_test: bool) -> Self {
         let mut facts = self.clone();
         for function in &mut facts.functions {

@@ -9,6 +9,7 @@ use std::{
 };
 
 #[tracing::instrument(level = "debug", skip(read), err(level = "warn"))]
+#[hotpath::measure]
 pub(crate) fn collect(
     root: &Path,
     mut read: impl FnMut(&Path) -> CordialResult<(VisibilityBody, FileSnapshot)>,
@@ -54,6 +55,7 @@ struct Header {
 }
 
 #[tracing::instrument(level = "debug", skip_all, err(level = "warn"))]
+#[hotpath::measure]
 fn file_tree(
     mut header: Header,
     read: &mut impl FnMut(&Path) -> CordialResult<(VisibilityBody, FileSnapshot)>,
@@ -75,6 +77,7 @@ fn file_tree(
 }
 
 #[tracing::instrument(level = "debug", skip_all, err(level = "warn"))]
+#[hotpath::measure]
 fn body_tree(
     body: VisibilityBody,
     header: Header,

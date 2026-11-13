@@ -23,6 +23,7 @@ pub struct ChecklistSource {
 impl ChecklistSource {
     /// Read checklists under the given store's `findings/` directory.
     #[instrument(level = "debug", skip(store))]
+    #[hotpath::measure]
     pub fn new(store: &StoreLayout) -> Self {
         Self {
             findings_dir: store.findings_dir(),
@@ -32,6 +33,7 @@ impl ChecklistSource {
 
     /// Read checklists from an explicit directory, useful for library callers.
     #[instrument(level = "debug", skip(path))]
+    #[hotpath::measure]
     pub fn from_findings_dir(path: impl Into<PathBuf>) -> Self {
         Self {
             findings_dir: path.into(),
@@ -72,6 +74,7 @@ impl ItemSource for ChecklistSource {
 }
 
 #[instrument(level = "debug", skip(area, checklist, items))]
+#[hotpath::measure]
 fn parse_checklist(
     area: &QualityAreaSummary,
     checklist: &crate::QualityChecklist,
@@ -131,6 +134,7 @@ fn parse_checklist(
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn heading(line: &str) -> Option<(usize, &str)> {
     let level = line.bytes().take_while(|byte| *byte == b'#').count();
     if (1..=6).contains(&level) && line.as_bytes().get(level) == Some(&b' ') {
@@ -141,6 +145,7 @@ fn heading(line: &str) -> Option<(usize, &str)> {
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn italic_paragraph(line: &str) -> Option<&str> {
     let trimmed = line.trim();
     if let Some(value) = trimmed.strip_prefix('_').and_then(|s| s.strip_suffix('_')) {
@@ -153,6 +158,7 @@ fn italic_paragraph(line: &str) -> Option<&str> {
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn file_hint(line: &str) -> Option<String> {
     let mut segments = line.split('`');
     while segments.next().is_some() {
@@ -168,6 +174,7 @@ fn file_hint(line: &str) -> Option<String> {
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn strip_location(quoted: &str) -> &str {
     let Some((path, line)) = quoted.rsplit_once(':') else {
         return quoted;
@@ -180,6 +187,7 @@ fn strip_location(quoted: &str) -> &str {
 }
 
 #[instrument(level = "debug", skip(path))]
+#[hotpath::measure]
 fn looks_like_source_path(path: &str) -> bool {
     let candidate = Path::new(path);
     candidate.is_absolute()

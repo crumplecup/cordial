@@ -12,6 +12,7 @@ use crate::{
 use tracing::instrument;
 
 #[instrument(level = "debug", err(level = "warn"))]
+#[hotpath::measure]
 pub(super) fn execute_tiers(project_root: &Path, store_home: Option<PathBuf>) -> CordialResult<()> {
     let session = SessionBuilder::new(project_root)
         .with_store_home(store_home.unwrap_or_else(default_store_home))
@@ -28,6 +29,7 @@ pub(super) fn execute_tiers(project_root: &Path, store_home: Option<PathBuf>) ->
 }
 
 #[instrument(level = "debug", skip(etiquettes, config))]
+#[hotpath::measure]
 fn render_tiers(etiquettes: &[&dyn Etiquette], config: &CordialConfig) -> String {
     let mut grouped: BTreeMap<String, Vec<&dyn Etiquette>> = BTreeMap::new();
     for name in [Tier::QUICK, Tier::BUILD, Tier::DEEP] {
@@ -91,6 +93,7 @@ fn assignment_source(etiquette: &dyn Etiquette, config: &CordialConfig) -> &'sta
 }
 
 #[instrument(level = "debug", skip(etiquettes, config))]
+#[hotpath::measure]
 pub(super) fn render_explain_list_with_tiers(
     etiquettes: &[&dyn Etiquette],
     config: &CordialConfig,
@@ -112,6 +115,7 @@ pub(super) fn render_explain_list_with_tiers(
 }
 
 #[instrument(level = "debug", skip(etiquette, config))]
+#[hotpath::measure]
 pub(super) fn render_explain_page_with_tier(
     etiquette: &dyn Etiquette,
     config: &CordialConfig,

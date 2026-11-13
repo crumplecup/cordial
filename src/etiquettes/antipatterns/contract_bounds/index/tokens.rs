@@ -7,12 +7,14 @@ use tracing::instrument;
 /// Drop the `::` a call-site turbofish (`Type::<Args>`) writes before its
 /// generic argument list.
 #[instrument(level = "debug")]
+#[hotpath::measure]
 pub(in crate::etiquettes::antipatterns::contract_bounds) fn strip_turbofish(text: &str) -> String {
     text.replace(" :: <", " <")
 }
 
 /// Strip every top-level `#[trigger]` attribute from `tokens`.
 #[instrument(level = "debug", skip(tokens))]
+#[hotpath::measure]
 pub(in crate::etiquettes::antipatterns::contract_bounds) fn strip_trigger_attrs(
     tokens: Vec<Token>,
 ) -> Vec<Token> {
@@ -37,6 +39,7 @@ pub(in crate::etiquettes::antipatterns::contract_bounds) fn strip_trigger_attrs(
 /// directly from tokens without requiring the argument list to parse as
 /// plain Rust syntax.
 #[instrument(level = "debug", skip(clause))]
+#[hotpath::measure]
 pub(in crate::etiquettes::antipatterns::contract_bounds) fn bare_named_call_name(
     clause: &[Token],
 ) -> Option<String> {
@@ -54,6 +57,7 @@ pub(in crate::etiquettes::antipatterns::contract_bounds) fn bare_named_call_name
 
 /// The clause as a Rust expression, when its tokens form exactly one.
 #[instrument(level = "debug", skip(clause))]
+#[hotpath::measure]
 pub(in crate::etiquettes::antipatterns::contract_bounds) fn expression(
     clause: &[Token],
 ) -> Option<ast::Expr> {
@@ -67,6 +71,7 @@ pub(in crate::etiquettes::antipatterns::contract_bounds) fn expression(
 /// [`bare_named_call_name`], extended to also recognize a Creusot/Verus
 /// bare call carrying a leading outer attribute (`#[trigger] name(...)`).
 #[instrument(level = "debug", skip(clause))]
+#[hotpath::measure]
 pub(in crate::etiquettes::antipatterns::contract_bounds) fn named_call_name_allowing_leading_attr(
     clause: &[Token],
 ) -> Option<String> {
@@ -82,6 +87,7 @@ pub(in crate::etiquettes::antipatterns::contract_bounds) fn named_call_name_allo
 /// Re-tokenize and re-stringify a fragment or clause into a canonical
 /// form for the type-prefix suffix comparison.
 #[instrument(level = "debug")]
+#[hotpath::measure]
 pub(in crate::etiquettes::antipatterns::contract_bounds) fn normalize_text(text: &str) -> String {
     parse(text).map_or_else(
         || canonicalize_type_text(text.trim()),
@@ -92,6 +98,7 @@ pub(in crate::etiquettes::antipatterns::contract_bounds) fn normalize_text(text:
 /// Canonicalize `text` for type-prefix suffix comparison by stripping
 /// whitespace and collapsing an elidable trailing comma before `>`.
 #[instrument(level = "debug")]
+#[hotpath::measure]
 pub(in crate::etiquettes::antipatterns::contract_bounds) fn canonicalize_type_text(
     text: &str,
 ) -> String {

@@ -202,6 +202,7 @@ impl SourceEnricher for FunctionInventoryEnricher {
 
 /// Project loader-owned facts with the current crate and recording policy.
 #[instrument(level = "debug", skip(ir), err(level = "warn"))]
+#[hotpath::measure]
 fn inventory_records(
     ir: &dyn crate::IrView,
     crate_root: &std::path::Path,
@@ -256,6 +257,7 @@ fn inventory_records(
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn module_context(qualified_name: &str) -> String {
     match qualified_name.rsplit_once("::") {
         Some((module, _)) => module.to_string(),

@@ -35,6 +35,7 @@ pub(super) struct Clause {
 
 impl Clause {
     #[instrument(level = "debug", skip(atom))]
+    #[hotpath::measure]
     fn atom(atom: &CfgAtom, negated: bool) -> Self {
         let mut clause = Self::default();
         if negated {
@@ -47,6 +48,7 @@ impl Clause {
 
     /// Both clauses at once, or `None` when they contradict.
     #[instrument(level = "debug", skip(self, other))]
+    #[hotpath::measure]
     fn and(&self, other: &Self) -> Option<Self> {
         let on: BTreeSet<_> = self.on.union(&other.on).cloned().collect();
         let off: BTreeSet<_> = self.off.union(&other.off).cloned().collect();

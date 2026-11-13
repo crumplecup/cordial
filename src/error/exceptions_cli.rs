@@ -15,6 +15,7 @@ pub struct CoverageSkipRequiresPathSource {
 impl CoverageSkipRequiresPathSource {
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn new() -> Self {
         let loc = Location::caller();
         Self {
@@ -47,6 +48,7 @@ pub struct QualityExceptionRequiresEtiquetteSource {
 impl QualityExceptionRequiresEtiquetteSource {
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn new() -> Self {
         let loc = Location::caller();
         Self {
@@ -79,6 +81,7 @@ pub struct QualityExceptionRequiresFileSource {
 impl QualityExceptionRequiresFileSource {
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn new() -> Self {
         let loc = Location::caller();
         Self {
@@ -113,6 +116,7 @@ pub struct LabelMustNotBeEmptySource {
 impl LabelMustNotBeEmptySource {
     #[track_caller]
     #[instrument(level = "debug", skip(label))]
+    #[hotpath::measure]
     pub fn new(label: impl Into<String>) -> Self {
         let loc = Location::caller();
         Self {
@@ -156,6 +160,7 @@ pub struct ExceptionsCliError {
 impl ExceptionsCliError {
     #[track_caller]
     #[instrument(level = "debug", skip(kind))]
+    #[hotpath::measure]
     fn new(kind: ExceptionsCliErrorKind) -> Self {
         let loc = Location::caller();
         Self {
@@ -197,6 +202,7 @@ impl super::CordialError {
     /// `cordial exceptions add --patch-set` was used without `--path`.
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn coverage_skip_requires_path() -> Self {
         Self::from_kind(super::CordialErrorKind::ExceptionsCli(
             ExceptionsCliError::new(ExceptionsCliErrorKind::CoverageSkipRequiresPath(
@@ -208,6 +214,7 @@ impl super::CordialError {
     /// `cordial exceptions add` was used without `--etiquette`.
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn quality_exception_requires_etiquette() -> Self {
         Self::from_kind(super::CordialErrorKind::ExceptionsCli(
             ExceptionsCliError::new(ExceptionsCliErrorKind::QualityExceptionRequiresEtiquette(
@@ -219,6 +226,7 @@ impl super::CordialError {
     /// `cordial exceptions add` was used without `--file`.
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn quality_exception_requires_file() -> Self {
         Self::from_kind(super::CordialErrorKind::ExceptionsCli(
             ExceptionsCliError::new(ExceptionsCliErrorKind::QualityExceptionRequiresFile(
@@ -230,6 +238,7 @@ impl super::CordialError {
     /// A required label (etiquette, crate name, ...) was empty.
     #[track_caller]
     #[instrument(level = "debug", skip(label))]
+    #[hotpath::measure]
     pub fn label_must_not_be_empty(label: impl Into<String>) -> Self {
         Self::from_kind(super::CordialErrorKind::ExceptionsCli(
             ExceptionsCliError::new(ExceptionsCliErrorKind::LabelMustNotBeEmpty(

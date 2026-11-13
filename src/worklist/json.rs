@@ -11,6 +11,7 @@ const VERSION: u32 = 1;
 const VERBOSE_LIMIT: usize = 25;
 
 #[instrument(level = "debug", skip(store, list, stale))]
+#[hotpath::measure]
 pub(crate) fn json_open(
     command: &str,
     store: &StoreLayout,
@@ -59,6 +60,7 @@ pub(crate) fn json_open(
 }
 
 #[instrument(level = "debug", skip(store, list, stale, changes))]
+#[hotpath::measure]
 pub(crate) fn json_claim(
     command: &str,
     store: &StoreLayout,

@@ -133,6 +133,7 @@ impl QualityAreaSpec {
 /// Every finding in `findings` still open (not suppressed or an exemplar), the
 /// standard scope for a quality-report area's own open-item count.
 #[instrument(level = "debug", skip(findings))]
+#[hotpath::measure]
 pub fn open_findings<'a>(
     findings: &'a [&'a dyn Finding],
 ) -> impl Iterator<Item = &'a dyn Finding> + 'a {
@@ -144,6 +145,7 @@ pub fn open_findings<'a>(
 
 /// Count of open findings in one rule category.
 #[instrument(level = "debug", skip(findings))]
+#[hotpath::measure]
 pub fn count_open_category(findings: &[&dyn Finding], category: &str) -> usize {
     open_findings(findings)
         .filter(|finding| finding.rule().category() == category)
@@ -152,6 +154,7 @@ pub fn count_open_category(findings: &[&dyn Finding], category: &str) -> usize {
 
 /// Count of open findings under one specific rule id.
 #[instrument(level = "debug", skip(findings))]
+#[hotpath::measure]
 pub fn count_open_rule(findings: &[&dyn Finding], rule_id: &str) -> usize {
     open_findings(findings)
         .filter(|finding| finding.rule().id() == rule_id)
@@ -160,6 +163,7 @@ pub fn count_open_rule(findings: &[&dyn Finding], rule_id: &str) -> usize {
 
 /// One emitted field's value off a finding, by name.
 #[instrument(level = "debug", skip(finding))]
+#[hotpath::measure]
 pub fn finding_field(finding: &dyn Finding, name: &str) -> Option<String> {
     let mut sink = MapFindingSink::default();
     finding.emit(&mut sink);

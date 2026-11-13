@@ -36,6 +36,7 @@ pub struct DependencySurveyRecord {
 impl DependencySurveyRecord {
     /// Construct a dependency survey record.
     #[instrument(level = "debug", skip(input))]
+    #[hotpath::measure]
     pub(crate) fn from_input(input: DependencySurveyRecordInput) -> Self {
         let mut indicators = indicators_for(&input.version_spec, &input.locked_versions);
         indicators.extend(input.indicators);
@@ -58,6 +59,7 @@ impl DependencySurveyRecord {
 
     /// Attach one registry freshness observation to this dependency row.
     #[instrument(level = "debug", skip(self, observation))]
+    #[hotpath::measure]
     pub(crate) fn add_freshness_observation(
         &mut self,
         observation: DependencyFreshnessObservation,
@@ -109,6 +111,7 @@ impl DependencySurveyRecord {
 
     /// Finding rule ids formatted for a flat artifact row.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn freshness_rule_ids_display(&self) -> String {
         let mut rule_ids = self
             .freshness_observations
@@ -159,12 +162,14 @@ pub(crate) struct DependencySurveyRecordInput {
 impl DependencySurveyRecordInput {
     /// Start building a dependency survey record input.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub(crate) fn builder() -> DependencySurveyRecordInputBuilder {
         DependencySurveyRecordInputBuilder::default()
     }
 }
 
 #[instrument(level = "debug", skip(version_spec))]
+#[hotpath::measure]
 fn indicators_for(
     version_spec: &ManifestVersionSpec,
     locked_versions: &[String],
@@ -191,6 +196,7 @@ fn indicators_for(
 }
 
 #[instrument(level = "debug", skip(indicators))]
+#[hotpath::measure]
 fn requirement_indicators(requirement: &str, indicators: &mut Vec<DependencyFreshnessIndicator>) {
     if requirement.trim_start().starts_with('=') {
         indicators.push(DependencyFreshnessIndicator::ManifestExactPin);

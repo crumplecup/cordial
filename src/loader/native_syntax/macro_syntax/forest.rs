@@ -5,6 +5,7 @@ use ra_ap_syntax::{AstNode, ast};
 
 impl DatabaseMacroSyntax {
     #[tracing::instrument(level = "debug", skip(self, file, root))]
+    #[hotpath::measure]
     fn collect(&mut self, file: &DatabaseSource<'_>, root: &ra_ap_syntax::SyntaxNode) {
         for invocation in root.descendants().filter_map(ast::MacroCall::cast) {
             let name = invocation
@@ -43,6 +44,7 @@ impl DatabaseMacroSyntax {
 impl DatabaseSource<'_> {
     /// Project opaque islands only from this snapshot and its issued islands.
     #[tracing::instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub(crate) fn proof_macro_syntax(&self) -> DatabaseMacroSyntax {
         let mut syntax = DatabaseMacroSyntax::default();
         syntax.collect(self, self.tree().syntax());
@@ -53,6 +55,7 @@ impl DatabaseSource<'_> {
 #[cfg(feature = "internal_error_chain")]
 impl DatabaseMacroSyntax {
     #[tracing::instrument(level = "debug", skip(self, file, root))]
+    #[hotpath::measure]
     fn collect_error_apply(&mut self, file: &DatabaseSource<'_>, root: &ra_ap_syntax::SyntaxNode) {
         for invocation in root.descendants().filter_map(ast::MacroCall::cast) {
             let is_write = invocation.path().is_some_and(|path| {
@@ -78,6 +81,7 @@ impl DatabaseMacroSyntax {
 impl DatabaseSource<'_> {
     /// Formatting arguments issued only from this snapshot's canonical syntax.
     #[tracing::instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub(crate) fn error_apply_macro_syntax(&self) -> DatabaseMacroSyntax {
         let mut syntax = DatabaseMacroSyntax::default();
         syntax.collect_error_apply(self, self.tree().syntax());

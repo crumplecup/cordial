@@ -113,6 +113,7 @@ pub struct ResolveCaps {
 
 impl Default for ResolveCaps {
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     fn default() -> Self {
         Self::new(8, 64)
     }
@@ -199,6 +200,7 @@ impl TypeResolver for RustdocTypeResolver {
 
 impl RustdocTypeResolver {
     #[instrument(level = "debug", skip(self, ty, bound))]
+    #[hotpath::measure]
     fn check_implements(&self, ty: &TypeKey, bound: &TypeKey) -> Implements {
         let owner = ty.head().split("::").next().unwrap_or_default();
         let Some(index) = self.crate_named(owner) else {
@@ -218,6 +220,7 @@ impl RustdocTypeResolver {
     }
 
     #[instrument(level = "debug", skip(self, ty))]
+    #[hotpath::measure]
     fn read_declared_bounds(&self, ty: &TypeKey) -> Vec<DeclaredBound> {
         let owner = ty.head().split("::").next().unwrap_or_default();
         let Some(index) = self.crate_named(owner) else {
@@ -240,6 +243,7 @@ impl RustdocTypeResolver {
     }
 
     #[instrument(level = "debug", skip(self), err(level = "warn"))]
+    #[hotpath::measure]
     fn resolve_normalized(&self, text: &str, head_only: bool) -> Result<TypeKey, Unresolved> {
         let parsed = parse_type_text(&normalize_type_text(text))
             .ok_or_else(|| Unresolved::Malformed(text.to_string()))?;
@@ -247,6 +251,7 @@ impl RustdocTypeResolver {
     }
 
     #[instrument(level = "debug", skip(self, text), err(level = "warn"))]
+    #[hotpath::measure]
     fn resolve_text(&self, text: &TypeText, head_only: bool) -> Result<TypeKey, Unresolved> {
         let args = if head_only {
             Vec::new()
@@ -266,6 +271,7 @@ impl RustdocTypeResolver {
     }
 
     #[instrument(level = "debug", skip(self, key), err(level = "warn"))]
+    #[hotpath::measure]
     fn check_size(&self, key: TypeKey) -> Result<TypeKey, Unresolved> {
         if key.node_count() > self.caps.max_type_nodes() {
             return Err(Unresolved::TypeTooLarge(key.head().clone()));
@@ -274,6 +280,7 @@ impl RustdocTypeResolver {
     }
 
     #[instrument(level = "debug", skip(self, path, args), err(level = "warn"))]
+    #[hotpath::measure]
     fn resolve_path(&self, path: &str, args: Vec<TypeKey>) -> Result<TypeKey, Unresolved> {
         if !path
             .chars()
@@ -320,6 +327,7 @@ impl RustdocTypeResolver {
     /// Identity of the item `id` seen from crate `index`, applied to `args`.
     /// Type aliases expand; everything else keeps its canonical head.
     #[instrument(level = "debug", skip(self, index, id, args), err(level = "warn"))]
+    #[hotpath::measure]
     fn key_for_item(
         &self,
         index: &CrateIndex,
@@ -353,6 +361,7 @@ impl RustdocTypeResolver {
     /// An id this crate's index does not hold: re-resolve it in the
     /// allowlisted crate that owns it, else keep it opaque.
     #[instrument(level = "debug", skip(self, index, id, args), err(level = "warn"))]
+    #[hotpath::measure]
     fn key_for_external(
         &self,
         index: &CrateIndex,
@@ -377,6 +386,7 @@ impl RustdocTypeResolver {
     }
 
     #[instrument(level = "debug", skip(self, index, alias, args), err(level = "warn"))]
+    #[hotpath::measure]
     fn expand_alias(
         &self,
         index: &CrateIndex,
@@ -403,6 +413,7 @@ impl RustdocTypeResolver {
         skip(self, index, ty, substitutions),
         err(level = "warn")
     )]
+    #[hotpath::measure]
     fn type_to_key(
         &self,
         index: &CrateIndex,
@@ -442,6 +453,7 @@ impl RustdocTypeResolver {
 
 /// Add every id a lookup found to `hits`.
 #[instrument(level = "debug", skip(hits, index, found))]
+#[hotpath::measure]
 fn collect_hits<'a>(hits: &mut Vec<(&'a CrateIndex, Id)>, index: &'a CrateIndex, found: Lookup) {
     match found {
         Lookup::Found(id) => hits.push((index, id)),
@@ -452,6 +464,7 @@ fn collect_hits<'a>(hits: &mut Vec<(&'a CrateIndex, Id)>, index: &'a CrateIndex,
 
 /// Canonical head for a local item: its defining path from rustdoc.
 #[instrument(level = "debug", skip(index, id), err(level = "warn"))]
+#[hotpath::measure]
 fn canonical_head(index: &CrateIndex, id: &Id) -> Result<String, Unresolved> {
     index
         .path_of(id)

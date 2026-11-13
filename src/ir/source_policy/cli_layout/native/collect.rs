@@ -11,6 +11,7 @@ use ra_ap_syntax::{
 };
 use std::collections::{BTreeMap, BTreeSet};
 #[tracing::instrument(level = "debug", skip(file), err(level = "warn"))]
+#[hotpath::measure]
 pub(super) fn file(file: &DatabaseSource<'_>, name: &str) -> CordialResult<NativeFile> {
     let mut result = NativeFile::new(
         Vec::new(),
@@ -67,6 +68,7 @@ pub(super) fn file(file: &DatabaseSource<'_>, name: &str) -> CordialResult<Nativ
     Ok(result)
 }
 #[tracing::instrument(level = "debug", skip(node, file, out), err(level = "warn"))]
+#[hotpath::measure]
 fn walk(
     node: &SyntaxNode,
     file: &DatabaseSource<'_>,

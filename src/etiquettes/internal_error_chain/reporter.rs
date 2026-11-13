@@ -36,6 +36,7 @@ struct InternalErrorChainRow {
 
 impl InternalErrorChainRow {
     #[instrument(level = "debug", skip(finding), ret)]
+    #[hotpath::measure]
     fn from_finding(finding: &dyn Finding) -> Self {
         let mut sink = MapFindingSink::default();
         finding.emit(&mut sink);
@@ -67,6 +68,7 @@ impl InternalErrorChainRow {
 }
 
 #[instrument(level = "debug", skip(findings))]
+#[hotpath::measure]
 fn internal_error_chain_rows(findings: &[&dyn Finding]) -> Vec<InternalErrorChainRow> {
     findings
         .iter()
@@ -76,12 +78,14 @@ fn internal_error_chain_rows(findings: &[&dyn Finding]) -> Vec<InternalErrorChai
 }
 
 #[instrument(level = "debug", skip(rows))]
+#[hotpath::measure]
 fn type_graph_rows(rows: &[InternalErrorChainRow]) -> impl Iterator<Item = &InternalErrorChainRow> {
     rows.iter()
         .filter(|row| row.record_kind == InternalErrorRecordKind::TypeGraph.as_str())
 }
 
 #[instrument(level = "debug", skip(rows))]
+#[hotpath::measure]
 fn compliance_rows(rows: &[InternalErrorChainRow]) -> impl Iterator<Item = &InternalErrorChainRow> {
     rows.iter().filter(|row| {
         row.record_kind == InternalErrorRecordKind::Compliance.as_str() && row.disposition == "open"
@@ -94,6 +98,7 @@ fn compliance_rows(rows: &[InternalErrorChainRow]) -> impl Iterator<Item = &Inte
 /// artifact must derive its own crate breakdown from `row.crate_name`
 /// instead (the same pattern `modularity::reporter::rows::crate_names` uses).
 #[instrument(level = "debug", skip(rows))]
+#[hotpath::measure]
 fn crate_names(rows: &[&InternalErrorChainRow]) -> Vec<String> {
     let mut names: Vec<String> = rows.iter().map(|row| row.crate_name.clone()).collect();
     names.sort();
@@ -102,6 +107,7 @@ fn crate_names(rows: &[&InternalErrorChainRow]) -> Vec<String> {
 }
 
 #[instrument(level = "debug", skip(rows))]
+#[hotpath::measure]
 fn class_counts(rows: &[InternalErrorChainRow]) -> BTreeMap<String, usize> {
     let mut counts = BTreeMap::new();
     for row in type_graph_rows(rows) {

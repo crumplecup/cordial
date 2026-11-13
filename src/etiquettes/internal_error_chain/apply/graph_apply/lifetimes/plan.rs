@@ -9,6 +9,7 @@ use super::{GraphLifetimeFacts, GraphLifetimePlan, Range, TypeArguments};
 
 impl GraphLifetimeFacts {
     #[instrument(level = "debug", skip(self, plan, strategy, storage_edits))]
+    #[hotpath::measure]
     pub(in crate::etiquettes::internal_error_chain::apply::graph_apply::lifetimes) fn plan(
         &self,
         plan: &GraphLifetimePlan,

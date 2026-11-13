@@ -102,6 +102,7 @@ pub static VERUS_WARNINGS_ETIQUETTE: LazyLock<StaticQualityEtiquette> = LazyLock
 });
 
 #[instrument(level = "debug", skip(findings))]
+#[hotpath::measure]
 fn quality_area_compute(findings: &[&dyn Finding]) -> (usize, String) {
     let verus_warnings = count_open_category(findings, "verus_warnings");
     (

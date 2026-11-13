@@ -79,6 +79,7 @@ pub struct SignatureChainCheck {
 
 impl SignatureChainCheck {
     #[tracing::instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub(crate) fn strip_file_prefix(&mut self, root: &Path) {
         if let Ok(rel) = self.file.strip_prefix(root) {
             self.file = rel.to_path_buf();

@@ -17,6 +17,7 @@ pub(in crate::etiquettes::internal_error_chain::apply) struct ModuleIdentity {
 }
 
 #[instrument(level = "debug", skip(files, source), err(level = "warn"))]
+#[hotpath::measure]
 pub(in crate::etiquettes::internal_error_chain::apply) fn module_identities(
     files: &[FileSnapshot],
     source: &crate::ir::SourceErrorApply,
@@ -52,6 +53,7 @@ pub(in crate::etiquettes::internal_error_chain::apply) fn module_identities(
 }
 
 #[instrument(level = "debug", skip(path))]
+#[hotpath::measure]
 fn module_path(path: &Path) -> Option<Vec<String>> {
     let src = path
         .ancestors()
@@ -70,6 +72,7 @@ fn module_path(path: &Path) -> Option<Vec<String>> {
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 pub(in crate::etiquettes::internal_error_chain::apply) fn absolute_path(
     module: &[String],
     written: &[String],

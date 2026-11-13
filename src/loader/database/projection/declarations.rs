@@ -21,6 +21,7 @@ pub(in crate::loader::database) struct Outline {
 impl SourceDatabase {
     /// The database-issued carrier for `path`, refusing a file that did not parse.
     #[tracing::instrument(level = "debug", skip(self, sema, path), err(level = "warn"))]
+    #[hotpath::measure]
     pub(in crate::loader::database) fn declaration_source<'a>(
         &'a self,
         sema: &Semantics<'a, RootDatabase>,

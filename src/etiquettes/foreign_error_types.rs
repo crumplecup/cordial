@@ -107,6 +107,7 @@ pub static FOREIGN_ERROR_TYPES_ETIQUETTE: LazyLock<StaticQualityEtiquette> = Laz
 /// happened to always be zero; the same shape of gap `proof_patterns`
 /// had).
 #[instrument(level = "debug", skip(findings))]
+#[hotpath::measure]
 fn quality_area_compute(findings: &[&dyn Finding]) -> (usize, String) {
     let chain_breaks = open_findings(findings)
         .filter(|finding| finding.rule().category() == "foreign_error_types")

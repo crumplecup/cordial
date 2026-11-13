@@ -13,6 +13,7 @@ use super::{GraphDeclarationFacts, GraphFields};
 
 impl GraphDeclarationFacts {
     #[instrument(level = "debug", skip(self, file, edits, strategy))]
+    #[hotpath::measure]
     pub(in crate::etiquettes::internal_error_chain::apply) fn repairs(
         &self,
         crate_name: &str,

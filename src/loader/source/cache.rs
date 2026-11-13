@@ -31,6 +31,7 @@ impl SourceLoadView {
     /// The view must have been created inside a loaded session.
     #[cfg(feature = "rustdoc")]
     #[tracing::instrument(level = "debug", skip(self, target), err(level = "warn"))]
+    #[hotpath::measure]
     pub(crate) fn project_target(
         &self,
         target: &crate::loader::CrateTarget,
@@ -42,6 +43,7 @@ impl SourceLoadView {
     /// The view must have been created inside a loaded session.
     #[cfg(feature = "derives")]
     #[tracing::instrument(level = "debug", skip(self), err(level = "warn"))]
+    #[hotpath::measure]
     pub(crate) fn project_path_inclusions(
         &self,
     ) -> crate::CordialResult<crate::ir::PathInclusionFacts> {
@@ -52,6 +54,7 @@ impl SourceLoadView {
     /// they hold them, else from `compute`, which is then recorded.
     #[cfg(feature = "tracing")]
     #[tracing::instrument(level = "debug", skip(self, compute), err(level = "warn"))]
+    #[hotpath::measure]
     pub(crate) fn cached_call_graph(
         &self,
         policy: &str,
@@ -70,11 +73,13 @@ impl SourceLoadView {
         feature = "homecoming_std"
     ))]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub(crate) fn for_session() -> Self {
         Self::new(String::new(), PathBuf::new(), Vec::new(), Vec::new())
     }
 
     #[instrument(level = "debug", skip(files, crate_kinds), fields(crate_name = crate_name))]
+    #[hotpath::measure]
     pub(in crate::loader) fn new(
         crate_name: String,
         src_root: PathBuf,

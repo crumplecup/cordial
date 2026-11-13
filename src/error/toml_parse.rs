@@ -21,6 +21,7 @@ pub struct TomlParseSource {
 impl TomlParseSource {
     #[track_caller]
     #[instrument(level = "debug", skip(path, source))]
+    #[hotpath::measure]
     pub fn new(path: impl Into<String>, source: toml::de::Error) -> Self {
         let loc = Location::caller();
         Self {
@@ -54,6 +55,7 @@ impl CordialError {
     /// TOML failed to parse at this path.
     #[track_caller]
     #[instrument(level = "debug", skip(path, err))]
+    #[hotpath::measure]
     pub fn toml_parse(path: impl Into<String>, err: toml::de::Error) -> Self {
         Self::from_kind(CordialErrorKind::TomlParse(TomlParseSource::new(path, err)))
     }

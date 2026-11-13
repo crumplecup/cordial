@@ -17,6 +17,7 @@ use tracing::instrument;
 /// sites. One record per active kind per function, since a function can carry
 /// more than one (e.g. `assume` and `admit` in the same body).
 #[instrument(level = "debug", skip(ir), err(level = "warn"))]
+#[hotpath::measure]
 pub fn proof_pattern_records(
     ir: &VerusCrateIr,
     crate_root: &Path,
@@ -29,6 +30,7 @@ pub fn proof_pattern_records(
 }
 
 #[instrument(level = "debug", skip(function), err(level = "warn"))]
+#[hotpath::measure]
 fn function_records(
     function: &VerusFnFacts,
     crate_root: &Path,

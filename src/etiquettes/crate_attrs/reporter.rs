@@ -19,6 +19,7 @@ struct CrateAttrsRow {
 
 impl CrateAttrsRow {
     #[instrument(level = "debug", skip(finding), ret)]
+    #[hotpath::measure]
     fn from_finding(finding: &dyn Finding) -> Self {
         let mut sink = MapFindingSink::default();
         finding.emit(&mut sink);
@@ -41,6 +42,7 @@ impl CrateAttrsRow {
 }
 
 #[instrument(level = "debug", skip(findings))]
+#[hotpath::measure]
 fn crate_attrs_rows(findings: &[&dyn Finding]) -> Vec<CrateAttrsRow> {
     findings
         .iter()
@@ -50,11 +52,13 @@ fn crate_attrs_rows(findings: &[&dyn Finding]) -> Vec<CrateAttrsRow> {
 }
 
 #[instrument(level = "debug", skip(rows))]
+#[hotpath::measure]
 fn open_rows(rows: &[CrateAttrsRow]) -> impl Iterator<Item = &CrateAttrsRow> {
     rows.iter().filter(|row| row.disposition == "open")
 }
 
 #[instrument(level = "debug", skip(rows))]
+#[hotpath::measure]
 fn sort_by_crate_rule(rows: &mut [&CrateAttrsRow]) {
     rows.sort_by(|left, right| {
         left.crate_name

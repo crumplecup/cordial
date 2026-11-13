@@ -47,6 +47,7 @@ pub(super) enum TokenKind {
 impl Token {
     /// The identifier text, if this is an identifier or keyword.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub(super) fn ident(&self) -> Option<&str> {
         match &self.kind {
             TokenKind::Ident(text) => Some(text),
@@ -62,6 +63,7 @@ impl Token {
 
     /// The contents of a group with this delimiter.
     #[instrument(level = "debug", skip(self, wanted))]
+    #[hotpath::measure]
     pub(super) fn group(&self, wanted: Delimiter) -> Option<&[Token]> {
         match &self.kind {
             TokenKind::Group(delimiter, inner) if *delimiter == wanted => Some(inner),
@@ -73,6 +75,7 @@ impl Token {
 /// Lex and bracket-match `text`; `None` when its delimiters do not balance or
 /// a token is malformed. Lines count from 1 at the start of `text`.
 #[instrument(level = "debug", skip(text))]
+#[hotpath::measure]
 pub(super) fn parse(text: &str) -> Option<Vec<Token>> {
     let parse = SourceFile::parse(&format!("m!{{{text}}}"), Edition::CURRENT);
     if !parse.errors().is_empty() {
@@ -122,6 +125,7 @@ fn children(tree: &ast::TokenTree, lines: &LineStarts) -> Vec<Token> {
 }
 
 #[instrument(level = "debug", skip(token))]
+#[hotpath::measure]
 fn leaf(token: &SyntaxToken) -> TokenKind {
     let kind = token.kind();
     if kind.is_punct() {
@@ -144,6 +148,7 @@ struct LineStarts(Vec<usize>);
 
 impl LineStarts {
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     fn new(text: &str) -> Self {
         Self(
             std::iter::once(0)
@@ -211,11 +216,13 @@ pub(super) fn split_top_level_commas(tokens: &[Token]) -> Vec<Vec<Token>> {
 /// A clause with every name and literal replaced by `X`, except called names,
 /// so clauses with the same call structure group together.
 #[instrument(level = "debug")]
+#[hotpath::measure]
 pub(in crate::etiquettes::antipatterns) fn shape(snippet: &str) -> String {
     parse(snippet).map_or_else(|| snippet.to_string(), |tokens| render(&shaped(&tokens)))
 }
 
 #[instrument(level = "debug", skip(tokens))]
+#[hotpath::measure]
 fn shaped(tokens: &[Token]) -> Vec<Token> {
     tokens
         .iter()

@@ -15,6 +15,7 @@ use findings::collect_findings;
 /// Apply `thresholds` to the loader-projected module tree, without reading
 /// source or resolving paths. The scanner never picks thresholds itself.
 #[instrument(level = "debug", skip(facts, thresholds), err(level = "warn"))]
+#[hotpath::measure]
 pub fn select_records(
     facts: &crate::ir::VisibilityFacts,
     thresholds: VisibilityThresholds,

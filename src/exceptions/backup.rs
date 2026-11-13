@@ -14,6 +14,7 @@ use crate::store::StoreLayout;
 /// lists). The last two keep elicit_doc's registry layout so a checkout like
 /// elicitation's `.elicit_doc-exceptions/` loads without renaming.
 #[instrument(level = "debug", skip(store), err(level = "warn"))]
+#[hotpath::measure]
 pub fn backup_exception_files(store: &StoreLayout, backup_root: &Path) -> CordialResult<usize> {
     store.ensure_dirs()?;
     let backup_slug_root = backup_root.join(store.project_slug());
@@ -30,6 +31,7 @@ pub fn backup_exception_files(store: &StoreLayout, backup_root: &Path) -> Cordia
 /// Replaces the matching store subtrees. Missing backup subtrees clear the
 /// corresponding store dirs so the registry is the source of truth.
 #[instrument(level = "info", skip(store), err(level = "warn"))]
+#[hotpath::measure]
 pub fn load_exception_files(store: &StoreLayout, backup_root: &Path) -> CordialResult<usize> {
     let backup_slug_root = backup_root.join(store.project_slug());
     if !backup_slug_root.is_dir() {
@@ -53,6 +55,7 @@ fn exception_subtrees(store: &StoreLayout) -> [(&'static str, PathBuf); 3] {
 }
 
 #[instrument(level = "debug", skip(from, to), err(level = "warn"))]
+#[hotpath::measure]
 fn sync_exception_subtree(from: &Path, to: &Path) -> CordialResult<usize> {
     if to.exists() {
         fs::remove_dir_all(to)?;
@@ -65,6 +68,7 @@ fn sync_exception_subtree(from: &Path, to: &Path) -> CordialResult<usize> {
 }
 
 #[instrument(level = "debug", skip(from, to), err(level = "warn"))]
+#[hotpath::measure]
 fn copy_tree_overwrite(from: &Path, to: &Path) -> CordialResult<usize> {
     let mut copied = 0usize;
     for entry in fs::read_dir(from)? {
@@ -86,6 +90,7 @@ fn copy_tree_overwrite(from: &Path, to: &Path) -> CordialResult<usize> {
 }
 
 #[instrument(level = "debug", skip(start, stop), err(level = "warn"))]
+#[hotpath::measure]
 fn prune_empty_dirs_up_to(start: &Path, stop: &Path) -> CordialResult<()> {
     let mut current = start.to_path_buf();
     while current.starts_with(stop) && current != stop {

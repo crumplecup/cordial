@@ -12,6 +12,7 @@ use tracing::instrument;
 
 /// Collect proof-chain subjects through the same parsed-source path as the IR.
 #[instrument(level = "debug", err(level = "warn"))]
+#[hotpath::measure]
 pub fn collect_proof_chain_subjects(project_root: &Path) -> CordialResult<HashSet<String>> {
     let source = SourceLoadView::for_session();
     let mut subjects = HashSet::new();

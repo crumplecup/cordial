@@ -8,6 +8,7 @@ use super::ExtractedItem;
 use super::type_walk::{collect_items_from_path, collect_items_from_type};
 
 #[instrument(level = "debug", skip(krate, args, seen, discovered))]
+#[hotpath::measure]
 pub(super) fn collect_items_from_generic_args(
     krate: &rustdoc_types::Crate,
     args: &rustdoc_types::GenericArgs,
@@ -93,6 +94,7 @@ pub(super) fn collect_items_from_generic_args(
     }
 }
 #[instrument(level = "debug", skip(krate, term, seen, discovered))]
+#[hotpath::measure]
 fn collect_items_from_term(
     krate: &rustdoc_types::Crate,
     term: &rustdoc_types::Term,
@@ -106,6 +108,7 @@ fn collect_items_from_term(
     }
 }
 #[instrument(level = "debug", skip(krate, bound, seen, discovered))]
+#[hotpath::measure]
 pub(super) fn collect_items_from_generic_bound(
     krate: &rustdoc_types::Crate,
     bound: &rustdoc_types::GenericBound,
@@ -132,6 +135,7 @@ pub(super) fn collect_items_from_generic_bound(
     }
 }
 #[instrument(level = "debug", skip(krate, poly_trait, seen, discovered))]
+#[hotpath::measure]
 pub(super) fn collect_items_from_poly_trait(
     krate: &rustdoc_types::Crate,
     poly_trait: &rustdoc_types::PolyTrait,
@@ -158,6 +162,7 @@ pub(super) fn collect_items_from_poly_trait(
     );
 }
 #[instrument(level = "debug", skip(krate, generic_params, seen, discovered))]
+#[hotpath::measure]
 pub(super) fn collect_items_from_generic_param_defs(
     krate: &rustdoc_types::Crate,
     generic_params: &[rustdoc_types::GenericParamDef],
@@ -207,6 +212,7 @@ pub(super) fn collect_items_from_generic_param_defs(
     }
 }
 #[instrument(level = "debug", skip(krate, generics, seen, discovered))]
+#[hotpath::measure]
 pub(super) fn collect_items_from_generics(
     krate: &rustdoc_types::Crate,
     generics: &rustdoc_types::Generics,
@@ -235,6 +241,7 @@ pub(super) fn collect_items_from_generics(
     }
 }
 #[instrument(level = "debug", skip(krate, predicate, seen, discovered))]
+#[hotpath::measure]
 fn collect_items_from_where_predicate(
     krate: &rustdoc_types::Crate,
     predicate: &rustdoc_types::WherePredicate,

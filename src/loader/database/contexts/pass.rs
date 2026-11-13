@@ -126,6 +126,7 @@ impl SourceDatabase {
     /// plan is accurate even when an error ends the pass. Returns whether planning
     /// reached its fixed point.
     #[instrument(level = "debug", skip_all, err(level = "warn"))]
+    #[hotpath::measure]
     fn analyse_contexts(
         &mut self,
         cfgs: &LocalCfgs,
@@ -343,6 +344,7 @@ const DEFAULT_BUDGET_MIB: u64 = 1024;
 
 impl Budget {
     #[instrument(level = "debug", skip(options))]
+    #[hotpath::measure]
     fn start(options: &crate::SemanticCargoOptions) -> Self {
         let allowed_kib = options
             .context_memory_budget_mib()

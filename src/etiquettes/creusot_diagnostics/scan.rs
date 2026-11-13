@@ -14,6 +14,7 @@ use tracing::instrument;
 /// Scan a crate: run Creusot when this crate is a Creusot target and the
 /// project has a Creusot runner available.
 #[instrument(level = "debug", skip(policy), err(level = "warn"))]
+#[hotpath::measure]
 pub fn scan_crate_creusot_diagnostics(
     crate_root: &Path,
     crate_name: &str,
@@ -36,6 +37,7 @@ pub fn scan_crate_creusot_diagnostics(
 
 /// True when this member is meant to be compiled with Creusot.
 #[instrument(level = "debug")]
+#[hotpath::measure]
 pub fn crate_is_creusot_target(crate_root: &Path) -> bool {
     if crate_root
         .file_name()
@@ -51,6 +53,7 @@ pub fn crate_is_creusot_target(crate_root: &Path) -> bool {
 }
 
 #[instrument(level = "debug", skip(manifest))]
+#[hotpath::measure]
 fn manifest_names_creusot_target(manifest: &str) -> bool {
     let mut in_package = false;
     let mut in_deps = false;
@@ -110,6 +113,7 @@ struct CreusotOutput {
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn resolve_creusot_runner(crate_name: &str) -> Option<CreusotRunner> {
     if let Ok(value) = std::env::var("CORDIAL_CREUSOT") {
         let path = PathBuf::from(value);
@@ -135,6 +139,7 @@ fn resolve_creusot_runner(crate_name: &str) -> Option<CreusotRunner> {
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn cargo_creusot_on_path() -> Option<PathBuf> {
     let Ok(path) = std::env::var("PATH") else {
         return None;
@@ -149,6 +154,7 @@ fn cargo_creusot_on_path() -> Option<PathBuf> {
 }
 
 #[instrument(level = "info", skip(runner), err(level = "warn"))]
+#[hotpath::measure]
 fn run_creusot(runner: &CreusotRunner, crate_root: &Path) -> CordialResult<CreusotOutput> {
     let output = Command::new(&runner.program)
         .current_dir(workspace_root(crate_root))
@@ -169,6 +175,7 @@ fn run_creusot(runner: &CreusotRunner, crate_root: &Path) -> CordialResult<Creus
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn workspace_root(crate_root: &Path) -> PathBuf {
     for ancestor in crate_root.ancestors() {
         let Ok(manifest) = std::fs::read_to_string(ancestor.join("Cargo.toml")) else {
@@ -188,6 +195,7 @@ fn workspace_root(crate_root: &Path) -> PathBuf {
 /// are dropped; the same span+severity+message is kept once. A failed verifier
 /// run with no parseable `error:` span produces one crate-level failure record.
 #[instrument(level = "debug", skip(output), err(level = "warn"))]
+#[hotpath::measure]
 pub fn parse_creusot_compiler_output(
     output: &str,
     crate_root: &Path,
@@ -304,6 +312,7 @@ fn parse_arrow_span(line: &str) -> Option<(String, u32)> {
 }
 
 #[instrument(level = "debug", skip(file))]
+#[hotpath::measure]
 fn resolve_diagnostic_file(crate_root: &Path, file: &str) -> PathBuf {
     let path = PathBuf::from(file);
     if path.is_absolute() {
@@ -317,6 +326,7 @@ fn resolve_diagnostic_file(crate_root: &Path, file: &str) -> PathBuf {
 }
 
 #[instrument(level = "debug", skip(path))]
+#[hotpath::measure]
 fn canonical_or_original(path: PathBuf) -> PathBuf {
     std::fs::canonicalize(&path).unwrap_or(path)
 }

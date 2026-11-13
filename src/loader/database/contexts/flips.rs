@@ -70,6 +70,7 @@ impl Flips {
 }
 
 #[instrument(level = "debug", skip(cfg, predicate))]
+#[hotpath::measure]
 fn predicate_holds(cfg: &CfgOptions, predicate: &ra_ap_cfg::CfgExpr) -> bool {
     cfg.check(predicate).unwrap_or(true)
 }

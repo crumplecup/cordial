@@ -41,6 +41,7 @@ pub(super) struct ApplyRecipeRecord {
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 pub(super) fn attr_style(lines: &[String]) -> InstrumentAttrStyle {
     if file_declares_mod(lines, "tracing") {
         InstrumentAttrStyle::CratePath
@@ -56,6 +57,7 @@ pub(super) fn attr_style(lines: &[String]) -> InstrumentAttrStyle {
     skip(lines, source, gap, record, style, policy, controls),
     err(level = "warn")
 )]
+#[hotpath::measure]
 pub(super) fn apply_gap(
     lines: &mut Vec<String>,
     source: &str,
@@ -138,6 +140,7 @@ pub(super) fn apply_gap(
 /// Remove an existing `#[instrument]` / `#[cfg_attr(.., instrument)]` from
 /// `gap` — attenuation for proof-only functions and skip-policy files.
 #[instrument(level = "debug", skip(lines, source, record))]
+#[hotpath::measure]
 pub(super) fn strip_instrument(
     lines: &mut Vec<String>,
     source: &str,
@@ -156,6 +159,7 @@ pub(super) fn strip_instrument(
 }
 
 #[instrument(level = "debug", skip(recipe, style))]
+#[hotpath::measure]
 fn recipe_attr(recipe: &InstrumentRecipe, style: InstrumentAttrStyle) -> String {
     match style {
         InstrumentAttrStyle::Short => recipe.as_attribute(),
@@ -165,6 +169,7 @@ fn recipe_attr(recipe: &InstrumentRecipe, style: InstrumentAttrStyle) -> String 
 }
 
 #[instrument(level = "debug", skip(records, gap))]
+#[hotpath::measure]
 pub(super) fn recipe_for_gap<'a>(
     records: &'a [ApplyRecipeRecord],
     gap: &InstrumentGap,
@@ -209,11 +214,13 @@ pub(super) fn recipe_for_gap<'a>(
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 pub(super) fn file_matches(record_file: &str, gap_file: &str) -> bool {
     record_file == gap_file || record_file.ends_with(gap_file) || gap_file.ends_with(record_file)
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn find_fn_line(lines: &[String], target_line: u32, qualified_name: &str) -> Option<usize> {
     let idx = target_line.saturating_sub(1) as usize;
     let expected_name = local_fn_name(qualified_name);
@@ -236,11 +243,13 @@ fn find_fn_line(lines: &[String], target_line: u32, qualified_name: &str) -> Opt
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn local_fn_name(qualified_name: &str) -> &str {
     qualified_name.rsplit("::").next().unwrap_or(qualified_name)
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn extract_fn_name(line: &str) -> Option<&str> {
     let fn_idx = line.find("fn ")?;
     let rest = &line[fn_idx + 3..];
@@ -279,6 +288,7 @@ fn closes_minus_opens(line: &str) -> i32 {
 /// `#[` -- a continuation line like `not(kani),` or the attribute's own
 /// `tracing::instrument(...)` payload line never does).
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn collect_attr_indices(lines: &[String], fn_idx: usize) -> Vec<usize> {
     let mut indices = Vec::new();
     let mut i = fn_idx;
@@ -323,6 +333,7 @@ fn collect_attr_indices(lines: &[String], fn_idx: usize) -> Vec<usize> {
 /// found by walking up until the brackets balance. `None` when the walk meets
 /// something that cannot be inside an attribute first.
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn attribute_opening(lines: &[String], tail: usize, tail_delta: i32) -> Option<usize> {
     let mut depth = tail_delta;
     let mut i = tail;
@@ -341,6 +352,7 @@ fn attribute_opening(lines: &[String], tail: usize, tail_delta: i32) -> Option<u
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn instrument_attr_range(lines: &[String], fn_idx: usize) -> Option<(usize, usize)> {
     let attrs = collect_attr_indices(lines, fn_idx);
     for &start in &attrs {
@@ -372,11 +384,13 @@ fn instrument_attr_range(lines: &[String], fn_idx: usize) -> Option<(usize, usiz
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn attrs_match_recipe(attr_lines: &[String], recipe_attr: &str) -> bool {
     normalize_attr(&attr_lines.join(" ")) == normalize_attr(recipe_attr)
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn normalize_attr(text: &str) -> String {
     text.split_whitespace()
         .collect::<String>()
@@ -385,6 +399,7 @@ fn normalize_attr(text: &str) -> String {
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn insert_after_track_caller(lines: &[String], attr_indices: &[usize]) -> Option<usize> {
     for idx in attr_indices.iter().rev() {
         if lines[*idx].contains("track_caller") {
@@ -395,6 +410,7 @@ fn insert_after_track_caller(lines: &[String], attr_indices: &[usize]) -> Option
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn leading_indent(line: &str) -> String {
     line.chars()
         .take_while(|ch| *ch == ' ' || *ch == '\t')
@@ -402,6 +418,7 @@ fn leading_indent(line: &str) -> String {
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn file_declares_mod(lines: &[String], name: &str) -> bool {
     lines.iter().any(|line| is_mod_decl(line.trim(), name))
 }
@@ -417,6 +434,7 @@ fn is_mod_decl(stripped: &str, name: &str) -> bool {
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 pub(super) fn ensure_use_instrument(lines: Vec<String>) -> Vec<String> {
     if attr_style(&lines) != InstrumentAttrStyle::Short || tracing_use_includes_instrument(&lines) {
         return lines;
@@ -455,6 +473,7 @@ pub(super) fn ensure_use_instrument(lines: Vec<String>) -> Vec<String> {
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn tracing_use_includes_instrument(lines: &[String]) -> bool {
     let mut i = 0usize;
     while i < lines.len() {
@@ -478,6 +497,7 @@ fn tracing_use_includes_instrument(lines: &[String]) -> bool {
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn import_names_include_instrument(block: &str) -> bool {
     if block.contains("use tracing::instrument;") || block.contains("use tracing::instrument as ") {
         return true;

@@ -43,6 +43,7 @@ pub struct ImplGapAssessment {
 
 /// Classify a type's impl gap, mirroring elicit_doc's `assess_impl_entry` gap kinds.
 #[instrument(level = "debug", skip(prereqs, feature_probe, wrappers))]
+#[hotpath::measure]
 pub fn assess_impl_gap(
     source_crate: &str,
     prereqs: &TraitPrereqs,
@@ -132,6 +133,7 @@ pub fn assess_impl_gap(
 }
 
 #[instrument(level = "debug", skip(wrappers))]
+#[hotpath::measure]
 fn covered_assessment(wrappers: Option<&[WrapperCoverage]>) -> ImplGapAssessment {
     ImplGapAssessment {
         gap_kind: None,
@@ -149,6 +151,7 @@ fn covered_assessment(wrappers: Option<&[WrapperCoverage]>) -> ImplGapAssessment
 }
 
 #[instrument(level = "debug", skip(prereqs))]
+#[hotpath::measure]
 fn missing_external_traits(prereqs: &TraitPrereqs) -> Vec<String> {
     [
         (prereqs.serialize(), "Serialize"),

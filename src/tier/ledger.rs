@@ -39,6 +39,7 @@ pub struct GateLedger {
 impl GateLedger {
     /// Save the latest run's phase, hook, and pipeline timings for inspection.
     #[instrument(level = "debug", skip(self, timings))]
+    #[hotpath::measure]
     pub fn record_last_run_timings(&mut self, timings: Vec<HookTiming>, wall: std::time::Duration) {
         self.last_run_timings = timings;
         self.last_run_wall_nanos = wall.as_nanos();
@@ -46,6 +47,7 @@ impl GateLedger {
     /// Save exact area counts only when every contributing etiquette ran.
     #[cfg(feature = "quality")]
     #[instrument(level = "debug", skip(self, report))]
+    #[hotpath::measure]
     pub(crate) fn record_quality_areas(
         &mut self,
         report: &crate::QualityReport,
@@ -61,6 +63,7 @@ impl GateLedger {
     }
     /// Read the previous ledger, or start an empty one.
     #[instrument(level = "debug", skip(store), err(level = "warn"))]
+    #[hotpath::measure]
     pub fn read(store: &StoreLayout) -> CordialResult<Self> {
         let path = store.root().join("ledger.json");
         match fs::read(&path) {
@@ -77,6 +80,7 @@ impl GateLedger {
         skip(self, etiquettes, findings, timings, config),
         err(level = "warn")
     )]
+    #[hotpath::measure]
     pub fn record_run(
         &mut self,
         etiquettes: &[std::sync::Arc<dyn Etiquette>],
@@ -145,6 +149,7 @@ impl GateLedger {
 
     /// Atomically replace the ledger after a successful run.
     #[instrument(level = "debug", skip(self, store), err(level = "warn"))]
+    #[hotpath::measure]
     pub fn write(&self, store: &StoreLayout) -> CordialResult<()> {
         fs::create_dir_all(store.root())?;
         let path = store.root().join("ledger.json");

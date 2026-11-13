@@ -45,6 +45,7 @@ pub struct StaleExceptionFinding {
 impl StaleExceptionFinding {
     /// Wrap a stale row found while assessing `crate_name`.
     #[instrument(level = "debug", skip(stale), fields(crate_name = crate_name))]
+    #[hotpath::measure]
     pub fn new(crate_name: &str, stale: StaleException) -> Self {
         Self {
             rule: StaleExceptionRule,

@@ -37,6 +37,7 @@ pub struct PartitionedErrorSiteRow {
 impl PartitionedErrorSiteRow {
     /// Start a builder for this value.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> PartitionedErrorSiteRowBuilder {
         PartitionedErrorSiteRowBuilder::default()
     }
@@ -44,6 +45,7 @@ impl PartitionedErrorSiteRow {
 
 /// Partition error site records.
 #[instrument(level = "debug", skip(records), err(level = "warn"))]
+#[hotpath::measure]
 pub fn partition_error_site_records(
     records: &[ErrorSiteScanRow],
     crate_name: &str,
@@ -56,6 +58,7 @@ pub fn partition_error_site_records(
 
 /// Partition error site row.
 #[instrument(level = "debug", skip(finding), err(level = "warn"))]
+#[hotpath::measure]
 pub fn partition_error_site_row(
     finding: &ErrorSiteScanRow,
     crate_name: &str,
@@ -76,6 +79,7 @@ pub fn partition_error_site_row(
 }
 
 #[instrument(level = "debug", skip(finding))]
+#[hotpath::measure]
 fn classify_origin(
     finding: &ErrorSiteScanRow,
     crate_name: &str,
@@ -143,6 +147,7 @@ fn classify_origin(
 }
 
 #[instrument(level = "debug", skip(source))]
+#[hotpath::measure]
 fn classify_call_source(
     source: &str,
     crate_name: &str,
@@ -216,6 +221,7 @@ fn classify_call_source(
 }
 
 #[instrument(level = "debug", skip(source))]
+#[hotpath::measure]
 fn mentions_crate_error(source: &str, site: &str) -> bool {
     for snippet in [source, site] {
         if snippet.contains("CordialError") {
@@ -269,6 +275,7 @@ fn is_bare_local_call(source: &str) -> bool {
 }
 
 #[instrument(level = "debug", skip(source))]
+#[hotpath::measure]
 fn extract_path_root(source: &str) -> Option<String> {
     let before_paren = source.split('(').next()?.trim();
     let path_prefix = before_paren.split('.').next()?.trim();

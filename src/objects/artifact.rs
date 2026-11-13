@@ -39,6 +39,7 @@ pub struct MapFindingSink {
 impl MapFindingSink {
     /// Consume the sink into its collected named fields.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn into_fields(self) -> Vec<(String, String)> {
         self.fields
     }
@@ -84,6 +85,7 @@ impl Artifact for TextArtifact {
     }
 
     #[instrument(level = "info", skip(self, dest), err(level = "warn"))]
+    #[hotpath::measure]
     fn write_to(&self, dest: &mut dyn Write) -> CordialResult<()> {
         dest.write_all(self.body.as_bytes())?;
         Ok(())

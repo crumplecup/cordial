@@ -32,6 +32,7 @@ pub struct AmenableStdOptions {
 }
 
 #[instrument(level = "debug", skip(store, options), err(level = "warn"))]
+#[hotpath::measure]
 fn ensure_registry_dump(
     store: &StoreLayout,
     project_root: &Path,
@@ -47,6 +48,7 @@ fn ensure_registry_dump(
 
 /// Load or refresh the cached amenable registry dump for assessors.
 #[instrument(level = "debug", skip(store, options), err(level = "warn"))]
+#[hotpath::measure]
 pub fn ensure_registry_dump_for_assessor(
     store: &StoreLayout,
     project_root: &Path,
@@ -61,6 +63,7 @@ pub fn ensure_registry_dump_for_assessor(
     skip(session, store, sysroot, options),
     err(level = "warn")
 )]
+#[hotpath::measure]
 pub fn assess_amenable_std_coverage(
     session: &dyn SessionView,
     store: &StoreLayout,

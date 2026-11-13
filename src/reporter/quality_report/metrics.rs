@@ -28,6 +28,7 @@ pub(super) struct ErrorHandlingMetrics {
 }
 
 #[instrument(level = "debug", skip(findings))]
+#[hotpath::measure]
 pub(super) fn error_handling_metrics(findings: &[&dyn Finding]) -> ErrorHandlingMetrics {
     let mut metrics = ErrorHandlingMetrics::default();
     let mut chain_sites = HashSet::new();
@@ -65,6 +66,7 @@ pub(super) fn error_handling_metrics(findings: &[&dyn Finding]) -> ErrorHandling
 }
 
 #[instrument(level = "debug", skip(finding))]
+#[hotpath::measure]
 fn finding_site(finding: &dyn Finding) -> (String, String) {
     (
         finding_field(finding, "file").unwrap_or_default(),
@@ -89,6 +91,7 @@ pub(super) struct PanicMetrics {
 }
 
 #[instrument(level = "debug", skip(findings))]
+#[hotpath::measure]
 pub(super) fn panic_metrics(findings: &[&dyn Finding]) -> PanicMetrics {
     let mut metrics = PanicMetrics::default();
     for finding in open_findings(findings) {

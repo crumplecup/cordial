@@ -85,6 +85,7 @@ pub struct SourceEnrichView<'a> {
 impl<'a> SourceEnrichView<'a> {
     /// Consume the view into its source hook inputs.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn into_parts(self) -> (&'a mut dyn IrMut, &'a SourceLoadView, &'a dyn SessionView) {
         (self.ir, self.source, self.session)
     }
@@ -110,12 +111,14 @@ pub struct EnrichView<'a> {
 impl<'a> EnrichView<'a> {
     /// Consume the view into its hook inputs.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn into_parts(self) -> (&'a mut dyn IrMut, &'a dyn LoadView, &'a dyn SessionView) {
         (self.ir, self.load, self.session)
     }
 
     /// Consume the view into its mutable IR input.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn ir(self) -> &'a mut dyn IrMut {
         self.ir
     }

@@ -46,6 +46,7 @@ pub(super) struct LocatedGroup {
 
 /// Tokens come from a parsed attribute; this projects their locations only.
 #[instrument(level = "debug", skip(tokens))]
+#[hotpath::measure]
 pub(super) fn collect(
     tokens: &[LocatedToken],
     gate_predicate: Option<String>,
@@ -98,6 +99,7 @@ fn compact_tokens(tokens: &[LocatedToken]) -> String {
 }
 
 #[instrument(level = "debug", skip(group))]
+#[hotpath::measure]
 fn arguments(group: &LocatedGroup) -> SourceAttributeArguments {
     let entries = group
         .tokens

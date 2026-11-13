@@ -19,6 +19,7 @@ struct VisibilityRow {
 
 impl VisibilityRow {
     #[instrument(level = "debug", skip(finding), ret)]
+    #[hotpath::measure]
     fn from_finding(finding: &dyn Finding) -> Self {
         let mut sink = MapFindingSink::default();
         finding.emit(&mut sink);
@@ -44,6 +45,7 @@ impl VisibilityRow {
 }
 
 #[instrument(level = "debug", skip(findings))]
+#[hotpath::measure]
 fn visibility_rows(findings: &[&dyn Finding]) -> Vec<VisibilityRow> {
     findings
         .iter()
@@ -53,11 +55,13 @@ fn visibility_rows(findings: &[&dyn Finding]) -> Vec<VisibilityRow> {
 }
 
 #[instrument(level = "debug", skip(rows))]
+#[hotpath::measure]
 fn open_rows(rows: &[VisibilityRow]) -> impl Iterator<Item = &VisibilityRow> {
     rows.iter().filter(|row| row.disposition == "open")
 }
 
 #[instrument(level = "debug", skip(rows))]
+#[hotpath::measure]
 fn crate_names(rows: &[&VisibilityRow]) -> Vec<String> {
     let mut names: Vec<String> = rows.iter().map(|row| row.crate_name.clone()).collect();
     names.sort();

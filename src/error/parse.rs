@@ -17,6 +17,7 @@ pub struct JsonSource {
 impl JsonSource {
     #[track_caller]
     #[instrument(level = "debug", skip(source))]
+    #[hotpath::measure]
     pub fn new(source: serde_json::Error) -> Self {
         let loc = Location::caller();
         Self {
@@ -30,6 +31,7 @@ impl JsonSource {
 impl From<serde_json::Error> for JsonSource {
     #[track_caller]
     #[instrument(level = "debug", skip(source))]
+    #[hotpath::measure]
     fn from(source: serde_json::Error) -> Self {
         Self::new(source)
     }
@@ -63,6 +65,7 @@ pub struct JsonParseSource {
 impl JsonParseSource {
     #[track_caller]
     #[instrument(level = "debug", skip(path, source))]
+    #[hotpath::measure]
     pub fn new(path: impl Into<String>, source: serde_json::Error) -> Self {
         let loc = Location::caller();
         Self {
@@ -100,6 +103,7 @@ pub struct ConfigSource {
 impl ConfigSource {
     #[track_caller]
     #[instrument(level = "debug", skip(source))]
+    #[hotpath::measure]
     pub fn new(source: config::ConfigError) -> Self {
         let loc = Location::caller();
         Self {
@@ -113,6 +117,7 @@ impl ConfigSource {
 impl From<config::ConfigError> for ConfigSource {
     #[track_caller]
     #[instrument(level = "debug", skip(source))]
+    #[hotpath::measure]
     fn from(source: config::ConfigError) -> Self {
         Self::new(source)
     }
@@ -136,6 +141,7 @@ impl super::CordialError {
     /// JSON failed to parse at this path.
     #[track_caller]
     #[instrument(level = "debug", skip(path, err))]
+    #[hotpath::measure]
     pub fn json_parse(path: impl Into<String>, err: serde_json::Error) -> Self {
         Self::from_kind(super::CordialErrorKind::JsonParse(JsonParseSource::new(
             path, err,
@@ -146,6 +152,7 @@ impl super::CordialError {
 impl From<serde_json::Error> for super::CordialError {
     #[track_caller]
     #[instrument(level = "debug", skip(value))]
+    #[hotpath::measure]
     fn from(value: serde_json::Error) -> Self {
         Self::from_kind(super::CordialErrorKind::Json(JsonSource::from(value)))
     }
@@ -154,6 +161,7 @@ impl From<serde_json::Error> for super::CordialError {
 impl From<config::ConfigError> for super::CordialError {
     #[track_caller]
     #[instrument(level = "debug", skip(value))]
+    #[hotpath::measure]
     fn from(value: config::ConfigError) -> Self {
         Self::from_kind(super::CordialErrorKind::Config(ConfigSource::from(value)))
     }

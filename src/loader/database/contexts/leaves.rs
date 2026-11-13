@@ -74,6 +74,7 @@ impl SourceDatabase {
     /// merging them, as the library's planning does, can set one atom both ways
     /// for a file that needs it on. Repeats until no gate asks for more.
     #[instrument(level = "debug", skip(self, files, leaves), err(level = "warn"))]
+    #[hotpath::measure]
     fn read_leaf_contexts(
         &mut self,
         files: &[PathBuf],
@@ -118,6 +119,7 @@ impl SourceDatabase {
     }
 
     #[instrument(level = "debug", skip(self, files, leaves), err(level = "warn"))]
+    #[hotpath::measure]
     fn read_leaves(&self, files: &[PathBuf], leaves: &mut Vec<LeafFunction>) -> CordialResult<()> {
         attach_db(&self.db, || {
             let sema = Semantics::new(&self.db);

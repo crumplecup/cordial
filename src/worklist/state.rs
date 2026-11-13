@@ -76,6 +76,7 @@ impl Worklist {
         skip(report, store, source, config),
         err(level = "warn")
     )]
+    #[hotpath::measure]
     pub fn build(
         report: &QualityReport,
         store: &StoreLayout,
@@ -91,6 +92,7 @@ impl Worklist {
         skip(report, store, source, config, tiers),
         err(level = "warn")
     )]
+    #[hotpath::measure]
     pub fn build_with_tiers(
         report: &QualityReport,
         store: &StoreLayout,
@@ -134,6 +136,7 @@ impl Worklist {
 
     /// Preserve prior items whose checklist was not verified in this run.
     #[instrument(level = "debug", skip(self, previous, verified_checklists))]
+    #[hotpath::measure]
     pub fn carry_unverified(
         &mut self,
         previous: &Self,
@@ -158,6 +161,7 @@ impl Worklist {
 
     /// Read the current list, if one exists.
     #[instrument(level = "debug", skip(store), err(level = "warn"))]
+    #[hotpath::measure]
     pub fn read(store: &StoreLayout) -> CordialResult<Option<Self>> {
         let path = store.worklist_path();
         let bytes = match fs::read(&path) {
@@ -172,6 +176,7 @@ impl Worklist {
 
     /// Atomically replace the stored list after a completed gate or cursor update.
     #[instrument(level = "debug", skip(self, store), err(level = "warn"))]
+    #[hotpath::measure]
     pub fn write(&self, store: &StoreLayout) -> CordialResult<()> {
         fs::create_dir_all(store.root())?;
         let target = store.worklist_path();
@@ -198,6 +203,7 @@ impl Worklist {
 
     /// Check the hard validity signals; source edits do not invalidate a list.
     #[instrument(level = "debug", skip(self, config), err(level = "warn"))]
+    #[hotpath::measure]
     pub fn validity(&self, config: &CordialConfig) -> CordialResult<Validity> {
         if self.record.schema_version != SCHEMA_VERSION {
             return Ok(Validity::SchemaChanged);
@@ -241,6 +247,7 @@ impl Worklist {
 
     /// Check off named items, every open item with `*`, or the current item.
     #[instrument(level = "debug", skip(self, ids), err(level = "warn"))]
+    #[hotpath::measure]
     pub fn done(&mut self, ids: &[String]) -> CordialResult<Vec<ClaimChange>> {
         if ids == ["*"] {
             let open_ids = self
@@ -262,6 +269,7 @@ impl Worklist {
 
     /// Set named items aside until the next gate run.
     #[instrument(level = "debug", skip(self, ids), err(level = "warn"))]
+    #[hotpath::measure]
     pub fn skip(
         &mut self,
         ids: &[String],
@@ -271,6 +279,7 @@ impl Worklist {
     }
 
     #[instrument(level = "debug", skip(self, ids, target), err(level = "warn"))]
+    #[hotpath::measure]
     fn apply(
         &mut self,
         ids: &[String],
@@ -342,6 +351,7 @@ fn legacy_tiers() -> Vec<String> {
 }
 
 #[instrument(level = "debug", skip(config), err(level = "warn"))]
+#[hotpath::measure]
 fn config_fingerprint(config: &CordialConfig) -> CordialResult<String> {
     let mut value = serde_json::to_value(config)?;
     sort_object_keys(&mut value);

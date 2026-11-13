@@ -162,6 +162,7 @@ pub type CordialResult<T> = Result<T, CordialError>;
 impl CordialError {
     #[track_caller]
     #[instrument(level = "debug", skip(kind))]
+    #[hotpath::measure]
     fn from_kind(kind: CordialErrorKind) -> Self {
         Self {
             kind: Box::new(kind),

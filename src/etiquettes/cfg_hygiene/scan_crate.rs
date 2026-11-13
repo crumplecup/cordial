@@ -11,6 +11,7 @@ use super::types::{CfgHygieneRuleId, CfgHygieneSiteRecord};
 
 use tracing::instrument;
 #[instrument(level = "debug", skip(inventory, thresholds), err(level = "warn"))]
+#[hotpath::measure]
 pub(crate) fn records_for_inventory(
     inventory: &crate::ir::SourcePolicyInventory,
     crate_name: &str,
@@ -49,6 +50,7 @@ pub(crate) fn records_for_inventory(
 }
 
 #[instrument(level = "debug", skip(occurrence, rule_id), err(level = "warn"))]
+#[hotpath::measure]
 fn record_for(
     occurrence: &CfgNameOccurrence,
     rule_id: CfgHygieneRuleId,

@@ -6,6 +6,7 @@ use std::path::Path;
 
 /// Workspace members, which define the context identity.
 #[tracing::instrument(level = "debug", skip(workspace))]
+#[hotpath::measure]
 pub(super) fn collect(workspace: &ProjectWorkspace) -> Vec<SemanticPackageContext> {
     select(workspace, true)
 }
@@ -13,11 +14,13 @@ pub(super) fn collect(workspace: &ProjectWorkspace) -> Vec<SemanticPackageContex
 /// Dependency packages of the same Cargo graph. They are not part of the
 /// context identity, but their source is in the database and may be projected.
 #[tracing::instrument(level = "debug", skip(workspace))]
+#[hotpath::measure]
 pub(super) fn collect_external(workspace: &ProjectWorkspace) -> Vec<SemanticPackageContext> {
     select(workspace, false)
 }
 
 #[tracing::instrument(level = "debug", skip(workspace))]
+#[hotpath::measure]
 fn select(workspace: &ProjectWorkspace, members: bool) -> Vec<SemanticPackageContext> {
     let ProjectWorkspaceKind::Cargo { cargo, .. } = &workspace.kind else {
         return Vec::new();

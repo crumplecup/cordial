@@ -12,6 +12,7 @@ use std::collections::HashSet;
 
 impl Collector<'_, '_> {
     #[tracing::instrument(level = "debug", skip_all, err(level = "warn"))]
+    #[hotpath::measure]
     pub(super) fn fields(
         &mut self,
         fields: Option<ast::FieldList>,

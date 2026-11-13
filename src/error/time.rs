@@ -18,6 +18,7 @@ pub struct ClockSource {
 impl ClockSource {
     #[track_caller]
     #[instrument(level = "debug", skip(source))]
+    #[hotpath::measure]
     pub fn new(source: SystemTimeError) -> Self {
         let loc = Location::caller();
         Self {
@@ -31,6 +32,7 @@ impl ClockSource {
 impl From<SystemTimeError> for ClockSource {
     #[track_caller]
     #[instrument(level = "debug", skip(source))]
+    #[hotpath::measure]
     fn from(source: SystemTimeError) -> Self {
         Self::new(source)
     }
@@ -53,6 +55,7 @@ impl std::error::Error for ClockSource {
 impl From<SystemTimeError> for super::CordialError {
     #[track_caller]
     #[instrument(level = "debug", skip(value))]
+    #[hotpath::measure]
     fn from(value: SystemTimeError) -> Self {
         Self::from_kind(super::CordialErrorKind::Clock(ClockSource::from(value)))
     }

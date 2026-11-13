@@ -34,6 +34,7 @@ pub struct ProofHarness {
 impl ProofHarness {
     /// Merge another value into this one.
     #[instrument(level = "debug", skip(self, other))]
+    #[hotpath::measure]
     pub fn merge(&mut self, other: ProofHarness) {
         self.non_empty_types.extend(other.non_empty_types);
         self.composition_pairs.extend(other.composition_pairs);
@@ -43,6 +44,7 @@ impl ProofHarness {
 
 /// Proof harness paths for a workspace hub (ported from elicit_doc).
 #[instrument(level = "debug", skip(hub, workspace))]
+#[hotpath::measure]
 pub fn proof_harness_paths(hub: WorkspaceHub, workspace: &Path) -> Vec<PathBuf> {
     match hub {
         WorkspaceHub::Elicitation => vec![
@@ -65,6 +67,7 @@ pub fn proof_harness_paths(hub: WorkspaceHub, workspace: &Path) -> Vec<PathBuf> 
 /// Load and merge proof harness scans for the workspace at `project_root`.
 #[cfg(feature = "impl_coverage")]
 #[instrument(level = "info", skip(filter), err(level = "warn"))]
+#[hotpath::measure]
 pub fn load_workspace_proof_harness(
     project_root: &Path,
     filter: &dyn crate::session::RunFilter,
@@ -75,6 +78,7 @@ pub fn load_workspace_proof_harness(
 
 /// Collect proof evidence from the run's shared source snapshot.
 #[instrument(level = "info", skip(filter, source), err(level = "warn"))]
+#[hotpath::measure]
 pub(crate) fn load_workspace_proof_harness_with_source(
     project_root: &Path,
     filter: &dyn crate::session::RunFilter,
@@ -93,12 +97,14 @@ pub(crate) fn load_workspace_proof_harness_with_source(
 /// Scan a proof harness test file.
 #[cfg(feature = "impl_coverage")]
 #[instrument(level = "debug", skip(path), err(level = "warn"))]
+#[hotpath::measure]
 pub fn collect_proof_harness(path: &Path) -> CordialResult<ProofHarness> {
     let source = SourceLoadView::for_session();
     collect_proof_harness_with_source(path, &source)
 }
 
 #[instrument(level = "debug", skip(path, source), err(level = "warn"))]
+#[hotpath::measure]
 pub(crate) fn collect_proof_harness_with_source(
     path: &Path,
     source: &SourceLoadView,
@@ -135,6 +141,7 @@ pub(crate) fn collect_proof_harness_with_source(
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn extract_turbofish_arg(line: &str, fn_name: &str) -> Option<String> {
     let prefix = format!("{fn_name}::<");
     let start = line.find(&prefix)? + prefix.len();
@@ -145,6 +152,7 @@ fn extract_turbofish_arg(line: &str, fn_name: &str) -> Option<String> {
 }
 
 #[instrument(level = "debug", skip(source, subjects))]
+#[hotpath::measure]
 fn collect_string_args(source: &str, fn_name: &str, subjects: &mut HashSet<String>) {
     let prefix = format!("{fn_name}(");
     let mut rest = source;
@@ -162,6 +170,7 @@ fn collect_string_args(source: &str, fn_name: &str, subjects: &mut HashSet<Strin
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn extract_kani_contains(line: &str) -> Option<(String, String)> {
     let prefix = "assert_kani_contains::<";
     let start = line.find(prefix)? + prefix.len();
@@ -179,6 +188,7 @@ fn extract_kani_contains(line: &str) -> Option<(String, String)> {
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn find_matching_angle(s: &str) -> Option<usize> {
     let mut depth: i32 = 1;
     for (i, ch) in s.char_indices() {
@@ -197,6 +207,7 @@ fn find_matching_angle(s: &str) -> Option<usize> {
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn find_top_level_comma(s: &str) -> Option<usize> {
     let mut depth: i32 = 0;
     for (i, ch) in s.char_indices() {

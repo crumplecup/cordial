@@ -2,6 +2,7 @@
 use crate::ir::VisibilityModule as ModuleNode;
 use tracing::instrument;
 #[instrument(level = "debug", skip(node))]
+#[hotpath::measure]
 pub(super) fn external_name_count(node: &ModuleNode) -> usize {
     let mut n = node.leaf_pub();
     for child in node.children() {
@@ -13,6 +14,7 @@ pub(super) fn external_name_count(node: &ModuleNode) -> usize {
 }
 
 #[instrument(level = "debug", skip(node))]
+#[hotpath::measure]
 pub(super) fn public_path_mods(node: &ModuleNode) -> Vec<&ModuleNode> {
     let mut out = Vec::new();
     for child in node.children() {

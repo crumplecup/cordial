@@ -44,6 +44,7 @@ impl NextestRequest {
 /// Read the events nextest prints with `--message-format libtest-json-plus`.
 /// Only tests that ran carry a duration; skipped and ignored ones are left out.
 #[instrument(level = "debug", skip(output), err(level = "warn"))]
+#[hotpath::measure]
 pub fn parse_events(output: &str) -> CordialResult<Vec<TestRun>> {
     let mut runs = Vec::new();
     for line in output.lines().filter(|line| line.starts_with('{')) {
@@ -77,6 +78,7 @@ pub fn parse_events(output: &str) -> CordialResult<Vec<TestRun>> {
 /// a run that produced no test results at all (a build error, a filter matching
 /// nothing) is an error.
 #[instrument(level = "debug", skip(root), err(level = "warn"))]
+#[hotpath::measure]
 pub fn run(root: &Path, request: &NextestRequest, raw: &Path) -> CordialResult<Vec<TestRun>> {
     if let Some(parent) = raw.parent() {
         std::fs::create_dir_all(parent)?;

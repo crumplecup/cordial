@@ -16,6 +16,7 @@ pub enum ShadowImplStatus {
 
 impl ShadowImplStatus {
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Complete => "Complete",
@@ -26,6 +27,7 @@ impl ShadowImplStatus {
 }
 
 #[instrument(level = "debug", skip(item, complete))]
+#[hotpath::measure]
 pub fn shadow_impl_status(item: &RustdocItem, complete: &ElicitCompleteSet) -> ShadowImplStatus {
     if !item.kind().is_type() {
         return ShadowImplStatus::Missing;
@@ -42,6 +44,7 @@ pub fn shadow_impl_status(item: &RustdocItem, complete: &ElicitCompleteSet) -> S
 }
 
 #[instrument(level = "debug", skip(item, prereqs))]
+#[hotpath::measure]
 pub fn shadow_can_be_direct(item: &RustdocItem, prereqs: &HashMap<String, TraitPrereqs>) -> String {
     if !item.kind().is_type() {
         return String::new();
@@ -53,6 +56,7 @@ pub fn shadow_can_be_direct(item: &RustdocItem, prereqs: &HashMap<String, TraitP
 }
 
 #[instrument(level = "debug", skip(item, prereqs))]
+#[hotpath::measure]
 pub fn shadow_missing_external_traits(
     item: &RustdocItem,
     prereqs: &HashMap<String, TraitPrereqs>,
@@ -67,6 +71,7 @@ pub fn shadow_missing_external_traits(
 }
 
 #[instrument(level = "debug", skip(item, prereqs))]
+#[hotpath::measure]
 pub fn shadow_missing_our_traits(
     item: &RustdocItem,
     prereqs: &HashMap<String, TraitPrereqs>,
@@ -90,6 +95,7 @@ pub fn shadow_missing_our_traits(
 }
 
 #[instrument(level = "debug", skip(row))]
+#[hotpath::measure]
 pub fn shadow_verification_gap(row: &ShadowRow) -> bool {
     if !matches!(row.status(), ShadowStatus::Covered | ShadowStatus::Drifted)
         || !row.item_kind().is_type()
@@ -101,6 +107,7 @@ pub fn shadow_verification_gap(row: &ShadowRow) -> bool {
 }
 
 #[instrument(level = "debug", skip(prereqs))]
+#[hotpath::measure]
 fn external_blockers_absent(prereqs: &TraitPrereqs) -> Vec<String> {
     let mut blockers = Vec::new();
     if !prereqs.serialize() {

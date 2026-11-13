@@ -78,6 +78,7 @@ fn group(part: &SyntaxElement, brace: bool) -> bool {
 }
 
 #[instrument(level = "debug", skip(tree, invocation, syntax))]
+#[hotpath::measure]
 pub(super) fn event(
     tree: Option<ast::TokenTree>,
     invocation: Option<&ast::MacroCall>,
@@ -101,6 +102,7 @@ pub(super) fn event(
 }
 
 #[instrument(level = "debug", skip(invocation, field, syntax))]
+#[hotpath::measure]
 fn unhandled(invocation: &ast::MacroCall, field: &str, syntax: &DatabaseMacroSyntax) -> bool {
     let mut tokens = Tokens::default();
     if let Some(tree) = invocation.token_tree() {
@@ -127,6 +129,7 @@ fn unhandled(invocation: &ast::MacroCall, field: &str, syntax: &DatabaseMacroSyn
 }
 
 #[instrument(level = "debug", skip(expr, field, syntax))]
+#[hotpath::measure]
 fn accesses(expr: &ast::Expr, field: &str, syntax: &DatabaseMacroSyntax) -> bool {
     expr.syntax().descendants().any(|node| {
         if let Some(value) = ast::FieldExpr::cast(node.clone())

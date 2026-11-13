@@ -44,6 +44,7 @@ pub struct SemanticCargoOptions {
 
 impl SemanticCargoOptions {
     #[tracing::instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub(super) fn cargo_config(&self) -> ra_ap_project_model::CargoConfig {
         use ra_ap_project_model::{CargoConfig, CargoFeatures, RustLibSource};
         let features = match &self.features {

@@ -6,6 +6,7 @@ impl ObservabilityBody {
     /// by `tracing`'s own functions, not by anything that happens to be called
     /// `init`; a fallback is the standard library's `unwrap_or` family.
     #[tracing::instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub(crate) fn note_callee(&mut self, callee: &crate::ir::SemanticCallee) {
         const SUBSCRIBER: &[&str] = &["tracing_subscriber", "tracing", "tracing_core"];
         self.calls_install |= callee.is(SUBSCRIBER, &["init", "try_init", "set_global_default"]);

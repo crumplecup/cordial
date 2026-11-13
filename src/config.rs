@@ -12,7 +12,7 @@ mod checks;
 mod configured;
 mod finding_policy;
 mod gates;
-mod hotpath;
+mod hotpath_config;
 mod internal_error_chain;
 mod lint_paths;
 mod lints;
@@ -41,7 +41,7 @@ pub use self::checks::{
 };
 pub use self::configured::TomlConfigured;
 pub use self::gates::EtiquetteGate;
-pub use self::hotpath::HotpathConfig;
+pub use self::hotpath_config::HotpathConfig;
 pub use self::internal_error_chain::{ErrorFieldStrategy, InternalErrorChainThresholds};
 pub use self::lints::{LintLocation, LintPathBase, LintPathPolicy, LintPolicy};
 pub use self::modularity::ModularityThresholds;
@@ -221,6 +221,7 @@ impl CordialConfig {
 /// layered over [`CordialConfig::default`]. Workspace wins. Missing or
 /// unreadable files fall back to `Default` instead of failing the run.
 #[instrument(level = "info")]
+#[hotpath::measure]
 pub fn load_cordial_config(workspace_root: &Path, store_home: &Path) -> CordialConfig {
     let mut builder = Config::builder();
     if let Ok(defaults) = Config::try_from(&CordialConfig::default()) {
@@ -236,12 +237,14 @@ pub fn load_cordial_config(workspace_root: &Path, store_home: &Path) -> CordialC
 
 /// Same as [`load_cordial_config`] using the session's project root and store home.
 #[instrument(level = "info", skip(session))]
+#[hotpath::measure]
 pub fn load_session_config(session: &dyn SessionView) -> CordialConfig {
     load_cordial_config(session.project_root(), session.store_home())
 }
 
 /// Convenience for the visibility etiquette.
 #[instrument(level = "info")]
+#[hotpath::measure]
 pub fn load_visibility_thresholds(
     workspace_root: &Path,
     store_home: &Path,
@@ -251,16 +254,19 @@ pub fn load_visibility_thresholds(
 
 /// Convenience for the derives etiquette.
 #[instrument(level = "info")]
+#[hotpath::measure]
 pub fn load_derives_thresholds(workspace_root: &Path, store_home: &Path) -> DerivesThresholds {
     load_cordial_config(workspace_root, store_home).derives
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 pub(super) fn default_true() -> bool {
     true
 }
 
 #[instrument(level = "debug", skip(builder, path))]
+#[hotpath::measure]
 fn add_optional_toml(
     builder: config::ConfigBuilder<config::builder::DefaultState>,
     path: &Path,

@@ -22,6 +22,7 @@ use crate::etiquettes::internal_error_chain::apply::initializers::{
 
 /// Return one conversion unit and declaration line per candidate field.
 #[instrument(level = "debug", skip(files, declarations), err(level = "warn"))]
+#[hotpath::measure]
 pub(super) fn collect_conversion_units(
     files: &[FileSnapshot],
     declarations: &CrateTypeIndex,
@@ -161,6 +162,7 @@ pub(super) fn collect_conversion_units(
 }
 
 #[instrument(level = "debug", skip(files, index), err(level = "warn"))]
+#[hotpath::measure]
 fn find_candidates(
     files: &[FileSnapshot],
     index: &CrateTypeIndex,
@@ -331,6 +333,7 @@ fn find_candidates(
 }
 
 #[instrument(level = "debug", skip(file, kind))]
+#[hotpath::measure]
 fn unresolved_site(file: &FileSnapshot, kind: ErrorConversionSiteKind) -> ErrorConversionSite {
     ErrorConversionSite {
         path: file.path().to_path_buf(),

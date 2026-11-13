@@ -38,6 +38,7 @@ pub struct TypeRec {
 
 impl TypeRec {
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub(crate) fn builder() -> TypeRecBuilder {
         TypeRecBuilder::default()
     }
@@ -83,6 +84,7 @@ pub struct LayoutCatalog {
 
 impl LayoutCatalog {
     #[instrument(level = "debug", fields(crate_name = crate_name))]
+    #[hotpath::measure]
     pub(crate) fn new(crate_name: String) -> Self {
         Self {
             crate_name,
@@ -93,6 +95,7 @@ impl LayoutCatalog {
     }
 
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub(crate) fn acts_mut(&mut self) -> &mut BTreeMap<String, ActRec> {
         &mut self.acts
     }

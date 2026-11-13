@@ -27,6 +27,7 @@ use tracing::instrument;
 /// (non-workspace) crate the two are the same path, so this is a no-op
 /// there.
 #[instrument(level = "debug", skip(policy), err(level = "warn"))]
+#[hotpath::measure]
 pub fn scan_crate_doc_warnings(
     crate_root: &Path,
     resolve_root: &Path,
@@ -57,6 +58,7 @@ pub fn scan_crate_doc_warnings(
 /// for why that's the workspace root, not necessarily the scanned
 /// crate's own root.
 #[instrument(level = "debug", skip(output), err(level = "warn"))]
+#[hotpath::measure]
 pub fn parse_doc_compiler_output(
     output: &str,
     resolve_root: &Path,
@@ -210,6 +212,7 @@ fn push_record(
 }
 
 #[instrument(level = "debug", skip(file))]
+#[hotpath::measure]
 fn resolve_diagnostic_file(resolve_root: &Path, file: &str) -> PathBuf {
     let path = PathBuf::from(file);
     if path.is_absolute() {
@@ -219,6 +222,7 @@ fn resolve_diagnostic_file(resolve_root: &Path, file: &str) -> PathBuf {
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn resolve_cargo_binary() -> Option<PathBuf> {
     for key in ["CORDIAL_CARGO", "CARGO"] {
         if let Ok(value) = std::env::var(key) {
@@ -232,6 +236,7 @@ fn resolve_cargo_binary() -> Option<PathBuf> {
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn which_cargo() -> Option<PathBuf> {
     let Ok(path) = std::env::var("PATH") else {
         return None;
@@ -246,6 +251,7 @@ fn which_cargo() -> Option<PathBuf> {
 }
 
 #[instrument(level = "info", skip(policy), fields(crate_name = crate_name), err(level = "warn"))]
+#[hotpath::measure]
 fn run_cargo_doc(
     cargo: &Path,
     crate_root: &Path,

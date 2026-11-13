@@ -14,6 +14,7 @@ pub struct AllMustBeOnlyTierRequestedSource {
 impl AllMustBeOnlyTierRequestedSource {
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn new() -> Self {
         let loc = Location::caller();
         Self {
@@ -50,6 +51,7 @@ pub struct UnknownTierSource {
 impl UnknownTierSource {
     #[track_caller]
     #[instrument(level = "debug", skip(tier, known))]
+    #[hotpath::measure]
     pub fn new(tier: impl Into<String>, known: impl Into<String>) -> Self {
         let loc = Location::caller();
         Self {
@@ -92,6 +94,7 @@ pub struct TierError {
 impl TierError {
     #[track_caller]
     #[instrument(level = "debug", skip(kind))]
+    #[hotpath::measure]
     fn new(kind: TierErrorKind) -> Self {
         let loc = Location::caller();
         Self {
@@ -127,6 +130,7 @@ impl super::CordialError {
     /// `--tier all` was combined with another tier name.
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn all_must_be_only_tier_requested() -> Self {
         Self::from_kind(super::CordialErrorKind::Tier(TierError::new(
             TierErrorKind::AllMustBeOnlyTierRequested(AllMustBeOnlyTierRequestedSource::new()),
@@ -136,6 +140,7 @@ impl super::CordialError {
     /// An unrecognized tier name was requested.
     #[track_caller]
     #[instrument(level = "debug", skip(tier, known))]
+    #[hotpath::measure]
     pub fn unknown_tier(tier: impl Into<String>, known: impl Into<String>) -> Self {
         Self::from_kind(super::CordialErrorKind::Tier(TierError::new(
             TierErrorKind::UnknownTier(UnknownTierSource::new(tier, known)),

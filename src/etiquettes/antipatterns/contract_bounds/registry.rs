@@ -12,6 +12,7 @@ use tracing::instrument;
 
 /// Load contract records for the unnamed-contract-bound rule.
 #[instrument(level = "info")]
+#[hotpath::measure]
 pub fn fetch_contract_records(workspace_root: &Path, store_root: &Path) -> Vec<ContractRecordDump> {
     let slug = crate::store::project_slug_from_path(workspace_root);
     let store = StoreLayout::from_root(store_root, slug);
@@ -47,6 +48,7 @@ pub fn fetch_contract_records(workspace_root: &Path, store_root: &Path) -> Vec<C
 }
 
 #[instrument(level = "info", skip(path), err(level = "warn"))]
+#[hotpath::measure]
 fn load_registry_dump(path: &Path) -> CordialResult<Vec<ContractRecordDump>> {
     let content = std::fs::read_to_string(path)?;
     let dump: RegistryDump = serde_json::from_str(&content)
@@ -55,6 +57,7 @@ fn load_registry_dump(path: &Path) -> CordialResult<Vec<ContractRecordDump>> {
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn workspace_has_amenable(workspace_root: &Path) -> bool {
     cargo_metadata::MetadataCommand::new()
         .current_dir(workspace_root)

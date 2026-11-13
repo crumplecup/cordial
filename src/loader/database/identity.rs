@@ -15,6 +15,7 @@ use crate::ir::{SemanticCallee, SemanticMacroCall};
 /// the macro it resolved to. Invocations inside closures count: an error event
 /// is often emitted from a `map_err` closure.
 #[tracing::instrument(level = "debug", skip(sema, function))]
+#[hotpath::measure]
 pub(super) fn macro_calls(
     sema: &Semantics<'_, RootDatabase>,
     function: &ast::Fn,
@@ -100,6 +101,7 @@ pub(crate) fn is_verus_macro(
 /// same module is not found this way, so it is never mistaken for another.
 #[cfg(any(feature = "tracing", feature = "verus_ir"))]
 #[tracing::instrument(level = "debug", skip(sema, invocation))]
+#[hotpath::measure]
 pub(crate) fn macro_by_path(
     sema: &Semantics<'_, RootDatabase>,
     invocation: &ast::MacroCall,
@@ -110,6 +112,7 @@ pub(crate) fn macro_by_path(
 /// The macro `path` names where `scope` is written: the same lookup for an
 /// attribute, whose path is resolved from the module around the item it is on.
 #[tracing::instrument(level = "debug", skip(sema, scope, path))]
+#[hotpath::measure]
 pub(crate) fn macro_at(
     sema: &Semantics<'_, RootDatabase>,
     scope: &ra_ap_syntax::SyntaxNode,

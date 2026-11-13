@@ -16,9 +16,11 @@ use tracing::instrument;
 /// Bump when the IR or what the analysis records changes shape.
 pub(crate) const SCHEMA: u32 = 11;
 
+#[cfg(feature = "tracing")]
 /// A short digest of a serialisable policy, to name an artifact that depends on
 /// it as well as on the entry's key.
 #[instrument(level = "debug", skip(policy), err(level = "warn"))]
+#[hotpath::measure]
 pub(crate) fn policy_digest<T: serde::Serialize>(policy: &T) -> CordialResult<String> {
     let bytes = serde_json::to_vec(policy)?;
     Ok(hex(&Sha256::digest(bytes))[..16].to_owned())
@@ -37,6 +39,7 @@ pub(crate) struct Inputs(BTreeMap<String, String>);
 impl Inputs {
     /// The digest naming this set of inputs.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub(crate) fn digest(&self) -> String {
         let mut hasher = Sha256::new();
         for (label, value) in &self.0 {
@@ -50,6 +53,7 @@ impl Inputs {
 
     /// Labels whose value differs from `previous`, for a miss explanation.
     #[instrument(level = "debug", skip(self, previous))]
+    #[hotpath::measure]
     pub(crate) fn changed_since(&self, previous: &Self) -> Vec<String> {
         let mut changed: Vec<String> = self
             .0
@@ -68,6 +72,7 @@ impl Inputs {
     }
 
     #[instrument(level = "debug", skip(self, label, value))]
+    #[hotpath::measure]
     fn put(&mut self, label: impl Into<String>, value: impl Into<String>) {
         self.0.insert(label.into(), value.into());
     }
@@ -129,6 +134,7 @@ const BUILD_VARIABLES: &[&str] = &[
 ];
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 pub(crate) fn shapes_the_build(name: &str) -> bool {
     BUILD_VARIABLES
         .iter()
@@ -138,6 +144,7 @@ pub(crate) fn shapes_the_build(name: &str) -> bool {
 /// Path, size and modification time of this binary: a rebuild changes what the
 /// analysis does, so it must change the key.
 #[instrument(level = "debug")]
+#[hotpath::measure]
 pub(crate) fn executable_fingerprint() -> String {
     std::env::current_exe()
         .and_then(|path| {
@@ -152,6 +159,7 @@ pub(crate) fn executable_fingerprint() -> String {
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn rustc_version(project_root: &Path) -> String {
     std::process::Command::new("rustc")
         .arg("-vV")
@@ -191,6 +199,7 @@ fn local_package_roots(project_root: &Path) -> CordialResult<(PathBuf, Vec<PathB
 }
 
 #[instrument(level = "debug", skip(inputs))]
+#[hotpath::measure]
 fn hash_tree(inputs: &mut Inputs, workspace_root: &Path, root: &Path) {
     let entries = walkdir::WalkDir::new(root)
         .into_iter()
@@ -209,6 +218,7 @@ fn hash_tree(inputs: &mut Inputs, workspace_root: &Path, root: &Path) {
 }
 
 #[instrument(level = "debug", skip(inputs, path))]
+#[hotpath::measure]
 fn hash_file(inputs: &mut Inputs, workspace_root: &Path, path: &Path) {
     let label = path
         .strip_prefix(workspace_root)
@@ -225,6 +235,7 @@ fn hash_file(inputs: &mut Inputs, workspace_root: &Path, path: &Path) {
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }

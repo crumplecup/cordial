@@ -40,6 +40,7 @@ impl StabilityLevel {
 
 /// Parse a [`StabilityLevel`] from one `Attribute::Other` debug string.
 #[instrument(level = "debug")]
+#[hotpath::measure]
 pub fn parse_stability_attr_text(text: &str) -> StabilityLevel {
     if let Some(level) = parse_stability_level(text).ok().map(|(_, level)| level) {
         return level;
@@ -56,6 +57,7 @@ pub fn parse_stability_attr_text(text: &str) -> StabilityLevel {
 
 /// Combined stability from all attrs on an item (Unstable wins over Stable).
 #[instrument(level = "debug", skip(attrs))]
+#[hotpath::measure]
 pub fn stability_from_attrs(attrs: &[Attribute]) -> StabilityLevel {
     let mut saw_stable = false;
     for attr in attrs {
@@ -77,17 +79,20 @@ pub fn stability_from_attrs(attrs: &[Attribute]) -> StabilityLevel {
 
 /// Whether an item's own attrs mark it unstable.
 #[instrument(level = "debug", skip(item))]
+#[hotpath::measure]
 pub fn item_attrs_are_unstable(item: &Item) -> bool {
     stability_from_attrs(&item.attrs).is_unstable()
 }
 
 /// True when rustdoc JSON embeds parseable stability markers (sanity check for sysroot cache).
 #[instrument(level = "debug")]
+#[hotpath::measure]
 pub fn rustdoc_json_has_stability_markers(content: &str) -> bool {
     content.contains(STABILITY_LEVEL_PREFIX)
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn parse_stability_level(input: &str) -> IResult<&str, StabilityLevel> {
     let (rest, _) = take_until(STABILITY_LEVEL_PREFIX)(input)?;
     let (rest, _) = tag(STABILITY_LEVEL_PREFIX)(rest)?;

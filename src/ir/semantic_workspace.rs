@@ -123,6 +123,7 @@ pub struct SemanticWorkspaceContext {
 impl SemanticWorkspaceContext {
     /// Start a builder for this value.
     #[tracing::instrument(level = "debug")]
+    #[hotpath::measure]
     pub(crate) fn builder() -> SemanticWorkspaceContextBuilder {
         SemanticWorkspaceContextBuilder::default()
     }

@@ -123,6 +123,7 @@ pub static FEATURE_WARNINGS_ETIQUETTE: LazyLock<StaticQualityEtiquette> = LazyLo
 });
 
 #[instrument(level = "debug", skip(findings))]
+#[hotpath::measure]
 fn quality_area_compute(findings: &[&dyn Finding]) -> (usize, String) {
     let feature_warnings = count_open_category(findings, "feature_warnings");
     (

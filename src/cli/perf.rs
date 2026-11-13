@@ -138,6 +138,7 @@ pub enum PerfTestsCommands {
 
 impl PerfCommands {
     #[instrument(level = "debug", skip(self, ctx), err(level = "warn"))]
+    #[hotpath::measure]
     pub(super) fn act(self, ctx: &ActCtx) -> CordialResult<()> {
         match self {
             Self::List { json } => list(ctx, json),
@@ -164,6 +165,7 @@ impl PerfCommands {
 
 impl PerfTestsCommands {
     #[instrument(level = "debug", skip(self, ctx), err(level = "warn"))]
+    #[hotpath::measure]
     pub(super) fn act(self, ctx: &ActCtx) -> CordialResult<()> {
         match self {
             Self::Timing {
@@ -230,6 +232,7 @@ fn row(record: &RunRecord, baseline: bool) -> String {
 }
 
 #[instrument(level = "debug", skip(ctx), err(level = "warn"))]
+#[hotpath::measure]
 fn list(ctx: &ActCtx, json: bool) -> CordialResult<()> {
     let store = PerfStore::new(ctx.store());
     let records = store.list()?;
@@ -262,6 +265,7 @@ struct TimingOptions {
 
 /// The nextest filterset for `name`: the one given, or the set the project names.
 #[instrument(level = "debug", skip(ctx, given), err(level = "warn"))]
+#[hotpath::measure]
 fn filter_of(ctx: &ActCtx, name: &str, given: Option<String>) -> CordialResult<String> {
     if let Some(filter) = given {
         return Ok(filter);
@@ -285,6 +289,7 @@ fn filter_of(ctx: &ActCtx, name: &str, given: Option<String>) -> CordialResult<S
 
 /// Run the named set (or read its raw logs), save its record, and print the ranking.
 #[instrument(level = "debug", skip(ctx, options), err(level = "warn"))]
+#[hotpath::measure]
 fn timing(ctx: &ActCtx, name: &str, options: TimingOptions) -> CordialResult<()> {
     let store = PerfStore::new(ctx.store());
     let record = if options.from.is_empty() {
@@ -313,6 +318,7 @@ fn timing(ctx: &ActCtx, name: &str, options: TimingOptions) -> CordialResult<()>
 /// Measure the named workflow on the project, save one record per state, and
 /// print where each state's time went.
 #[instrument(level = "debug", skip(ctx, program), err(level = "warn"))]
+#[hotpath::measure]
 fn workflow(
     ctx: &ActCtx,
     name: &str,
@@ -354,6 +360,7 @@ fn workflow(
 /// Run the set with per-test profiling, join the profiles into the record, save
 /// it, and print where the time went.
 #[instrument(level = "debug", skip(ctx, options), err(level = "warn"))]
+#[hotpath::measure]
 fn profile(ctx: &ActCtx, name: &str, options: TimingOptions) -> CordialResult<()> {
     let store = PerfStore::new(ctx.store());
     let stamp = std::time::SystemTime::now()
@@ -387,6 +394,7 @@ fn profile(ctx: &ActCtx, name: &str, options: TimingOptions) -> CordialResult<()
 
 /// Mark the named record as its subject's baseline.
 #[instrument(level = "debug", skip(ctx), err(level = "warn"))]
+#[hotpath::measure]
 fn baseline(ctx: &ActCtx, query: &str) -> CordialResult<()> {
     let store = PerfStore::new(ctx.store());
     let record = store.find(query)?;
@@ -403,6 +411,7 @@ fn baseline(ctx: &ActCtx, query: &str) -> CordialResult<()> {
 
 /// The (baseline, candidate) pairs the arguments name.
 #[instrument(level = "debug", skip(store), err(level = "warn"))]
+#[hotpath::measure]
 fn pairs(
     store: &PerfStore,
     first: Option<String>,
@@ -441,6 +450,7 @@ fn pairs(
 
 /// Compare the chosen records and print each comparison.
 #[instrument(level = "debug", skip(ctx), err(level = "warn"))]
+#[hotpath::measure]
 fn compare_records(
     ctx: &ActCtx,
     first: Option<String>,
@@ -477,6 +487,7 @@ fn compare_records(
 
 /// Print the last `last` rows of the run log as an aligned table.
 #[instrument(level = "debug", skip(ctx), err(level = "warn"))]
+#[hotpath::measure]
 fn runs(ctx: &ActCtx, last: usize) -> CordialResult<()> {
     let file = crate::perf::runlog::path(ctx.store());
     let mut output = crate::host::stdout();

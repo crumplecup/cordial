@@ -68,6 +68,7 @@ impl IrEnricher for SynDocLinkEnricher {
 }
 
 #[instrument(level = "debug", skip(ir, source, rustdoc), err(level = "warn"))]
+#[hotpath::measure]
 fn link_peers(
     ir: &mut dyn IrMut,
     source: crate::ir::NodeId,
@@ -90,6 +91,7 @@ fn link_peers(
 
 /// Resolve the linked peer node id when syn and rustdoc inventories were both loaded.
 #[instrument(level = "debug", skip(node))]
+#[hotpath::measure]
 pub fn syn_doc_peer(node: &dyn NodeView) -> Option<crate::ir::NodeId> {
     let id = node
         .attr(ATTR_SYN_DOC_PEER)
@@ -100,6 +102,7 @@ pub fn syn_doc_peer(node: &dyn NodeView) -> Option<crate::ir::NodeId> {
 
 /// Inventory link key.
 #[instrument(level = "debug", skip(path))]
+#[hotpath::measure]
 pub fn inventory_link_key(path: &str, crate_name: &str) -> String {
     let normalized = crate_name.replace('-', "_");
     if path.split("::").next() == Some(normalized.as_str()) {

@@ -37,6 +37,7 @@ impl SourceDatabase {
         )
     }
     #[tracing::instrument(level = "debug", skip(self, path), err(level = "warn"))]
+    #[hotpath::measure]
     pub(super) fn error_source<'db>(
         &'db self,
         path: &'db Path,
@@ -56,6 +57,7 @@ impl SourceDatabase {
         ))
     }
     #[tracing::instrument(level = "debug", skip(self), err(level = "warn"))]
+    #[hotpath::measure]
     pub(super) fn error_module_files(&self, root: &Path) -> CordialResult<Vec<PathBuf>> {
         let src = root.join("src");
         let library = src.join("lib.rs");

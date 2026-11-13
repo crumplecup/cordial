@@ -46,6 +46,7 @@ pub struct ScanError {
 impl ScanError {
     #[track_caller]
     #[instrument(level = "debug", skip(kind))]
+    #[hotpath::measure]
     fn new(kind: ScanErrorKind) -> Self {
         let loc = Location::caller();
         Self {
@@ -103,6 +104,7 @@ impl super::CordialError {
     /// A probe rustdoc cache was missing and live probe builds are disabled.
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn probe_rustdoc_cache_miss() -> Self {
         Self::from_kind(super::CordialErrorKind::Scan(ScanError::new(
             ScanErrorKind::ProbeRustdocCacheMiss(ProbeRustdocCacheMissSource::new()),
@@ -112,6 +114,7 @@ impl super::CordialError {
     /// `amenable ext`'s reporter rendered without any assessor findings.
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn amenable_ext_reporter_requires_assessor_findings() -> Self {
         Self::from_kind(super::CordialErrorKind::Scan(ScanError::new(
             ScanErrorKind::AmenableExtReporterRequiresAssessorFindings(
@@ -123,6 +126,7 @@ impl super::CordialError {
     /// `amenable std`'s reporter rendered without any assessor findings.
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn amenable_std_reporter_requires_assessor_findings() -> Self {
         Self::from_kind(super::CordialErrorKind::Scan(ScanError::new(
             ScanErrorKind::AmenableStdReporterRequiresAssessorFindings(
@@ -134,6 +138,7 @@ impl super::CordialError {
     /// `homecoming std`'s reporter rendered without any assessor findings.
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn homecoming_std_reporter_requires_assessor_findings() -> Self {
         Self::from_kind(super::CordialErrorKind::Scan(ScanError::new(
             ScanErrorKind::HomecomingStdReporterRequiresAssessorFindings(
@@ -145,6 +150,7 @@ impl super::CordialError {
     /// `cargo update --dry-run --verbose` failed while checking dependency freshness.
     #[track_caller]
     #[instrument(level = "debug", skip(text))]
+    #[hotpath::measure]
     pub fn dependency_freshness_check_failed(text: impl Into<String>) -> Self {
         Self::from_kind(super::CordialErrorKind::Scan(ScanError::new(
             ScanErrorKind::DependencyFreshnessCheckFailed(
@@ -156,6 +162,7 @@ impl super::CordialError {
     /// Rustdoc JSON was not found for a specific crate.
     #[track_caller]
     #[instrument(level = "debug", skip(crate_name, path))]
+    #[hotpath::measure]
     pub fn rustdoc_json_not_found_for_crate(crate_name: impl Into<String>, path: PathBuf) -> Self {
         Self::from_kind(super::CordialErrorKind::Scan(ScanError::new(
             ScanErrorKind::RustdocJsonNotFoundForCrate(RustdocJsonNotFoundForCrateSource::new(
@@ -167,6 +174,7 @@ impl super::CordialError {
     /// No std-family rustdoc cache was found under the sysroot store.
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn no_std_family_rustdoc_cache() -> Self {
         Self::from_kind(super::CordialErrorKind::Scan(ScanError::new(
             ScanErrorKind::NoStdFamilyRustdocCache(NoStdFamilyRustdocCacheSource::new()),
@@ -176,6 +184,7 @@ impl super::CordialError {
     /// A crate's IR must exist in the workspace after enrichment.
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn crate_ir_must_exist() -> Self {
         Self::from_kind(super::CordialErrorKind::Scan(ScanError::new(
             ScanErrorKind::CrateIrMustExist(CrateIrMustExistSource::new()),
@@ -185,6 +194,7 @@ impl super::CordialError {
     /// A crate's IR was not loaded in the workspace for a shadow compare.
     #[track_caller]
     #[instrument(level = "debug", skip(crate_name))]
+    #[hotpath::measure]
     pub fn crate_ir_not_loaded_for_shadow_compare(crate_name: impl Into<String>) -> Self {
         Self::from_kind(super::CordialErrorKind::Scan(ScanError::new(
             ScanErrorKind::CrateIrNotLoadedForShadowCompare(
@@ -196,6 +206,7 @@ impl super::CordialError {
     /// The workspace had no crate targets to render a report for.
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn workspace_missing_crate_targets() -> Self {
         Self::from_kind(super::CordialErrorKind::Scan(ScanError::new(
             ScanErrorKind::WorkspaceMissingCrateTargets(WorkspaceMissingCrateTargetsSource::new()),

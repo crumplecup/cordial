@@ -37,6 +37,7 @@ pub(in crate::etiquettes::internal_error_chain::apply) struct CrateTypeIndex {
 
 impl CrateTypeIndex {
     #[instrument(level = "debug", skip(files, source), err(level = "warn"))]
+    #[hotpath::measure]
     pub(in crate::etiquettes::internal_error_chain::apply) fn new(
         files: &[FileSnapshot],
         source: &crate::ir::SourceErrorApply,
@@ -104,6 +105,7 @@ impl CrateTypeIndex {
     }
 
     #[instrument(level = "debug", skip(self, files))]
+    #[hotpath::measure]
     fn collect_incoming_edges(&self, files: &[FileSnapshot]) -> Vec<(String, ErrorEdgeTarget)> {
         let mut incoming = Vec::new();
         for file in files {

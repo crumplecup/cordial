@@ -14,6 +14,7 @@ use super::graph::{Dispatch, Graph, Origin};
 /// known caller is never added (public API, or dead code), and neither is one
 /// whose callers cannot all be seen.
 #[tracing::instrument(level = "debug", skip(graph, gates))]
+#[hotpath::measure]
 pub(super) fn proof_only(
     graph: &Graph,
     gates: &HashMap<String, BTreeSet<String>>,

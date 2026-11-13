@@ -20,6 +20,7 @@ struct CreusotDiagnosticRow {
 
 impl CreusotDiagnosticRow {
     #[instrument(level = "debug", skip(finding), ret)]
+    #[hotpath::measure]
     fn from_finding(finding: &dyn Finding) -> Self {
         let mut sink = MapFindingSink::default();
         finding.emit(&mut sink);
@@ -43,6 +44,7 @@ impl CreusotDiagnosticRow {
 }
 
 #[instrument(level = "debug", skip(findings))]
+#[hotpath::measure]
 fn diagnostic_rows(findings: &[&dyn Finding]) -> Vec<CreusotDiagnosticRow> {
     findings
         .iter()
@@ -52,6 +54,7 @@ fn diagnostic_rows(findings: &[&dyn Finding]) -> Vec<CreusotDiagnosticRow> {
 }
 
 #[instrument(level = "debug", skip(rows))]
+#[hotpath::measure]
 fn open_rows(rows: &[CreusotDiagnosticRow]) -> impl Iterator<Item = &CreusotDiagnosticRow> {
     rows.iter().filter(|row| row.disposition == "open")
 }
@@ -62,6 +65,7 @@ fn open_rows(rows: &[CreusotDiagnosticRow]) -> impl Iterator<Item = &CreusotDiag
 /// artifact must derive its own crate breakdown from `row.crate_name`
 /// instead (the same pattern `modularity::reporter::rows::crate_names` uses).
 #[instrument(level = "debug", skip(rows))]
+#[hotpath::measure]
 fn crate_names(rows: &[&CreusotDiagnosticRow]) -> Vec<String> {
     let mut names: Vec<String> = rows.iter().map(|row| row.crate_name.clone()).collect();
     names.sort();

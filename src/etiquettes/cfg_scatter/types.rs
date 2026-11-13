@@ -20,6 +20,7 @@ pub enum CfgScatterRuleId {
 
 impl CfgScatterRuleId {
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Scatter001 => "CFG-SCATTER-001",
@@ -79,6 +80,7 @@ pub enum CfgSiteKind {
 impl CfgSiteKind {
     /// Stable string form of this value.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Field => "field",
@@ -142,6 +144,7 @@ pub struct CfgSiteOccurrence {
 impl CfgSiteOccurrence {
     /// Start a builder for this value.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> CfgSiteOccurrenceBuilder {
         CfgSiteOccurrenceBuilder::default()
     }
@@ -309,6 +312,7 @@ pub struct CfgScatterFinding {
 impl CfgScatterFinding {
     /// Start a builder for this value.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> CfgScatterFindingBuilder {
         CfgScatterFindingBuilder::default()
     }
@@ -357,6 +361,7 @@ pub struct CfgScatterRecord {
 impl CfgScatterRecord {
     /// Start a builder for this value.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> CfgScatterRecordBuilder {
         CfgScatterRecordBuilder::default()
     }
@@ -364,6 +369,7 @@ impl CfgScatterRecord {
 
 impl CfgScatterRecord {
     #[instrument(level = "debug", skip(group), err(level = "warn"))]
+    #[hotpath::measure]
     pub fn from_group(group: &CfgScatterGroup) -> crate::error::CordialResult<Self> {
         let distinct_kinds: Vec<CfgSiteKind> =
             group.distinct_non_field_kinds().into_iter().collect();

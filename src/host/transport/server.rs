@@ -33,6 +33,7 @@ impl FrameSink for Connection {
 /// A socket left by a server that is gone is replaced; one that still answers
 /// is an error, since two sessions would each hold half the state.
 #[instrument(level = "debug", err(level = "warn"))]
+#[hotpath::measure]
 pub fn serve(socket: &Path, owner: Option<u32>) -> CordialResult<()> {
     let _ = server_build();
     if UnixStream::connect(socket).is_ok() {
@@ -75,6 +76,7 @@ pub fn serve(socket: &Path, owner: Option<u32>) -> CordialResult<()> {
 /// Exit when the terminal that started this session ends, removing the socket.
 /// A server is somebody's working state, not a daemon to leave behind.
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn watch_owner(socket: std::path::PathBuf, owner: u32) {
     let spawned = std::thread::Builder::new()
         .name("cordial-session-owner".to_owned())
@@ -106,6 +108,7 @@ fn server_build() -> &'static str {
 /// The server's environment is fixed when it starts, so a command that would
 /// build differently has to run in its own process.
 #[instrument(level = "debug", skip(request))]
+#[hotpath::measure]
 fn environment_conflict(request: &Request) -> Option<String> {
     let ours: std::collections::BTreeMap<String, String> = std::env::vars()
         .filter(|(name, _)| shapes_the_build(name) || name == "CORDIAL_HOME")

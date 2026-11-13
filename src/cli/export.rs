@@ -8,6 +8,7 @@ use crate::CordialResult;
 
 impl ExportCommands {
     #[instrument(level = "debug", skip(self, ctx), err(level = "warn"))]
+    #[hotpath::measure]
     pub(super) fn act(self, ctx: &ActCtx) -> CordialResult<()> {
         match self {
             Self::Surreal { output, statements } => export_surreal(

@@ -22,6 +22,7 @@ struct DeriveRow {
 
 impl DeriveRow {
     #[instrument(level = "debug", skip(finding), ret)]
+    #[hotpath::measure]
     fn from_finding(finding: &dyn Finding) -> Self {
         let mut sink = MapFindingSink::default();
         finding.emit(&mut sink);
@@ -48,6 +49,7 @@ impl DeriveRow {
 }
 
 #[instrument(level = "debug", skip(findings))]
+#[hotpath::measure]
 fn derive_rows(findings: &[&dyn Finding]) -> Vec<DeriveRow> {
     findings
         .iter()
@@ -57,6 +59,7 @@ fn derive_rows(findings: &[&dyn Finding]) -> Vec<DeriveRow> {
 }
 
 #[instrument(level = "debug", skip(rows))]
+#[hotpath::measure]
 fn open_rows(rows: &[DeriveRow]) -> impl Iterator<Item = &DeriveRow> {
     rows.iter().filter(|row| row.disposition == "open")
 }
@@ -67,6 +70,7 @@ fn open_rows(rows: &[DeriveRow]) -> impl Iterator<Item = &DeriveRow> {
 /// artifact must derive its own crate breakdown from `row.crate_name`
 /// instead (the same pattern `modularity::reporter::rows::crate_names` uses).
 #[instrument(level = "debug", skip(rows))]
+#[hotpath::measure]
 fn crate_names(rows: &[&DeriveRow]) -> Vec<String> {
     let mut names: Vec<String> = rows.iter().map(|row| row.crate_name.clone()).collect();
     names.sort();

@@ -61,6 +61,7 @@ use crate::objects::Rule;
 /// by the number of configured targets, and reclaimed at process exit
 /// (this is a CLI, not a long-running server).
 #[instrument(level = "debug")]
+#[hotpath::measure]
 pub fn build_ext_etiquette(target: &str) -> StaticEtiquette {
     let id = ext_etiquette_id(target);
 

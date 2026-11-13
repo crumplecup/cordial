@@ -6,6 +6,7 @@ use ra_ap_syntax::{AstNode, ast};
 use std::path::Path;
 
 #[tracing::instrument(level = "debug", skip(file, prefix), err(level = "warn"))]
+#[hotpath::measure]
 pub(super) fn collect(
     file: &DatabaseSource<'_>,
     root: &Path,

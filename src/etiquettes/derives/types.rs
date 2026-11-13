@@ -32,6 +32,7 @@ pub enum DeriveRuleId {
 impl DeriveRuleId {
     /// Stable string form of this value.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Builder001 => "DERIVE-BUILDER-001",
@@ -47,6 +48,7 @@ impl DeriveRuleId {
 
     /// Parse from the stable identifier string.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn from_attr(value: &str) -> Option<Self> {
         match value {
             "DERIVE-BUILDER-001" => Some(Self::Builder001),
@@ -139,6 +141,7 @@ pub struct DeriveFinding {
 impl DeriveFinding {
     /// Start a builder for this value.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> DeriveFindingBuilder {
         DeriveFindingBuilder::default()
     }
@@ -210,6 +213,7 @@ pub struct DeriveSiteRecord {
 impl DeriveSiteRecord {
     /// Start a builder for this value.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> DeriveSiteRecordBuilder {
         DeriveSiteRecordBuilder::default()
     }

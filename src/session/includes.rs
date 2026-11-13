@@ -14,6 +14,7 @@ use crate::session::RunFilter;
     feature = "elicitation"
 ))]
 #[instrument(level = "info", skip(plugins, filter, etiquettes))]
+#[hotpath::measure]
 pub(super) fn run_includes_coverage(
     plugins: &[&'static dyn Plugin],
     filter: &dyn RunFilter,
@@ -28,6 +29,7 @@ pub(super) fn run_includes_coverage(
 }
 
 #[instrument(level = "info", skip(plugins, filter, etiquettes))]
+#[hotpath::measure]
 #[cfg(feature = "quality")]
 pub(super) fn run_includes_quality(
     plugins: &[&'static dyn Plugin],

@@ -31,6 +31,7 @@ pub struct ErrorEdgeTarget {
 
 impl ErrorEdgeTarget {
     #[instrument(level = "debug", skip(file, kind))]
+    #[hotpath::measure]
     pub(in crate::etiquettes::internal_error_chain::apply) fn from_snapshot(
         file: &impl SourceSnapshot,
         line: usize,

@@ -38,6 +38,7 @@ pub struct ExceptionSet {
 impl ExceptionSet {
     /// Build a set from these entries.
     #[instrument(level = "debug", skip(entries), ret)]
+    #[hotpath::measure]
     pub fn from_entries(entries: Vec<ExceptionEntry>) -> Self {
         Self { entries }
     }
@@ -61,6 +62,7 @@ impl ExceptionSet {
 impl ExceptionEntry {
     /// Construct a new value.
     #[instrument(level = "debug", skip(file, reason), ret)]
+    #[hotpath::measure]
     pub fn new(file: impl Into<String>, reason: impl Into<String>) -> Self {
         Self {
             file: file.into(),
@@ -99,6 +101,7 @@ impl ExceptionEntry {
     }
 
     #[instrument(level = "debug", skip(self), err(level = "warn"))]
+    #[hotpath::measure]
     pub(super) fn normalized_for_store(mut self) -> CordialResult<Self> {
         self.file = normalize_rel_path(std::path::Path::new(self.file.trim()));
         self.reason = self.reason.trim().to_string();
@@ -120,6 +123,7 @@ impl ExceptionEntry {
     }
 
     #[instrument(level = "debug", skip(self, finding))]
+    #[hotpath::measure]
     fn matches(&self, finding: &dyn Finding) -> bool {
         let mut sink = MapFindingSink::default();
         finding.emit(&mut sink);
@@ -159,6 +163,7 @@ impl ExceptionEntry {
 }
 
 #[instrument(level = "debug", err(level = "warn"))]
+#[hotpath::measure]
 fn require_nonempty(label: &str, value: &str) -> CordialResult<()> {
     if value.trim().is_empty() {
         return Err(CordialError::label_must_not_be_empty(label));
@@ -175,6 +180,7 @@ pub struct FilteredFinding {
 
 impl FilteredFinding {
     #[instrument(level = "debug", skip(inner, reason))]
+    #[hotpath::measure]
     pub fn suppressed(inner: Box<dyn Finding>, reason: impl Into<String>) -> Self {
         Self {
             inner,
@@ -224,6 +230,7 @@ pub struct StaleException {
 /// row shadows is still live as long as some finding matches it. Results are
 /// ordered by etiquette, then file position.
 #[instrument(level = "debug", skip(findings, sets))]
+#[hotpath::measure]
 pub fn stale_exceptions(
     findings: &[&dyn Finding],
     sets: &HashMap<String, ExceptionSet>,
@@ -246,6 +253,7 @@ pub fn stale_exceptions(
 
 /// Apply loaded exception sets, wrapping matching findings as suppressed.
 #[instrument(level = "debug", skip(findings, sets))]
+#[hotpath::measure]
 pub fn apply_exception_sets(
     findings: Vec<Box<dyn Finding>>,
     sets: &HashMap<String, ExceptionSet>,

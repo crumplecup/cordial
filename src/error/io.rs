@@ -17,6 +17,7 @@ pub struct IoSource {
 impl IoSource {
     #[track_caller]
     #[instrument(level = "debug", skip(source))]
+    #[hotpath::measure]
     pub fn new(source: std::io::Error) -> Self {
         let loc = Location::caller();
         Self {
@@ -30,6 +31,7 @@ impl IoSource {
 impl From<std::io::Error> for IoSource {
     #[track_caller]
     #[instrument(level = "debug", skip(source))]
+    #[hotpath::measure]
     fn from(source: std::io::Error) -> Self {
         Self::new(source)
     }
@@ -61,6 +63,7 @@ pub struct FmtSource {
 impl FmtSource {
     #[track_caller]
     #[instrument(level = "debug", skip(source))]
+    #[hotpath::measure]
     pub fn new(source: std::fmt::Error) -> Self {
         let loc = Location::caller();
         Self {
@@ -74,6 +77,7 @@ impl FmtSource {
 impl From<std::fmt::Error> for FmtSource {
     #[track_caller]
     #[instrument(level = "debug", skip(source))]
+    #[hotpath::measure]
     fn from(source: std::fmt::Error) -> Self {
         Self::new(source)
     }
@@ -105,6 +109,7 @@ pub struct PrefixSource {
 impl PrefixSource {
     #[track_caller]
     #[instrument(level = "debug", skip(source))]
+    #[hotpath::measure]
     pub fn new(source: std::path::StripPrefixError) -> Self {
         let loc = Location::caller();
         Self {
@@ -118,6 +123,7 @@ impl PrefixSource {
 impl From<std::path::StripPrefixError> for PrefixSource {
     #[track_caller]
     #[instrument(level = "debug", skip(source))]
+    #[hotpath::measure]
     fn from(source: std::path::StripPrefixError) -> Self {
         Self::new(source)
     }
@@ -144,6 +150,7 @@ impl std::error::Error for PrefixSource {
 impl From<std::io::Error> for super::CordialError {
     #[track_caller]
     #[instrument(level = "debug", skip(value))]
+    #[hotpath::measure]
     fn from(value: std::io::Error) -> Self {
         Self::from_kind(super::CordialErrorKind::Io(IoSource::from(value)))
     }
@@ -152,6 +159,7 @@ impl From<std::io::Error> for super::CordialError {
 impl From<std::fmt::Error> for super::CordialError {
     #[track_caller]
     #[instrument(level = "debug", skip(value))]
+    #[hotpath::measure]
     fn from(value: std::fmt::Error) -> Self {
         Self::from_kind(super::CordialErrorKind::Fmt(FmtSource::from(value)))
     }
@@ -160,6 +168,7 @@ impl From<std::fmt::Error> for super::CordialError {
 impl From<std::path::StripPrefixError> for super::CordialError {
     #[track_caller]
     #[instrument(level = "debug", skip(value))]
+    #[hotpath::measure]
     fn from(value: std::path::StripPrefixError) -> Self {
         Self::from_kind(super::CordialErrorKind::Prefix(PrefixSource::from(value)))
     }

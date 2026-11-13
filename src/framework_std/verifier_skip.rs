@@ -20,6 +20,7 @@ pub struct VerifierSkipEntry {
 impl VerifierSkipEntry {
     /// Covers.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn covers(&self, verifier: &str) -> bool {
         match self.verifiers() {
             None => true,
@@ -41,6 +42,7 @@ struct RawVerifierSkipEntry {
 
 /// Load verifier-scoped skip list from `{store}/patches/{patch_set}.json`.
 #[instrument(level = "info", skip(store))]
+#[hotpath::measure]
 pub fn load_verifier_skip_map(store: &StoreLayout, patch_set: &str) -> VerifierSkipMap {
     let candidates = [
         store.patches_dir().join(format!("{patch_set}.json")),
@@ -55,6 +57,7 @@ pub fn load_verifier_skip_map(store: &StoreLayout, patch_set: &str) -> VerifierS
 }
 
 #[instrument(level = "info", skip(path))]
+#[hotpath::measure]
 fn load_verifier_skip_file(path: &Path) -> VerifierSkipMap {
     let bytes = match std::fs::read(path) {
         Ok(bytes) => bytes,

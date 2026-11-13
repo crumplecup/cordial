@@ -27,6 +27,7 @@ struct DependencyFreshnessSurveyRow {
 
 impl DependencyFreshnessSurveyRow {
     #[instrument(level = "debug", skip(node))]
+    #[hotpath::measure]
     fn from_node(node: crate::ir::NodeRef<'_>) -> Self {
         let field = |key: &str| {
             node.attr(key)
@@ -57,6 +58,7 @@ impl DependencyFreshnessSurveyRow {
 }
 
 #[instrument(level = "debug", skip(view))]
+#[hotpath::measure]
 fn survey_rows(view: RenderView<'_>) -> Vec<DependencyFreshnessSurveyRow> {
     let query = QueryBuilder::new()
         .node_kinds([NodeKind::Plugin("dependency_freshness".to_string())])
@@ -137,6 +139,7 @@ struct DependencyFreshnessRow {
 
 impl DependencyFreshnessRow {
     #[instrument(level = "debug", skip(finding), ret)]
+    #[hotpath::measure]
     fn from_finding(finding: &dyn Finding) -> Self {
         let mut sink = MapFindingSink::default();
         finding.emit(&mut sink);
@@ -166,6 +169,7 @@ impl DependencyFreshnessRow {
 }
 
 #[instrument(level = "debug", skip(findings))]
+#[hotpath::measure]
 fn finding_rows(findings: &[&dyn Finding]) -> Vec<DependencyFreshnessRow> {
     findings
         .iter()
@@ -175,11 +179,13 @@ fn finding_rows(findings: &[&dyn Finding]) -> Vec<DependencyFreshnessRow> {
 }
 
 #[instrument(level = "debug", skip(rows))]
+#[hotpath::measure]
 fn open_rows(rows: &[DependencyFreshnessRow]) -> impl Iterator<Item = &DependencyFreshnessRow> {
     rows.iter().filter(|row| row.disposition == "open")
 }
 
 #[instrument(level = "debug", skip(rows))]
+#[hotpath::measure]
 fn crate_names(rows: &[&DependencyFreshnessRow]) -> Vec<String> {
     let mut names: Vec<_> = rows.iter().map(|row| row.crate_name.clone()).collect();
     names.sort();

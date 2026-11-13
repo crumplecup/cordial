@@ -60,6 +60,7 @@ pub struct AmenableExtOptions {
 /// uses — one real `amenable dump-registry` run covers every backend
 /// linked into that binary, std and ext target types alike).
 #[instrument(level = "debug", skip(session, store, options), err(level = "warn"))]
+#[hotpath::measure]
 pub fn assess_amenable_ext_coverage(
     session: &dyn SessionView,
     store: &StoreLayout,

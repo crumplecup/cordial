@@ -81,6 +81,7 @@ impl Assessor for CliLayoutAssessor {
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn rule_from_attr(value: &str) -> Option<CliLayoutId> {
     match value {
         "CLI-ISLAND-001" => Some(CliLayoutId::Island001),

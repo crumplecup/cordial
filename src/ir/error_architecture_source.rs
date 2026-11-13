@@ -22,6 +22,7 @@ pub struct SourceErrorArchitecture {
 
 impl SourceErrorArchitecture {
     #[tracing::instrument(level = "debug", skip(collect), err(level = "warn"))]
+    #[hotpath::measure]
     pub(crate) fn collect_with(
         root: &Path,
         crate_name: &str,

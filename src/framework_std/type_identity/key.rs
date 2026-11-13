@@ -20,6 +20,7 @@ pub struct TypeKey {
 impl TypeKey {
     /// A key with no generic arguments.
     #[instrument(level = "debug", skip(head))]
+    #[hotpath::measure]
     pub fn plain(head: impl Into<String> + std::fmt::Debug) -> Self {
         Self::new(head.into(), Vec::new())
     }

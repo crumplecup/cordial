@@ -13,6 +13,7 @@ struct CoveragePluginEntry {
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn coverage_plugin_entries() -> Vec<CoveragePluginEntry> {
     [
         #[cfg(feature = "elicitation")]
@@ -55,6 +56,7 @@ fn coverage_plugin_entries() -> Vec<CoveragePluginEntry> {
 
 /// Union [`CoverageTarget`] rows from active coverage plugins in this run.
 #[instrument(level = "debug", skip(plugins, session, filter), err(level = "warn"))]
+#[hotpath::measure]
 pub fn coverage_targets_for_plugins(
     plugins: &[&'static dyn Plugin],
     session: &dyn SessionView,
@@ -71,6 +73,7 @@ pub fn coverage_targets_for_plugins(
 
 /// Crate names that need per-crate IR for active coverage plugins.
 #[instrument(level = "debug", skip(plugins, session, filter), err(level = "warn"))]
+#[hotpath::measure]
 pub fn ir_crate_names_for_coverage_plugins(
     plugins: &[&'static dyn Plugin],
     session: &dyn SessionView,
@@ -90,6 +93,7 @@ pub fn ir_crate_names_for_coverage_plugins(
 }
 
 #[instrument(level = "debug", skip(plugin, session, filter), err(level = "warn"))]
+#[hotpath::measure]
 fn coverage_targets_for_plugin(
     plugin: &dyn Plugin,
     session: &dyn SessionView,
@@ -106,6 +110,7 @@ fn coverage_targets_for_plugin(
 }
 
 #[instrument(level = "debug", skip(targets))]
+#[hotpath::measure]
 fn dedupe_coverage_targets(targets: Vec<CoverageTarget>) -> Vec<CoverageTarget> {
     use std::collections::HashSet;
 
@@ -127,6 +132,7 @@ fn dedupe_coverage_targets(targets: Vec<CoverageTarget>) -> Vec<CoverageTarget> 
 
 /// Built-in coverage plugins.
 #[instrument(level = "debug")]
+#[hotpath::measure]
 pub fn coverage_plugins() -> Vec<&'static dyn Plugin> {
     coverage_plugin_entries()
         .into_iter()
@@ -136,6 +142,7 @@ pub fn coverage_plugins() -> Vec<&'static dyn Plugin> {
 
 /// Coverage plugins appropriate for a detected workspace hub.
 #[instrument(level = "debug", skip(hub))]
+#[hotpath::measure]
 pub fn coverage_plugins_for_hub(hub: crate::plugin::WorkspaceHub) -> Vec<&'static dyn Plugin> {
     if hub == crate::plugin::WorkspaceHub::Unknown {
         return coverage_plugins();

@@ -71,6 +71,7 @@ impl TargetProvider for ElicitationTargetProvider {
 
 /// Look up a tracked target by upstream crate name.
 #[instrument(level = "debug")]
+#[hotpath::measure]
 pub fn tracked_target_for_upstream(upstream: &str) -> Option<&'static ElicitationTrackedTarget> {
     ELICITATION_TRACKED_TARGETS
         .iter()
@@ -85,6 +86,7 @@ pub fn is_interface_shadow_crate(crate_name: &str) -> bool {
 
 /// Compare workspace members against the single tracked-target list.
 #[instrument(level = "debug")]
+#[hotpath::measure]
 pub fn compare_tracked_target_roster(workspace_members: &[String]) -> TrackedTargetRosterGap {
     let configured_shadows: HashSet<&str> = ELICITATION_TRACKED_TARGETS
         .iter()
@@ -105,6 +107,7 @@ pub fn compare_tracked_target_roster(workspace_members: &[String]) -> TrackedTar
 }
 
 #[instrument(level = "debug", skip(targets, filter))]
+#[hotpath::measure]
 fn apply_coverage_filter(
     targets: Vec<CoverageTarget>,
     filter: &dyn RunFilter,

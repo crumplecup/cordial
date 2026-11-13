@@ -80,6 +80,7 @@ impl SourceTracingInventory {
     skip(file, function, semantics, kind),
     err(level = "warn")
 )]
+#[hotpath::measure]
 fn context(
     file: &DatabaseSource<'_>,
     function: &ast::Fn,
@@ -163,6 +164,7 @@ fn context(
 /// The parameters `#[instrument]` cannot record: those whose `Debug` is not
 /// proven. With no facts for the function nothing is proven, so all are skipped.
 #[instrument(level = "debug", skip(names, semantics))]
+#[hotpath::measure]
 fn unrecordable_parameters(names: &[String], semantics: Option<&SemanticFunction>) -> Vec<String> {
     names
         .iter()
@@ -180,6 +182,7 @@ fn unrecordable_parameters(names: &[String], semantics: Option<&SemanticFunction
 }
 
 #[instrument(level = "debug", skip(file, function))]
+#[hotpath::measure]
 fn body(file: &DatabaseSource<'_>, function: &ast::Fn) -> (BodyPeek, u32) {
     let Some(body) = function.body() else {
         return (BodyPeek::default(), 1);
@@ -207,6 +210,7 @@ fn body(file: &DatabaseSource<'_>, function: &ast::Fn) -> (BodyPeek, u32) {
 }
 
 #[instrument(level = "debug", skip(function))]
+#[hotpath::measure]
 fn visibility(function: &ast::Fn) -> VisibilityLabel {
     use ast::VisibilityKind;
     match function.visibility().map(|visibility| visibility.kind()) {

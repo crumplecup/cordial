@@ -14,6 +14,7 @@ use crate::etiquettes::internal_error_chain::{
 
 impl SignatureChainIndex {
     #[tracing::instrument(level = "debug", skip(self), err(level = "warn"))]
+    #[hotpath::measure]
     pub(crate) fn assess(
         &self,
         crate_name: &str,
@@ -71,6 +72,7 @@ impl SignatureChainIndex {
     }
 
     #[tracing::instrument(level = "debug", skip(self, site))]
+    #[hotpath::measure]
     fn receiver_error(&self, site: &Conversion) -> Option<Ty> {
         let ty = match &site.receiver {
             Expr::Call {
@@ -96,6 +98,7 @@ impl SignatureChainIndex {
     }
 
     #[tracing::instrument(level = "debug", skip(self, expr, hint))]
+    #[hotpath::measure]
     fn flow(
         &self,
         expr: &Expr,
@@ -114,6 +117,7 @@ impl SignatureChainIndex {
     }
 
     #[tracing::instrument(level = "debug", skip(self, path, args, hint))]
+    #[hotpath::measure]
     fn call_flow(
         &self,
         path: &Path,
@@ -173,6 +177,7 @@ impl SignatureChainIndex {
     }
 
     #[tracing::instrument(level = "debug", skip(self, path))]
+    #[hotpath::measure]
     fn function(&self, path: &Path, scope: &[String]) -> Option<&Function> {
         let key = self.resolve_path(path, scope, None)?;
         let functions = self.functions.get(&key)?;
@@ -180,6 +185,7 @@ impl SignatureChainIndex {
     }
 
     #[tracing::instrument(level = "debug", skip(self, ty, bindings, self_ty))]
+    #[hotpath::measure]
     pub(super) fn resolve_type(
         &self,
         ty: &Type,
@@ -291,6 +297,7 @@ impl SignatureChainIndex {
     }
 
     #[tracing::instrument(level = "debug", skip(self, output, input, visited))]
+    #[hotpath::measure]
     fn reaches(&self, output: &Ty, input: &Ty, visited: &mut BTreeSet<Ty>) -> Reach {
         if output == input {
             return Reach::Yes;

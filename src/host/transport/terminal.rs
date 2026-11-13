@@ -39,6 +39,7 @@ pub fn read_entry(pid: u32) -> Option<ProcessEntry> {
 /// under: the session leader of the first one that has a terminal. `None` when no
 /// process in the chain has one.
 #[instrument(level = "debug", skip(chain))]
+#[hotpath::measure]
 pub fn owner_of_chain(chain: &[ProcessEntry]) -> Option<u32> {
     chain
         .iter()
@@ -48,6 +49,7 @@ pub fn owner_of_chain(chain: &[ProcessEntry]) -> Option<u32> {
 
 /// This process and its ancestors, nearest first.
 #[instrument(level = "debug")]
+#[hotpath::measure]
 pub fn own_chain() -> Vec<ProcessEntry> {
     let mut chain = Vec::new();
     let mut pid = std::process::id();
@@ -63,6 +65,7 @@ pub fn own_chain() -> Vec<ProcessEntry> {
 
 /// The shell of the terminal this command runs under, if it runs under one.
 #[instrument(level = "debug")]
+#[hotpath::measure]
 pub fn terminal_owner() -> Option<u32> {
     owner_of_chain(&own_chain())
 }

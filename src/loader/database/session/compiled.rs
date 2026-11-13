@@ -14,6 +14,7 @@ use std::{
 /// a different build script or proc-macro implementation. Toolchain libraries
 /// are precompiled inputs; their source files do not build these artifacts.
 #[tracing::instrument(level = "debug", skip_all)]
+#[hotpath::measure]
 pub(super) fn collect(
     db: &RootDatabase,
     vfs: &Vfs,

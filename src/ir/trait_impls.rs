@@ -8,6 +8,7 @@ use tracing::instrument;
 
 /// Type paths in `ir` that have `impl {trait_short} for T`.
 #[instrument(level = "debug", skip(ir))]
+#[hotpath::measure]
 pub fn collect_trait_impl_type_paths_from_ir(
     ir: &dyn IrView,
     trait_short: &str,
@@ -29,6 +30,7 @@ pub fn collect_trait_impl_type_paths_from_ir(
 }
 
 #[instrument(level = "debug", skip(ir, type_node))]
+#[hotpath::measure]
 fn type_has_trait_short(ir: &dyn IrView, type_node: crate::ir::NodeId, trait_short: &str) -> bool {
     ir.children(type_node, EdgeKind::Implements)
         .into_iter()

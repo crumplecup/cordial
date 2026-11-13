@@ -53,6 +53,7 @@ impl WorkspaceAssessor for CrossCrateShadowWorkspaceAssessor {
 }
 
 #[instrument(level = "debug", skip(report, anchor), err(level = "warn"))]
+#[hotpath::measure]
 pub fn findings_from_shadow_pair_report(
     report: &crate::shadow::ShadowReport,
     upstream: &str,

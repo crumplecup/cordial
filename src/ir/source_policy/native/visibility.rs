@@ -16,6 +16,7 @@ use std::path::Path;
 
 impl SourcePolicyInventory {
     #[tracing::instrument(level = "debug", skip(read), err(level = "warn"))]
+    #[hotpath::measure]
     pub(crate) fn collect_native_visibility(
         root: &Path,
         read: impl FnMut(&Path) -> CordialResult<(VisibilityBody, FileSnapshot)>,
@@ -24,6 +25,7 @@ impl SourcePolicyInventory {
     }
 
     #[tracing::instrument(level = "debug", skip_all, err(level = "warn"))]
+    #[hotpath::measure]
     pub(crate) fn native_visibility_file(
         file: &DatabaseSource<'_>,
         #[cfg(feature = "verus_ir")] is_verus: &dyn Fn(&ast::MacroCall) -> bool,
@@ -41,6 +43,7 @@ impl SourcePolicyInventory {
 }
 
 #[tracing::instrument(level = "debug", skip_all, err(level = "warn"))]
+#[hotpath::measure]
 fn items(
     input: impl Iterator<Item = ast::Item>,
     file: &DatabaseSource<'_>,

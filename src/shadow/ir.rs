@@ -38,6 +38,7 @@ pub struct ShadowIrItem {
 impl ShadowIrItem {
     /// Start a builder for this item.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> ShadowIrItemBuilder {
         ShadowIrItemBuilder::default()
     }
@@ -55,6 +56,7 @@ impl ShadowIrItem {
 
 /// Collect shadow-relevant items from one crate's graph IR.
 #[instrument(level = "debug", skip(workspace), err(level = "warn"))]
+#[hotpath::measure]
 pub fn collect_shadow_items_from_workspace(
     workspace: &WorkspaceIr,
     crate_name: &str,
@@ -66,6 +68,7 @@ pub fn collect_shadow_items_from_workspace(
 }
 
 #[instrument(level = "debug", skip(ir), err(level = "warn"))]
+#[hotpath::measure]
 pub fn collect_shadow_items_from_ir(ir: &crate::ir::CrateIr) -> CordialResult<Vec<ShadowIrItem>> {
     let all_nodes = BasicQuery::all_nodes();
     let mut items = Vec::new();
@@ -127,6 +130,7 @@ pub fn collect_shadow_items_from_ir(ir: &crate::ir::CrateIr) -> CordialResult<Ve
 
 /// Match upstream ↔ shadow items and record [`EdgeKind::Mirrors`] cross-crate edges.
 #[instrument(level = "debug", skip(workspace), err(level = "warn"))]
+#[hotpath::measure]
 pub fn materialize_cross_crate_shadow_mirrors(
     workspace: &mut WorkspaceIr,
     upstream: &str,
@@ -201,6 +205,7 @@ pub fn materialize_cross_crate_shadow_mirrors(
 
 /// Build one upstream ↔ shadow mirror report from workspace graph IR.
 #[instrument(level = "debug", skip(workspace), err(level = "warn"))]
+#[hotpath::measure]
 pub fn build_shadow_pair_report_from_workspace_ir(
     workspace: &WorkspaceIr,
     upstream: &str,
@@ -235,6 +240,7 @@ pub fn build_shadow_pair_report_from_workspace_ir(
 }
 
 #[instrument(level = "debug", skip(items))]
+#[hotpath::measure]
 fn rustdoc_inventory_from_items(
     crate_name: &str,
     items: &[ShadowIrItem],
@@ -248,6 +254,7 @@ fn rustdoc_inventory_from_items(
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn empty_krate() -> rustdoc_types::Crate {
     rustdoc_types::Crate {
         root: rustdoc_types::Id(0),
@@ -265,6 +272,7 @@ fn empty_krate() -> rustdoc_types::Crate {
 }
 
 #[instrument(level = "debug", skip(items))]
+#[hotpath::measure]
 fn methods_map_from_items(items: &[ShadowIrItem]) -> HashMap<String, BTreeSet<String>> {
     items
         .iter()
@@ -274,6 +282,7 @@ fn methods_map_from_items(items: &[ShadowIrItem]) -> HashMap<String, BTreeSet<St
 }
 
 #[instrument(level = "debug", skip(items))]
+#[hotpath::measure]
 fn trait_impl_map_from_items(
     crate_name: &str,
     items: &[ShadowIrItem],
@@ -303,6 +312,7 @@ fn trait_impl_map_from_items(
 }
 
 #[instrument(level = "debug", skip(items))]
+#[hotpath::measure]
 fn elicit_complete_set_from_items(items: &[ShadowIrItem]) -> ElicitCompleteSet {
     let mut concrete = HashSet::new();
     let mut factory = HashSet::new();
@@ -320,6 +330,7 @@ fn elicit_complete_set_from_items(items: &[ShadowIrItem]) -> ElicitCompleteSet {
 }
 
 #[instrument(level = "debug", skip(items))]
+#[hotpath::measure]
 fn prereqs_map_from_items(items: &[ShadowIrItem]) -> HashMap<String, TraitPrereqs> {
     items
         .iter()
@@ -332,6 +343,7 @@ fn prereqs_map_from_items(items: &[ShadowIrItem]) -> HashMap<String, TraitPrereq
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn inventory_kind_from_attr(value: &str) -> Option<InventoryItemKind> {
     match value {
         "Struct" => Some(InventoryItemKind::Struct),
@@ -345,6 +357,7 @@ fn inventory_kind_from_attr(value: &str) -> Option<InventoryItemKind> {
 }
 
 #[instrument(level = "debug", skip(node))]
+#[hotpath::measure]
 fn string_set_attr(node: &crate::ir::NodeRef<'_>, key: &str) -> BTreeSet<String> {
     node.attr(key)
         .and_then(|value| value.as_array())
@@ -358,6 +371,7 @@ fn string_set_attr(node: &crate::ir::NodeRef<'_>, key: &str) -> BTreeSet<String>
 }
 
 #[instrument(level = "debug", skip(target_item, shadow_names))]
+#[hotpath::measure]
 fn find_drift_shadow_item<'a>(
     target_item: &ShadowIrItem,
     shadow_names: &HashMap<String, Vec<&'a ShadowIrItem>>,
@@ -389,6 +403,7 @@ fn find_drift_shadow_item<'a>(
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn edit_distance(a: &str, b: &str) -> usize {
     let a: Vec<char> = a.chars().collect();
     let b: Vec<char> = b.chars().collect();
@@ -434,6 +449,7 @@ fn has_cross_crate_mirror(
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn missing_crate_ir(crate_name: &str) -> CordialError {
     CordialError::crate_ir_not_loaded_for_shadow_compare(crate_name)
 }

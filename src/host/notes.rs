@@ -64,6 +64,7 @@ pub(crate) fn cache_hit() {
 /// Say what the run decided about reuse. These are the program's own account of
 /// whether it used a cache, kept for the run log and shown when a run is stopped.
 #[instrument(level = "debug")]
+#[hotpath::measure]
 pub(crate) fn event(text: String) {
     tracing::info!(target: "cordial::cache", "{text}");
     EVENTS
@@ -74,6 +75,7 @@ pub(crate) fn event(text: String) {
 
 /// The events of the run that ended last, for a caller that prints them.
 #[instrument(level = "debug")]
+#[hotpath::measure]
 pub fn last_events() -> Vec<String> {
     LAST_EVENTS
         .lock()
@@ -83,6 +85,7 @@ pub fn last_events() -> Vec<String> {
 
 /// Everything noted since the last call, resetting the counts.
 #[instrument(level = "debug")]
+#[hotpath::measure]
 pub fn take() -> RunNotes {
     let events = std::mem::take(&mut *EVENTS.lock().unwrap_or_else(PoisonError::into_inner));
     *LAST_EVENTS.lock().unwrap_or_else(PoisonError::into_inner) = events.clone();

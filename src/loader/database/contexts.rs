@@ -97,6 +97,7 @@ impl LocalCfgs {
     }
 
     #[instrument(level = "debug", skip(context))]
+    #[hotpath::measure]
     fn diff(context: &SemanticContextKey) -> CfgDiff {
         CfgDiff::new(
             context.enabled().iter().map(|text| atom(text)).collect(),

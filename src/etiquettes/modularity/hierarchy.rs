@@ -51,6 +51,7 @@ pub struct ModuleHierarchyNode {
 impl ModuleHierarchyNode {
     /// Fraction of subtree lines that live in this module's own file.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn top_heavy(&self) -> f64 {
         if self.subtree_lines == 0 {
             0.0
@@ -74,6 +75,7 @@ pub const CRATE_ROOT_PATH: &str = "<crate>";
 pub const TEST_TARGET_PREFIX: &str = "tests/";
 
 #[instrument(level = "debug", skip(path))]
+#[hotpath::measure]
 fn parent_path(path: &str) -> Option<String> {
     if path == CRATE_ROOT_PATH {
         None
@@ -85,6 +87,7 @@ fn parent_path(path: &str) -> Option<String> {
 }
 
 #[instrument(level = "debug", skip(path, existing))]
+#[hotpath::measure]
 fn nearest_parent(path: &str, existing: &BTreeSet<String>) -> Option<String> {
     let mut current = parent_path(path)?;
     loop {
@@ -97,6 +100,7 @@ fn nearest_parent(path: &str, existing: &BTreeSet<String>) -> Option<String> {
 
 /// Build the module tree and assign Strahler order, depth, and subtree size.
 #[instrument(level = "debug", skip(modules))]
+#[hotpath::measure]
 pub fn build_module_hierarchy(modules: &[ModuleSizeInput]) -> Vec<ModuleHierarchyNode> {
     if modules.is_empty() {
         return Vec::new();
@@ -226,6 +230,7 @@ pub fn build_module_hierarchy(modules: &[ModuleSizeInput]) -> Vec<ModuleHierarch
 /// Direct children of the crate root that have nested modules, ranked most
 /// top-heavy first. Undecomposed crate-root files are [`fat_leaves`], not this.
 #[instrument(level = "debug", skip(nodes))]
+#[hotpath::measure]
 pub fn library_branches(nodes: &[ModuleHierarchyNode]) -> Vec<&ModuleHierarchyNode> {
     let mut branches: Vec<&ModuleHierarchyNode> = nodes
         .iter()
@@ -244,6 +249,7 @@ pub fn library_branches(nodes: &[ModuleHierarchyNode]) -> Vec<&ModuleHierarchyNo
 /// File modules with no children, ranked largest first. These never grew a
 /// subtree — a different failure mode from a parent that kept the mass.
 #[instrument(level = "debug", skip(nodes))]
+#[hotpath::measure]
 pub fn fat_leaves(nodes: &[ModuleHierarchyNode]) -> Vec<&ModuleHierarchyNode> {
     let mut leaves: Vec<&ModuleHierarchyNode> = nodes
         .iter()
@@ -260,6 +266,7 @@ pub fn fat_leaves(nodes: &[ModuleHierarchyNode]) -> Vec<&ModuleHierarchyNode> {
 
 /// Parents that retained subtree mass, at any depth except the crate root.
 #[instrument(level = "debug", skip(nodes))]
+#[hotpath::measure]
 pub fn top_heavy_parents(nodes: &[ModuleHierarchyNode]) -> Vec<&ModuleHierarchyNode> {
     let mut parents: Vec<&ModuleHierarchyNode> = nodes
         .iter()
@@ -303,6 +310,7 @@ pub struct SiblingImbalance {
 /// sibling subtree lines. Children below `min_child_lines` are omitted from
 /// the group (a stub next to a real module is not lopsided).
 #[instrument(level = "debug", skip(nodes))]
+#[hotpath::measure]
 pub fn lopsided_siblings(
     nodes: &[ModuleHierarchyNode],
     min_child_lines: u32,
@@ -380,6 +388,7 @@ pub struct UnaryNest {
 /// A unary *leaf* is a peel (`chain_layer` + `preds.rs`), not this. Ranked
 /// by passthrough subtree, largest first.
 #[instrument(level = "debug", skip(nodes))]
+#[hotpath::measure]
 pub fn unary_nests(nodes: &[ModuleHierarchyNode], min_subtree_lines: u32) -> Vec<UnaryNest> {
     let by_path: HashMap<&str, &ModuleHierarchyNode> = nodes
         .iter()
@@ -422,6 +431,7 @@ pub fn unary_nests(nodes: &[ModuleHierarchyNode], min_subtree_lines: u32) -> Vec
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 pub fn format_mass_list(entries: &[(String, u32)]) -> String {
     entries
         .iter()
@@ -431,6 +441,7 @@ pub fn format_mass_list(entries: &[(String, u32)]) -> String {
 }
 
 #[instrument(level = "debug", skip(node, nodes))]
+#[hotpath::measure]
 pub fn child_mass_list(node: &ModuleHierarchyNode, nodes: &[ModuleHierarchyNode]) -> String {
     let by_path: HashMap<&str, &ModuleHierarchyNode> = nodes
         .iter()
@@ -450,6 +461,7 @@ pub fn child_mass_list(node: &ModuleHierarchyNode, nodes: &[ModuleHierarchyNode]
 
 /// Horton-style rollup: count and mean sizes at each Strahler order.
 #[instrument(level = "debug", skip(nodes))]
+#[hotpath::measure]
 pub fn order_bands(nodes: &[ModuleHierarchyNode]) -> Vec<OrderBand> {
     let mut bands: BTreeMap<u32, (usize, u64, u64)> = BTreeMap::new();
     for node in nodes {

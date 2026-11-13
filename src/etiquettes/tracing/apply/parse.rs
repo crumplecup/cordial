@@ -10,6 +10,7 @@ use super::InstrumentGap;
 
 /// Parse open items from `tracing-instrument.checklist.md`.
 #[instrument(level = "debug", skip(path), err(level = "warn"))]
+#[hotpath::measure]
 pub fn parse_tracing_instrument_checklist(path: &Path) -> CordialResult<Vec<InstrumentGap>> {
     let body = std::fs::read_to_string(path)?;
     parse_tracing_instrument_checklist_text(&body)
@@ -17,6 +18,7 @@ pub fn parse_tracing_instrument_checklist(path: &Path) -> CordialResult<Vec<Inst
 
 /// Parse checklist markdown already loaded into memory.
 #[instrument(level = "debug", err(level = "warn"))]
+#[hotpath::measure]
 pub fn parse_tracing_instrument_checklist_text(body: &str) -> CordialResult<Vec<InstrumentGap>> {
     let mut gaps = Vec::new();
     let mut current_crate = String::new();
@@ -45,6 +47,7 @@ pub fn parse_tracing_instrument_checklist_text(body: &str) -> CordialResult<Vec<
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn parse_crate_heading(line: &str) -> Option<String> {
     let trimmed = line.trim();
     let rest = trimmed.strip_prefix("## `")?;
@@ -53,6 +56,7 @@ fn parse_crate_heading(line: &str) -> Option<String> {
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn parse_gap_line(line: &str) -> Option<(String, String, u32)> {
     let trimmed = line.trim();
     if !trimmed.starts_with("- [ ] `") {

@@ -160,6 +160,7 @@ fn range(node: &SyntaxNode) -> Range {
 }
 
 #[instrument(level = "debug", skip(expr, params))]
+#[hotpath::measure]
 fn value(
     expr: &ast::Expr,
     params: &BTreeMap<String, std::collections::BTreeSet<String>>,
@@ -207,6 +208,7 @@ fn value(
 }
 
 #[instrument(level = "debug", skip(function))]
+#[hotpath::measure]
 fn source_argument(function: &ast::Fn) -> SourceArgument {
     let argument = function
         .body()

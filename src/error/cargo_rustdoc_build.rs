@@ -20,6 +20,7 @@ pub struct AmenableDumpRegistryExitedSource {
 impl AmenableDumpRegistryExitedSource {
     #[track_caller]
     #[instrument(level = "debug", skip(status))]
+    #[hotpath::measure]
     pub fn new(status: ExitStatus) -> Self {
         let loc = Location::caller();
         Self {
@@ -55,6 +56,7 @@ pub struct AmenableDumpRegistryDidNotWriteSource {
 impl AmenableDumpRegistryDidNotWriteSource {
     #[track_caller]
     #[instrument(level = "debug", skip(path))]
+    #[hotpath::measure]
     pub fn new(path: PathBuf) -> Self {
         let loc = Location::caller();
         Self {
@@ -94,6 +96,7 @@ pub struct CargoRustdocExitedSource {
 impl CargoRustdocExitedSource {
     #[track_caller]
     #[instrument(level = "debug", skip(crate_name, status))]
+    #[hotpath::measure]
     pub fn new(crate_name: impl Into<String>, status: ExitStatus) -> Self {
         let loc = Location::caller();
         Self {
@@ -132,6 +135,7 @@ pub struct RustdocJsonNotFoundSource {
 impl RustdocJsonNotFoundSource {
     #[track_caller]
     #[instrument(level = "debug", skip(path))]
+    #[hotpath::measure]
     pub fn new(path: PathBuf) -> Self {
         let loc = Location::caller();
         Self {
@@ -173,6 +177,7 @@ pub struct CargoDocForOptionalDepExitedSource {
 impl CargoDocForOptionalDepExitedSource {
     #[track_caller]
     #[instrument(level = "debug", skip(shadow_crate, activating_feature, status))]
+    #[hotpath::measure]
     pub fn new(
         shadow_crate: impl Into<String>,
         activating_feature: impl Into<String>,
@@ -224,6 +229,7 @@ pub struct CargoRustdocBuildError {
 impl CargoRustdocBuildError {
     #[track_caller]
     #[instrument(level = "debug", skip(kind))]
+    #[hotpath::measure]
     fn new(kind: CargoRustdocBuildErrorKind) -> Self {
         let loc = Location::caller();
         Self {
@@ -269,6 +275,7 @@ impl super::CordialError {
     /// `amenable dump-registry` exited with a non-zero status.
     #[track_caller]
     #[instrument(level = "debug", skip(status))]
+    #[hotpath::measure]
     pub fn amenable_dump_registry_exited(status: ExitStatus) -> Self {
         Self::from_kind(super::CordialErrorKind::CargoRustdocBuild(
             CargoRustdocBuildError::new(CargoRustdocBuildErrorKind::AmenableDumpRegistryExited(
@@ -280,6 +287,7 @@ impl super::CordialError {
     /// `amenable dump-registry` exited successfully but did not write its output.
     #[track_caller]
     #[instrument(level = "debug", skip(path))]
+    #[hotpath::measure]
     pub fn amenable_dump_registry_did_not_write(path: PathBuf) -> Self {
         Self::from_kind(super::CordialErrorKind::CargoRustdocBuild(
             CargoRustdocBuildError::new(
@@ -293,6 +301,7 @@ impl super::CordialError {
     /// `cargo rustdoc` exited with a non-zero status.
     #[track_caller]
     #[instrument(level = "debug", skip(crate_name, status))]
+    #[hotpath::measure]
     pub fn cargo_rustdoc_exited(crate_name: impl Into<String>, status: ExitStatus) -> Self {
         Self::from_kind(super::CordialErrorKind::CargoRustdocBuild(
             CargoRustdocBuildError::new(CargoRustdocBuildErrorKind::CargoRustdocExited(
@@ -304,6 +313,7 @@ impl super::CordialError {
     /// A `cargo rustdoc`/`cargo doc` build did not produce the expected JSON file.
     #[track_caller]
     #[instrument(level = "debug", skip(path))]
+    #[hotpath::measure]
     pub fn rustdoc_json_not_found(path: PathBuf) -> Self {
         Self::from_kind(super::CordialErrorKind::CargoRustdocBuild(
             CargoRustdocBuildError::new(CargoRustdocBuildErrorKind::RustdocJsonNotFound(
@@ -315,6 +325,7 @@ impl super::CordialError {
     /// `cargo doc` for an optional dependency's shadow crate exited with a non-zero status.
     #[track_caller]
     #[instrument(level = "debug", skip(shadow_crate, activating_feature, status))]
+    #[hotpath::measure]
     pub fn cargo_doc_for_optional_dep_exited(
         shadow_crate: impl Into<String>,
         activating_feature: impl Into<String>,

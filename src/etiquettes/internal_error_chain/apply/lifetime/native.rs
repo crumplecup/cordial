@@ -63,6 +63,7 @@ impl LifetimeFileFacts {
 }
 
 #[instrument(level = "debug", skip(file, index, item, field))]
+#[hotpath::measure]
 fn plan(
     file: &DatabaseSource<'_>,
     index: &Index,

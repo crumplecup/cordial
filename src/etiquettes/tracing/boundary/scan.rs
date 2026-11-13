@@ -28,6 +28,7 @@ struct FnSite {
 /// `main` delegates to (e.g. `Cli::act`) can be recognized as already
 /// reporting its own errors.
 #[instrument(level = "debug", skip(inventory, policy), err(level = "warn"))]
+#[hotpath::measure]
 pub fn findings_from_inventory(
     inventory: &crate::ir::SourceObservability,
     crate_name: &str,
@@ -54,6 +55,7 @@ pub fn findings_from_inventory(
 }
 
 #[instrument(level = "debug", skip(sites, policy, inventory), err(level = "warn"))]
+#[hotpath::measure]
 fn findings_for_sites(
     sites: &[FnSite],
     inventory: &crate::ir::SourceObservability,
@@ -99,6 +101,7 @@ fn findings_for_sites(
 }
 
 #[instrument(level = "debug", skip(site), err(level = "warn"))]
+#[hotpath::measure]
 fn record(site: &FnSite, snippet: &str) -> CordialResult<BoundarySiteRecord> {
     BoundarySiteRecord::builder()
         .rule_id(BoundaryRuleId::MainSilent)

@@ -30,6 +30,7 @@ impl TestStatus {
 
     /// Human-readable form, including the concrete instantiation when present.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn display(&self) -> String {
         match self {
             Self::Covered => "Covered".to_string(),
@@ -43,6 +44,7 @@ impl TestStatus {
 
 /// Determine proof and composition harness status for a type path.
 #[instrument(level = "debug", skip(harness))]
+#[hotpath::measure]
 pub fn test_status_for_type_path(
     type_path: &str,
     has_factory_impl: bool,
@@ -88,6 +90,7 @@ pub fn test_status_for_type_path(
 }
 
 #[instrument(level = "debug", skip(harness))]
+#[hotpath::measure]
 fn composition_test_status(name: &str, harness: &ProofHarness) -> TestStatus {
     let found = harness
         .composition_pairs()

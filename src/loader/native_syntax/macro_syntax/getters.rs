@@ -7,6 +7,7 @@ use ra_ap_syntax::{
 
 impl DatabaseSource<'_> {
     #[tracing::instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub(crate) fn getter_macro_syntax(&self) -> DatabaseMacroSyntax {
         let mut syntax = DatabaseMacroSyntax::default();
         syntax.collect_getters(self, self.tree().syntax());
@@ -14,6 +15,7 @@ impl DatabaseSource<'_> {
     }
 
     #[tracing::instrument(level = "debug", skip(self, invocation))]
+    #[hotpath::measure]
     fn getter_harness_items(&self, invocation: &ast::MacroCall) -> Option<(usize, Vec<ast::Item>)> {
         let tree = invocation.token_tree()?;
         let tokens: Vec<_> = tree
@@ -49,6 +51,7 @@ impl DatabaseSource<'_> {
 
 impl DatabaseMacroSyntax {
     #[tracing::instrument(level = "debug", skip(self, file, root))]
+    #[hotpath::measure]
     fn collect_getters(&mut self, file: &DatabaseSource<'_>, root: &SyntaxNode) {
         for invocation in root.descendants().filter_map(ast::MacroCall::cast) {
             let names = invocation

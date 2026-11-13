@@ -7,6 +7,7 @@ use crate::{CordialResult, ItemState, StoreLayout, Validity, Worklist, WorklistI
 use tracing::instrument;
 
 #[instrument(level = "debug", skip(store, in_scope, matches), err(level = "warn"))]
+#[hotpath::measure]
 pub(super) fn report(
     project_root: &Path,
     store: &StoreLayout,

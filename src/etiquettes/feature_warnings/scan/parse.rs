@@ -9,6 +9,7 @@ use tracing::instrument;
 /// without stderr: a failed build cannot be named, so it is reported as an
 /// unknown combination.
 #[instrument(level = "debug", skip(output))]
+#[hotpath::measure]
 pub fn parse_cargo_hack_output(output: &str, package: &str) -> HackRun {
     parse_cargo_hack_run(output, "", package)
 }

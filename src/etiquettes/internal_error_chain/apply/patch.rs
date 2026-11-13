@@ -18,6 +18,7 @@ use super::{
     skip(file, strategy, ir_units, graphs),
     err(level = "warn")
 )]
+#[hotpath::measure]
 pub(super) fn patch_file(
     file: &SourceEditView,
     strategy: ErrorFieldStrategy,
@@ -192,6 +193,7 @@ pub(super) fn patch_file(
     skip(file, edits, blockers, pending, units),
     err(level = "warn")
 )]
+#[hotpath::measure]
 fn apply_planned_edits(
     file: &SourceEditView,
     mut edits: Vec<Edit>,

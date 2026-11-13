@@ -18,6 +18,7 @@ pub(super) struct DependencyEntry {
 }
 
 #[instrument(level = "debug", skip(manifest, table))]
+#[hotpath::measure]
 pub(super) fn workspace_dependencies(
     manifest: &str,
     table: &toml::Table,
@@ -44,6 +45,7 @@ pub(super) fn workspace_dependencies(
 }
 
 #[instrument(level = "debug", skip(manifest, table, workspace_dependencies))]
+#[hotpath::measure]
 pub(super) fn dependency_entries(
     manifest: &str,
     table: &toml::Table,
@@ -87,6 +89,7 @@ pub(super) fn dependency_entries(
     level = "debug",
     skip(manifest, table, section, workspace_dependencies, entries)
 )]
+#[hotpath::measure]
 fn collect_root_dependency_table(
     manifest: &str,
     table: &toml::Table,
@@ -109,6 +112,7 @@ fn collect_root_dependency_table(
     level = "debug",
     skip(manifest, table, workspace_dependencies, entries)
 )]
+#[hotpath::measure]
 fn collect_target_dependency_tables(
     manifest: &str,
     table: &toml::Table,
@@ -153,6 +157,7 @@ fn collect_target_dependency_tables(
     level = "debug",
     skip(manifest, target_table, section, workspace_dependencies, entries)
 )]
+#[hotpath::measure]
 fn collect_target_dependency_table(
     manifest: &str,
     target_table: &toml::map::Map<String, toml::Value>,
@@ -179,6 +184,7 @@ fn collect_target_dependency_table(
     level = "debug",
     skip(manifest, section, dependencies, workspace_dependencies)
 )]
+#[hotpath::measure]
 fn parse_dependency_table(
     manifest: &str,
     section: DependencySection,
@@ -203,6 +209,7 @@ fn parse_dependency_table(
     level = "debug",
     skip(manifest, section, declaration, workspace_dependencies)
 )]
+#[hotpath::measure]
 fn parse_dependency_entry(
     manifest: &str,
     section: DependencySection,
@@ -241,6 +248,7 @@ fn parse_dependency_entry(
 }
 
 #[instrument(level = "debug", skip(section, table, workspace_dependencies))]
+#[hotpath::measure]
 fn table_dependency_entry(
     section: DependencySection,
     dependency_name: &str,
@@ -290,6 +298,7 @@ fn table_dependency_entry(
 }
 
 #[instrument(level = "debug", skip(workspace_dependencies))]
+#[hotpath::measure]
 fn workspace_bypass_indicators(
     workspace_dependencies: &BTreeMap<String, DependencyEntry>,
     dependency_name: &str,
@@ -303,6 +312,7 @@ fn workspace_bypass_indicators(
 }
 
 #[instrument(level = "debug", skip(table))]
+#[hotpath::measure]
 fn source_kind(
     table: &toml::map::Map<String, toml::Value>,
     workspace_inherited: bool,
@@ -321,6 +331,7 @@ fn source_kind(
 }
 
 #[instrument(level = "debug", skip(manifest, section))]
+#[hotpath::measure]
 fn dependency_line(
     manifest: &str,
     section: &DependencySection,
@@ -352,6 +363,7 @@ fn dependency_line(
 }
 
 #[instrument(level = "debug", skip(section))]
+#[hotpath::measure]
 fn section_headers(section: &DependencySection) -> Vec<String> {
     match section {
         DependencySection::Normal => vec!["[dependencies]".to_string()],
@@ -365,6 +377,7 @@ fn section_headers(section: &DependencySection) -> Vec<String> {
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn target_headers(target: &str, section: &str) -> Vec<String> {
     vec![
         format!("[target.'{target}'.{section}]"),

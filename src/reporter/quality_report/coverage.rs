@@ -11,6 +11,7 @@ use super::QualityReport;
 
 /// Compiled etiquettes whose findings contribute to an area.
 #[instrument(level = "debug")]
+#[hotpath::measure]
 pub(crate) fn quality_area_owners(title: &str) -> Vec<&'static str> {
     crate::etiquettes::quality_report_etiquettes()
         .into_iter()
@@ -50,6 +51,7 @@ pub(super) struct AreaRunCoverage {
 
 impl ReportRunCoverage {
     #[instrument(level = "debug", skip(report, config, ledger, fresh_artifacts))]
+    #[hotpath::measure]
     pub(super) fn new(
         report: &QualityReport,
         active_ids: &[&str],

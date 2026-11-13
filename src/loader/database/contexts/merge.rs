@@ -24,6 +24,7 @@ pub(super) struct Pending {
 impl Pending {
     /// A request that stands alone.
     #[instrument(level = "debug", skip(key))]
+    #[hotpath::measure]
     pub(super) fn single(key: SemanticContextKey) -> Self {
         Self {
             members: vec![key.clone()],
@@ -41,6 +42,7 @@ impl Pending {
     /// members. Splitting in halves converges on the conflicting requests
     /// without separating the ones that were never in conflict.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub(super) fn halves(&self) -> Vec<Pending> {
         let middle = self.members.len() / 2;
         [&self.members[..middle], &self.members[middle..]]
@@ -76,6 +78,7 @@ fn union(a: &SemanticContextKey, b: &SemanticContextKey) -> Option<SemanticConte
 
 /// Greedily combine `keys` into as few compatible contexts as possible.
 #[instrument(level = "debug", skip(keys))]
+#[hotpath::measure]
 pub(super) fn group(keys: Vec<SemanticContextKey>) -> Vec<Pending> {
     let mut groups: Vec<Pending> = Vec::new();
     for key in keys {
@@ -126,6 +129,7 @@ enum Namespace {
 }
 
 #[instrument(level = "debug", skip(definition))]
+#[hotpath::measure]
 fn namespace(definition: &ModuleDef) -> Option<Namespace> {
     match definition {
         ModuleDef::Function(_) | ModuleDef::Const(_) | ModuleDef::Static(_) => {

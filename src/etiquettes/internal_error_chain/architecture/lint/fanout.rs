@@ -14,6 +14,7 @@ use super::{FindingSite, SiteClassifier};
 
 impl Catalog {
     #[instrument(level = "debug", skip(self, findings), err(level = "warn"))]
+    #[hotpath::measure]
     pub(super) fn emit_kind_fanout_findings(
         &self,
         max_call_sites: usize,

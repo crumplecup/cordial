@@ -18,6 +18,7 @@ const TEST_DEFAULT_FILTER: &str = "warn,cordial=info";
 /// Safe to call more than once (`try_init` ignores an already-set subscriber).
 /// `main` and each `#[test]` under `tests/` should call this.
 #[tracing::instrument(level = "debug")]
+#[hotpath::measure]
 pub fn init_tracing() {
     profile::start();
     init_tracing_with_default(TEST_DEFAULT_FILTER);
@@ -28,6 +29,7 @@ pub fn init_tracing() {
 /// The CLI uses progress indicators for routine responsiveness, so tracing
 /// defaults to warnings unless `RUST_LOG` asks for more detail.
 #[tracing::instrument(level = "debug")]
+#[hotpath::measure]
 pub fn init_cli_tracing() {
     init_tracing_with_default("warn");
 }
@@ -40,6 +42,7 @@ pub fn init_cli_tracing() {
 /// The filter applies to this layer alone, so recorder layers still see every
 /// event and span they assert on.
 #[tracing::instrument(level = "debug")]
+#[hotpath::measure]
 pub fn tracing_fmt_layer<S>() -> impl tracing_subscriber::Layer<S>
 where
     S: tracing::Subscriber + for<'a> tracing_subscriber::registry::LookupSpan<'a>,
@@ -51,11 +54,13 @@ where
 }
 
 #[tracing::instrument(level = "debug")]
+#[hotpath::measure]
 fn env_filter(default_filter: &str) -> EnvFilter {
     EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(default_filter))
 }
 
 #[tracing::instrument(level = "debug")]
+#[hotpath::measure]
 fn init_tracing_with_default(default_filter: &str) {
     // The install site reads `RUST_LOG` itself; the subscriber policy checks
     // for `try_from_default_env` + `unwrap_or*` in the function that installs.

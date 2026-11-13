@@ -44,6 +44,7 @@ impl FileSyntaxFacts {
         skip(file, tracked_names, tracked_fields, graph_declarations, source),
         err(level = "warn")
     )]
+    #[hotpath::measure]
     pub(super) fn collect(
         file: &impl SourceSnapshot,
         tracked_names: &BTreeSet<String>,

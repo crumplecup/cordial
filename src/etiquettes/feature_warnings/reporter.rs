@@ -24,6 +24,7 @@ struct FeatureWarningRow {
 
 impl FeatureWarningRow {
     #[instrument(level = "debug", skip(finding), ret)]
+    #[hotpath::measure]
     fn from_finding(finding: &dyn Finding) -> Self {
         let mut sink = MapFindingSink::default();
         finding.emit(&mut sink);
@@ -51,6 +52,7 @@ impl FeatureWarningRow {
 }
 
 #[instrument(level = "debug", skip(findings))]
+#[hotpath::measure]
 fn warning_rows(findings: &[&dyn Finding]) -> Vec<FeatureWarningRow> {
     findings
         .iter()
@@ -60,6 +62,7 @@ fn warning_rows(findings: &[&dyn Finding]) -> Vec<FeatureWarningRow> {
 }
 
 #[instrument(level = "debug", skip(rows))]
+#[hotpath::measure]
 fn open_rows(rows: &[FeatureWarningRow]) -> impl Iterator<Item = &FeatureWarningRow> {
     rows.iter().filter(|row| row.disposition == "open")
 }
@@ -67,6 +70,7 @@ fn open_rows(rows: &[FeatureWarningRow]) -> impl Iterator<Item = &FeatureWarning
 /// Distinct crate names present in `rows`, sorted (a workspace-spanning
 /// artifact derives its breakdown from the rows, not the run's first crate).
 #[instrument(level = "debug", skip(rows))]
+#[hotpath::measure]
 fn crate_names(rows: &[&FeatureWarningRow]) -> Vec<String> {
     let mut names: Vec<String> = rows.iter().map(|row| row.crate_name.clone()).collect();
     names.sort();

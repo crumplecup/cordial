@@ -13,6 +13,7 @@ use super::token_tree::{Delimiter, Token, TokenKind, render, split_top_level_com
 use super::{make_finding, site_context};
 
 #[instrument(level = "debug", skip(tokens, file), err(level = "warn"))]
+#[hotpath::measure]
 pub(super) fn collect_payload(
     tokens: &[Token],
     file: &Path,
@@ -60,6 +61,7 @@ pub(super) fn collect_payload(
 /// but is never one: a genuine `requires`/`ensures` keyword always
 /// follows a function signature directly, never a `.`.
 #[instrument(level = "debug", skip(items))]
+#[hotpath::measure]
 fn preceded_by_dot(items: &[Token], idx: usize) -> bool {
     idx > 0 && items[idx - 1].is_punct('.')
 }
@@ -94,6 +96,7 @@ type ClauseGroup = (&'static str, Vec<Vec<Token>>, String);
 /// restates a *sibling* clause in the same list — see
 /// [`ContractClause`].
 #[instrument(level = "debug", skip(items, out))]
+#[hotpath::measure]
 fn walk_verus_tokens(items: &[Token], out: &mut Vec<ClauseGroup>) {
     let mut i = 0;
     let mut current_fn = String::new();

@@ -19,6 +19,7 @@ pub enum VerusWarningRuleId {
 impl VerusWarningRuleId {
     /// Stable string form of this value.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Warning001 => "VERUS-WARNING-001",
@@ -27,6 +28,7 @@ impl VerusWarningRuleId {
 
     /// Parse from the stable identifier string.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn from_attr(value: &str) -> Option<Self> {
         match value {
             "VERUS-WARNING-001" => Some(Self::Warning001),
@@ -108,6 +110,7 @@ pub struct VerusWarningFinding {
 
 impl VerusWarningFinding {
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> VerusWarningFindingBuilder {
         VerusWarningFindingBuilder::default()
     }
@@ -162,6 +165,7 @@ pub struct VerusWarningRecord {
 impl VerusWarningRecord {
     /// Start a builder for this value.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> VerusWarningRecordBuilder {
         VerusWarningRecordBuilder::default()
     }

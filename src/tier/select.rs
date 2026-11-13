@@ -17,6 +17,7 @@ pub struct TierSelection {
 impl TierSelection {
     /// Resolve `--tier`, or the project's default, against known tier names.
     #[instrument(level = "debug", skip(etiquettes, config), err(level = "warn"))]
+    #[hotpath::measure]
     pub fn resolve(
         etiquettes: &[Arc<dyn Etiquette>],
         config: &CordialConfig,
@@ -68,6 +69,7 @@ impl TierSelection {
 
 /// Effective assignment, with project config taking precedence.
 #[instrument(level = "debug", skip(etiquette, config))]
+#[hotpath::measure]
 pub fn assigned_tier(etiquette: &dyn Etiquette, config: &CordialConfig) -> Tier {
     let name = config
         .tiers()

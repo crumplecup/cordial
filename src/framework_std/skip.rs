@@ -16,6 +16,7 @@ struct SkipEntry {
 
 /// Load framework std skip list from `{store}/patches/{patch_set}.json`.
 #[instrument(level = "info", skip(store))]
+#[hotpath::measure]
 pub fn load_framework_skip_map(store: &StoreLayout, patch_set: &str) -> SkipMap {
     let candidates = [
         store.patches_dir().join(format!("{patch_set}.json")),
@@ -30,6 +31,7 @@ pub fn load_framework_skip_map(store: &StoreLayout, patch_set: &str) -> SkipMap 
 }
 
 #[instrument(level = "info", skip(path))]
+#[hotpath::measure]
 fn load_skip_file(path: &Path) -> SkipMap {
     let bytes = match std::fs::read(path) {
         Ok(bytes) => bytes,

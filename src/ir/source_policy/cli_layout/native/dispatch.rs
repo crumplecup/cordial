@@ -7,6 +7,7 @@ use ra_ap_syntax::{
 };
 use std::collections::{BTreeMap, BTreeSet};
 #[tracing::instrument(level = "debug", skip(catalog, body))]
+#[hotpath::measure]
 pub(super) fn targets(
     catalog: &LayoutCatalog,
     owner: &str,

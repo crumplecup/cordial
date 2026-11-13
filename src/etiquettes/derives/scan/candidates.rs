@@ -7,6 +7,7 @@ use tracing::instrument;
 
 impl DeriveScanVisitor<'_> {
     #[instrument(level = "debug", skip(self, struct_info, method))]
+    #[hotpath::measure]
     pub(super) fn check_getter_candidate(
         &mut self,
         self_ty: &str,
@@ -75,6 +76,7 @@ impl DeriveScanVisitor<'_> {
     }
 
     #[instrument(level = "debug", skip(self, struct_info, method))]
+    #[hotpath::measure]
     pub(super) fn check_as_ref_candidate(
         &mut self,
         self_ty: &str,
@@ -137,6 +139,7 @@ impl DeriveScanVisitor<'_> {
     }
 
     #[instrument(level = "debug", skip(self, struct_info, method))]
+    #[hotpath::measure]
     pub(super) fn check_setter_candidate(
         &mut self,
         self_ty: &str,
@@ -184,6 +187,7 @@ impl DeriveScanVisitor<'_> {
     }
 
     #[instrument(level = "debug", skip(self, struct_info, method))]
+    #[hotpath::measure]
     pub(super) fn check_new_candidate(
         &mut self,
         self_ty: &str,

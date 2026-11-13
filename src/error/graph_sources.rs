@@ -18,6 +18,7 @@ pub struct WorkspaceSourceFactsMissingSource {
 impl WorkspaceSourceFactsMissingSource {
     #[track_caller]
     #[instrument(level = "debug", fields(name = name))]
+    #[hotpath::measure]
     pub fn new(name: &'static str) -> Self {
         let loc = Location::caller();
         Self {
@@ -51,6 +52,7 @@ pub struct EdgeReferencesMissingNodeSource {
 impl EdgeReferencesMissingNodeSource {
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn new() -> Self {
         let loc = Location::caller();
         Self {
@@ -115,6 +117,7 @@ pub struct SnapshotEdgeMissingEndpointsSource {
 impl SnapshotEdgeMissingEndpointsSource {
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn new() -> Self {
         let loc = Location::caller();
         Self {
@@ -147,6 +150,7 @@ pub struct SnapshotEdgeFromInvalidSource {
 impl SnapshotEdgeFromInvalidSource {
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn new() -> Self {
         let loc = Location::caller();
         Self {
@@ -179,6 +183,7 @@ pub struct SnapshotEdgeToInvalidSource {
 impl SnapshotEdgeToInvalidSource {
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn new() -> Self {
         let loc = Location::caller();
         Self {
@@ -213,6 +218,7 @@ pub struct CrateMustExistSource {
 impl CrateMustExistSource {
     #[track_caller]
     #[instrument(level = "debug", skip(crate_name))]
+    #[hotpath::measure]
     pub fn new(crate_name: impl Into<String>) -> Self {
         let loc = Location::caller();
         Self {
@@ -250,6 +256,7 @@ pub struct NoLoadViewForEnricherSource {
 impl NoLoadViewForEnricherSource {
     #[track_caller]
     #[instrument(level = "debug", skip(enricher_id, crate_name))]
+    #[hotpath::measure]
     pub fn new(enricher_id: impl Into<String>, crate_name: impl Into<String>) -> Self {
         let loc = Location::caller();
         Self {
@@ -288,6 +295,7 @@ pub struct NoLoadViewAvailableForEnricherSource {
 impl NoLoadViewAvailableForEnricherSource {
     #[track_caller]
     #[instrument(level = "debug", skip(enricher_id, crate_name))]
+    #[hotpath::measure]
     pub fn new(enricher_id: impl Into<String>, crate_name: impl Into<String>) -> Self {
         let loc = Location::caller();
         Self {
@@ -322,6 +330,7 @@ pub struct SourceEnricherWrongLoaderSource {
 impl SourceEnricherWrongLoaderSource {
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn new() -> Self {
         let loc = Location::caller();
         Self {

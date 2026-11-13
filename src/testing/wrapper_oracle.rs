@@ -17,6 +17,7 @@ use crate::session::RunFilter;
 
 /// Build wrapper coverage from hub trenchcoat pairs by re-parsing rustdoc JSON (oracle).
 #[instrument(level = "info", skip(filter), err(level = "warn"))]
+#[hotpath::measure]
 pub fn load_workspace_wrapper_coverage(
     project_root: &Path,
     store_root: &Path,

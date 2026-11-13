@@ -49,6 +49,7 @@ pub struct LineProgress {
 impl LineProgress {
     /// Write progress lines to stderr with a ten-second heartbeat.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn new() -> Self {
         Self::with_writer(crate::host::stderr(), Duration::from_secs(10))
     }
@@ -66,6 +67,7 @@ impl LineProgress {
     }
 
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     fn start(&self, message: String, total: Option<u64>) -> Box<dyn ProgressTask> {
         write_progress_line(&self.output, &format!("Starting: {message}"));
         let state = Arc::new(Mutex::new(LineTaskState {
@@ -112,6 +114,7 @@ impl LineProgress {
 
 impl Default for LineProgress {
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     fn default() -> Self {
         Self::new()
     }
@@ -150,6 +153,7 @@ struct LineTask {
 
 impl LineTask {
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     fn stop_heartbeat(&self) {
         let _ = self.stop.send(());
         if let Ok(mut worker) = self.worker.lock()
@@ -199,6 +203,7 @@ impl Drop for LineTask {
 }
 
 #[instrument(level = "info", skip(output))]
+#[hotpath::measure]
 fn write_progress_line(output: &Mutex<Box<dyn Write + Send>>, line: &str) {
     if let Ok(mut output) = output.lock() {
         let _ = writeln!(output, "{line}");
@@ -239,11 +244,13 @@ static NOOP_PROGRESS: NoopProgress = NoopProgress;
 
 /// Shared no-op progress reporter.
 #[instrument(level = "debug")]
+#[hotpath::measure]
 pub fn noop_progress() -> &'static dyn ProgressSink {
     &NOOP_PROGRESS
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 pub(crate) fn noop_progress_arc() -> Arc<dyn ProgressSink> {
     Arc::new(NoopProgress)
 }

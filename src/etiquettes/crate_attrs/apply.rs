@@ -40,6 +40,7 @@ pub struct CrateAttrsApplySummary {
 
 /// Patch library roots that are missing `forbid(unsafe_code)` / `warn(missing_docs)`.
 #[instrument(level = "info", err(level = "warn"))]
+#[hotpath::measure]
 pub fn run_crate_attrs_apply(
     project_root: &Path,
     store_home: &Path,
@@ -137,6 +138,7 @@ pub fn run_crate_attrs_apply(
 }
 
 #[instrument(level = "debug", skip(records))]
+#[hotpath::measure]
 fn attr_lines_for(records: &[super::types::CrateAttrsSiteRecord]) -> Vec<String> {
     let mut lines = Vec::new();
     if records
@@ -155,6 +157,7 @@ fn attr_lines_for(records: &[super::types::CrateAttrsSiteRecord]) -> Vec<String>
 }
 
 #[instrument(level = "debug", skip(source, to_insert))]
+#[hotpath::measure]
 fn insert_crate_attrs(source: &str, insert_at: usize, to_insert: &[String]) -> String {
     let mut lines: Vec<String> = source.lines().map(str::to_string).collect();
     let insert_at = insert_at.min(lines.len());

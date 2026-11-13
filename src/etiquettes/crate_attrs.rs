@@ -106,6 +106,7 @@ pub static CRATE_ATTRS_ETIQUETTE: LazyLock<StaticQualityEtiquette> = LazyLock::n
 });
 
 #[instrument(level = "debug", skip(findings))]
+#[hotpath::measure]
 fn quality_area_compute(findings: &[&dyn Finding]) -> (usize, String) {
     let forbid_unsafe = count_open_rule(findings, "CRATE-FORBID-UNSAFE-001");
     let missing_docs = count_open_rule(findings, "CRATE-MISSING-DOCS-001");

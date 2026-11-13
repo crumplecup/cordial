@@ -5,6 +5,7 @@ use ra_ap_syntax::ast::{self, HasAttrs, HasGenericArgs, HasGenericParams, HasMod
 use tracing::instrument;
 
 #[instrument(level = "debug", skip(file))]
+#[hotpath::measure]
 pub(super) fn methods(file: &DatabaseSource<'_>) -> Vec<MethodContract> {
     let mut methods = Vec::new();
     for item in file.tree().items() {

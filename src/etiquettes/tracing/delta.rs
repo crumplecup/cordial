@@ -17,6 +17,7 @@ pub struct DeltaContext<'a> {
 
 /// Recipe-vs-present findings for an already-instrumented function.
 #[instrument(level = "debug", skip(recipe, present, ctx))]
+#[hotpath::measure]
 pub fn recipe_deltas(
     recipe: &InstrumentRecipe,
     present: &PresentInstrument,
@@ -54,6 +55,7 @@ pub fn recipe_deltas(
 }
 
 #[instrument(level = "debug", skip(recipe, present))]
+#[hotpath::measure]
 fn skip_missing(
     recipe: &InstrumentRecipe,
     present: &PresentInstrument,
@@ -69,6 +71,7 @@ fn skip_missing(
 }
 
 #[instrument(level = "debug", skip(recipe, present))]
+#[hotpath::measure]
 fn fields_missing(recipe: &InstrumentRecipe, present: &PresentInstrument) -> bool {
     recipe
         .fields()
@@ -77,6 +80,7 @@ fn fields_missing(recipe: &InstrumentRecipe, present: &PresentInstrument) -> boo
 }
 
 #[instrument(level = "debug", skip(recipe, present, ctx))]
+#[hotpath::measure]
 fn error_path_silent(
     recipe: &InstrumentRecipe,
     present: &PresentInstrument,

@@ -23,6 +23,7 @@ pub(super) struct AntipatternRow {
 
 impl AntipatternRow {
     #[instrument(level = "debug", skip(finding), ret)]
+    #[hotpath::measure]
     fn from_finding(finding: &dyn Finding) -> Self {
         let mut sink = MapFindingSink::default();
         finding.emit(&mut sink);
@@ -47,6 +48,7 @@ impl AntipatternRow {
 }
 
 #[instrument(level = "debug", skip(findings))]
+#[hotpath::measure]
 pub(super) fn antipattern_rows(findings: &[&dyn Finding]) -> Vec<AntipatternRow> {
     findings
         .iter()
@@ -56,6 +58,7 @@ pub(super) fn antipattern_rows(findings: &[&dyn Finding]) -> Vec<AntipatternRow>
 }
 
 #[instrument(level = "debug", skip(rows))]
+#[hotpath::measure]
 fn open_rows(rows: &[AntipatternRow]) -> impl Iterator<Item = &AntipatternRow> {
     rows.iter().filter(|row| row.disposition == "open")
 }
@@ -66,6 +69,7 @@ fn open_rows(rows: &[AntipatternRow]) -> impl Iterator<Item = &AntipatternRow> {
 /// artifact must derive its own crate breakdown from `row.crate_name`
 /// instead (the same pattern `modularity::reporter::rows::crate_names` uses).
 #[instrument(level = "debug", skip(rows))]
+#[hotpath::measure]
 fn crate_names(rows: &[&AntipatternRow]) -> Vec<String> {
     let mut names: Vec<String> = rows.iter().map(|row| row.crate_name.clone()).collect();
     names.sort();
@@ -211,6 +215,7 @@ impl Reporter for AntipatternChecklistReporter {
 }
 
 #[instrument(level = "info", skip(findings), err(level = "warn"))]
+#[hotpath::measure]
 fn write_finding_sections(body: &mut String, findings: &[&AntipatternRow]) -> CordialResult<()> {
     let mut by_rule: BTreeMap<String, Vec<&AntipatternRow>> = BTreeMap::new();
     for finding in findings {
@@ -240,6 +245,7 @@ fn write_finding_sections(body: &mut String, findings: &[&AntipatternRow]) -> Co
 }
 
 #[instrument(level = "info", skip(entries), err(level = "warn"))]
+#[hotpath::measure]
 fn write_duplicate_clusters(body: &mut String, entries: &[&AntipatternRow]) -> CordialResult<()> {
     let mut by_shape: BTreeMap<String, Vec<&AntipatternRow>> = BTreeMap::new();
     for entry in entries {

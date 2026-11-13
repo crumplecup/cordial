@@ -23,6 +23,7 @@ pub(in crate::cli) struct QualityApplyOptions<'a> {
 }
 
 #[instrument(level = "debug", skip(ctx, options), err(level = "warn"))]
+#[hotpath::measure]
 pub(in crate::cli) fn execute_quality_apply(
     ctx: &ActCtx,
     options: QualityApplyOptions<'_>,
@@ -125,6 +126,7 @@ pub(in crate::cli) fn execute_quality_apply(
 }
 
 #[instrument(level = "debug", skip(store), err(level = "warn"))]
+#[hotpath::measure]
 fn execute_tracing_apply(
     project_root: &Path,
     store: &StoreLayout,
@@ -156,6 +158,7 @@ fn execute_tracing_apply(
 
 #[cfg(feature = "quality")]
 #[instrument(level = "debug", skip(store, summary), err(level = "warn"))]
+#[hotpath::measure]
 fn report_tracing_apply_worklist(
     project_root: &Path,
     store: &StoreLayout,

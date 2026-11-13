@@ -329,6 +329,7 @@ pub(super) struct ActCtx {
 
 impl Commands {
     #[instrument(level = "debug", skip(self, ctx), err(level = "warn"))]
+    #[hotpath::measure]
     pub(super) fn act(self, ctx: ActCtx) -> CordialResult<()> {
         match self {
             Self::Clean { all, dry_run } => super::clean::execute_clean(
@@ -435,6 +436,7 @@ impl Commands {
 #[cfg(any(feature = "elicitation", feature = "homecoming_std"))]
 impl BuildCommands {
     #[instrument(level = "debug", skip(self, ctx), err(level = "warn"))]
+    #[hotpath::measure]
     fn act(self, ctx: &ActCtx) -> CordialResult<()> {
         match self {
             Self::Rustdoc { force } => super::run::execute_build_rustdoc(

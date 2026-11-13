@@ -54,6 +54,7 @@ pub struct ForeignErrorTypeRecord {
 impl ForeignErrorTypeRecord {
     /// Start a builder for this value.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> ForeignErrorTypeRecordBuilder {
         ForeignErrorTypeRecordBuilder::default()
     }
@@ -93,6 +94,7 @@ pub struct WorkspaceForeignErrorTypeSummary {
 
 /// Build workspace foreign error type summary.
 #[instrument(level = "debug", skip(reports))]
+#[hotpath::measure]
 pub fn build_workspace_foreign_error_type_summary(
     reports: &[ForeignErrorTypeReport],
 ) -> WorkspaceForeignErrorTypeSummary {
@@ -242,6 +244,7 @@ pub struct ForeignErrorTypeFinding {
 impl ForeignErrorTypeFinding {
     /// Start a builder for this value.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> ForeignErrorTypeFindingBuilder {
         ForeignErrorTypeFindingBuilder::default()
     }

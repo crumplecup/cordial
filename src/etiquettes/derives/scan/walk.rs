@@ -8,6 +8,7 @@ use tracing::instrument;
 
 impl DeriveScanVisitor<'_> {
     #[instrument(level = "debug", skip(self, items))]
+    #[hotpath::measure]
     pub(super) fn walk_items(&mut self, items: &[DeriveItemFacts]) {
         for item in items {
             match item {
@@ -30,6 +31,7 @@ impl DeriveScanVisitor<'_> {
     }
 
     #[instrument(level = "debug", skip(self, item_mod))]
+    #[hotpath::measure]
     fn walk_mod(&mut self, item_mod: &DeriveModuleFacts) {
         if item_mod.test_only() {
             return;
@@ -53,6 +55,7 @@ impl DeriveScanVisitor<'_> {
     }
 
     #[instrument(level = "debug", skip(self, item_struct))]
+    #[hotpath::measure]
     fn register_struct(&mut self, item_struct: &DeriveStructFacts) {
         let name = item_struct.name().clone();
         let exposed_fields = item_struct.exposed_fields();
@@ -84,6 +87,7 @@ impl DeriveScanVisitor<'_> {
     }
 
     #[instrument(level = "debug", skip(self, item_impl))]
+    #[hotpath::measure]
     fn visit_impl(&mut self, item_impl: &DeriveImplFacts) {
         let self_ty = item_impl.self_type().clone();
         if self.generated_builders.contains(&self_ty) {
@@ -112,6 +116,7 @@ impl DeriveScanVisitor<'_> {
     }
 
     #[instrument(level = "debug", skip(self, struct_info, method))]
+    #[hotpath::measure]
     fn inspect_impl_method(
         &mut self,
         self_ty: &str,
@@ -140,6 +145,7 @@ impl DeriveScanVisitor<'_> {
     }
 
     #[instrument(level = "debug", skip(self, item_impl))]
+    #[hotpath::measure]
     fn maybe_flag_manual_builder(
         &mut self,
         self_ty: &str,

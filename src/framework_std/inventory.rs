@@ -14,6 +14,7 @@ pub const FRAMEWORK_STD_SOURCES: &[&str] = &["std", "core", "alloc"];
 
 /// Convert extracted public inventory rows into framework std items.
 #[instrument(level = "debug", skip(items))]
+#[hotpath::measure]
 pub fn std_items_from_extracted(items: &[ExtractedItem]) -> Vec<StdInventoryItem> {
     items
         .iter()
@@ -31,6 +32,7 @@ pub fn std_items_from_extracted(items: &[ExtractedItem]) -> Vec<StdInventoryItem
 
 /// Load one std-family inventory from the shared sysroot cache.
 #[instrument(level = "info", skip(sysroot), fields(crate_name = crate_name), err(level = "warn"))]
+#[hotpath::measure]
 pub fn load_std_inventory_from_sysroot(
     sysroot: &SysrootCache,
     crate_name: &str,
@@ -41,6 +43,7 @@ pub fn load_std_inventory_from_sysroot(
 
 /// Load one std-family inventory from a rustdoc JSON file.
 #[instrument(level = "info", fields(crate_name = crate_name), err(level = "warn"))]
+#[hotpath::measure]
 pub fn load_std_inventory_from_json(
     json_path: &Path,
     crate_name: &str,
@@ -59,6 +62,7 @@ pub fn load_std_inventory_from_json(
 
 /// Load merged std/core/alloc inventories from the sysroot cache.
 #[instrument(level = "info", skip(sysroot), err(level = "warn"))]
+#[hotpath::measure]
 pub fn load_merged_std_inventory(sysroot: &SysrootCache) -> CordialResult<Vec<StdInventoryItem>> {
     let mut inventories = Vec::new();
     for source in FRAMEWORK_STD_SOURCES {

@@ -66,6 +66,7 @@ impl SourceErrorApply {
     }
 
     #[tracing::instrument(level = "debug", skip(collect), err(level = "warn"))]
+    #[hotpath::measure]
     pub(crate) fn collect_with(
         root: &Path,
         paths: &[PathBuf],
@@ -83,6 +84,7 @@ impl SourceErrorApply {
     }
 
     #[tracing::instrument(level = "debug", skip(file))]
+    #[hotpath::measure]
     pub(crate) fn native_file(file: &DatabaseSource<'_>) -> ErrorApplyFile {
         ErrorApplyFile {
             snapshot: FileSnapshot::new(file.path().to_path_buf(), file.source_digest()),

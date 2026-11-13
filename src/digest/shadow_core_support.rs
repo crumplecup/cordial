@@ -86,6 +86,7 @@ pub enum ShadowCoreSupportStatus {
 impl ShadowCoreSupportStatus {
     /// Stable string form of this value.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::CoreTracked => "CoreTracked",
@@ -147,6 +148,7 @@ impl ImplCrateRollup {
     skip(session, filter, findings, workspace),
     err(level = "warn")
 )]
+#[hotpath::measure]
 pub fn build_shadow_core_support_digest(
     session: &dyn SessionView,
     filter: &dyn RunFilter,
@@ -184,6 +186,7 @@ pub fn build_shadow_core_support_digest(
 
 /// Build shadow core support summary.
 #[instrument(level = "debug", skip(impl_rollup), err(level = "warn"))]
+#[hotpath::measure]
 pub fn build_shadow_core_support_summary(
     upstream: &str,
     shadow: &str,
@@ -241,6 +244,7 @@ pub fn build_shadow_core_support_summary(
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 pub fn build_tracked_target_roster_digest(
     workspace_members: &[String],
 ) -> TrackedTargetRosterDigest {
@@ -263,6 +267,7 @@ pub fn build_tracked_target_roster_digest(
 }
 
 #[instrument(level = "debug", skip(findings))]
+#[hotpath::measure]
 fn rollup_impl_findings(findings: &[&dyn Finding]) -> BTreeMap<String, ImplCrateRollup> {
     let mut by_crate: BTreeMap<String, ImplCrateRollup> = BTreeMap::new();
     for finding in findings {
@@ -301,6 +306,7 @@ fn rollup_impl_findings(findings: &[&dyn Finding]) -> BTreeMap<String, ImplCrate
 
 /// Summary section appended to elicitation `summary.md` (elicit_doc parity).
 #[instrument(level = "debug", skip(digest))]
+#[hotpath::measure]
 pub fn render_shadow_core_support_summary_section(digest: &ShadowCoreSupportDigest) -> String {
     let mut out = String::new();
     out.push_str("## Target Support (core + shadow)\n\n");
@@ -383,6 +389,7 @@ pub fn render_shadow_core_support_summary_section(digest: &ShadowCoreSupportDige
 
 /// Render tracked target roster markdown.
 #[instrument(level = "debug", skip(roster))]
+#[hotpath::measure]
 pub fn render_tracked_target_roster_markdown(roster: &TrackedTargetRosterDigest) -> String {
     let mut out = String::new();
     out.push_str("# Tracked target roster\n\n");
@@ -432,6 +439,7 @@ pub fn render_tracked_target_roster_markdown(roster: &TrackedTargetRosterDigest)
 }
 
 #[instrument(level = "info", skip(items))]
+#[hotpath::measure]
 fn write_gap_list(out: &mut String, heading: &str, items: &[String], action: &str) {
     out.push_str(heading);
     out.push_str("\n\n");
@@ -446,6 +454,7 @@ fn write_gap_list(out: &mut String, heading: &str, items: &[String], action: &st
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn format_crate_list(crates: &[String]) -> String {
     if crates.is_empty() {
         "—".to_string()
@@ -459,6 +468,7 @@ fn format_crate_list(crates: &[String]) -> String {
 }
 
 #[instrument(level = "debug", skip(finding))]
+#[hotpath::measure]
 fn finding_row(finding: &dyn Finding) -> BTreeMap<String, String> {
     let mut sink = MapFindingSink::default();
     finding.emit(&mut sink);
@@ -466,11 +476,13 @@ fn finding_row(finding: &dyn Finding) -> BTreeMap<String, String> {
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn truthy(value: Option<&String>) -> bool {
     matches!(value.map(String::as_str), Some("true" | "1" | "yes"))
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn percent(numerator: usize, denominator: usize) -> f64 {
     if denominator == 0 {
         0.0
@@ -480,6 +492,7 @@ fn percent(numerator: usize, denominator: usize) -> f64 {
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn yes_no(value: bool) -> &'static str {
     if value { "yes" } else { "no" }
 }

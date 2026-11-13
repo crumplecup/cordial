@@ -21,6 +21,7 @@ use tracing::instrument;
 
 /// Survey selected crates from one workspace snapshot and join Cargo freshness once.
 #[instrument(level = "debug", skip(targets), err(level = "warn"))]
+#[hotpath::measure]
 pub(crate) fn survey_workspace_dependency_freshness(
     project_root: &Path,
     targets: &[CrateTarget],
@@ -90,6 +91,7 @@ pub(crate) fn survey_workspace_dependency_freshness(
     skip(manifest, manifest_table, workspace_dependencies, lockfile_index),
     err(level = "warn")
 )]
+#[hotpath::measure]
 fn survey_manifest(
     crate_name: &str,
     manifest_path: &Path,
@@ -118,6 +120,7 @@ fn survey_manifest(
 }
 
 #[instrument(level = "debug", skip(path), err(level = "warn"))]
+#[hotpath::measure]
 fn parse_table(content: &str, path: &Path) -> CordialResult<toml::Table> {
     toml::from_str(content)
         .map_err(|error| CordialError::toml_parse(path.display().to_string(), error))

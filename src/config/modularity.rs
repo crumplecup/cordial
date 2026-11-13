@@ -81,62 +81,74 @@ pub struct ModularityThresholds {
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn default_file_inventory_min_lines() -> u32 {
     500
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn default_function_inventory_min_lines() -> u32 {
     150
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn default_function_hotspot_min_lines() -> u32 {
     80
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn default_file_checklist_min_lines() -> u32 {
     default_file_inventory_min_lines()
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn default_function_checklist_min_lines() -> u32 {
     200
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn default_max_types_per_file() -> u32 {
     10
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn default_module_size_sigma() -> u32 {
     2
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn default_min_module_lines() -> u32 {
     0
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn default_top_heavy_min_percent() -> u32 {
     50
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn default_lopsided_min_percent() -> u32 {
     75
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn default_hierarchy_min_lines() -> u32 {
     150
 }
 
 impl Default for ModularityThresholds {
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     fn default() -> Self {
         Self {
             file_inventory_min_lines: default_file_inventory_min_lines(),
@@ -250,6 +262,7 @@ impl ModularityThresholds {
 
     /// Whether `numerator / denominator` is at least `percent`.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn ratio_meets(numerator: u32, denominator: u32, percent: u32) -> bool {
         denominator > 0 && u64::from(numerator) * 100 >= u64::from(denominator) * u64::from(percent)
     }
@@ -292,6 +305,7 @@ impl ModularityThresholds {
     /// can name extract-helper candidates. CSV inventory stays at
     /// [`Self::function_inventory_min_lines`].
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn function_scan_min_lines(&self, file_lines: u32) -> u32 {
         if file_lines >= self.file_inventory_min_lines {
             self.function_hotspot_min_lines

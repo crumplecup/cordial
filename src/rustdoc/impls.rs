@@ -24,6 +24,7 @@ impl TraitImplRecord {
 
 /// Collect trait impl edges for types in `inventory`.
 #[instrument(level = "debug", skip(inventory))]
+#[hotpath::measure]
 pub fn collect_trait_impls(inventory: &RustdocInventory) -> Vec<TraitImplRecord> {
     let tracked: std::collections::HashSet<String> = inventory
         .type_items()
@@ -73,6 +74,7 @@ pub fn collect_trait_impls(inventory: &RustdocInventory) -> Vec<TraitImplRecord>
 
 /// Resolve the canonical path for an impl target type.
 #[instrument(level = "debug", skip(krate, ty))]
+#[hotpath::measure]
 pub fn impl_target_path(krate: &rustdoc_types::Crate, ty: &Type) -> Option<String> {
     let Type::ResolvedPath(path) = ty else {
         return None;

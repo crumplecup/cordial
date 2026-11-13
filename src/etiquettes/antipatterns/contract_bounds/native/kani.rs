@@ -18,6 +18,7 @@ struct Clause {
 }
 
 #[tracing::instrument(level = "debug", skip_all, err(level = "warn"))]
+#[hotpath::measure]
 pub(super) fn assertion(
     source: &DatabaseSource<'_>,
     syntax: &DatabaseMacroSyntax,
@@ -86,6 +87,7 @@ pub(super) fn assertion(
 }
 
 #[tracing::instrument(level = "debug", skip_all, err(level = "warn"))]
+#[hotpath::measure]
 pub(super) fn assumption(
     source: &DatabaseSource<'_>,
     call: &ast::CallExpr,
@@ -124,6 +126,7 @@ pub(super) fn assumption(
 }
 
 #[tracing::instrument(level = "debug", skip_all, err(level = "warn"))]
+#[hotpath::measure]
 fn record(
     source: &DatabaseSource<'_>,
     context: String,

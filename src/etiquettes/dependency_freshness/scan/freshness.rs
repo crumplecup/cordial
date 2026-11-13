@@ -20,6 +20,7 @@ const DEPENDENCY_FRESHNESS_CACHE_FILE: &str = "dependency-freshness.toml";
 
 /// Path of the optional deterministic freshness override.
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn dependency_freshness_cache_path(store_root: &Path) -> PathBuf {
     store_root
         .join("cache")
@@ -27,6 +28,7 @@ fn dependency_freshness_cache_path(store_root: &Path) -> PathBuf {
 }
 
 #[instrument(level = "debug", err(level = "warn"))]
+#[hotpath::measure]
 fn freshness_cache_index(store_root: &Path) -> CordialResult<FreshnessIndex> {
     let path = dependency_freshness_cache_path(store_root);
     if !path.is_file() {
@@ -49,6 +51,7 @@ fn freshness_cache_index(store_root: &Path) -> CordialResult<FreshnessIndex> {
 }
 
 #[instrument(level = "debug", err(level = "warn"))]
+#[hotpath::measure]
 pub(super) fn freshness_index(
     project_root: &Path,
     store_root: Option<&Path>,
@@ -63,6 +66,7 @@ pub(super) fn freshness_index(
 }
 
 #[instrument(level = "debug", err(level = "warn"))]
+#[hotpath::measure]
 fn cargo_update_dry_run_freshness_index(project_root: &Path) -> CordialResult<FreshnessIndex> {
     let output = Command::new("cargo")
         .current_dir(project_root)
@@ -85,6 +89,7 @@ fn cargo_update_dry_run_freshness_index(project_root: &Path) -> CordialResult<Fr
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn parse_cargo_update_dry_run_freshness(output: &str) -> FreshnessIndex {
     let mut out: FreshnessIndex = BTreeMap::new();
     for line in output.lines() {
@@ -101,12 +106,14 @@ fn parse_cargo_update_dry_run_freshness(output: &str) -> FreshnessIndex {
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn parse_cargo_update_line(line: &str) -> Option<(String, String)> {
     let trimmed = line.trim();
     parse_cargo_updating_line(trimmed).or_else(|| parse_cargo_unchanged_line(trimmed))
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn parse_cargo_updating_line(line: &str) -> Option<(String, String)> {
     let rest = line.strip_prefix("Updating ")?;
     let (left, right) = rest.split_once(" -> ")?;
@@ -116,6 +123,7 @@ fn parse_cargo_updating_line(line: &str) -> Option<(String, String)> {
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn parse_cargo_unchanged_line(line: &str) -> Option<(String, String)> {
     let rest = line.strip_prefix("Unchanged ")?;
     let (left, right) = rest.split_once(" (available: ")?;
@@ -125,6 +133,7 @@ fn parse_cargo_unchanged_line(line: &str) -> Option<(String, String)> {
 }
 
 #[instrument(level = "debug", skip(record, freshness))]
+#[hotpath::measure]
 pub(super) fn add_freshness_observations(
     record: &mut DependencySurveyRecord,
     freshness: &FreshnessIndex,
@@ -149,6 +158,7 @@ pub(super) fn add_freshness_observations(
 }
 
 #[instrument(level = "debug", skip(record))]
+#[hotpath::measure]
 pub(super) fn record_can_have_freshness_observations(record: &DependencySurveyRecord) -> bool {
     matches!(
         record.source_kind(),

@@ -23,6 +23,7 @@ pub struct InternalErrorChainCrateSummary {
 impl InternalErrorChainCrateSummary {
     /// Start a builder for this value.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> InternalErrorChainCrateSummaryBuilder {
         InternalErrorChainCrateSummaryBuilder::default()
     }

@@ -28,6 +28,7 @@ impl SourceDatabase {
     /// Issue a batch of trees without mutating inputs between syntax queries.
     #[cfg(feature = "antipatterns")]
     #[tracing::instrument(level = "debug", skip_all, err(level = "warn"))]
+    #[hotpath::measure]
     pub(crate) fn collect_sources<T>(
         &self,
         paths: &[std::path::PathBuf],
@@ -43,6 +44,7 @@ impl SourceDatabase {
     }
 
     #[tracing::instrument(level = "debug", skip_all, err(level = "warn"))]
+    #[hotpath::measure]
     fn captured_source<'a>(&'a self, path: &'a Path) -> CordialResult<DatabaseSource<'a>> {
         let file = self.file_id(path)?;
         let edition = if self.workspace.is_some() {

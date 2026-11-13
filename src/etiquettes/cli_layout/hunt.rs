@@ -3,6 +3,7 @@ use crate::ir::{TypeRec, VariantShape};
 use std::collections::BTreeSet;
 use tracing::instrument;
 #[instrument(level = "debug", skip(item, clap_idents))]
+#[hotpath::measure]
 pub(super) fn nested_clap_types(
     item: &TypeRec,
     clap_idents: &BTreeSet<String>,

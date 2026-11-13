@@ -29,6 +29,7 @@ pub struct ExtAssessor {
 impl ExtAssessor {
     /// Build the assessor for `target` (e.g. `"jiff"`).
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn new(target: &str) -> Self {
         Self {
             id: format!("amenable-ext-{target}-assessor"),

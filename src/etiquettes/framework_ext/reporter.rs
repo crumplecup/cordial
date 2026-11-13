@@ -25,6 +25,7 @@ pub struct ExtReporter {
 impl ExtReporter {
     /// Build the reporter for `target` (e.g. `"jiff"`).
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn new(target: &str) -> Self {
         Self {
             id: format!("amenable-ext-{target}-reporter"),
@@ -75,6 +76,7 @@ impl Reporter for ExtReporter {
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn artifact(name: &str, media_type: &str, body: String) -> Box<dyn Artifact> {
     Box::new(TextArtifact::new(
         name.to_string(),

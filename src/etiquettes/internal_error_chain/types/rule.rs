@@ -10,6 +10,7 @@ pub struct InternalErrorChainRule {
 
 impl InternalErrorChainRule {
     #[instrument(level = "debug", skip(probe_id), ret)]
+    #[hotpath::measure]
     pub fn from_probe(probe_id: InternalErrorTypeProbeId) -> Self {
         Self {
             rule_id: probe_id.as_str().to_string(),
@@ -17,6 +18,7 @@ impl InternalErrorChainRule {
     }
 
     #[instrument(level = "debug", skip(compliance_id), ret)]
+    #[hotpath::measure]
     pub fn from_compliance(compliance_id: InternalErrorComplianceId) -> Self {
         Self {
             rule_id: compliance_id.as_str().to_string(),

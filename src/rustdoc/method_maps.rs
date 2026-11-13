@@ -20,6 +20,7 @@ fn is_user_facing_method(name: &str) -> bool {
 
 /// Collect public method names keyed by canonical type path from a rustdoc crate.
 #[instrument(level = "debug", skip(krate))]
+#[hotpath::measure]
 pub fn collect_type_methods_from_krate(krate: &Crate) -> HashMap<String, BTreeSet<String>> {
     let mut methods: HashMap<String, BTreeSet<String>> = HashMap::new();
 
@@ -66,6 +67,7 @@ pub fn collect_type_methods_from_krate(krate: &Crate) -> HashMap<String, BTreeSe
 
 /// Collect method maps from a parsed inventory (uses embedded `krate` JSON).
 #[instrument(level = "debug", skip(inventory))]
+#[hotpath::measure]
 pub fn collect_type_methods_from_inventory(
     inventory: &RustdocInventory,
 ) -> HashMap<String, BTreeSet<String>> {
@@ -74,6 +76,7 @@ pub fn collect_type_methods_from_inventory(
 
 /// Collect method maps by reading rustdoc JSON from disk.
 #[instrument(level = "debug", err(level = "warn"))]
+#[hotpath::measure]
 pub fn collect_type_methods(json_path: &Path) -> CordialResult<HashMap<String, BTreeSet<String>>> {
     let content = std::fs::read_to_string(json_path)?;
     let krate: Crate = serde_json::from_str(&content)?;
@@ -82,6 +85,7 @@ pub fn collect_type_methods(json_path: &Path) -> CordialResult<HashMap<String, B
 
 /// Build `trait_path → implementing type bare names` from rustdoc JSON.
 #[instrument(level = "debug", skip(krate))]
+#[hotpath::measure]
 pub fn collect_trait_impl_map_from_krate(krate: &Crate) -> HashMap<String, BTreeSet<String>> {
     let own_crate = krate
         .index
@@ -138,6 +142,7 @@ pub fn collect_trait_impl_map_from_krate(krate: &Crate) -> HashMap<String, BTree
 
 /// Collect trait impl map from inventory.
 #[instrument(level = "debug", skip(inventory))]
+#[hotpath::measure]
 pub fn collect_trait_impl_map_from_inventory(
     inventory: &RustdocInventory,
 ) -> HashMap<String, BTreeSet<String>> {
@@ -146,6 +151,7 @@ pub fn collect_trait_impl_map_from_inventory(
 
 /// Collect trait impl map.
 #[instrument(level = "debug", err(level = "warn"))]
+#[hotpath::measure]
 pub fn collect_trait_impl_map(
     json_path: &Path,
 ) -> CordialResult<HashMap<String, BTreeSet<String>>> {
@@ -156,6 +162,7 @@ pub fn collect_trait_impl_map(
 
 /// Look up the method set for a type path, with bare-name suffix fallback.
 #[instrument(level = "debug", skip(methods))]
+#[hotpath::measure]
 pub fn methods_for_type_path(
     item_path: &str,
     methods: &HashMap<String, BTreeSet<String>>,

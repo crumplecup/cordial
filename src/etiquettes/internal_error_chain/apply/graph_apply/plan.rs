@@ -15,6 +15,7 @@ use super::lifetimes;
 use super::{Change, ErrorGraphPlan, GraphCandidate, Shape, VariantChange};
 
 #[instrument(level = "debug", skip(file, strategy, index))]
+#[hotpath::measure]
 pub(super) fn plan_file(
     file: &SourceEditView,
     strategy: ErrorFieldStrategy,
@@ -138,6 +139,7 @@ pub(super) fn plan_file(
     level = "debug",
     skip(strategy, structs, enums, roots, changing_generics)
 )]
+#[hotpath::measure]
 fn discover_graph<'a>(
     strategy: ErrorFieldStrategy,
     structs: &BTreeMap<String, &'a GraphDeclaration>,
@@ -299,6 +301,7 @@ pub(super) struct FieldScope<'a, 'b> {
 }
 
 #[instrument(level = "debug", skip(file, strategy, index, scope, changing_generics))]
+#[hotpath::measure]
 pub(super) fn plan_struct_fields(
     file: &SourceEditView,
     strategy: ErrorFieldStrategy,

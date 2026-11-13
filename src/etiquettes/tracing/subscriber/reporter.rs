@@ -22,6 +22,7 @@ struct SubscriberRow {
 
 impl SubscriberRow {
     #[instrument(level = "debug", skip(finding), ret)]
+    #[hotpath::measure]
     fn from_finding(finding: &dyn Finding) -> Self {
         let mut sink = MapFindingSink::default();
         finding.emit(&mut sink);
@@ -45,6 +46,7 @@ impl SubscriberRow {
 }
 
 #[instrument(level = "debug", skip(findings))]
+#[hotpath::measure]
 fn subscriber_rows(findings: &[&dyn Finding]) -> Vec<SubscriberRow> {
     findings
         .iter()
@@ -54,6 +56,7 @@ fn subscriber_rows(findings: &[&dyn Finding]) -> Vec<SubscriberRow> {
 }
 
 #[instrument(level = "debug", skip(rows))]
+#[hotpath::measure]
 fn open_rows(rows: &[SubscriberRow]) -> impl Iterator<Item = &SubscriberRow> {
     rows.iter().filter(|row| row.disposition == "open")
 }
@@ -64,6 +67,7 @@ fn open_rows(rows: &[SubscriberRow]) -> impl Iterator<Item = &SubscriberRow> {
 /// artifact must derive its own crate breakdown from `row.crate_name`
 /// instead (the same pattern `modularity::reporter::rows::crate_names` uses).
 #[instrument(level = "debug", skip(rows))]
+#[hotpath::measure]
 fn crate_names(rows: &[&SubscriberRow]) -> Vec<String> {
     let mut names: Vec<String> = rows.iter().map(|row| row.crate_name.clone()).collect();
     names.sort();

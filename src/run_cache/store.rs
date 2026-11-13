@@ -29,6 +29,7 @@ pub(crate) struct RunCache {
 impl RunCache {
     /// The entry for `inputs` in `store`; nothing is created until a write.
     #[instrument(level = "debug", skip(store, inputs))]
+    #[hotpath::measure]
     pub(crate) fn open(store: &StoreLayout, inputs: Inputs) -> Self {
         let root = store.cache_dir().join("run");
         Self {
@@ -65,6 +66,7 @@ impl RunCache {
     /// The workspace path-inclusion facts, if this entry has them.
     #[cfg(feature = "derives")]
     #[instrument(level = "debug", skip(self), err(level = "warn"))]
+    #[hotpath::measure]
     pub(crate) fn read_path_inclusions(
         &self,
     ) -> CordialResult<Option<crate::ir::PathInclusionFacts>> {
@@ -74,6 +76,7 @@ impl RunCache {
     /// Record the workspace path-inclusion facts in this entry.
     #[cfg(feature = "derives")]
     #[instrument(level = "debug", skip(self, facts), err(level = "warn"))]
+    #[hotpath::measure]
     pub(crate) fn write_path_inclusions(
         &self,
         facts: &crate::ir::PathInclusionFacts,
@@ -88,6 +91,7 @@ impl RunCache {
     /// names.
     #[cfg(feature = "tracing")]
     #[instrument(level = "debug", skip(self), err(level = "warn"))]
+    #[hotpath::measure]
     pub(crate) fn read_call_graph(
         &self,
         policy: &str,
@@ -98,6 +102,7 @@ impl RunCache {
     /// Record the workspace call-graph facts evaluated under `policy`.
     #[cfg(feature = "tracing")]
     #[instrument(level = "debug", skip(self, facts), err(level = "warn"))]
+    #[hotpath::measure]
     pub(crate) fn write_call_graph(
         &self,
         policy: &str,
@@ -116,6 +121,7 @@ impl RunCache {
     /// Inputs that differ from the most recent other entry, for a miss message.
     /// Empty when there is no earlier entry to compare with.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub(crate) fn changed_since_last(&self) -> Vec<String> {
         let newest = std::fs::read_dir(&self.root)
             .into_iter()
@@ -138,6 +144,7 @@ impl RunCache {
 
     /// Create this entry's directory, record its inputs, and drop other entries.
     #[instrument(level = "debug", skip(self), err(level = "warn"))]
+    #[hotpath::measure]
     fn begin_write(&self) -> CordialResult<()> {
         if self.pruned.swap(true, Ordering::Relaxed) {
             return Ok(());
@@ -161,6 +168,7 @@ impl RunCache {
 }
 
 #[instrument(level = "debug", skip(path))]
+#[hotpath::measure]
 fn partial_path(path: &Path) -> PathBuf {
     let mut name = path
         .file_name()
@@ -171,6 +179,7 @@ fn partial_path(path: &Path) -> PathBuf {
 }
 
 #[instrument(level = "debug", skip(value, path), err(level = "warn"))]
+#[hotpath::measure]
 fn write_json<T: Serialize>(path: &Path, value: &T) -> CordialResult<()> {
     let partial = partial_path(path);
     let mut encoder =
@@ -182,6 +191,7 @@ fn write_json<T: Serialize>(path: &Path, value: &T) -> CordialResult<()> {
 }
 
 #[instrument(level = "debug", err(level = "warn"), skip(path))]
+#[hotpath::measure]
 fn read_json<T: DeserializeOwned>(path: &Path) -> CordialResult<Option<T>> {
     if !path.is_file() {
         return Ok(None);

@@ -38,6 +38,7 @@ impl IrEnricher for ErrorComplianceInventoryEnricher {
 }
 
 #[instrument(level = "debug", skip(ir, findings), err(level = "warn"))]
+#[hotpath::measure]
 pub(super) fn materialize(
     ir: &mut dyn IrMut,
     crate_root: &std::path::Path,

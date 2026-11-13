@@ -135,6 +135,7 @@ pub static DEPENDENCY_FRESHNESS_ETIQUETTE: LazyLock<StaticQualityEtiquette> = La
 });
 
 #[instrument(level = "debug", skip(findings))]
+#[hotpath::measure]
 fn quality_area_compute(findings: &[&dyn Finding]) -> (usize, String) {
     let dependency_freshness = count_open_category(findings, "dependency_freshness");
     (

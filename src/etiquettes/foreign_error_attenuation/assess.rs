@@ -25,6 +25,7 @@ struct SiteKey {
     skip(foreign_report, chain_records),
     err(level = "warn")
 )]
+#[hotpath::measure]
 pub fn build_foreign_error_attenuation_report(
     foreign_report: &crate::etiquettes::foreign_error_types::ForeignErrorTypeReport,
     chain_records: &[ErrorChainRecord],
@@ -44,6 +45,7 @@ pub(crate) struct ErrorBridgeHint {
     skip(foreign_report, chain_records, bridges),
     err(level = "warn")
 )]
+#[hotpath::measure]
 pub(crate) fn build_foreign_error_attenuation_report_with_bridges(
     foreign_report: &crate::etiquettes::foreign_error_types::ForeignErrorTypeReport,
     chain_records: &[ErrorChainRecord],
@@ -79,6 +81,7 @@ pub(crate) fn build_foreign_error_attenuation_report_with_bridges(
 }
 
 #[instrument(level = "debug", skip(chain_records))]
+#[hotpath::measure]
 fn index_preserved_propagation_sites(
     chain_records: &[ErrorChainRecord],
 ) -> HashMap<SiteKey, ErrorChainRecord> {
@@ -111,6 +114,7 @@ fn is_propagation_probe(rule_id: ErrorChainProbeId) -> bool {
     skip(foreign, preserved_by_site, bridges),
     err(level = "warn")
 )]
+#[hotpath::measure]
 fn classify_foreign_site(
     foreign: &ForeignErrorTypeRecord,
     preserved_by_site: &HashMap<SiteKey, ErrorChainRecord>,
@@ -207,6 +211,7 @@ fn classify_foreign_site(
     skip(foreign, handling_class, resolution_id),
     err(level = "warn")
 )]
+#[hotpath::measure]
 fn record_from_foreign(
     foreign: &ForeignErrorTypeRecord,
     handling_class: ForeignErrorHandlingClass,
@@ -244,6 +249,7 @@ fn is_miette_surface_site(foreign: &ForeignErrorTypeRecord) -> bool {
 }
 
 #[instrument(level = "debug", skip(foreign), err(level = "warn"))]
+#[hotpath::measure]
 fn miette_surface_record(
     foreign: &ForeignErrorTypeRecord,
 ) -> CordialResult<ForeignErrorAttenuationRecord> {
@@ -269,6 +275,7 @@ fn miette_surface_record(
 /// exactly). There is no newtype to add: `?` is already the complete,
 /// correct, final handling every time.
 #[instrument(level = "debug", skip(foreign), err(level = "warn"))]
+#[hotpath::measure]
 fn fmt_error_exemplar_record(
     foreign: &ForeignErrorTypeRecord,
 ) -> CordialResult<ForeignErrorAttenuationRecord> {
@@ -287,6 +294,7 @@ fn fmt_error_exemplar_record(
 }
 
 #[instrument(level = "debug", skip(foreign), err(level = "warn"))]
+#[hotpath::measure]
 fn option_ok_neutral_record(
     foreign: &ForeignErrorTypeRecord,
 ) -> CordialResult<ForeignErrorAttenuationRecord> {
@@ -301,6 +309,7 @@ fn option_ok_neutral_record(
 }
 
 #[instrument(level = "debug", skip(bridges))]
+#[hotpath::measure]
 fn chain_break_resolution(
     foreign_error_type: &str,
     source_snippet: &str,
@@ -329,6 +338,7 @@ fn chain_break_resolution(
 }
 
 #[instrument(level = "debug", skip(bridges))]
+#[hotpath::measure]
 fn pending_infrastructure_resolution(
     foreign_error_type: &str,
     source_snippet: &str,
@@ -354,6 +364,7 @@ fn pending_infrastructure_resolution(
 }
 
 #[instrument(level = "debug", skip(bridges))]
+#[hotpath::measure]
 fn good_pattern_template(
     foreign_error_type: &str,
     source_snippet: &str,
@@ -373,6 +384,7 @@ fn good_pattern_template(
 }
 
 #[instrument(level = "debug", skip(bridges))]
+#[hotpath::measure]
 fn find_bridge<'a>(
     bridges: &'a [ErrorBridgeHint],
     foreign_error_type: &str,

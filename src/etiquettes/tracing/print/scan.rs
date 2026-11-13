@@ -6,6 +6,7 @@ use tracing::instrument;
 
 /// Apply the stdio policy to the loader-projected print sites.
 #[instrument(level = "debug", skip(inventory, policy), err(level = "warn"))]
+#[hotpath::measure]
 pub fn findings_from_inventory(
     inventory: &crate::ir::SourceObservability,
     policy: &TracingStdioPolicy,
@@ -27,6 +28,7 @@ pub fn findings_from_inventory(
 }
 
 #[instrument(level = "debug", skip(file, policy), err(level = "warn"))]
+#[hotpath::measure]
 fn file_findings(
     file: &crate::ir::ObservabilityFile,
     policy: &TracingStdioPolicy,

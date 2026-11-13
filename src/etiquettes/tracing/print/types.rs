@@ -25,6 +25,7 @@ pub enum PrintRuleId {
 impl PrintRuleId {
     /// Stable string form of this value.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Println => "TRACING-STD-PRINTLN",
@@ -37,6 +38,7 @@ impl PrintRuleId {
 
     /// Parse from the stable identifier string.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn from_attr(value: &str) -> Option<Self> {
         match value {
             "TRACING-STD-PRINTLN" => Some(Self::Println),
@@ -67,6 +69,7 @@ impl PrintRuleId {
     }
 
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     fn description(self) -> &'static str {
         match self {
             Self::Println => {
@@ -158,6 +161,7 @@ pub struct PrintFinding {
 impl PrintFinding {
     /// Start a builder for this value.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> PrintFindingBuilder {
         PrintFindingBuilder::default()
     }
@@ -213,6 +217,7 @@ pub struct PrintSiteRecord {
 impl PrintSiteRecord {
     /// Start a builder for this value.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> PrintSiteRecordBuilder {
         PrintSiteRecordBuilder::default()
     }

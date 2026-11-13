@@ -60,6 +60,7 @@ impl CallGraphFacts {
 
 /// Evaluate proof-only reachability over the workspace's crate IRs.
 #[instrument(level = "debug", skip(config, path_facts, crates), err(level = "warn"))]
+#[hotpath::measure]
 pub(crate) fn workspace_call_graph(
     config: &TracingThresholds,
     path_facts: &PathInclusionFacts,

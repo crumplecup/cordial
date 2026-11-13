@@ -18,6 +18,7 @@ pub struct CleanSource {
 impl CleanSource {
     #[track_caller]
     #[instrument(level = "debug", skip(path, reason))]
+    #[hotpath::measure]
     pub fn new(path: PathBuf, reason: impl Into<String>) -> Self {
         let location = Location::caller();
         Self {
@@ -47,6 +48,7 @@ impl super::CordialError {
     /// A requested clean was refused or incomplete.
     #[track_caller]
     #[instrument(level = "debug", skip(path, reason))]
+    #[hotpath::measure]
     pub fn clean(path: PathBuf, reason: impl Into<String>) -> Self {
         Self::from_kind(super::CordialErrorKind::Clean(CleanSource::new(
             path, reason,

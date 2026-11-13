@@ -62,6 +62,7 @@ pub struct RunFacts {
 
 /// One run as a CSV row (no newline), matching [`COLUMNS`].
 #[instrument(level = "debug", skip(facts, notes))]
+#[hotpath::measure]
 pub fn row(at: u64, commit: &str, dirty: bool, facts: &RunFacts, notes: RunNotes) -> String {
     let timings = facts.timings();
     let mode = if crate::host::keeping() {

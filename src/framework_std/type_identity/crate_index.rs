@@ -63,6 +63,7 @@ pub enum Lookup {
 impl CrateIndex {
     /// Wrap a parsed rustdoc crate under `name`.
     #[instrument(level = "debug", skip(krate), fields(name = name))]
+    #[hotpath::measure]
     pub fn new(name: &str, krate: Crate) -> Self {
         Self {
             name: name.to_string(),
@@ -75,6 +76,7 @@ impl CrateIndex {
 
     /// Read rustdoc JSON from `json_path` as the crate `name`.
     #[instrument(level = "debug", err(level = "warn"))]
+    #[hotpath::measure]
     pub fn load(name: &str, json_path: &Path) -> CordialResult<Self> {
         let content = std::fs::read_to_string(json_path)?;
         Ok(Self::new(name, serde_json::from_str(&content)?))
@@ -200,6 +202,7 @@ impl CrateIndex {
     /// Breadth-first from the root, so the first path recorded for an item is
     /// a shortest one. Re-exports and glob re-exports are followed.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     fn build_public_paths(&self) -> HashMap<Id, String> {
         let mut best: HashMap<Id, String> = HashMap::new();
         let mut seen: HashSet<Id> = HashSet::from([self.krate.root]);
@@ -272,6 +275,7 @@ impl CrateIndex {
     /// Resolve `segments` (without the leading crate name) from the crate
     /// root. An empty slice resolves to the root module itself.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn lookup(&self, segments: &[&str]) -> Lookup {
         let mut current = vec![self.krate.root];
         for segment in segments {
@@ -298,6 +302,7 @@ impl CrateIndex {
     /// Items named `name` directly in `module`, following `pub use` and glob
     /// re-exports. `visited` stops cycles and diamond re-exports.
     #[instrument(level = "debug", skip(self, module, visited))]
+    #[hotpath::measure]
     fn children_named(&self, module: Id, name: &str, visited: &mut HashSet<Id>) -> Vec<Id> {
         let Some(ItemEnum::Module(m)) = self.item(&module).map(|item| &item.inner) else {
             return Vec::new();
@@ -373,6 +378,7 @@ fn raw_bounds(generics: &Generics) -> Vec<RawBound> {
 
 /// The trait ids among `bounds`, without `?Trait` relaxations and lifetimes.
 #[instrument(level = "debug", skip(bounds))]
+#[hotpath::measure]
 fn trait_ids(bounds: &[GenericBound]) -> impl Iterator<Item = Id> + '_ {
     bounds.iter().filter_map(|bound| match bound {
         GenericBound::TraitBound {

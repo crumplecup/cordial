@@ -6,6 +6,7 @@ use tracing::instrument;
 
 /// Last path segment of a type label (`io::IoSource` → `IoSource`).
 #[instrument(level = "debug")]
+#[hotpath::measure]
 pub(crate) fn last_ident(label: &str) -> &str {
     label.rsplit("::").next().unwrap_or(label)
 }
@@ -13,6 +14,7 @@ pub(crate) fn last_ident(label: &str) -> &str {
 /// Keep type-graph nodes that belong to a type (or variant of a type) that
 /// implements `Error`.
 #[instrument(level = "debug", skip(error_impls))]
+#[hotpath::measure]
 pub(crate) fn type_path_is_error_related(type_path: &str, error_impls: &BTreeSet<String>) -> bool {
     type_path
         .split("::")

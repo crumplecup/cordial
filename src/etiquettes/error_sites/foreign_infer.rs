@@ -24,6 +24,7 @@ impl Display for ForeignTypeConfidence {
 
 /// Infer a foreign error type from a source-expression snippet.
 #[instrument(level = "debug", skip(source))]
+#[hotpath::measure]
 pub fn infer_foreign_error_type(source: &str) -> Option<(String, String, ForeignTypeConfidence)> {
     for rule in FOREIGN_TYPE_RULES {
         if (rule.matches)(source) {
@@ -114,36 +115,43 @@ const FOREIGN_TYPE_RULES: &[ForeignTypeRule] = &[
 ];
 
 #[instrument(level = "debug", skip(source))]
+#[hotpath::measure]
 fn matches_std_fmt(source: &str) -> bool {
     source.contains("writeln!(…)") || source.contains("write!(…)")
 }
 
 #[instrument(level = "debug", skip(source))]
+#[hotpath::measure]
 fn matches_process_status(source: &str) -> bool {
     source.contains(".status(…)")
 }
 
 #[instrument(level = "debug", skip(source))]
+#[hotpath::measure]
 fn matches_std_fs(source: &str) -> bool {
     source.contains("std::fs::")
 }
 
 #[instrument(level = "debug", skip(source))]
+#[hotpath::measure]
 fn matches_unqualified_fs(source: &str) -> bool {
     source.starts_with("fs::")
 }
 
 #[instrument(level = "debug", skip(source))]
+#[hotpath::measure]
 fn matches_std_io(source: &str) -> bool {
     source.contains("std::io::")
 }
 
 #[instrument(level = "debug", skip(source))]
+#[hotpath::measure]
 fn matches_ensure_dirs(source: &str) -> bool {
     source.contains("ensure_dirs(…)")
 }
 
 #[instrument(level = "debug", skip(source))]
+#[hotpath::measure]
 fn matches_serde_json(source: &str) -> bool {
     source.contains("serde_json::from_str")
         || source.contains("serde_json::from_slice")
@@ -155,16 +163,19 @@ fn matches_serde_json(source: &str) -> bool {
 }
 
 #[instrument(level = "debug", skip(source))]
+#[hotpath::measure]
 fn matches_cargo_metadata(source: &str) -> bool {
     source.contains("cargo_metadata::")
 }
 
 #[instrument(level = "debug", skip(source))]
+#[hotpath::measure]
 fn matches_csv_writer(source: &str) -> bool {
     source.contains("csv::Writer") || source.contains("csv::Reader") || source.starts_with("csv::")
 }
 
 #[instrument(level = "debug", skip(source))]
+#[hotpath::measure]
 fn matches_csv_methods(source: &str) -> bool {
     source.contains(".write_record(…)")
         || source.contains(".flush(…)")
@@ -172,6 +183,7 @@ fn matches_csv_methods(source: &str) -> bool {
 }
 
 #[instrument(level = "debug", skip(source))]
+#[hotpath::measure]
 fn matches_syn_parse(source: &str) -> bool {
     source.contains("syn::parse_file")
         || source.contains("syn::parse2")

@@ -72,6 +72,7 @@ impl SourceDatabase {
     /// build-script or proc-macro changes. Replacement is atomic: a failed
     /// load leaves this session and its virtual source revisions untouched.
     #[instrument(level = "debug", skip(self, root, options), err(level = "warn"))]
+    #[hotpath::measure]
     pub fn reload(&mut self, root: &Path, options: &SemanticCargoOptions) -> CordialResult<()> {
         let mut replacement = Self::load_with(root, options)?;
         replacement.revision = self.revision + 1;
@@ -81,6 +82,7 @@ impl SourceDatabase {
 
     /// Virtual edits cannot refresh a Cargo manifest or a compiled macro.
     #[instrument(level = "debug", skip(self, path), err(level = "warn"))]
+    #[hotpath::measure]
     pub(super) fn check_virtual_input(&self, path: &Path) -> CordialResult<()> {
         let path = path.canonicalize()?;
         if let Some(context) = &self.workspace {

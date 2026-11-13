@@ -128,6 +128,7 @@ impl WorkspaceIr {
     /// files or revisit syntax.
     #[cfg(feature = "tracing")]
     #[instrument(level = "debug", skip(self, config), err(level = "warn"))]
+    #[hotpath::measure]
     pub fn refresh_tracing_call_graph(
         &mut self,
         config: &crate::config::TracingThresholds,
@@ -141,6 +142,7 @@ impl WorkspaceIr {
     /// attaching it.
     #[cfg(feature = "tracing")]
     #[instrument(level = "debug", skip(self, config), err(level = "warn"))]
+    #[hotpath::measure]
     pub(crate) fn evaluate_tracing_call_graph(
         &self,
         config: &crate::config::TracingThresholds,
@@ -196,6 +198,7 @@ impl WorkspaceIr {
 
     /// Insert crate.
     #[instrument(level = "debug", skip(self, crate_ir))]
+    #[hotpath::measure]
     pub fn insert_crate(&mut self, crate_ir: CrateIr) -> NodeId {
         let root = crate_ir.root();
         self.crates.insert(crate_ir.crate_name().clone(), crate_ir);
@@ -219,17 +222,20 @@ impl WorkspaceIr {
 
     /// Crate ir mut.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn crate_ir_mut(&mut self, crate_name: &str) -> Option<&mut CrateIr> {
         self.crates.get_mut(crate_name)
     }
 
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     fn require_crate(&self, crate_name: &str) -> CordialResult<&CrateIr> {
         self.crate_ir(crate_name)
             .ok_or_else(|| CordialError::crate_must_exist(crate_name))
     }
 
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     fn require_crate_mut(&mut self, crate_name: &str) -> CordialResult<&mut CrateIr> {
         self.crate_ir_mut(crate_name)
             .ok_or_else(|| CordialError::crate_must_exist(crate_name))
@@ -237,6 +243,7 @@ impl WorkspaceIr {
 
     /// Insert cross crate edge.
     #[instrument(level = "debug", skip(self, from_crate, from, to_crate, to, kind))]
+    #[hotpath::measure]
     pub fn insert_cross_crate_edge(
         &mut self,
         from_crate: impl Into<String>,

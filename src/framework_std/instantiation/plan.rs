@@ -33,6 +33,7 @@ struct Seed {
 /// parent followed by one child row per instantiation, recounting the
 /// report. Rows without instantiations pass through unchanged.
 #[instrument(level = "debug", skip(report, ctx), err(level = "warn"))]
+#[hotpath::measure]
 pub fn expand_report(
     report: &AmenableStdReport,
     ctx: &InstantiationContext<'_>,
@@ -59,6 +60,7 @@ pub fn expand_report(
 /// The same expansion over bare rows, for callers that classify rows one at a
 /// time and have no report yet.
 #[instrument(level = "debug", skip(entries, ctx), err(level = "warn"))]
+#[hotpath::measure]
 pub fn expand_entries(
     entries: &[AmenableStdEntry],
     ctx: &InstantiationContext<'_>,
@@ -88,6 +90,7 @@ struct Seeds {
 
 /// `[parent, children..]` for a generic row, or just `[entry]`.
 #[instrument(level = "debug", skip(parent, ctx), err(level = "warn"))]
+#[hotpath::measure]
 fn expand_entry(
     parent: &AmenableStdEntry,
     ctx: &InstantiationContext<'_>,
@@ -147,6 +150,7 @@ fn expand_entry(
 /// otherwise the ones derived from rustdoc, then any registered instantiation
 /// that was not among them.
 #[instrument(level = "debug", skip(parent, head, ctx))]
+#[hotpath::measure]
 fn seeds_for(parent: &AmenableStdEntry, head: &TypeKey, ctx: &InstantiationContext<'_>) -> Seeds {
     let (mut seeds, source) = match ctx.expected.configured(parent.type_path()) {
         Some(tuples) => (
@@ -202,6 +206,7 @@ fn seeds_for(parent: &AmenableStdEntry, head: &TypeKey, ctx: &InstantiationConte
 }
 
 #[instrument(level = "debug", skip(parent, seed, ctx), err(level = "warn"))]
+#[hotpath::measure]
 fn child_entry(
     parent: &AmenableStdEntry,
     seed: &Seed,

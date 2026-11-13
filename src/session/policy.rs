@@ -8,6 +8,7 @@ use crate::objects::{Finding, MapFindingSink};
 use crate::{CordialConfig, LintLocation};
 
 #[tracing::instrument(level = "debug", skip(config, targets, workspace, findings))]
+#[hotpath::measure]
 pub(super) fn retain_workspace_findings(
     config: &CordialConfig,
     project_root: &Path,

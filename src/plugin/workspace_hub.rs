@@ -23,6 +23,7 @@ pub enum WorkspaceHub {
 impl WorkspaceHub {
     /// Framework impl crate.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn framework_impl_crate(self) -> Option<&'static str> {
         match self {
             Self::Homecoming => Some("homecoming_core"),
@@ -33,6 +34,7 @@ impl WorkspaceHub {
 
     /// Framework patch set.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn framework_patch_set(self) -> Option<&'static str> {
         match self {
             Self::Homecoming => Some("homecoming"),
@@ -43,6 +45,7 @@ impl WorkspaceHub {
 
     /// Framework primary trait.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn framework_primary_trait(self) -> Option<&'static str> {
         match self {
             Self::Homecoming => Some("Code"),
@@ -59,6 +62,7 @@ impl WorkspaceHub {
 
 /// Detect hub crate from workspace member names.
 #[instrument(level = "debug", skip(members))]
+#[hotpath::measure]
 pub fn detect_workspace_hub(members: &HashSet<String>) -> WorkspaceHub {
     for candidate in ["elicitation", "amenable", "homecoming"] {
         if members.contains(candidate) {
@@ -75,6 +79,7 @@ pub fn detect_workspace_hub(members: &HashSet<String>) -> WorkspaceHub {
 
 /// Discover workspace hub from cargo metadata at `project_root`.
 #[instrument(level = "debug", skip(filter), err(level = "warn"))]
+#[hotpath::measure]
 pub fn discover_workspace_hub(
     project_root: &std::path::Path,
     filter: &dyn RunFilter,

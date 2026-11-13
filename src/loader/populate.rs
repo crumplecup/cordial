@@ -8,6 +8,7 @@ use tracing::instrument;
 impl SourceLoadView {
     /// Load the same source view used by the session for a crate target.
     #[instrument(level = "debug", skip(target), err(level = "warn"))]
+    #[hotpath::measure]
     pub(crate) fn for_target(target: &super::CrateTarget) -> CordialResult<Self> {
         let src_root = target.crate_root().join("src");
         let view = Self::new(
@@ -23,6 +24,7 @@ impl SourceLoadView {
 }
 
 #[instrument(level = "debug", skip(src_root), err(level = "warn"))]
+#[hotpath::measure]
 fn read_source_files(src_root: &Path) -> CordialResult<Vec<SourceFile>> {
     let mut files = Vec::new();
     if src_root.is_dir() {

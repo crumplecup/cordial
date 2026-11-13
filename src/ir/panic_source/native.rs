@@ -69,6 +69,7 @@ impl Context {
 
 impl<'a, 'db> Scanner<'a, 'db> {
     #[tracing::instrument(level = "debug", skip(source, reachable))]
+    #[hotpath::measure]
     pub(super) fn new(
         source: &'a DatabaseSource<'db>,
         root: &'a Path,
@@ -86,6 +87,7 @@ impl<'a, 'db> Scanner<'a, 'db> {
     }
 
     #[tracing::instrument(level = "debug", skip(self, node, inherited), err(level = "warn"))]
+    #[hotpath::measure]
     pub(super) fn walk(&mut self, node: &SyntaxNode, inherited: &Context) -> CordialResult<()> {
         let context = if let Some(module) = ast::Module::cast(node.clone()) {
             let mut context = inherited.clone();

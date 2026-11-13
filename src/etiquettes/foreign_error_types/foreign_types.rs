@@ -7,6 +7,7 @@ use super::types::{ErrorSitePartitionReport, ForeignErrorTypeRecord, ForeignErro
 use tracing::instrument;
 /// Infer foreign error types from partitioned Phase 2 rows.
 #[instrument(level = "debug", skip(report), err(level = "warn"))]
+#[hotpath::measure]
 pub fn build_foreign_error_type_report(
     report: &ErrorSitePartitionReport,
 ) -> CordialResult<ForeignErrorTypeReport> {
@@ -24,6 +25,7 @@ pub fn build_foreign_error_type_report(
 }
 
 #[instrument(level = "debug", skip(finding), err(level = "warn"))]
+#[hotpath::measure]
 fn infer_foreign_error_type_finding(
     finding: &PartitionedErrorSiteRow,
 ) -> CordialResult<Option<ForeignErrorTypeRecord>> {
@@ -52,6 +54,7 @@ fn infer_foreign_error_type_finding(
 
 /// Build a partition report from partitioned rows.
 #[instrument(level = "debug", skip(findings))]
+#[hotpath::measure]
 pub fn build_error_site_partition_report(
     crate_name: &str,
     findings: Vec<PartitionedErrorSiteRow>,

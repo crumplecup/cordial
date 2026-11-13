@@ -99,6 +99,7 @@ pub struct AmenableStdEntry {
 impl AmenableStdEntry {
     /// Start a builder for this entry.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> AmenableStdEntryBuilder {
         AmenableStdEntryBuilder::default()
     }
@@ -215,12 +216,14 @@ pub struct AmenableStdReport {
 impl AmenableStdReport {
     /// Start a builder for this report.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> AmenableStdReportBuilder {
         AmenableStdReportBuilder::default()
     }
 
     /// Covered items as a percentage of the inventory.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn coverage_pct(&self) -> f32 {
         let accountable = self.entries.len().saturating_sub(self.skipped_count);
         if accountable == 0 {

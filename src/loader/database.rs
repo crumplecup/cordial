@@ -31,6 +31,7 @@ pub struct Reporter(std::sync::Arc<dyn Fn(String) + Send + Sync>);
 impl Reporter {
     /// Report through `report`.
     #[instrument(level = "debug", skip(report))]
+    #[hotpath::measure]
     pub fn new(report: impl Fn(String) + Send + Sync + 'static) -> Self {
         Self(std::sync::Arc::new(report))
     }
@@ -44,6 +45,7 @@ impl Reporter {
 
 impl Default for Reporter {
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     fn default() -> Self {
         Self::new(|_| {})
     }

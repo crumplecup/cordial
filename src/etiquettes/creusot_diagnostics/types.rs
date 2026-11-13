@@ -21,6 +21,7 @@ pub enum CreusotDiagnosticRuleId {
 impl CreusotDiagnosticRuleId {
     /// Stable string form of this value.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Warning001 => "CREUSOT-DIAGNOSTIC-001",
@@ -30,6 +31,7 @@ impl CreusotDiagnosticRuleId {
 
     /// Parse from the stable identifier string.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn from_attr(value: &str) -> Option<Self> {
         match value {
             "CREUSOT-DIAGNOSTIC-001" => Some(Self::Warning001),
@@ -112,6 +114,7 @@ pub struct CreusotDiagnosticFinding {
 
 impl CreusotDiagnosticFinding {
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> CreusotDiagnosticFindingBuilder {
         CreusotDiagnosticFindingBuilder::default()
     }
@@ -166,6 +169,7 @@ pub struct CreusotDiagnosticRecord {
 impl CreusotDiagnosticRecord {
     /// Start a builder for this value.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> CreusotDiagnosticRecordBuilder {
         CreusotDiagnosticRecordBuilder::default()
     }

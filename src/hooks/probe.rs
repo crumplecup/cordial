@@ -33,6 +33,7 @@ pub struct ProbeView<'a> {
 impl<'a> ProbeView<'a> {
     /// Consume the view into its hook inputs.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn into_parts(self) -> (&'a dyn IrView, (), &'a dyn SessionView) {
         (self.ir, (), self.session)
     }

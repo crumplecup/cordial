@@ -33,6 +33,7 @@ struct ForeignErrorAttenuationRow {
 
 impl ForeignErrorAttenuationRow {
     #[instrument(level = "debug", skip(finding), ret)]
+    #[hotpath::measure]
     fn from_finding(finding: &dyn Finding) -> Self {
         let mut sink = MapFindingSink::default();
         finding.emit(&mut sink);
@@ -65,6 +66,7 @@ impl ForeignErrorAttenuationRow {
 }
 
 #[instrument(level = "debug", skip(findings))]
+#[hotpath::measure]
 fn attenuation_rows(findings: &[&dyn Finding]) -> Vec<ForeignErrorAttenuationRow> {
     findings
         .iter()
@@ -74,6 +76,7 @@ fn attenuation_rows(findings: &[&dyn Finding]) -> Vec<ForeignErrorAttenuationRow
 }
 
 #[instrument(level = "debug", skip(rows))]
+#[hotpath::measure]
 fn open_rows(
     rows: &[ForeignErrorAttenuationRow],
 ) -> impl Iterator<Item = &ForeignErrorAttenuationRow> {
@@ -86,6 +89,7 @@ fn open_rows(
 /// artifact must derive its own crate breakdown from `row.crate_name`
 /// instead (the same pattern `modularity::reporter::rows::crate_names` uses).
 #[instrument(level = "debug", skip(rows))]
+#[hotpath::measure]
 fn crate_names(rows: &[ForeignErrorAttenuationRow]) -> Vec<String> {
     let mut names: Vec<String> = rows.iter().map(|row| row.crate_name.clone()).collect();
     names.sort();
@@ -94,6 +98,7 @@ fn crate_names(rows: &[ForeignErrorAttenuationRow]) -> Vec<String> {
 }
 
 #[instrument(level = "debug", skip(rows), err(level = "warn"))]
+#[hotpath::measure]
 fn report_from_rows(
     rows: &[ForeignErrorAttenuationRow],
 ) -> CordialResult<ForeignErrorAttenuationReport> {
@@ -131,6 +136,7 @@ fn report_from_rows(
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn parse_handling_class(value: &str) -> ForeignErrorHandlingClass {
     if value.contains("CHAIN-PRESERVED") {
         ForeignErrorHandlingClass::ChainPreserved
@@ -144,6 +150,7 @@ fn parse_handling_class(value: &str) -> ForeignErrorHandlingClass {
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn parse_resolution_id(value: &str) -> super::types::ErrorHandlingResolutionId {
     use super::types::ErrorHandlingResolutionId;
     if value.contains("MAINTAIN-EXEMPLAR") {
@@ -158,6 +165,7 @@ fn parse_resolution_id(value: &str) -> super::types::ErrorHandlingResolutionId {
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn parse_site_kind(value: &str) -> crate::etiquettes::error_sites::ErrorSiteKind {
     use crate::etiquettes::error_sites::ErrorSiteKind;
     match value {
@@ -292,6 +300,7 @@ impl Reporter for ForeignErrorAttenuationChecklistReporter {
 }
 
 #[instrument(level = "info", skip(report, class))]
+#[hotpath::measure]
 fn write_class_section(
     body: &mut String,
     report: &ForeignErrorAttenuationReport,
@@ -380,6 +389,7 @@ impl Reporter for ForeignErrorAttenuationSummaryReporter {
 }
 
 #[instrument(level = "debug", skip(summary))]
+#[hotpath::measure]
 fn render_summary(summary: &WorkspaceForeignErrorAttenuationSummary) -> String {
     let mut body = String::new();
     body.push_str("# Foreign error handling attenuation summary\n\n");

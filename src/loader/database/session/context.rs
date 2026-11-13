@@ -30,6 +30,7 @@ pub(super) struct WorkspaceInputs {
 
 impl WorkspaceInputs {
     #[instrument(level = "debug", skip_all, err(level = "warn"))]
+    #[hotpath::measure]
     pub(super) fn capture(
         workspace: &ProjectWorkspace,
         options: &SemanticCargoOptions,

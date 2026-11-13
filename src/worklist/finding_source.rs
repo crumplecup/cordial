@@ -33,6 +33,7 @@ struct MatchedFinding {
 impl FindingSource {
     /// Read the gate's finished checklists and its open finding identities.
     #[instrument(level = "debug", skip(checklists, findings))]
+    #[hotpath::measure]
     pub fn from_findings(checklists: ChecklistSource, findings: &[&dyn Finding]) -> Self {
         let findings = findings
             .iter()
@@ -185,6 +186,7 @@ fn same_file(left: &str, right: &str) -> bool {
 }
 
 #[instrument(level = "debug", skip(file))]
+#[hotpath::measure]
 fn location_line(item_line: &str, file: Option<&str>) -> Option<u32> {
     let file = file?;
     item_line

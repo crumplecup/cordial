@@ -28,6 +28,7 @@ use crate::store::StoreLayout;
 /// inventory the same way `load_std_inventory_from_json` (private to
 /// this module, no public path to link) loads a std-family source.
 #[instrument(level = "info", skip(store), err(level = "warn"))]
+#[hotpath::measure]
 pub fn load_ext_inventory_from_shadow_dep(
     project_root: &Path,
     store: &StoreLayout,

@@ -29,6 +29,7 @@ pub struct ShadowPair {
 
 /// Tracked shadow targets whose mirror crate exists in this workspace.
 #[instrument(level = "debug", skip(workspace_members))]
+#[hotpath::measure]
 pub fn active_tracked_targets(
     workspace_members: &HashSet<String>,
 ) -> Vec<&'static ElicitationTrackedTarget> {
@@ -40,6 +41,7 @@ pub fn active_tracked_targets(
 
 /// Active upstream ↔ shadow pairs for the workspace at `project_root`.
 #[instrument(level = "debug", skip(filter), err(level = "warn"))]
+#[hotpath::measure]
 pub fn discover_active_shadow_pairs(
     project_root: &std::path::Path,
     filter: &dyn RunFilter,
@@ -59,6 +61,7 @@ pub fn discover_active_shadow_pairs(
 }
 
 #[instrument(level = "debug", skip(pairs, filter))]
+#[hotpath::measure]
 fn filter_shadow_pairs(pairs: Vec<ShadowPair>, filter: &dyn RunFilter) -> Vec<ShadowPair> {
     if let Some(name) = filter.crate_name() {
         return pairs
@@ -77,6 +80,7 @@ fn filter_shadow_pairs(pairs: Vec<ShadowPair>, filter: &dyn RunFilter) -> Vec<Sh
 
 /// Look up a tracked target by shadow member crate name.
 #[instrument(level = "debug")]
+#[hotpath::measure]
 pub fn tracked_target_for_shadow(shadow: &str) -> Option<&'static ElicitationTrackedTarget> {
     ELICITATION_TRACKED_TARGETS
         .iter()

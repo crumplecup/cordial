@@ -41,6 +41,7 @@ impl IrEnricher for ErrorSiteInventoryEnricher {
 }
 
 #[instrument(level = "debug", skip(ir, record), err(level = "warn"))]
+#[hotpath::measure]
 fn insert_error_site_node(
     ir: &mut dyn IrMut,
     crate_root: &std::path::Path,

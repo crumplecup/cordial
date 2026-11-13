@@ -23,6 +23,7 @@ impl super::CordialError {
     /// The run reached the stage it was asked to stop after.
     #[track_caller]
     #[instrument(level = "debug", skip(stage))]
+    #[hotpath::measure]
     pub fn stopped_after(stage: impl Into<String>) -> Self {
         Self::from_kind(super::CordialErrorKind::Stopped(StoppedSource {
             stage: stage.into(),

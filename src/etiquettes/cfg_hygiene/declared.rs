@@ -85,6 +85,7 @@ const CARGO_INJECTED_NAMES: &[&str] = &["test", "feature", "docsrs"];
 /// `build.rs`-emitted `cargo::rustc-check-cfg=cfg(...)` lines, and
 /// `thresholds`' `extra_known_names` escape hatch.
 #[instrument(level = "debug", skip(source, thresholds), err(level = "warn"))]
+#[hotpath::measure]
 pub fn declared_names_for_crate(
     source: &SourceLoadView,
     crate_root: &Path,
@@ -108,6 +109,7 @@ pub fn declared_names_for_crate(
     skip(manifest_source, workspace_source, build_source, thresholds),
     err(level = "warn")
 )]
+#[hotpath::measure]
 pub(crate) fn declared_names_from_inputs(
     manifest_source: Option<&str>,
     workspace_source: Option<&str>,
@@ -147,6 +149,7 @@ pub(crate) fn declared_names_from_inputs(
 }
 
 #[instrument(level = "debug", skip(table))]
+#[hotpath::measure]
 fn uses_workspace_lints(table: &toml::Table) -> bool {
     table
         .get("lints")
@@ -160,6 +163,7 @@ fn uses_workspace_lints(table: &toml::Table) -> bool {
 /// `[lints.rust.unexpected_cfgs] check-cfg = [...]` in a package- or
 /// `[workspace]`-rooted table.
 #[instrument(level = "debug", skip(table))]
+#[hotpath::measure]
 fn check_cfg_names_from_package_table(table: &toml::Table) -> Vec<String> {
     table
         .get("lints")
@@ -186,6 +190,7 @@ fn check_cfg_names_from_package_table(table: &toml::Table) -> Vec<String> {
 /// on older `cargo`). A plain text scan, not a `syn` parse — the payload is
 /// inside a string literal, not real Rust syntax.
 #[instrument(level = "debug", skip(content))]
+#[hotpath::measure]
 fn check_cfg_names_from_build_script(content: &str) -> Vec<String> {
     const MARKERS: &[&str] = &["cargo::rustc-check-cfg=", "cargo:rustc-check-cfg="];
     content
@@ -203,6 +208,7 @@ fn check_cfg_names_from_build_script(content: &str) -> Vec<String> {
 /// however much trailing text follows (a rest-of-line remainder, a closing
 /// `"` from a `println!` string literal, …).
 #[instrument(level = "debug", skip(text))]
+#[hotpath::measure]
 fn extract_cfg_name(text: &str) -> Option<String> {
     let after_cfg = text.split_once("cfg(")?.1;
     let name: String = after_cfg
@@ -218,6 +224,7 @@ fn extract_cfg_name(text: &str) -> Option<String> {
 /// (deliberately opt-in per crate, not "every crate must own exactly one
 /// verifier name"; see [`CfgHygieneThresholds::crate_verifier`] doc).
 #[instrument(level = "debug", skip(thresholds))]
+#[hotpath::measure]
 pub fn expected_verifier_for<'a>(
     thresholds: &'a CfgHygieneThresholds,
     crate_name: &str,
@@ -232,6 +239,7 @@ pub fn expected_verifier_for<'a>(
 /// `crate_verifier` — the vocabulary CFG-VERIFIER-MISMATCH-001 treats as
 /// "belongs to some specific backend crate, not this one".
 #[instrument(level = "debug", skip(thresholds))]
+#[hotpath::measure]
 pub fn all_verifier_names(thresholds: &CfgHygieneThresholds) -> HashSet<&str> {
     thresholds
         .crate_verifier()

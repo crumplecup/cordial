@@ -50,6 +50,7 @@ impl std::fmt::Debug for CacheToken {
 
 impl Default for CacheToken {
     #[tracing::instrument(level = "debug")]
+    #[hotpath::measure]
     fn default() -> Self {
         static NEXT: AtomicU64 = AtomicU64::new(1);
         Self {
@@ -63,6 +64,7 @@ impl Default for CacheToken {
 }
 
 #[instrument(level = "debug", skip(mutex))]
+#[hotpath::measure]
 fn locked<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(PoisonError::into_inner)
 }
@@ -262,6 +264,7 @@ impl CacheToken {
 
     /// Say why the cached results do not apply, naming the inputs that changed.
     #[tracing::instrument(level = "debug", skip(self, cache))]
+    #[hotpath::measure]
     fn explain_miss(&self, cache: &RunCache, crate_name: &str) {
         let changed = cache.changed_since_last();
         let shown: Vec<_> = changed.iter().take(3).cloned().collect();
@@ -296,6 +299,7 @@ pub(crate) struct ParsedSourceSession {
 
 impl ParsedSourceSession {
     #[tracing::instrument(level = "debug")]
+    #[hotpath::measure]
     pub(crate) fn begin() -> Self {
         let token = Arc::new(CacheToken::default());
         let previous = SESSION_TOKEN.with(|current| current.replace(Some(token.clone())));
@@ -310,6 +314,7 @@ impl ParsedSourceSession {
         feature = "crate_attrs"
     ))]
     #[tracing::instrument(level = "debug", err(level = "warn"), skip(reporter, planning))]
+    #[hotpath::measure]
     pub(crate) fn begin_in(
         root: &std::path::Path,
         reporter: &Reporter,
@@ -329,6 +334,7 @@ impl ParsedSourceSession {
     /// cached. `cache` is `None` when the inputs could not be gathered, in which
     /// case the workspace loads on first use and nothing is reused.
     #[tracing::instrument(level = "debug", skip(cache, planning))]
+    #[hotpath::measure]
     pub(crate) fn begin_deferred(
         root: &std::path::Path,
         planning: CfgPlanning,
@@ -352,6 +358,7 @@ impl ParsedSourceSession {
     /// Project one target's source and semantic evidence: from the cached
     /// results when they hold it, otherwise from the run database.
     #[tracing::instrument(level = "debug", skip(self, target), err(level = "warn"))]
+    #[hotpath::measure]
     pub(crate) fn project_target(
         &self,
         target: &crate::loader::CrateTarget,

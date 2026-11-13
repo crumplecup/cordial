@@ -16,6 +16,7 @@ use crate::rustdoc::{
 use tracing::instrument;
 /// Build wrapper coverage for foreign types from hub crate IR attrs and edges.
 #[instrument(level = "debug", skip(workspace))]
+#[hotpath::measure]
 pub fn build_wrapper_coverage_from_hub_ir(
     workspace: &WorkspaceIr,
     hub_name: &str,
@@ -31,6 +32,7 @@ pub fn build_wrapper_coverage_from_hub_ir(
 
 /// `(foreign_path, wrapper_path)` pairs from materialized `wraps_foreign` attrs.
 #[instrument(level = "debug", skip(ir))]
+#[hotpath::measure]
 pub fn collect_trenchcoat_pairs_from_ir(ir: &CrateIr) -> Vec<(String, String)> {
     let all_nodes = BasicQuery::all_nodes();
     let mut pairs = Vec::new();
@@ -55,6 +57,7 @@ pub fn collect_trenchcoat_pairs_from_ir(ir: &CrateIr) -> Vec<(String, String)> {
 }
 
 #[instrument(level = "debug", skip(ir))]
+#[hotpath::measure]
 fn elicit_complete_set_from_ir(ir: &CrateIr) -> ElicitCompleteSet {
     let all_nodes = BasicQuery::all_nodes();
     let mut concrete = HashSet::new();
@@ -84,6 +87,7 @@ fn elicit_complete_set_from_ir(ir: &CrateIr) -> ElicitCompleteSet {
 }
 
 #[instrument(level = "debug", skip(ir))]
+#[hotpath::measure]
 fn trait_prereqs_map_from_ir(ir: &CrateIr) -> HashMap<String, TraitPrereqs> {
     let all_nodes = BasicQuery::all_nodes();
     ir.nodes_matching(&all_nodes)
@@ -100,6 +104,7 @@ fn trait_prereqs_map_from_ir(ir: &CrateIr) -> HashMap<String, TraitPrereqs> {
 
 /// Compare IR-built map with inventory oracle for parity tests.
 #[instrument(level = "debug", skip(left, right))]
+#[hotpath::measure]
 pub fn wrapper_maps_equivalent(left: &WrapperCoverageMap, right: &WrapperCoverageMap) -> bool {
     if left.len() != right.len() {
         return false;

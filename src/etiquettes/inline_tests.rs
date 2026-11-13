@@ -98,6 +98,7 @@ pub static INLINE_TESTS_ETIQUETTE: LazyLock<StaticQualityEtiquette> = LazyLock::
 });
 
 #[instrument(level = "debug", skip(findings))]
+#[hotpath::measure]
 fn quality_area_compute(findings: &[&dyn Finding]) -> (usize, String) {
     let inline_tests = count_open_category(findings, "inline_tests");
     (

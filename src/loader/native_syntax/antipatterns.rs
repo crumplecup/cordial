@@ -53,6 +53,7 @@ impl DatabaseSource<'_> {
     }
 
     #[tracing::instrument(level = "debug", skip_all)]
+    #[hotpath::measure]
     pub(crate) fn antipattern_contracts_at(
         &self,
         tree: &ast::TokenTree,

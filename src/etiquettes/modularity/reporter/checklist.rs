@@ -21,6 +21,7 @@ impl ModularityChecklistReporter {
 
 /// Count the same top-level items that the checklist renderer emits.
 #[instrument(level = "debug", skip(findings))]
+#[hotpath::measure]
 pub(in crate::etiquettes::modularity) fn checklist_open_items(findings: &[&dyn Finding]) -> usize {
     let rows = modularity_rows(findings);
     let open: Vec<_> = open_rows(&rows).collect();
@@ -103,6 +104,7 @@ impl Reporter for ModularityChecklistReporter {
 }
 
 #[instrument(level = "debug", skip(open))]
+#[hotpath::measure]
 fn render_checklist_sections(open: &[&ModularityRow]) -> (String, usize) {
     let mut open_items = 0;
     let mut rendered = String::new();
@@ -136,6 +138,7 @@ struct FileHotspot<'a> {
 }
 
 #[instrument(level = "debug", skip(open))]
+#[hotpath::measure]
 fn render_crate_checklist(open: &[&ModularityRow]) -> (String, usize) {
     let hotspots = file_hotspots(open);
     let nested_files: BTreeSet<&str> = hotspots.iter().map(|hotspot| hotspot.file).collect();
@@ -304,6 +307,7 @@ fn render_crate_checklist(open: &[&ModularityRow]) -> (String, usize) {
     level = "debug",
     skip(open, nested_top_heavy, nested_lopsided, nested_collapse)
 )]
+#[hotpath::measure]
 fn render_rebalance(
     open: &[&ModularityRow],
     nested_top_heavy: &BTreeSet<&str>,
@@ -353,6 +357,7 @@ fn render_rebalance(
 }
 
 #[instrument(level = "debug", skip(open, nested))]
+#[hotpath::measure]
 fn leftover_kind<'a>(
     open: &[&'a ModularityRow],
     kind: &str,
@@ -370,6 +375,7 @@ fn leftover_kind<'a>(
 }
 
 #[instrument(level = "debug", skip(row))]
+#[hotpath::measure]
 fn share_label(row: &ModularityRow) -> String {
     if row.share().is_empty() {
         "most".to_string()
@@ -379,6 +385,7 @@ fn share_label(row: &ModularityRow) -> String {
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn share_as_percent(share: &str) -> String {
     share
         .parse::<f64>()
@@ -387,6 +394,7 @@ fn share_as_percent(share: &str) -> String {
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn detail_suffix(detail: &str) -> String {
     if detail.is_empty() {
         String::new()
@@ -396,6 +404,7 @@ fn detail_suffix(detail: &str) -> String {
 }
 
 #[instrument(level = "debug", skip(open))]
+#[hotpath::measure]
 fn file_hotspots<'a>(open: &[&'a ModularityRow]) -> Vec<FileHotspot<'a>> {
     let tree = build_module_hierarchy(&file_module_inputs(open));
     let fat_leaf_paths: BTreeSet<String> = fat_leaves(&tree)

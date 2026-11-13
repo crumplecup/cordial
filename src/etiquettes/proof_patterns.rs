@@ -118,6 +118,7 @@ pub static PROOF_PATTERNS_ETIQUETTE: LazyLock<StaticQualityEtiquette> = LazyLock
 });
 
 #[instrument(level = "debug", skip(findings))]
+#[hotpath::measure]
 fn quality_area_compute(findings: &[&dyn Finding]) -> (usize, String) {
     let assume = count_open_rule(findings, "PROOF-PATTERN-ASSUME");
     let admit = count_open_rule(findings, "PROOF-PATTERN-ADMIT");

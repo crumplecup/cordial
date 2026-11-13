@@ -23,6 +23,7 @@ pub enum CliLayoutId {
 impl CliLayoutId {
     /// Stable string form of this value.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Island001 => "CLI-ISLAND-001",
@@ -62,6 +63,7 @@ pub struct CliLayoutRecord {
 impl CliLayoutRecord {
     /// Start a builder for this value.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> CliLayoutRecordBuilder {
         CliLayoutRecordBuilder::default()
     }
@@ -133,6 +135,7 @@ pub struct CliLayoutFinding {
 
 impl CliLayoutFinding {
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> CliLayoutFindingBuilder {
         CliLayoutFindingBuilder::default()
     }

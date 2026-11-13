@@ -41,6 +41,7 @@ impl SourceEnricher for CrateAttrsInventoryEnricher {
 
 /// Derive crate-attribute decisions and insertion evidence from the shared IR.
 #[instrument(level = "debug", skip(ir, policy), err(level = "warn"))]
+#[hotpath::measure]
 pub(super) fn enrich_crate_attrs_evidence(
     ir: &mut dyn IrMut,
     crate_root: &std::path::Path,
@@ -101,6 +102,7 @@ pub(super) fn enrich_crate_attrs_evidence(
 
 /// Read apply evidence only from the enriched graph.
 #[instrument(level = "debug", skip(ir), err(level = "warn"))]
+#[hotpath::measure]
 pub(super) fn crate_attrs_apply_evidence_from_ir(
     ir: &dyn IrView,
 ) -> CordialResult<Option<(Vec<CrateAttrsSiteRecord>, usize)>> {

@@ -16,6 +16,7 @@ static KEPT: Mutex<Option<HashMap<String, SourceDatabase>>> = Mutex::new(None);
 
 /// Start keeping databases between runs: this process is a session.
 #[instrument(level = "debug")]
+#[hotpath::measure]
 pub fn keep_between_runs() {
     KEEPING.store(true, Ordering::Relaxed);
 }

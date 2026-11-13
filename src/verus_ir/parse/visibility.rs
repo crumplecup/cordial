@@ -10,6 +10,7 @@ impl VerusBlock {
 }
 
 #[tracing::instrument(level = "debug", skip(items))]
+#[hotpath::measure]
 fn count_item_names(items: &[verus_syn::Item]) -> (usize, usize) {
     let mut leaf_pub = 0usize;
     let mut leaf_crate = 0usize;
@@ -44,6 +45,7 @@ fn count_item_names(items: &[verus_syn::Item]) -> (usize, usize) {
 /// copies), since the two `Item` enums can't share one generic
 /// implementation without a wrapper trait neither crate provides.
 #[instrument(level = "debug", skip(item))]
+#[hotpath::measure]
 fn verus_item_vis_and_name_count(
     item: &verus_syn::Item,
 ) -> Option<(&verus_syn::Visibility, usize)> {
@@ -63,6 +65,7 @@ fn verus_item_vis_and_name_count(
 }
 
 #[instrument(level = "debug", skip(tree))]
+#[hotpath::measure]
 fn verus_use_name_count(tree: &verus_syn::UseTree) -> usize {
     match tree {
         verus_syn::UseTree::Name(_) | verus_syn::UseTree::Rename(_) => 1,

@@ -157,11 +157,13 @@ impl Reporter for ModularitySummaryReporter {
 }
 
 #[instrument(level = "debug", skip(row))]
+#[hotpath::measure]
 fn module_zscore(row: &ModularityRow) -> Option<f64> {
     row.zscore().parse::<f64>().ok()
 }
 
 #[instrument(level = "debug", skip(row))]
+#[hotpath::measure]
 fn module_zscore_abs(row: &ModularityRow) -> Option<f64> {
     module_zscore(row).map(f64::abs)
 }
@@ -176,6 +178,7 @@ fn is_module_outlier(row: &ModularityRow, thresholds: &ModularityThresholds) -> 
 }
 
 #[instrument(level = "debug", skip(modules, thresholds))]
+#[hotpath::measure]
 fn append_truncated_module_table(
     body: &mut String,
     modules: &[&ModularityRow],
@@ -233,6 +236,7 @@ fn append_truncated_module_table(
 }
 
 #[instrument(level = "debug", skip(open))]
+#[hotpath::measure]
 fn append_longest_methods(body: &mut String, open: &[&ModularityRow]) {
     let mut methods: Vec<&ModularityRow> = open
         .iter()

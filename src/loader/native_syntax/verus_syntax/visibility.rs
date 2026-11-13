@@ -18,6 +18,7 @@ impl DatabaseVerusSyntax {
 
 impl DatabaseSource<'_> {
     #[tracing::instrument(level = "debug", skip(self, is_verus))]
+    #[hotpath::measure]
     pub(crate) fn verus_visibility(
         &self,
         is_verus: &dyn Fn(&ast::MacroCall) -> bool,

@@ -33,6 +33,7 @@ pub struct AntipatternsConfig {
 
 impl Default for AntipatternsConfig {
     #[instrument(level = "debug", ret)]
+    #[hotpath::measure]
     fn default() -> Self {
         Self {
             enabled: true,
@@ -53,6 +54,7 @@ pub struct StaticRefPolicy {
 
 impl Default for StaticRefPolicy {
     #[instrument(level = "debug", ret)]
+    #[hotpath::measure]
     fn default() -> Self {
         Self {
             strategy: StaticRefStrategy::default(),
@@ -75,6 +77,7 @@ pub enum StaticRefStrategy {
 
 impl Default for StaticRefStrategy {
     #[instrument(level = "debug", ret)]
+    #[hotpath::measure]
     fn default() -> Self {
         Self::String
     }

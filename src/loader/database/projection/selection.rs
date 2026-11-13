@@ -119,6 +119,7 @@ fn is_fixture(path: &Path, root: &Path) -> bool {
 }
 
 #[tracing::instrument(level = "debug", skip(target, graph), err(level = "warn"))]
+#[hotpath::measure]
 pub(super) fn target_attributes(target: &CrateTarget, graph: &mut CrateIr) -> CordialResult<()> {
     let root = graph.root();
     if let Some(snapshot) = target.manifest_snapshot() {
@@ -150,6 +151,7 @@ pub(super) fn target_attributes(target: &CrateTarget, graph: &mut CrateIr) -> Co
 }
 
 #[tracing::instrument(level = "debug", skip_all, err(level = "warn"))]
+#[hotpath::measure]
 pub(super) fn validate_target(
     target: &CrateTarget,
     context: &crate::SemanticWorkspaceContext,
@@ -180,6 +182,7 @@ pub(super) fn validate_target(
 ))]
 impl SourceDatabase {
     #[tracing::instrument(level = "debug", skip(self, path, sema), err(level = "warn"))]
+    #[hotpath::measure]
     pub(super) fn policy_source<'a>(
         &'a self,
         path: &'a Path,

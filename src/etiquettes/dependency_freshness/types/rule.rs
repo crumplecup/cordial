@@ -44,6 +44,7 @@ impl DependencyFreshnessRuleId {
 
     /// Parse from the stable identifier string.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn from_attr(value: &str) -> Option<Self> {
         match value {
             "DEPENDENCY-FRESHNESS-PATCH" => Some(Self::Patch),

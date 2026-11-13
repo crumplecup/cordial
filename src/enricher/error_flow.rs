@@ -75,6 +75,7 @@ impl IrEnricher for ErrorFlowEnricher {
     skip(ir, site_id, crate_root, origin_nodes),
     err(level = "warn")
 )]
+#[hotpath::measure]
 fn enrich_error_site(
     ir: &mut dyn IrMut,
     site_id: crate::ir::NodeId,
@@ -113,6 +114,7 @@ fn enrich_error_site(
 }
 
 #[instrument(level = "debug", skip(ir, site_id), err(level = "warn"))]
+#[hotpath::measure]
 fn scan_row_from_node(
     ir: &dyn IrMut,
     site_id: crate::ir::NodeId,
@@ -167,6 +169,7 @@ fn scan_row_from_node(
 }
 
 #[instrument(level = "debug", skip(partitioned))]
+#[hotpath::measure]
 fn origin_key_for(partitioned: &crate::etiquettes::error_sites::PartitionedErrorSiteRow) -> String {
     if partitioned.origin_class() == ErrorOriginClass::Internal {
         format!("internal:{}", partitioned.origin_detail())
@@ -184,6 +187,7 @@ fn origin_key_for(partitioned: &crate::etiquettes::error_sites::PartitionedError
     skip(ir, origin_nodes, crate_root),
     err(level = "warn")
 )]
+#[hotpath::measure]
 fn origin_node(
     ir: &mut dyn IrMut,
     origin_nodes: &mut BTreeMap<String, crate::ir::NodeId>,
@@ -212,6 +216,7 @@ fn origin_node(
 }
 
 #[instrument(level = "debug", skip(ir, site_id, partitioned), err(level = "warn"))]
+#[hotpath::measure]
 fn apply_foreign_error_attrs(
     ir: &mut dyn IrMut,
     site_id: crate::ir::NodeId,
@@ -277,6 +282,7 @@ fn apply_foreign_error_attrs(
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn chain_probe_preserves(rule_id: &str) -> bool {
     rule_id == "ERROR-CHAIN-PRESERVED-MAP-ERR-001"
         || rule_id == "ERROR-CHAIN-PRESERVED-QUESTION-MARK-001"

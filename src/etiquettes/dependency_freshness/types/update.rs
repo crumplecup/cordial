@@ -60,6 +60,7 @@ impl Display for DependencyUpdateKind {
 /// Invalid semver inputs and non-newer versions return `None`; callers can
 /// decide whether to record those as registry-data errors.
 #[instrument(level = "debug")]
+#[hotpath::measure]
 pub fn classify_dependency_update(current: &str, available: &str) -> Option<DependencyUpdateKind> {
     let current = semver::Version::parse(current).ok()?;
     let available = semver::Version::parse(available).ok()?;

@@ -61,6 +61,7 @@ pub struct ErrorScope {
 impl ErrorScope {
     /// Error-analysis scope for a workspace member crate.
     #[instrument(level = "debug", skip(crate_name))]
+    #[hotpath::measure]
     pub fn workspace_member(crate_name: impl Into<String>) -> Self {
         Self {
             crate_name: crate_name.into(),
@@ -104,6 +105,7 @@ impl ErrorHandlingLayers {
 
     /// Any enabled.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn any_enabled(self) -> bool {
         self.panics()
             || self.sites()
@@ -128,6 +130,7 @@ pub enum ErrorSurface {
 impl ErrorSurface {
     /// Classify a source path as library, binary, or test.
     #[instrument(level = "debug", skip(path), ret)]
+    #[hotpath::measure]
     pub fn from_path(path: &Path) -> Self {
         let components: Vec<&str> = path
             .iter()
@@ -153,6 +156,7 @@ impl ErrorSurface {
 
     /// Stable string form of this value.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Library => "library",
@@ -163,6 +167,7 @@ impl ErrorSurface {
 
     /// Expected error stack for this surface.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn expected_stack(self) -> &'static str {
         match self {
             Self::Library => "internal error types",
@@ -172,6 +177,7 @@ impl ErrorSurface {
 
     /// Checklist action for an abort site on this surface.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn abort_action(self) -> &'static str {
         match self {
             Self::Library => "return the crate's internal error type instead of aborting",

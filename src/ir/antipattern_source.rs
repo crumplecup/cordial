@@ -41,6 +41,7 @@ impl SourceAntipatterns {
 
     /// Evaluate current policy and registry evidence without reading source.
     #[tracing::instrument(level = "debug", skip_all, err(level = "warn"))]
+    #[hotpath::measure]
     pub fn assess(
         &self,
         crate_name: &str,

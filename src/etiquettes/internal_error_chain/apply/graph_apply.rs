@@ -69,6 +69,7 @@ impl ErrorGraphPlan {
 }
 
 #[instrument(level = "debug", skip(ir, files, strategy), err(level = "warn"))]
+#[hotpath::measure]
 pub(super) fn enrich_conversion_graphs(
     ir: &mut dyn IrMut,
     files: &[SourceEditView],
@@ -205,6 +206,7 @@ pub(super) fn enrich_conversion_graphs(
 }
 
 #[instrument(level = "debug", skip(ir), err(level = "warn"))]
+#[hotpath::measure]
 pub(super) fn conversion_graphs_from_ir(ir: &dyn IrView) -> CordialResult<Vec<ErrorGraphPlan>> {
     let root = ir.root()?;
     let value = ir

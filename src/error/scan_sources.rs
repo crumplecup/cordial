@@ -17,6 +17,7 @@ pub struct ProbeRustdocCacheMissSource {
 impl ProbeRustdocCacheMissSource {
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn new() -> Self {
         let loc = Location::caller();
         Self {
@@ -49,6 +50,7 @@ pub struct NoStdFamilyRustdocCacheSource {
 impl NoStdFamilyRustdocCacheSource {
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn new() -> Self {
         let loc = Location::caller();
         Self {
@@ -81,6 +83,7 @@ pub struct CrateIrMustExistSource {
 impl CrateIrMustExistSource {
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn new() -> Self {
         let loc = Location::caller();
         Self {
@@ -113,6 +116,7 @@ pub struct WorkspaceMissingCrateTargetsSource {
 impl WorkspaceMissingCrateTargetsSource {
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn new() -> Self {
         let loc = Location::caller();
         Self {
@@ -149,6 +153,7 @@ pub struct AmenableExtReporterRequiresAssessorFindingsSource {
 impl AmenableExtReporterRequiresAssessorFindingsSource {
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn new() -> Self {
         let loc = Location::caller();
         Self {
@@ -182,6 +187,7 @@ pub struct AmenableStdReporterRequiresAssessorFindingsSource {
 impl AmenableStdReporterRequiresAssessorFindingsSource {
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn new() -> Self {
         let loc = Location::caller();
         Self {
@@ -215,6 +221,7 @@ pub struct HomecomingStdReporterRequiresAssessorFindingsSource {
 impl HomecomingStdReporterRequiresAssessorFindingsSource {
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn new() -> Self {
         let loc = Location::caller();
         Self {
@@ -249,6 +256,7 @@ pub struct DependencyFreshnessCheckFailedSource {
 impl DependencyFreshnessCheckFailedSource {
     #[track_caller]
     #[instrument(level = "debug", skip(text))]
+    #[hotpath::measure]
     pub fn new(text: impl Into<String>) -> Self {
         let loc = Location::caller();
         Self {
@@ -286,6 +294,7 @@ pub struct RustdocJsonNotFoundForCrateSource {
 impl RustdocJsonNotFoundForCrateSource {
     #[track_caller]
     #[instrument(level = "debug", skip(crate_name, path))]
+    #[hotpath::measure]
     pub fn new(crate_name: impl Into<String>, path: PathBuf) -> Self {
         let loc = Location::caller();
         Self {
@@ -325,6 +334,7 @@ pub struct CrateIrNotLoadedForShadowCompareSource {
 impl CrateIrNotLoadedForShadowCompareSource {
     #[track_caller]
     #[instrument(level = "debug", skip(crate_name))]
+    #[hotpath::measure]
     pub fn new(crate_name: impl Into<String>) -> Self {
         let loc = Location::caller();
         Self {

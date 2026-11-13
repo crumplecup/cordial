@@ -43,6 +43,7 @@ pub struct GraphError {
 impl GraphError {
     #[track_caller]
     #[instrument(level = "debug", skip(kind))]
+    #[hotpath::measure]
     fn new(kind: GraphErrorKind) -> Self {
         let loc = Location::caller();
         Self {
@@ -98,6 +99,7 @@ impl super::CordialError {
     /// A source enricher required facts absent from the workspace IR.
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn workspace_source_facts_missing(name: &'static str) -> Self {
         Self::from_kind(super::CordialErrorKind::Graph(GraphError::new(
             GraphErrorKind::WorkspaceSourceFactsMissing(WorkspaceSourceFactsMissingSource::new(
@@ -108,6 +110,7 @@ impl super::CordialError {
     /// An apply plan no longer matches the source file it would overwrite.
     #[track_caller]
     #[instrument(level = "debug", skip(path))]
+    #[hotpath::measure]
     pub fn stale_source_snapshot(path: &std::path::Path) -> Self {
         Self::from_kind(super::CordialErrorKind::Graph(GraphError::new(
             GraphErrorKind::StaleSourceSnapshot(StaleSourceSnapshotSource::new(path)),
@@ -117,6 +120,7 @@ impl super::CordialError {
     /// A conversion candidate was absent from the shared IR.
     #[track_caller]
     #[instrument(level = "debug", skip(path, type_name, field_name))]
+    #[hotpath::measure]
     pub fn missing_conversion_unit(
         path: &std::path::Path,
         type_name: &str,
@@ -132,6 +136,7 @@ impl super::CordialError {
     /// No load view was found for an enricher on a crate.
     #[track_caller]
     #[instrument(level = "debug", skip(enricher_id, crate_name))]
+    #[hotpath::measure]
     pub fn no_load_view_for_enricher(
         enricher_id: impl Into<String>,
         crate_name: impl Into<String>,
@@ -147,6 +152,7 @@ impl super::CordialError {
     /// No load view was available for an enricher on a crate.
     #[track_caller]
     #[instrument(level = "debug", skip(enricher_id, crate_name))]
+    #[hotpath::measure]
     pub fn no_load_view_available_for_enricher(
         enricher_id: impl Into<String>,
         crate_name: impl Into<String>,
@@ -161,6 +167,7 @@ impl super::CordialError {
     /// A crate must exist in the workspace IR.
     #[track_caller]
     #[instrument(level = "debug", skip(crate_name))]
+    #[hotpath::measure]
     pub fn crate_must_exist(crate_name: impl Into<String>) -> Self {
         Self::from_kind(super::CordialErrorKind::Graph(GraphError::new(
             GraphErrorKind::CrateMustExist(CrateMustExistSource::new(crate_name)),
@@ -170,6 +177,7 @@ impl super::CordialError {
     /// An edge references a missing graph node.
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn edge_references_missing_node() -> Self {
         Self::from_kind(super::CordialErrorKind::Graph(GraphError::new(
             GraphErrorKind::EdgeReferencesMissingNode(EdgeReferencesMissingNodeSource::new()),
@@ -188,6 +196,7 @@ impl super::CordialError {
     /// A graph snapshot edge was missing its endpoints.
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn snapshot_edge_missing_endpoints() -> Self {
         Self::from_kind(super::CordialErrorKind::Graph(GraphError::new(
             GraphErrorKind::SnapshotEdgeMissingEndpoints(SnapshotEdgeMissingEndpointsSource::new()),
@@ -197,6 +206,7 @@ impl super::CordialError {
     /// A graph snapshot edge's `from` index was invalid.
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn snapshot_edge_from_invalid() -> Self {
         Self::from_kind(super::CordialErrorKind::Graph(GraphError::new(
             GraphErrorKind::SnapshotEdgeFromInvalid(SnapshotEdgeFromInvalidSource::new()),
@@ -206,6 +216,7 @@ impl super::CordialError {
     /// A graph snapshot edge's `to` index was invalid.
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn snapshot_edge_to_invalid() -> Self {
         Self::from_kind(super::CordialErrorKind::Graph(GraphError::new(
             GraphErrorKind::SnapshotEdgeToInvalid(SnapshotEdgeToInvalidSource::new()),
@@ -215,6 +226,7 @@ impl super::CordialError {
     /// A source enricher received a loader view of the wrong kind.
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn source_enricher_wrong_loader() -> Self {
         Self::from_kind(super::CordialErrorKind::Graph(GraphError::new(
             GraphErrorKind::SourceEnricherWrongLoader(SourceEnricherWrongLoaderSource::new()),

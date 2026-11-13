@@ -8,6 +8,7 @@ impl SourceLoadView {
     /// Collect facts while the database owns both the source and its tree.
     /// The callback cannot return syntax borrowed from this input owner.
     #[tracing::instrument(level = "debug", skip_all, err(level = "warn"))]
+    #[hotpath::measure]
     pub(crate) fn collect_native_file<T>(
         &self,
         path: &Path,
@@ -48,6 +49,7 @@ impl SourceLoadView {
         feature = "derives"
     ))]
     #[tracing::instrument(level = "debug", skip_all, err(level = "warn"))]
+    #[hotpath::measure]
     pub(crate) fn collect_native_fixture<T>(
         path: &Path,
         source: &str,

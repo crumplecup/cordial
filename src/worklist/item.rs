@@ -18,6 +18,7 @@ impl ItemId {
     }
 
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub(super) fn from_string(value: String) -> Self {
         Self(value)
     }
@@ -66,6 +67,7 @@ pub struct WorklistItem {
 
 impl WorklistItem {
     #[instrument(level = "debug", skip(file))]
+    #[hotpath::measure]
     pub(super) fn from_checklist(
         area_priority: u8,
         area: &str,
@@ -105,6 +107,7 @@ impl WorklistItem {
     }
 
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub(super) fn push_detail(&mut self, line: &str) {
         self.detail_lines.push(line.to_string());
     }
@@ -165,6 +168,7 @@ fn first_pass() -> u32 {
 
 /// Remove location-only line numbers without changing other item text.
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn without_line_number(input: &str) -> String {
     let bytes = input.as_bytes();
     let mut output = String::with_capacity(input.len());
@@ -213,6 +217,7 @@ fn without_line_number(input: &str) -> String {
 
 /// Assign unique, stable display ids after all checklist items are known.
 #[instrument(level = "debug", skip(items), err(level = "warn"))]
+#[hotpath::measure]
 pub(super) fn assign_ids(items: &mut [WorklistItem]) -> CordialResult<()> {
     let mut full_hashes = BTreeMap::new();
     for item in items.iter() {

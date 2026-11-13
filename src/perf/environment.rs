@@ -101,6 +101,7 @@ fn enabled_features() -> Vec<String> {
 /// Package name to resolved version(s) from the `Cargo.lock` beside `root`; a
 /// package locked at several versions lists them all, comma separated.
 #[instrument(level = "debug", skip(root))]
+#[hotpath::measure]
 fn locked_dependencies(root: &Path) -> BTreeMap<String, String> {
     let mut resolved: BTreeMap<String, Vec<String>> = BTreeMap::new();
     let packages = std::fs::read_to_string(root.join("Cargo.lock"))
@@ -146,6 +147,7 @@ impl PerfEnvironment {
     /// Read the environment of the current process, with the dependencies the
     /// project at `root` has locked.
     #[instrument(level = "debug", skip(root))]
+    #[hotpath::measure]
     pub fn capture(root: &Path) -> Self {
         let memory_kib = proc_field("/proc/meminfo", "MemTotal")
             .and_then(|value| value.split_whitespace().next()?.parse::<u64>().ok())
@@ -182,6 +184,7 @@ impl PerfEnvironment {
     /// then dependencies, each in name order. Nothing here forbids a comparison;
     /// it says what a change in the numbers might be due to.
     #[instrument(level = "debug", skip(self, earlier))]
+    #[hotpath::measure]
     pub fn changes_from(&self, earlier: &Self) -> Vec<EnvironmentChange> {
         let mut changes = Vec::new();
         let mut note = |kind, name: &str, before: String, after: String| {

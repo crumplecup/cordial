@@ -79,6 +79,7 @@ impl SourceEnricher for AttributeEnricher {
 }
 
 #[instrument(level = "debug", skip(ir, file, path, item), err(level = "warn"))]
+#[hotpath::measure]
 fn attach(
     ir: &mut dyn IrMut,
     file: &std::path::Path,

@@ -4,6 +4,7 @@ use ra_ap_syntax::{AstNode, SyntaxKind, SyntaxNode, ast, ast::HasName};
 use std::collections::BTreeSet;
 
 #[tracing::instrument(level = "debug", skip(file, block))]
+#[hotpath::measure]
 pub(super) fn error_assertion_lines(
     file: &DatabaseSource<'_>,
     block: &ast::BlockExpr,

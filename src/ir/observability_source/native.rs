@@ -14,6 +14,7 @@ use std::path::Path;
 
 impl SourceObservability {
     #[tracing::instrument(level = "debug", skip(file, identify, identify_attribute))]
+    #[hotpath::measure]
     pub(crate) fn native_file(
         file: &DatabaseSource<'_>,
         tree: &Path,
@@ -109,6 +110,7 @@ fn is_trait_member(function: &ast::Fn) -> bool {
 }
 
 #[tracing::instrument(level = "debug", skip(node))]
+#[hotpath::measure]
 fn modules(node: &ra_ap_syntax::SyntaxNode) -> Vec<String> {
     let mut modules: Vec<_> = node
         .ancestors()
@@ -122,6 +124,7 @@ fn modules(node: &ra_ap_syntax::SyntaxNode) -> Vec<String> {
 }
 
 #[tracing::instrument(level = "debug", skip(body, identify))]
+#[hotpath::measure]
 fn body_facts(
     body: &ast::BlockExpr,
     identify: &dyn Fn(&ast::MacroCall) -> Option<SemanticMacroCall>,

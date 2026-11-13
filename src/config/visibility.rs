@@ -56,22 +56,26 @@ pub struct VisibilityThresholds {
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn default_max_crate_names_for_flat() -> usize {
     50
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn default_min_module_names() -> usize {
     10
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn default_prefer_root() -> bool {
     true
 }
 
 impl Default for VisibilityThresholds {
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     fn default() -> Self {
         Self {
             max_crate_names_for_flat: default_max_crate_names_for_flat(),

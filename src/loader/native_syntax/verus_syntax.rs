@@ -28,6 +28,7 @@ impl DatabaseSource<'_> {
     /// `is_verus` says which invocations are the Verus macro: the caller knows
     /// what a path resolves to, the snapshot does not.
     #[tracing::instrument(level = "debug", skip(self, is_verus))]
+    #[hotpath::measure]
     pub(crate) fn verus_facts(
         &self,
         module_path: &str,
@@ -64,6 +65,7 @@ impl DatabaseSource<'_> {
     }
 
     #[tracing::instrument(level = "debug", skip(self, invocation, is_verus))]
+    #[hotpath::measure]
     fn verus_payload(
         &self,
         invocation: &ast::MacroCall,

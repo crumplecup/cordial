@@ -59,6 +59,7 @@ impl RunOutcome for ConcreteRunOutcome {
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn empty_outcome() -> Box<dyn RunOutcome> {
     Box::new(ConcreteRunOutcome {
         findings: Vec::new(),
@@ -70,6 +71,7 @@ fn empty_outcome() -> Box<dyn RunOutcome> {
 
 /// A run that was asked to stop after a stage still says what it cost so far.
 #[instrument(level = "debug", skip(store, session, timings, error))]
+#[hotpath::measure]
 fn log_stopped(
     store: &StoreLayout,
     session: &RuntimeSession,

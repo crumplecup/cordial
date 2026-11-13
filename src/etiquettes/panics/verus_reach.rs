@@ -42,6 +42,7 @@ impl VerusReachability {
 
 /// Build the verification-leaf set from a crate's real `verus_ir` facts.
 #[instrument(level = "debug", skip(ir))]
+#[hotpath::measure]
 pub(super) fn build_verus_reachability(ir: &VerusCrateIr) -> VerusReachability {
     let called: HashSet<&str> = ir
         .functions()

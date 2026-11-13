@@ -18,6 +18,7 @@ impl Tier {
 
     /// Name a tier, including a project-defined one.
     #[instrument(level = "debug", skip(name))]
+    #[hotpath::measure]
     pub fn new(name: impl Into<String>) -> Self {
         Self(name.into())
     }
@@ -31,6 +32,7 @@ impl Tier {
 
 impl Default for Tier {
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     fn default() -> Self {
         Self::new(Self::QUICK)
     }

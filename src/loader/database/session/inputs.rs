@@ -8,6 +8,7 @@ use std::path::PathBuf;
 use tracing::instrument;
 
 #[instrument(level = "debug", skip(workspace, options), err(level = "warn"))]
+#[hotpath::measure]
 pub(super) fn configuration(
     workspace: &ProjectWorkspace,
     options: &SemanticCargoOptions,

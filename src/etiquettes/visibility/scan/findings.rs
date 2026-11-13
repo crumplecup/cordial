@@ -10,6 +10,7 @@ use crate::ir::VisibilityKind as VisKind;
 
 use tracing::instrument;
 #[instrument(level = "debug", skip(root, thresholds, eval), err(level = "warn"))]
+#[hotpath::measure]
 pub(super) fn collect_findings(
     root: &ModuleNode,
     thresholds: VisibilityThresholds,
@@ -44,6 +45,7 @@ pub(super) fn collect_findings(
 }
 
 #[instrument(level = "debug", skip(node, out), err(level = "warn"))]
+#[hotpath::measure]
 fn collect_module_findings(
     node: &ModuleNode,
     thin_floor: usize,

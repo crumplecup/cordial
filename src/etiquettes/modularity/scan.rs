@@ -5,6 +5,7 @@ use std::path::Path;
 
 /// Scan supplied source through the loader-owned native database.
 #[tracing::instrument(level = "debug", skip(source, thresholds, file), err(level = "warn"))]
+#[hotpath::measure]
 pub fn scan_rust_source(
     source: &str,
     file: &Path,
@@ -18,6 +19,7 @@ pub fn scan_rust_source(
 
 /// Apply current thresholds without revisiting syntax or source text.
 #[tracing::instrument(level = "debug", skip(records, thresholds), err(level = "warn"))]
+#[hotpath::measure]
 pub(crate) fn select_records(
     records: &[ModularitySiteRecord],
     root: &Path,

@@ -30,6 +30,7 @@ pub enum SessionCommands {
 
 impl SessionCommands {
     #[instrument(level = "debug", skip(self, ctx), err(level = "warn"))]
+    #[hotpath::measure]
     pub(super) fn act(self, ctx: &ActCtx) -> CordialResult<()> {
         let socket = socket_path(ctx.store().root());
         match self {
@@ -43,6 +44,7 @@ impl SessionCommands {
 
 /// Start a fresh session for this project, replacing one that is running.
 #[instrument(level = "debug", skip(ctx), err(level = "warn"))]
+#[hotpath::measure]
 fn start(ctx: &ActCtx, socket: &std::path::Path) -> CordialResult<()> {
     if host::stop(socket)? {
         writeln!(host::stdout(), "Stopped the running session.")?;
@@ -64,6 +66,7 @@ fn start(ctx: &ActCtx, socket: &std::path::Path) -> CordialResult<()> {
 
 /// Ask the session to exit.
 #[instrument(level = "debug", err(level = "warn"))]
+#[hotpath::measure]
 fn stop(socket: &std::path::Path) -> CordialResult<()> {
     let answered = host::stop(socket)?;
     let message = if answered {
@@ -77,6 +80,7 @@ fn stop(socket: &std::path::Path) -> CordialResult<()> {
 
 /// Report whether a session answers.
 #[instrument(level = "debug", err(level = "warn"))]
+#[hotpath::measure]
 fn status(socket: &std::path::Path) -> CordialResult<()> {
     let running = std::os::unix::net::UnixStream::connect(socket).is_ok();
     writeln!(

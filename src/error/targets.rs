@@ -18,6 +18,7 @@ pub struct MissingPackageMetadataSource {
 impl MissingPackageMetadataSource {
     #[track_caller]
     #[instrument(level = "debug", skip(package_id))]
+    #[hotpath::measure]
     pub fn new(package_id: impl Into<String>) -> Self {
         let loc = Location::caller();
         Self {
@@ -53,6 +54,7 @@ pub struct ManifestPathHasNoParentSource {
 impl ManifestPathHasNoParentSource {
     #[track_caller]
     #[instrument(level = "debug", skip(manifest_path))]
+    #[hotpath::measure]
     pub fn new(manifest_path: impl Into<String>) -> Self {
         let loc = Location::caller();
         Self {
@@ -88,6 +90,7 @@ pub struct NoWorkspaceMembersFoundSource {
 impl NoWorkspaceMembersFoundSource {
     #[track_caller]
     #[instrument(level = "debug", skip(project_root))]
+    #[hotpath::measure]
     pub fn new(project_root: PathBuf) -> Self {
         let loc = Location::caller();
         Self {
@@ -125,6 +128,7 @@ pub struct NoParentForManifestSource {
 impl NoParentForManifestSource {
     #[track_caller]
     #[instrument(level = "debug", skip(manifest_path))]
+    #[hotpath::measure]
     pub fn new(manifest_path: impl Into<String>) -> Self {
         let loc = Location::caller();
         Self {
@@ -168,6 +172,7 @@ pub struct TargetsError {
 impl TargetsError {
     #[track_caller]
     #[instrument(level = "debug", skip(kind))]
+    #[hotpath::measure]
     fn new(kind: TargetsErrorKind) -> Self {
         let loc = Location::caller();
         Self {
@@ -207,6 +212,7 @@ impl super::CordialError {
     /// `cargo metadata` did not include a workspace member's own package.
     #[track_caller]
     #[instrument(level = "debug", skip(package_id))]
+    #[hotpath::measure]
     pub fn missing_package_metadata(package_id: impl Into<String>) -> Self {
         Self::from_kind(super::CordialErrorKind::Targets(TargetsError::new(
             TargetsErrorKind::MissingPackageMetadata(MissingPackageMetadataSource::new(package_id)),
@@ -216,6 +222,7 @@ impl super::CordialError {
     /// A package manifest path had no parent directory.
     #[track_caller]
     #[instrument(level = "debug", skip(manifest_path))]
+    #[hotpath::measure]
     pub fn manifest_path_has_no_parent(manifest_path: impl Into<String>) -> Self {
         Self::from_kind(super::CordialErrorKind::Targets(TargetsError::new(
             TargetsErrorKind::ManifestPathHasNoParent(ManifestPathHasNoParentSource::new(
@@ -227,6 +234,7 @@ impl super::CordialError {
     /// No workspace members were found at a project root.
     #[track_caller]
     #[instrument(level = "debug", skip(project_root))]
+    #[hotpath::measure]
     pub fn no_workspace_members_found(project_root: PathBuf) -> Self {
         Self::from_kind(super::CordialErrorKind::Targets(TargetsError::new(
             TargetsErrorKind::NoWorkspaceMembersFound(NoWorkspaceMembersFoundSource::new(
@@ -238,6 +246,7 @@ impl super::CordialError {
     /// A package manifest path had no parent directory (antipatterns scan).
     #[track_caller]
     #[instrument(level = "debug", skip(manifest_path))]
+    #[hotpath::measure]
     pub fn no_parent_for_manifest(manifest_path: impl Into<String>) -> Self {
         Self::from_kind(super::CordialErrorKind::Targets(TargetsError::new(
             TargetsErrorKind::NoParentForManifest(NoParentForManifestSource::new(manifest_path)),

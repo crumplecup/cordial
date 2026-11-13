@@ -66,6 +66,7 @@ pub struct ExtScopeProbe {
 impl ExtScopeProbe {
     /// Build the scope probe for `target` (e.g. `"jiff"`).
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn new(target: &str) -> Self {
         Self {
             id: format!("amenable-ext-{target}-scope"),

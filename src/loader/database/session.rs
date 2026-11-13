@@ -25,6 +25,7 @@ impl SourceDatabase {
     /// Create the source-input owner before Cargo context is available.
     /// Existing syntax collectors consume these inputs during their migration.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub(crate) fn new() -> Self {
         Self {
             db: RootDatabase::new(None),
@@ -49,6 +50,7 @@ impl SourceDatabase {
     /// Register one source input and return the database-owned text snapshot.
     /// The source session freezes each input until the next analysis run.
     #[instrument(level = "debug", skip(self, path, text), err(level = "warn"))]
+    #[hotpath::measure]
     pub(crate) fn capture(&mut self, path: &Path, text: &str) -> CordialResult<String> {
         let path = std::path::absolute(path)?;
         let text_path = path
@@ -69,6 +71,7 @@ impl SourceDatabase {
     /// database value, including virtual revisions made by candidate analysis.
     #[cfg(feature = "cfg_hygiene")]
     #[instrument(level = "debug", skip(self, path), err(level = "warn"))]
+    #[hotpath::measure]
     pub(crate) fn input_text(&mut self, path: &Path) -> CordialResult<Option<String>> {
         self.captured_text(path, None)
     }
@@ -76,6 +79,7 @@ impl SourceDatabase {
     /// Return frozen database text, seeding an unseen input from supplied loader
     /// bytes before consulting disk. This path never requests a syntax tree.
     #[instrument(level = "debug", skip(self, path, supplied), err(level = "warn"))]
+    #[hotpath::measure]
     pub(crate) fn captured_text(
         &mut self,
         path: &Path,
@@ -107,6 +111,7 @@ impl SourceDatabase {
     /// Change one already-loaded source input without reloading Cargo or writing
     /// the file. Unsupported/new paths fail before changing database state.
     #[instrument(level = "debug", skip(self, path, text), err(level = "warn"))]
+    #[hotpath::measure]
     pub fn change_file(&mut self, path: &Path, text: String) -> CordialResult<()> {
         self.check_virtual_input(path)?;
         let file = self.file_id(path)?;

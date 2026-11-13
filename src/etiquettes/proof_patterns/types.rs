@@ -31,6 +31,7 @@ pub enum ProofPatternKind {
 impl ProofPatternKind {
     /// Rule id.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn rule_id(self) -> &'static str {
         match self {
             Self::Assume => "PROOF-PATTERN-ASSUME",
@@ -44,6 +45,7 @@ impl ProofPatternKind {
 
     /// Parse from the stable identifier string.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn from_attr(value: &str) -> Option<Self> {
         match value {
             "assume" => Some(Self::Assume),
@@ -58,6 +60,7 @@ impl ProofPatternKind {
 
     /// Stable identifier string for IR attributes.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn as_attr(self) -> &'static str {
         match self {
             Self::Assume => "assume",
@@ -74,6 +77,7 @@ impl ProofPatternKind {
     /// a trust problem; the other five are real, local soundness escape
     /// hatches).
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn description(self) -> &'static str {
         match self {
             Self::Assume => {
@@ -184,6 +188,7 @@ pub struct ProofPatternFinding {
 impl ProofPatternFinding {
     /// Start a builder for this value.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> ProofPatternFindingBuilder {
         ProofPatternFindingBuilder::default()
     }
@@ -240,6 +245,7 @@ pub struct ProofPatternRecord {
 impl ProofPatternRecord {
     /// Start a builder for this value.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> ProofPatternRecordBuilder {
         ProofPatternRecordBuilder::default()
     }

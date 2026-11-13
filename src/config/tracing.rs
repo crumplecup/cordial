@@ -102,6 +102,7 @@ pub struct TracingSubscriberPolicy {
 
 impl Default for TracingSubscriberPolicy {
     #[instrument(level = "debug", ret)]
+    #[hotpath::measure]
     fn default() -> Self {
         Self {
             init_in_main: true,
@@ -137,6 +138,7 @@ pub struct TracingBoundaryPolicy {
 
 impl Default for TracingBoundaryPolicy {
     #[instrument(level = "debug", ret)]
+    #[hotpath::measure]
     fn default() -> Self {
         Self {
             main_reports_errors: true,
@@ -182,6 +184,7 @@ pub struct TracingStdioPolicy {
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn default_stdio_skip_folders() -> Vec<String> {
     vec!["tests/fixtures".to_string(), "tests/parity".to_string()]
 }
@@ -200,6 +203,7 @@ impl TracingStdioPolicy {
 
 impl Default for TracingStdioPolicy {
     #[instrument(level = "debug", ret)]
+    #[hotpath::measure]
     fn default() -> Self {
         Self {
             println: true,
@@ -215,6 +219,7 @@ impl Default for TracingStdioPolicy {
 
 impl Default for TracingThresholds {
     #[instrument(level = "debug", ret)]
+    #[hotpath::measure]
     fn default() -> Self {
         Self {
             extra_skip: Vec::new(),

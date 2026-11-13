@@ -18,6 +18,7 @@ mod kani;
 mod walk;
 
 #[tracing::instrument(level = "debug", skip_all, err(level = "warn"))]
+#[hotpath::measure]
 pub(in crate::etiquettes::antipatterns) fn collect(
     root: &Path,
     crate_name: &str,
@@ -60,6 +61,7 @@ pub(in crate::etiquettes::antipatterns) fn collect(
 }
 
 #[tracing::instrument(level = "debug", skip_all, err(level = "warn"))]
+#[hotpath::measure]
 pub(super) fn collect_file(
     source: &DatabaseSource<'_>,
     src: &Path,
@@ -92,6 +94,7 @@ pub(super) fn collect_file(
 
 /// Called only by the loader's tracked opaque-dialect query.
 #[tracing::instrument(level = "debug", skip_all)]
+#[hotpath::measure]
 pub(crate) fn collect_payload(
     text: &str,
     file: &Path,

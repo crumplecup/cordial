@@ -15,6 +15,7 @@ pub struct NextCommandUnrecognizedSource {
 impl NextCommandUnrecognizedSource {
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn new() -> Self {
         let loc = Location::caller();
         Self {
@@ -47,6 +48,7 @@ pub struct NotAWorklistCommandSource {
 impl NotAWorklistCommandSource {
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn new() -> Self {
         let loc = Location::caller();
         Self {
@@ -79,6 +81,7 @@ pub struct NoCurrentWorklistSource {
 impl NoCurrentWorklistSource {
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn new() -> Self {
         let loc = Location::caller();
         Self {
@@ -111,6 +114,7 @@ pub struct WorklistOutOfDateSource {
 impl WorklistOutOfDateSource {
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn new() -> Self {
         let loc = Location::caller();
         Self {
@@ -143,6 +147,7 @@ pub struct WorklistValidityIncompleteSource {
 impl WorklistValidityIncompleteSource {
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn new() -> Self {
         let loc = Location::caller();
         Self {
@@ -175,6 +180,7 @@ pub struct GateDidNotWriteWorklistSource {
 impl GateDidNotWriteWorklistSource {
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn new() -> Self {
         let loc = Location::caller();
         Self {
@@ -219,6 +225,7 @@ pub struct WorklistCliError {
 impl WorklistCliError {
     #[track_caller]
     #[instrument(level = "debug", skip(kind))]
+    #[hotpath::measure]
     fn new(kind: WorklistCliErrorKind) -> Self {
         let loc = Location::caller();
         Self {
@@ -262,6 +269,7 @@ impl super::CordialError {
     /// `cordial next` is not a recognized worklist command.
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn next_command_unrecognized() -> Self {
         Self::from_kind(super::CordialErrorKind::WorklistCli(WorklistCliError::new(
             WorklistCliErrorKind::NextCommandUnrecognized(NextCommandUnrecognizedSource::new()),
@@ -271,6 +279,7 @@ impl super::CordialError {
     /// A CLI subcommand that is not a worklist command reached worklist dispatch.
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn not_a_worklist_command() -> Self {
         Self::from_kind(super::CordialErrorKind::WorklistCli(WorklistCliError::new(
             WorklistCliErrorKind::NotAWorklistCommand(NotAWorklistCommandSource::new()),
@@ -280,6 +289,7 @@ impl super::CordialError {
     /// No worklist exists yet.
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn no_current_worklist() -> Self {
         Self::from_kind(super::CordialErrorKind::WorklistCli(WorklistCliError::new(
             WorklistCliErrorKind::NoCurrentWorklist(NoCurrentWorklistSource::new()),
@@ -289,6 +299,7 @@ impl super::CordialError {
     /// The on-disk worklist is out of date with the current source tree.
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn worklist_out_of_date() -> Self {
         Self::from_kind(super::CordialErrorKind::WorklistCli(WorklistCliError::new(
             WorklistCliErrorKind::WorklistOutOfDate(WorklistOutOfDateSource::new()),
@@ -298,6 +309,7 @@ impl super::CordialError {
     /// A worklist's validity state did not resolve to a known case.
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn worklist_validity_incomplete() -> Self {
         Self::from_kind(super::CordialErrorKind::WorklistCli(WorklistCliError::new(
             WorklistCliErrorKind::WorklistValidityIncomplete(
@@ -309,6 +321,7 @@ impl super::CordialError {
     /// A gate run completed without writing a worklist.
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn gate_did_not_write_worklist() -> Self {
         Self::from_kind(super::CordialErrorKind::WorklistCli(WorklistCliError::new(
             WorklistCliErrorKind::GateDidNotWriteWorklist(GateDidNotWriteWorklistSource::new()),

@@ -76,6 +76,7 @@ pub struct SourcePolicyInventory {
 
 impl SourcePolicyInventory {
     #[tracing::instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub(crate) fn sort(&mut self) {
         #[cfg(feature = "derives")]
         self.derives.sort_by(|a, b| a.file().cmp(b.file()));

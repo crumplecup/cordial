@@ -6,6 +6,7 @@ use super::{InternalErrorChainRow, compliance_rows};
 use crate::etiquettes::internal_error_chain::types::InternalErrorComplianceId;
 
 #[instrument(level = "debug", skip(rows))]
+#[hotpath::measure]
 pub(super) fn compliance_counts(
     rows: &[InternalErrorChainRow],
 ) -> (usize, usize, usize, usize, usize, usize) {

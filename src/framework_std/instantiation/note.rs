@@ -18,6 +18,7 @@ pub(super) struct ChildView<'a> {
 
 /// "3 of 4 instantiations Complete", counting only those not excepted.
 #[instrument(level = "debug", skip(children))]
+#[hotpath::measure]
 pub(super) fn rollup_summary(children: &[AmenableStdEntry]) -> String {
     let counted: Vec<&AmenableStdEntry> = children
         .iter()
@@ -61,6 +62,7 @@ pub(super) fn short_label(key: &TypeKey) -> String {
 /// registry. A type that declares none (`HashMap` keeps its bounds on impl
 /// blocks) says so rather than guessing.
 #[instrument(level = "debug", skip(head, children, resolver))]
+#[hotpath::measure]
 pub(super) fn declared_bounds_note(
     head: &TypeKey,
     children: &[ChildView<'_>],
@@ -140,6 +142,7 @@ enum Outcome {
 /// position. A missing impl outranks an unchecked bound, so the answer names
 /// a definite failure when there is one.
 #[instrument(level = "debug", skip(bounds, key, resolver))]
+#[hotpath::measure]
 fn check(bounds: &[DeclaredBound], key: &TypeKey, resolver: &dyn TypeResolver) -> Outcome {
     let mut lacks = None;
     let mut unknown = None;

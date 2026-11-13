@@ -29,6 +29,7 @@ pub enum CfgHygieneRuleId {
 impl CfgHygieneRuleId {
     /// Stable string form of this value.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::UnexpectedCfg001 => "UNEXPECTED-CFG-001",
@@ -38,6 +39,7 @@ impl CfgHygieneRuleId {
 
     /// Parse from the stable identifier string.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn from_attr(value: &str) -> Option<Self> {
         match value {
             "UNEXPECTED-CFG-001" => Some(Self::UnexpectedCfg001),
@@ -128,6 +130,7 @@ pub struct CfgHygieneFinding {
 
 impl CfgHygieneFinding {
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> CfgHygieneFindingBuilder {
         CfgHygieneFindingBuilder::default()
     }
@@ -187,6 +190,7 @@ pub struct CfgHygieneSiteRecord {
 impl CfgHygieneSiteRecord {
     /// Start a builder for this value.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> CfgHygieneSiteRecordBuilder {
         CfgHygieneSiteRecordBuilder::default()
     }

@@ -29,6 +29,7 @@ fn default_kind_fanout_max_call_sites() -> usize {
 
 impl Default for InternalErrorChainThresholds {
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     fn default() -> Self {
         Self {
             kind_fanout_max_call_sites: default_kind_fanout_max_call_sites(),

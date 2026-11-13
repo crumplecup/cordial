@@ -21,6 +21,7 @@ pub struct TimingRequest {
 /// Fold repeated runs of the same tests into one timing per test, plus the
 /// total time of each repeat. A test that failed in any repeat is counted.
 #[instrument(level = "debug", skip(runs))]
+#[hotpath::measure]
 pub fn summarise(runs: &[Vec<TestRun>]) -> (Vec<TestTiming>, Vec<u64>, u64) {
     let mut samples: BTreeMap<(String, String), Vec<u64>> = BTreeMap::new();
     let mut failed: BTreeMap<(String, String), bool> = BTreeMap::new();
@@ -52,6 +53,7 @@ pub fn summarise(runs: &[Vec<TestRun>]) -> (Vec<TestTiming>, Vec<u64>, u64) {
 
 /// The record for repeats already measured, however they were obtained.
 #[instrument(level = "debug", skip(root, runs), err(level = "warn"))]
+#[hotpath::measure]
 fn record_of(
     root: &Path,
     set: &str,
@@ -81,6 +83,7 @@ fn record_of(
 /// Run the set `repeat` times, keeping each repeat's raw events under `raw_dir`,
 /// and record every test's duration.
 #[instrument(level = "debug", skip(root, raw_dir), err(level = "warn"))]
+#[hotpath::measure]
 pub fn measure(root: &Path, request: &TimingRequest, raw_dir: &Path) -> CordialResult<RunRecord> {
     let stamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)?
@@ -96,6 +99,7 @@ pub fn measure(root: &Path, request: &TimingRequest, raw_dir: &Path) -> CordialR
 /// Build the record from raw event logs a run left behind, one file per repeat,
 /// as when a long run was interrupted or its record was lost.
 #[instrument(level = "debug", skip(root, files), err(level = "warn"))]
+#[hotpath::measure]
 pub fn measure_from(
     root: &Path,
     set: &str,

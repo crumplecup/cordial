@@ -52,6 +52,7 @@ pub struct DependencyFreshnessFinding {
 
 impl DependencyFreshnessFinding {
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> DependencyFreshnessFindingBuilder {
         DependencyFreshnessFindingBuilder::default()
     }

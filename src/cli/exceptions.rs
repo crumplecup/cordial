@@ -15,6 +15,7 @@ use tracing::instrument;
 use super::commands::{ActCtx, ExceptionCommands};
 
 #[instrument(level = "debug", skip(store), err(level = "warn"))]
+#[hotpath::measure]
 pub(super) fn execute_backup_exceptions(
     project_root: &Path,
     store: &StoreLayout,
@@ -31,6 +32,7 @@ pub(super) fn execute_backup_exceptions(
 }
 
 #[instrument(level = "debug", skip(store), err(level = "warn"))]
+#[hotpath::measure]
 pub(super) fn execute_load_exceptions(
     project_root: &Path,
     store: &StoreLayout,
@@ -47,6 +49,7 @@ pub(super) fn execute_load_exceptions(
 }
 
 #[instrument(level = "debug", skip(store, entry), err(level = "warn"))]
+#[hotpath::measure]
 pub(super) fn execute_add_exception(
     store: &StoreLayout,
     etiquette: &str,
@@ -57,6 +60,7 @@ pub(super) fn execute_add_exception(
 }
 
 #[instrument(level = "debug", skip(store, selector), err(level = "warn"))]
+#[hotpath::measure]
 pub(super) fn execute_remove_exception(
     store: &StoreLayout,
     etiquette: &str,
@@ -74,6 +78,7 @@ pub(super) fn execute_remove_exception(
 }
 
 #[instrument(level = "debug", skip(store, selector, update), err(level = "warn"))]
+#[hotpath::measure]
 pub(super) fn execute_edit_exception(
     store: &StoreLayout,
     etiquette: &str,
@@ -92,6 +97,7 @@ pub(super) fn execute_edit_exception(
 }
 
 #[instrument(level = "debug", skip(store, entry), err(level = "warn"))]
+#[hotpath::measure]
 pub(super) fn execute_add_coverage_skip(
     store: &StoreLayout,
     patch_set: &str,
@@ -101,6 +107,7 @@ pub(super) fn execute_add_coverage_skip(
 }
 
 #[instrument(level = "debug", skip(outcome), err(level = "warn"))]
+#[hotpath::measure]
 fn print_add_outcome(outcome: AddExceptionOutcome) -> CordialResult<()> {
     let verb = if outcome.inserted() {
         "added"
@@ -112,6 +119,7 @@ fn print_add_outcome(outcome: AddExceptionOutcome) -> CordialResult<()> {
 }
 
 #[instrument(level = "debug", skip(store), err(level = "warn"))]
+#[hotpath::measure]
 pub(super) fn list_exceptions(store: &StoreLayout) -> CordialResult<()> {
     let mut files = Vec::new();
     let exceptions_dir = store.exceptions_dir();
@@ -148,6 +156,7 @@ pub(super) fn list_exceptions(store: &StoreLayout) -> CordialResult<()> {
 }
 
 #[instrument(level = "debug", err(level = "warn"))]
+#[hotpath::measure]
 fn collect_files(
     base: &Path,
     current: &Path,
@@ -168,6 +177,7 @@ fn collect_files(
 }
 
 #[instrument(level = "debug", skip(store), err(level = "warn"))]
+#[hotpath::measure]
 pub(super) fn show_exceptions(
     store: &StoreLayout,
     etiquette: &str,
@@ -195,6 +205,7 @@ pub(super) fn show_exceptions(
 
 impl ExceptionCommands {
     #[instrument(level = "debug", skip(self, ctx), err(level = "warn"))]
+    #[hotpath::measure]
     pub(super) fn act(self, ctx: &ActCtx) -> CordialResult<()> {
         match self {
             Self::List => list_exceptions(ctx.store()),

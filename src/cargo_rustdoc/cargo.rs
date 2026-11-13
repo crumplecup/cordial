@@ -7,6 +7,7 @@ use crate::error::{CordialError, CordialResult};
 
 /// True when a nightly toolchain with `cargo` is available for rustdoc JSON output.
 #[instrument(level = "debug")]
+#[hotpath::measure]
 pub fn nightly_available() -> bool {
     resolve_nightly_cargo_binary().is_some_and(|cargo| {
         std::process::Command::new(&cargo)
@@ -21,6 +22,7 @@ pub fn nightly_available() -> bool {
 
 /// Run `cargo rustdoc -p <crate> --output-format json` and return the JSON path.
 #[instrument(level = "info", fields(crate_name = crate_name), err(level = "warn"))]
+#[hotpath::measure]
 pub fn run_cargo_rustdoc(
     workspace_root: &Path,
     crate_name: &str,
@@ -31,6 +33,7 @@ pub fn run_cargo_rustdoc(
 
 /// Run `cargo rustdoc` with an explicit Cargo `--target-dir`.
 #[instrument(level = "info", skip(target_dir), fields(crate_name = crate_name), err(level = "warn"))]
+#[hotpath::measure]
 pub(crate) fn run_cargo_rustdoc_to(
     workspace_root: &Path,
     crate_name: &str,
@@ -98,6 +101,7 @@ pub(crate) fn run_cargo_rustdoc_to(
     fields(shadow_crate, activating_feature, upstream_crate),
     err(level = "warn")
 )]
+#[hotpath::measure]
 pub(crate) fn run_cargo_doc_for_optional_dep_to(
     workspace_root: &Path,
     shadow_crate: &str,
@@ -151,6 +155,7 @@ pub(crate) fn run_cargo_doc_for_optional_dep_to(
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 pub(crate) fn nightly_cargo() -> Command {
     if let Some(cargo) = resolve_nightly_cargo_binary() {
         let mut cmd = Command::new(&cargo);
@@ -184,6 +189,7 @@ pub(crate) fn nightly_cargo() -> Command {
 
 /// Host target triple for the active nightly toolchain (`rustc -vV`).
 #[instrument(level = "debug", err(level = "warn"))]
+#[hotpath::measure]
 pub(crate) fn nightly_host_target() -> CordialResult<String> {
     let mut cmd = Command::new(resolve_nightly_rustc_binary()?);
     if resolve_nightly_cargo_binary().is_none() {
@@ -204,6 +210,7 @@ pub(crate) fn nightly_host_target() -> CordialResult<String> {
 }
 
 #[instrument(level = "debug", err(level = "warn"))]
+#[hotpath::measure]
 fn resolve_nightly_rustc_binary() -> CordialResult<PathBuf> {
     if let Some(cargo) = resolve_nightly_cargo_binary() {
         let rustc = cargo
@@ -218,6 +225,7 @@ fn resolve_nightly_rustc_binary() -> CordialResult<PathBuf> {
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 pub(crate) fn resolve_nightly_cargo_binary() -> Option<PathBuf> {
     let rustup_home = std::env::var_os("RUSTUP_HOME")
         .map(PathBuf::from)

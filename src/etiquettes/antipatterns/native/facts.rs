@@ -8,6 +8,7 @@ use ra_ap_syntax::{
 
 impl CrateFacts {
     #[tracing::instrument(level = "debug", skip(self, source))]
+    #[hotpath::measure]
     pub(super) fn collect(&mut self, source: &DatabaseSource<'_>) {
         // Error membership historically includes inactive/test declarations;
         // placement and local-trait exemptions exclude cfg(test) modules.
@@ -33,6 +34,7 @@ impl CrateFacts {
     }
 
     #[tracing::instrument(level = "debug", skip(self, node))]
+    #[hotpath::measure]
     pub(super) fn collect_kinds(&mut self, node: &SyntaxNode) {
         for structure in node.descendants().filter_map(ast::Struct::cast) {
             if structure
@@ -70,6 +72,7 @@ impl CrateFacts {
     }
 
     #[tracing::instrument(level = "debug", skip(self, node))]
+    #[hotpath::measure]
     fn placement(&mut self, node: &SyntaxNode, in_const: bool) {
         if let Some(module) = ast::Module::cast(node.clone())
             && cfg_test(&module)

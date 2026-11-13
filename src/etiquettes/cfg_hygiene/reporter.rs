@@ -20,6 +20,7 @@ struct CfgHygieneRow {
 
 impl CfgHygieneRow {
     #[instrument(level = "debug", skip(finding), ret)]
+    #[hotpath::measure]
     fn from_finding(finding: &dyn Finding) -> Self {
         let mut sink = MapFindingSink::default();
         finding.emit(&mut sink);
@@ -44,6 +45,7 @@ impl CfgHygieneRow {
 }
 
 #[instrument(level = "debug", skip(findings))]
+#[hotpath::measure]
 fn cfg_hygiene_rows(findings: &[&dyn Finding]) -> Vec<CfgHygieneRow> {
     findings
         .iter()
@@ -53,11 +55,13 @@ fn cfg_hygiene_rows(findings: &[&dyn Finding]) -> Vec<CfgHygieneRow> {
 }
 
 #[instrument(level = "debug", skip(rows))]
+#[hotpath::measure]
 fn open_rows(rows: &[CfgHygieneRow]) -> impl Iterator<Item = &CfgHygieneRow> {
     rows.iter().filter(|row| row.disposition == "open")
 }
 
 #[instrument(level = "debug", skip(rows))]
+#[hotpath::measure]
 fn sort_by_file_line(rows: &mut [&CfgHygieneRow]) {
     rows.sort_by(|left, right| {
         left.file

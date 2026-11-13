@@ -29,6 +29,7 @@ pub struct ContractRecordDump {
 impl ContractRecordDump {
     /// Start a builder for this value.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> ContractRecordDumpBuilder {
         ContractRecordDumpBuilder::default()
     }

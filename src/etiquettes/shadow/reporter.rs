@@ -8,6 +8,7 @@ use crate::shadow::api_family;
 
 use tracing::instrument;
 #[instrument(level = "debug", skip(findings))]
+#[hotpath::measure]
 fn pair_rows(findings: &[&dyn Finding]) -> Vec<MapFindingSink> {
     findings
         .iter()
@@ -21,6 +22,7 @@ fn pair_rows(findings: &[&dyn Finding]) -> Vec<MapFindingSink> {
 }
 
 #[instrument(level = "debug", skip(sink))]
+#[hotpath::measure]
 fn field<'a>(sink: &'a MapFindingSink, name: &str) -> &'a str {
     sink.fields()
         .iter()

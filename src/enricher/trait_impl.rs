@@ -71,6 +71,7 @@ impl IrEnricher for TraitImplEnricher {
 }
 
 #[instrument(level = "debug", skip(ir), err(level = "warn"))]
+#[hotpath::measure]
 fn ensure_trait_node(ir: &mut dyn IrMut, trait_short: &str) -> CordialResult<crate::ir::NodeId> {
     if let Some(existing) = ir
         .nodes_matching(&BasicQuery::all_nodes())

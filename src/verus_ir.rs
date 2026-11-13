@@ -52,6 +52,7 @@ pub(crate) struct VerusPayloadFacts {
 
 /// Extract a loader-issued dialect payload once, independent of consumer context.
 #[tracing::instrument(level = "debug", skip(payload))]
+#[hotpath::measure]
 pub(crate) fn payload_facts(payload: &str) -> Option<VerusPayloadFacts> {
     let block = parse::block_in_payload(payload, Path::new(""), "", false)?;
     #[cfg(feature = "visibility")]

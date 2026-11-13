@@ -66,6 +66,7 @@ fn feature_list(features: &[String]) -> String {
 ///    triggering combination has them all.
 /// 3. Otherwise [`Gate::NoSingleGate`].
 #[instrument(level = "debug", skip(triggering, silent))]
+#[hotpath::measure]
 pub fn suggest_gate(triggering: &[FeatureSet], silent: &[FeatureSet]) -> Gate {
     if silent.is_empty() {
         return Gate::NoSingleGate;

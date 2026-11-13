@@ -16,6 +16,7 @@ pub struct PerfStore {
 impl PerfStore {
     /// The records directory of `layout`'s store.
     #[instrument(level = "debug", skip(layout))]
+    #[hotpath::measure]
     pub fn new(layout: &StoreLayout) -> Self {
         Self {
             dir: layout.perf_dir().join("records"),
@@ -37,6 +38,7 @@ impl PerfStore {
     /// Write `record` and return where it went. A record is never overwritten:
     /// two runs in the same second of the same subject are the caller's to name.
     #[instrument(level = "debug", skip(self, record), err(level = "warn"))]
+    #[hotpath::measure]
     pub fn save(&self, record: &RunRecord) -> CordialResult<PathBuf> {
         std::fs::create_dir_all(&self.dir)?;
         let path = self.path_of(&record.id());
@@ -51,6 +53,7 @@ impl PerfStore {
 
     /// Read one record, refusing a format version this build does not know.
     #[instrument(level = "debug", skip(path), err(level = "warn"))]
+    #[hotpath::measure]
     pub fn load(path: &Path) -> CordialResult<RunRecord> {
         let text = std::fs::read_to_string(path)?;
         let record: RunRecord = serde_json::from_str(&text)
@@ -70,6 +73,7 @@ impl PerfStore {
     /// Every record, oldest first. A file that cannot be read is an error that
     /// names it, not a record silently left out of a comparison.
     #[instrument(level = "debug", skip(self), err(level = "warn"))]
+    #[hotpath::measure]
     pub fn list(&self) -> CordialResult<Vec<RunRecord>> {
         if !self.dir.is_dir() {
             return Ok(Vec::new());
@@ -104,6 +108,7 @@ impl PerfStore {
 
     /// The marked baselines: subject (and state) to record id.
     #[instrument(level = "debug", skip(self), err(level = "warn"))]
+    #[hotpath::measure]
     pub fn baselines(&self) -> CordialResult<BTreeMap<String, String>> {
         let path = self.baselines_path();
         match std::fs::read_to_string(&path) {
@@ -130,6 +135,7 @@ impl PerfStore {
 
     /// The record named `query`: an id, or any prefix that names exactly one.
     #[instrument(level = "debug", skip(self), err(level = "warn"))]
+    #[hotpath::measure]
     pub fn find(&self, query: &str) -> CordialResult<RunRecord> {
         let mut matches: Vec<RunRecord> = self
             .list()?
@@ -154,6 +160,7 @@ impl PerfStore {
 
     /// The newest record of `subject` (and `state`), if any.
     #[instrument(level = "debug", skip(self), err(level = "warn"))]
+    #[hotpath::measure]
     pub fn latest(
         &self,
         subject: &str,

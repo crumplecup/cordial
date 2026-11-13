@@ -30,6 +30,7 @@ pub(super) struct MarginalPair {
 
 impl MarginalPair {
     #[instrument(level = "debug", skip(full, without))]
+    #[hotpath::measure]
     fn new(full: TimingPass, without: TimingPass) -> Self {
         let full_hooks: BTreeMap<_, _> = full
             .hooks
@@ -71,6 +72,7 @@ impl MarginalPair {
 }
 
 #[instrument(level = "debug", skip(ctx), fields(id = id), err(level = "warn"))]
+#[hotpath::measure]
 pub(super) fn measure_marginal(
     ctx: &ActCtx,
     id: &str,

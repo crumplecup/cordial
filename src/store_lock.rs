@@ -17,6 +17,7 @@ pub struct WorklistLock {
 impl WorklistLock {
     /// Wait for exclusive access to the worklist store and record the holder.
     #[instrument(level = "debug", skip(store, progress), err(level = "warn"))]
+    #[hotpath::measure]
     pub fn exclusive(
         store: &StoreLayout,
         command: &str,
@@ -27,18 +28,21 @@ impl WorklistLock {
 
     /// Wait for shared access while another command may be replacing the list.
     #[instrument(level = "debug", skip(store, progress), err(level = "warn"))]
+    #[hotpath::measure]
     pub fn shared(store: &StoreLayout, progress: &dyn ProgressSink) -> CordialResult<Self> {
         Self::acquire(store, None, progress)
     }
 
     /// Attempt exclusive access without waiting; `None` means another command holds it.
     #[instrument(level = "debug", skip(store), err(level = "warn"))]
+    #[hotpath::measure]
     pub fn try_exclusive(store: &StoreLayout, command: &str) -> CordialResult<Option<Self>> {
         let file = acquire_lock(&store.worklist_lock_path(), Some(command), None, false)?;
         Ok(file.map(|file| Self { _file: file }))
     }
 
     #[instrument(level = "debug", skip(store, progress), err(level = "warn"))]
+    #[hotpath::measure]
     fn acquire(
         store: &StoreLayout,
         command: Option<&str>,
@@ -63,6 +67,7 @@ pub struct SysrootLock {
 impl SysrootLock {
     /// Wait for exclusive access while building shared sysroot artifacts.
     #[instrument(level = "debug", skip(sysroot, progress), err(level = "warn"))]
+    #[hotpath::measure]
     pub fn exclusive(
         sysroot: &SysrootCache,
         command: &str,
@@ -75,6 +80,7 @@ impl SysrootLock {
 
     /// Attempt exclusive access without waiting during `clean --all`.
     #[instrument(level = "debug", skip(sysroot), err(level = "warn"))]
+    #[hotpath::measure]
     pub fn try_exclusive(sysroot: &SysrootCache, command: &str) -> CordialResult<Option<Self>> {
         let file = acquire_lock(&sysroot.lock_path(), Some(command), None, false)?;
         Ok(file.map(|file| Self { _file: file }))
@@ -82,6 +88,7 @@ impl SysrootLock {
 }
 
 #[instrument(level = "debug", skip(path, progress), err(level = "warn"))]
+#[hotpath::measure]
 fn acquire_lock(
     path: &Path,
     command: Option<&str>,

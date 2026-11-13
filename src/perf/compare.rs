@@ -174,6 +174,7 @@ fn share_of(record: &RunRecord) -> Option<f64> {
 /// Compare `after` against `before`. Any two records can be compared; what
 /// differs between their environments is listed, never a reason to refuse.
 #[instrument(level = "debug", skip(before, after))]
+#[hotpath::measure]
 pub fn compare(before: &RunRecord, after: &RunRecord, tolerance: f64) -> Comparison {
     let mut counters = Vec::new();
     let names: std::collections::BTreeSet<&String> = before
@@ -233,6 +234,7 @@ pub fn compare(before: &RunRecord, after: &RunRecord, tolerance: f64) -> Compari
 /// The comparison as text: the verdict, exact counter changes, the timings that
 /// moved most, and the inputs that differ. `top` bounds each list.
 #[instrument(level = "debug", skip(comparison))]
+#[hotpath::measure]
 pub fn render_comparison(comparison: &Comparison, top: usize) -> String {
     let mut out = String::new();
     let _ = writeln!(

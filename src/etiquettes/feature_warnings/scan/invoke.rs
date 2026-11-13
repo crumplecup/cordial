@@ -33,6 +33,7 @@ fn private_features(crate_root: &Path, crate_name: &str) -> Vec<String> {
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn cargo_command() -> Command {
     let cargo: OsString = std::env::var_os("CORDIAL_CARGO")
         .or_else(|| std::env::var_os("CARGO"))

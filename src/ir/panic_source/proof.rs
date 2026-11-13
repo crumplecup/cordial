@@ -14,6 +14,7 @@ pub(super) struct ProofCollector {
 
 impl ProofCollector {
     #[tracing::instrument(level = "debug", skip(self, node, macros))]
+    #[hotpath::measure]
     pub(super) fn walk(&mut self, node: &SyntaxNode, macros: &DatabaseMacroSyntax, kani: bool) {
         let kani = kani
             || ast::Module::cast(node.clone()).is_some_and(|item| cfg_flag(&item, "kani"))

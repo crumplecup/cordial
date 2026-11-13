@@ -9,6 +9,7 @@ impl SourceLoadView {
     /// Freeze non-syntax inputs in the same database as the shared tree.
     #[cfg(feature = "cfg_hygiene")]
     #[instrument(level = "debug", skip(self, path), err(level = "warn"))]
+    #[hotpath::measure]
     pub(crate) fn input_text(&self, path: &Path) -> CordialResult<Option<String>> {
         self.cache_token
             .with_database(|database| database.input_text(path))
@@ -23,6 +24,7 @@ impl SourceLoadView {
         feature = "amenable_std"
     ))]
     #[instrument(level = "debug", skip(self, path), err(level = "warn"))]
+    #[hotpath::measure]
     pub(crate) fn source_text(&self, path: &Path) -> CordialResult<String> {
         let supplied = self
             .files

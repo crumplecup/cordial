@@ -20,6 +20,7 @@ impl SourceObservability {
     /// what the function calls in every context that resolved it; a function with
     /// no facts keeps nothing, and nothing is claimed for it.
     #[tracing::instrument(level = "debug", skip(self, resolve))]
+    #[hotpath::measure]
     pub(crate) fn apply_calls(
         &mut self,
         mut resolve: impl FnMut(&Path, std::ops::Range<usize>) -> ResolvedCalls,
@@ -44,6 +45,7 @@ impl SourceObservability {
     /// functions are matched by place, so the facts of one function from two
     /// contexts join; a print is added unless this context already saw it.
     #[tracing::instrument(level = "debug", skip(self, other))]
+    #[hotpath::measure]
     pub(crate) fn merge_context(&mut self, other: Self) {
         for file in other.files {
             let Some(known) = self

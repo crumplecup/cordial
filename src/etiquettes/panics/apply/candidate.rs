@@ -27,6 +27,7 @@ pub(super) fn site(ir: &dyn IrView, finding: &dyn Finding) -> CordialResult<Pani
 }
 
 #[tracing::instrument(level = "debug", skip(ir, finding), err(level = "warn"))]
+#[hotpath::measure]
 pub(super) fn selection(
     ir: &dyn IrView,
     finding: &dyn Finding,

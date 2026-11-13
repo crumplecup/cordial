@@ -7,6 +7,7 @@ use tracing::{debug, instrument};
 use super::{ExtractedItem, item_is_public, path_matches_scope};
 
 #[instrument(level = "debug", skip(krate, existing_paths))]
+#[hotpath::measure]
 pub(super) fn collect_public_signature_dependency_items(
     krate: &rustdoc_types::Crate,
     own_crate_key: &str,
@@ -99,6 +100,7 @@ pub(super) fn collect_public_signature_dependency_items(
 }
 
 #[instrument(level = "debug", skip(krate, impl_item))]
+#[hotpath::measure]
 fn inherent_impl_targets_scope(
     krate: &rustdoc_types::Crate,
     impl_item: &rustdoc_types::Impl,
@@ -115,6 +117,7 @@ fn inherent_impl_targets_scope(
 }
 
 #[instrument(level = "debug", skip(krate, function, seen, discovered))]
+#[hotpath::measure]
 fn collect_items_from_function_signature(
     krate: &rustdoc_types::Crate,
     function: &rustdoc_types::Function,

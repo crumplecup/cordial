@@ -12,6 +12,7 @@ use super::item::build_inventory_item;
 use super::{ExtractedItem, path_matches_scope};
 
 #[instrument(level = "debug", skip(krate, ty, seen, discovered))]
+#[hotpath::measure]
 pub(super) fn collect_items_from_type(
     krate: &rustdoc_types::Crate,
     ty: &rustdoc_types::Type,
@@ -167,6 +168,7 @@ pub(super) fn collect_items_from_type(
     }
 }
 #[instrument(level = "debug", skip(krate, path, seen, discovered))]
+#[hotpath::measure]
 pub(super) fn collect_items_from_path(
     krate: &rustdoc_types::Crate,
     path: &rustdoc_types::Path,

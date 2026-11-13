@@ -15,6 +15,7 @@ pub struct EditRequiresNewValueSource {
 impl EditRequiresNewValueSource {
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn new() -> Self {
         let loc = Location::caller();
         Self {
@@ -47,6 +48,7 @@ pub struct EtiquetteMustNotBeEmptySource {
 impl EtiquetteMustNotBeEmptySource {
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn new() -> Self {
         let loc = Location::caller();
         Self {
@@ -79,6 +81,7 @@ pub struct CrateNameMustNotBeEmptySource {
 impl CrateNameMustNotBeEmptySource {
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn new() -> Self {
         let loc = Location::caller();
         Self {
@@ -111,6 +114,7 @@ pub struct SelectorRequiresAtLeastOneFieldSource {
 impl SelectorRequiresAtLeastOneFieldSource {
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn new() -> Self {
         let loc = Location::caller();
         Self {
@@ -145,6 +149,7 @@ pub struct EditedExceptionDuplicatesRowSource {
 impl EditedExceptionDuplicatesRowSource {
     #[track_caller]
     #[instrument(level = "debug", skip(rendered))]
+    #[hotpath::measure]
     pub fn new(rendered: impl Into<String>) -> Self {
         let loc = Location::caller();
         Self {
@@ -184,6 +189,7 @@ pub struct NoExceptionMatchesSelectorSource {
 impl NoExceptionMatchesSelectorSource {
     #[track_caller]
     #[instrument(level = "debug", skip(etiquette_id, crate_name, selector))]
+    #[hotpath::measure]
     pub fn new(
         etiquette_id: impl Into<String>,
         crate_name: impl Into<String>,
@@ -233,6 +239,7 @@ pub struct MultipleExceptionsMatchSelectorSource {
 impl MultipleExceptionsMatchSelectorSource {
     #[track_caller]
     #[instrument(level = "debug", skip(etiquette_id, crate_name, selector, listing))]
+    #[hotpath::measure]
     pub fn new(
         count: usize,
         etiquette_id: impl Into<String>,
@@ -295,6 +302,7 @@ pub struct ExceptionsEditError {
 impl ExceptionsEditError {
     #[track_caller]
     #[instrument(level = "debug", skip(kind))]
+    #[hotpath::measure]
     fn new(kind: ExceptionsEditErrorKind) -> Self {
         let loc = Location::caller();
         Self {
@@ -344,6 +352,7 @@ impl super::CordialError {
     /// `cordial exceptions edit` was used with no new value to set.
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn edit_requires_new_value() -> Self {
         Self::from_kind(super::CordialErrorKind::ExceptionsEdit(
             ExceptionsEditError::new(ExceptionsEditErrorKind::EditRequiresNewValue(
@@ -355,6 +364,7 @@ impl super::CordialError {
     /// An edited exception row would duplicate an existing one.
     #[track_caller]
     #[instrument(level = "debug", skip(rendered))]
+    #[hotpath::measure]
     pub fn edited_exception_duplicates_row(rendered: impl Into<String>) -> Self {
         Self::from_kind(super::CordialErrorKind::ExceptionsEdit(
             ExceptionsEditError::new(ExceptionsEditErrorKind::EditedExceptionDuplicatesRow(
@@ -366,6 +376,7 @@ impl super::CordialError {
     /// `cordial exceptions edit`'s `etiquette_id` argument was empty.
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn etiquette_must_not_be_empty() -> Self {
         Self::from_kind(super::CordialErrorKind::ExceptionsEdit(
             ExceptionsEditError::new(ExceptionsEditErrorKind::EtiquetteMustNotBeEmpty(
@@ -377,6 +388,7 @@ impl super::CordialError {
     /// `cordial exceptions edit`'s `crate_name` argument was empty.
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn crate_name_must_not_be_empty() -> Self {
         Self::from_kind(super::CordialErrorKind::ExceptionsEdit(
             ExceptionsEditError::new(ExceptionsEditErrorKind::CrateNameMustNotBeEmpty(
@@ -388,6 +400,7 @@ impl super::CordialError {
     /// An exception selector named none of `--rule-id`/`--context`/`--file`/`--line`.
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn selector_requires_at_least_one_field() -> Self {
         Self::from_kind(super::CordialErrorKind::ExceptionsEdit(
             ExceptionsEditError::new(ExceptionsEditErrorKind::SelectorRequiresAtLeastOneField(
@@ -399,6 +412,7 @@ impl super::CordialError {
     /// No exception matched an edit selector.
     #[track_caller]
     #[instrument(level = "debug", skip(etiquette_id, crate_name, selector))]
+    #[hotpath::measure]
     pub fn no_exception_matches_selector(
         etiquette_id: impl Into<String>,
         crate_name: impl Into<String>,
@@ -414,6 +428,7 @@ impl super::CordialError {
     /// Several exceptions matched an edit selector that must pick exactly one.
     #[track_caller]
     #[instrument(level = "debug", skip(etiquette_id, crate_name, selector, listing))]
+    #[hotpath::measure]
     pub fn multiple_exceptions_match_selector(
         count: usize,
         etiquette_id: impl Into<String>,

@@ -14,6 +14,7 @@ use crate::error::CordialResult;
 use tracing::instrument;
 /// Write rustdoc crate json.
 #[instrument(level = "info", skip(path, krate), err(level = "warn"))]
+#[hotpath::measure]
 pub fn write_rustdoc_crate_json(path: &Path, krate: &Crate) -> CordialResult<()> {
     std::fs::write(path, serde_json::to_string_pretty(krate)?)?;
     Ok(())
@@ -21,6 +22,7 @@ pub fn write_rustdoc_crate_json(path: &Path, krate: &Crate) -> CordialResult<()>
 
 /// Minimal crate with one struct missing `Deserialize`.
 #[instrument(level = "debug")]
+#[hotpath::measure]
 pub fn demo_impl_coverage_crate() -> Crate {
     let root = Id(0);
     let widget = Id(1);
@@ -136,6 +138,7 @@ pub fn demo_impl_coverage_crate() -> Crate {
 
 /// Demo trenchcoat crate.
 #[instrument(level = "debug")]
+#[hotpath::measure]
 pub fn demo_trenchcoat_crate() -> Crate {
     let root = Id(0);
     let foreign = Id(1);
@@ -236,6 +239,7 @@ pub fn demo_trenchcoat_crate() -> Crate {
 
 /// Demo shadow crate.
 #[instrument(level = "debug")]
+#[hotpath::measure]
 pub fn demo_shadow_crate() -> Crate {
     let root = Id(0);
     let widget = Id(1);
@@ -273,6 +277,7 @@ pub fn demo_shadow_crate() -> Crate {
 }
 
 #[instrument(level = "debug", skip(id, items))]
+#[hotpath::measure]
 fn module_item(id: Id, name: &str, is_crate: bool, items: Vec<Id>) -> Item {
     Item {
         id,
@@ -295,6 +300,7 @@ fn module_item(id: Id, name: &str, is_crate: bool, items: Vec<Id>) -> Item {
 }
 
 #[instrument(level = "debug", skip(id, impls))]
+#[hotpath::measure]
 fn struct_item(id: Id, name: &str, impls: Vec<Id>) -> Item {
     Item {
         id,
@@ -317,6 +323,7 @@ fn struct_item(id: Id, name: &str, impls: Vec<Id>) -> Item {
 }
 
 #[instrument(level = "debug", skip(path, kind))]
+#[hotpath::measure]
 fn summary(path: Vec<String>, kind: ItemKind) -> ItemSummary {
     ItemSummary {
         crate_id: 0,
@@ -326,6 +333,7 @@ fn summary(path: Vec<String>, kind: ItemKind) -> ItemSummary {
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn empty_generics() -> Generics {
     Generics {
         params: Vec::new(),
@@ -334,6 +342,7 @@ fn empty_generics() -> Generics {
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn empty_function() -> Function {
     Function {
         sig: FunctionSignature {
@@ -354,6 +363,7 @@ fn empty_function() -> Function {
 }
 
 #[instrument(level = "debug", skip(root, paths, index))]
+#[hotpath::measure]
 fn base_crate(root: Id, paths: HashMap<Id, ItemSummary>, index: HashMap<Id, Item>) -> Crate {
     Crate {
         root,

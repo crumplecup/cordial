@@ -130,6 +130,7 @@ impl GraphLifetimePlan {
 impl GraphLifetimeFacts {
     /// Select graph candidates from required loader evidence without visiting syntax.
     #[instrument(level = "debug", skip(self, tracked_names))]
+    #[hotpath::measure]
     pub(in crate::etiquettes::internal_error_chain::apply) fn select_names(
         &self,
         tracked_names: &BTreeSet<String>,
@@ -181,6 +182,7 @@ impl GraphLifetimeFacts {
 }
 
 #[instrument(level = "debug", skip(file, strategy, names, index))]
+#[hotpath::measure]
 pub(super) fn select(
     file: &SourceEditView,
     strategy: ErrorFieldStrategy,
@@ -198,6 +200,7 @@ pub(super) fn select(
 }
 
 #[instrument(level = "debug", skip(strategy, names, owners, index))]
+#[hotpath::measure]
 pub(super) fn select_across(
     strategy: ErrorFieldStrategy,
     names: &BTreeSet<String>,
@@ -217,6 +220,7 @@ pub(super) fn select_across(
 }
 
 #[instrument(level = "debug", skip(strategy, names, sites, index))]
+#[hotpath::measure]
 fn select_sites(
     strategy: ErrorFieldStrategy,
     names: &BTreeSet<String>,

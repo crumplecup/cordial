@@ -8,6 +8,7 @@ use crate::shadow::{ShadowReport, TraitImplCoverage, TypeMethodCoverage};
 use tracing::instrument;
 /// Render a per-pair method checklist (elicit_doc `shadow-{upstream}.checklist.md` parity).
 #[instrument(level = "debug", skip(report), err(level = "warn"))]
+#[hotpath::measure]
 pub fn render_shadow_method_checklist(report: &ShadowReport) -> CordialResult<String> {
     let total_methods: usize = report
         .method_coverage()
@@ -120,6 +121,7 @@ pub fn render_shadow_method_checklist(report: &ShadowReport) -> CordialResult<St
 }
 
 #[instrument(level = "info", skip(entry), err(level = "warn"))]
+#[hotpath::measure]
 fn write_type_method_section(out: &mut String, entry: &TypeMethodCoverage) -> CordialResult<()> {
     let total = entry.upstream_method_count();
     writeln!(
@@ -148,6 +150,7 @@ fn write_type_method_section(out: &mut String, entry: &TypeMethodCoverage) -> Co
 }
 
 #[instrument(level = "info", skip(entry), err(level = "warn"))]
+#[hotpath::measure]
 fn write_trait_section(out: &mut String, entry: &TraitImplCoverage) -> CordialResult<()> {
     writeln!(out, "### `{}`", entry.trait_path())?;
     writeln!(out)?;

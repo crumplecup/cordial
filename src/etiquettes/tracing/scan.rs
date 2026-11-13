@@ -16,6 +16,7 @@ impl SourceTracingInventory {
         skip(self, never_instrument, file),
         err(level = "warn")
     )]
+    #[hotpath::measure]
     pub(crate) fn records(
         &self,
         file: &Path,

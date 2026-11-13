@@ -88,6 +88,7 @@ pub struct ForeignErrorAttenuationRecord {
 impl ForeignErrorAttenuationRecord {
     /// Start a builder for this value.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> ForeignErrorAttenuationRecordBuilder {
         ForeignErrorAttenuationRecordBuilder::default()
     }
@@ -118,6 +119,7 @@ pub struct ForeignErrorHandlingCounts {
 impl ForeignErrorAttenuationReport {
     /// Handling counts.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn handling_counts(&self) -> ForeignErrorHandlingCounts {
         let mut counts = ForeignErrorHandlingCounts::default();
         for finding in self.findings() {
@@ -135,6 +137,7 @@ impl ForeignErrorAttenuationReport {
 
     /// Preservation rate.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn preservation_rate(&self) -> Option<f64> {
         let counts = self.handling_counts();
         let denominator = counts.chain_preserved + counts.chain_break;
@@ -167,6 +170,7 @@ pub struct ForeignErrorAttenuationTypeRow {
 impl ForeignErrorAttenuationTypeRow {
     /// Start a builder for this value.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> ForeignErrorAttenuationTypeRowBuilder {
         ForeignErrorAttenuationTypeRowBuilder::default()
     }
@@ -206,6 +210,7 @@ pub struct WorkspaceForeignErrorAttenuationSummary {
 impl WorkspaceForeignErrorAttenuationSummary {
     /// Start a builder for this value.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> WorkspaceForeignErrorAttenuationSummaryBuilder {
         WorkspaceForeignErrorAttenuationSummaryBuilder::default()
     }
@@ -213,6 +218,7 @@ impl WorkspaceForeignErrorAttenuationSummary {
 
 /// Build workspace foreign error attenuation summary.
 #[instrument(level = "debug", skip(reports), err(level = "warn"))]
+#[hotpath::measure]
 pub fn build_workspace_foreign_error_attenuation_summary(
     reports: &[ForeignErrorAttenuationReport],
 ) -> CordialResult<WorkspaceForeignErrorAttenuationSummary> {
@@ -397,6 +403,7 @@ pub struct ForeignErrorAttenuationFinding {
 impl ForeignErrorAttenuationFinding {
     /// Start a builder for this value.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> ForeignErrorAttenuationFindingBuilder {
         ForeignErrorAttenuationFindingBuilder::default()
     }

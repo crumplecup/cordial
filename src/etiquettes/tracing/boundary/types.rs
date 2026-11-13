@@ -20,6 +20,7 @@ pub enum BoundaryRuleId {
 impl BoundaryRuleId {
     /// Stable string form of this value.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::MainSilent => "TRACING-BOUNDARY-MAIN-SILENT",
@@ -28,6 +29,7 @@ impl BoundaryRuleId {
 
     /// Parse from the stable identifier string.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn from_attr(value: &str) -> Option<Self> {
         match value {
             "TRACING-BOUNDARY-MAIN-SILENT" => Some(Self::MainSilent),
@@ -42,6 +44,7 @@ impl BoundaryRuleId {
     }
 
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     fn description(self) -> &'static str {
         match self {
             Self::MainSilent => {
@@ -128,6 +131,7 @@ pub struct BoundaryFinding {
 impl BoundaryFinding {
     /// Start a builder for this value.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> BoundaryFindingBuilder {
         BoundaryFindingBuilder::default()
     }
@@ -183,6 +187,7 @@ pub struct BoundarySiteRecord {
 impl BoundarySiteRecord {
     /// Start a builder for this value.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> BoundarySiteRecordBuilder {
         BoundarySiteRecordBuilder::default()
     }

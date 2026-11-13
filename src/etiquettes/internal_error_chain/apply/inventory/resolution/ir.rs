@@ -32,6 +32,7 @@ struct CrateTypeIndexFacts {
 
 impl CrateTypeIndex {
     #[instrument(level = "debug", skip(self, ir), err(level = "warn"))]
+    #[hotpath::measure]
     pub(in crate::etiquettes::internal_error_chain::apply) fn write_to_ir(
         &self,
         ir: &mut dyn IrMut,
@@ -66,6 +67,7 @@ impl CrateTypeIndex {
     }
 
     #[instrument(level = "debug", skip(ir), err(level = "warn"))]
+    #[hotpath::measure]
     pub(in crate::etiquettes::internal_error_chain::apply) fn from_ir(
         ir: &dyn IrView,
     ) -> CordialResult<Self> {

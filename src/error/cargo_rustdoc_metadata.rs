@@ -17,6 +17,7 @@ pub struct WorkspacePackageNotFoundSource {
 impl WorkspacePackageNotFoundSource {
     #[track_caller]
     #[instrument(level = "debug", skip(member_crate_name))]
+    #[hotpath::measure]
     pub fn new(member_crate_name: impl Into<String>) -> Self {
         let loc = Location::caller();
         Self {
@@ -54,6 +55,7 @@ pub struct DependencyNotFoundInPackageSource {
 impl DependencyNotFoundInPackageSource {
     #[track_caller]
     #[instrument(level = "debug", skip(crate_name, member_crate_name))]
+    #[hotpath::measure]
     pub fn new(crate_name: impl Into<String>, member_crate_name: impl Into<String>) -> Self {
         let loc = Location::caller();
         Self {
@@ -90,6 +92,7 @@ pub struct PackageNotFoundInWorkspaceSource {
 impl PackageNotFoundInWorkspaceSource {
     #[track_caller]
     #[instrument(level = "debug", skip(crate_name))]
+    #[hotpath::measure]
     pub fn new(crate_name: impl Into<String>) -> Self {
         let loc = Location::caller();
         Self {
@@ -132,6 +135,7 @@ pub struct CargoRustdocMetadataError {
 impl CargoRustdocMetadataError {
     #[track_caller]
     #[instrument(level = "debug", skip(kind))]
+    #[hotpath::measure]
     fn new(kind: CargoRustdocMetadataErrorKind) -> Self {
         let loc = Location::caller();
         Self {
@@ -175,6 +179,7 @@ impl super::CordialError {
     /// A workspace member package was not found in `cargo metadata`.
     #[track_caller]
     #[instrument(level = "debug", skip(member_crate_name))]
+    #[hotpath::measure]
     pub fn workspace_package_not_found(member_crate_name: impl Into<String>) -> Self {
         Self::from_kind(super::CordialErrorKind::CargoRustdocMetadata(
             CargoRustdocMetadataError::new(
@@ -188,6 +193,7 @@ impl super::CordialError {
     /// A dependency was not found in a workspace member's package metadata.
     #[track_caller]
     #[instrument(level = "debug", skip(crate_name, member_crate_name))]
+    #[hotpath::measure]
     pub fn dependency_not_found_in_package(
         crate_name: impl Into<String>,
         member_crate_name: impl Into<String>,
@@ -204,6 +210,7 @@ impl super::CordialError {
     /// A package was not found in workspace metadata.
     #[track_caller]
     #[instrument(level = "debug", skip(crate_name))]
+    #[hotpath::measure]
     pub fn package_not_found_in_workspace(crate_name: impl Into<String>) -> Self {
         Self::from_kind(super::CordialErrorKind::CargoRustdocMetadata(
             CargoRustdocMetadataError::new(

@@ -27,6 +27,7 @@ impl SourceLoadView {
     /// Issue text without acquiring a compatibility syntax tree. The IR identity
     /// must match the frozen database input before any edit can be planned.
     #[instrument(level = "debug", skip(self, snapshot), err(level = "warn"))]
+    #[hotpath::measure]
     pub(crate) fn edit_file(&self, snapshot: &FileSnapshot) -> CordialResult<SourceEditView> {
         let source = self.source_text(snapshot.path())?;
         let digest: [u8; 32] = Sha256::digest(source.as_bytes()).into();
@@ -54,6 +55,7 @@ impl SourceEditView {
     }
 
     #[instrument(level = "debug", skip(self), err(level = "warn"))]
+    #[hotpath::measure]
     pub(crate) fn matches_disk(&self) -> CordialResult<bool> {
         matches_snapshot(self.path(), self.source_digest())
     }
@@ -61,6 +63,7 @@ impl SourceEditView {
 
 /// Whether the file at `path` still holds the bytes with digest `expected`.
 #[instrument(level = "debug", skip(path), err(level = "warn"))]
+#[hotpath::measure]
 fn matches_snapshot(path: &Path, expected: [u8; 32]) -> CordialResult<bool> {
     let current = std::fs::read(path)?;
     let digest: [u8; 32] = Sha256::digest(current).into();

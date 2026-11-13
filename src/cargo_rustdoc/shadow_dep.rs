@@ -20,6 +20,7 @@ use super::{
 
 /// Resolve how to build upstream rustdoc for one shadow mirror pair.
 #[instrument(level = "debug")]
+#[hotpath::measure]
 pub fn resolve_shadow_dep_build_config(
     project_root: &Path,
     shadow_crate: &str,
@@ -48,6 +49,7 @@ pub fn resolve_shadow_dep_build_config(
 
 /// Build and cache upstream rustdoc for one shadow ↔ upstream pair.
 #[instrument(level = "debug", skip(store), err(level = "warn"))]
+#[hotpath::measure]
 pub fn build_shadow_dep_rustdoc(
     project_root: &Path,
     store: &StoreLayout,
@@ -66,6 +68,7 @@ pub fn build_shadow_dep_rustdoc(
 }
 
 #[instrument(level = "debug", skip(store, progress), err(level = "warn"))]
+#[hotpath::measure]
 pub(crate) fn build_shadow_dep_rustdoc_with_progress(
     project_root: &Path,
     store: &StoreLayout,
@@ -143,6 +146,7 @@ pub(crate) fn build_shadow_dep_rustdoc_with_progress(
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn reference_member_root(project_root: &Path, member_crate: &str) -> PathBuf {
     let crate_root = project_root.join("crates").join(member_crate);
     if crate_root.join("Cargo.toml").is_file() {
@@ -154,6 +158,7 @@ fn reference_member_root(project_root: &Path, member_crate: &str) -> PathBuf {
 
 /// Build shadow-dep rustdoc for every active tracked pair in the workspace.
 #[instrument(level = "debug", skip(store, filter), err(level = "warn"))]
+#[hotpath::measure]
 pub fn build_active_shadow_deps(
     project_root: &Path,
     store: &StoreLayout,
@@ -164,6 +169,7 @@ pub fn build_active_shadow_deps(
 }
 
 #[instrument(level = "debug", skip(store, filter, progress), err(level = "warn"))]
+#[hotpath::measure]
 pub(crate) fn build_active_shadow_deps_with_progress(
     project_root: &Path,
     store: &StoreLayout,
@@ -212,6 +218,7 @@ pub(crate) fn build_active_shadow_deps_with_progress(
 
 /// Build shadow-dep rustdoc for all active pairs (no crate filter).
 #[instrument(level = "debug", skip(store), err(level = "warn"))]
+#[hotpath::measure]
 pub fn build_all_active_shadow_deps(
     project_root: &Path,
     store: &StoreLayout,
@@ -222,6 +229,7 @@ pub fn build_all_active_shadow_deps(
 
 #[cfg(all(feature = "cli", feature = "elicitation"))]
 #[instrument(level = "debug", skip(store, progress), err(level = "warn"))]
+#[hotpath::measure]
 pub(crate) fn build_all_active_shadow_deps_with_progress(
     project_root: &Path,
     store: &StoreLayout,

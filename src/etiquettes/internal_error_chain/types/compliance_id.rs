@@ -33,6 +33,7 @@ pub enum InternalErrorComplianceId {
 impl InternalErrorComplianceId {
     /// Stable string form of this value.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::StringifyForeign001 => "ERROR-CHAIN-COMPLIANCE-STRINGIFY-001",
@@ -51,6 +52,7 @@ impl InternalErrorComplianceId {
 
     /// Parse from the stable identifier string.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn from_attr(value: &str) -> Option<Self> {
         match value {
             "ERROR-CHAIN-COMPLIANCE-STRINGIFY-001" => Some(Self::StringifyForeign001),

@@ -103,6 +103,7 @@ pub fn records_from_run(
 
 /// What to do about a combination that does not compile.
 #[instrument(level = "debug")]
+#[hotpath::measure]
 pub fn failure_advice(code: &str) -> String {
     let cause = match code {
         "E0432" | "E0433" | "E0412" | "E0425" | "E0405" | "E0599" | "E0603" => {
@@ -122,6 +123,7 @@ pub fn failure_advice(code: &str) -> String {
 /// `combos` with `ignored` features removed. Umbrella features (`default`,
 /// `full`, ...) are not something a `cfg` gate should name.
 #[instrument(level = "debug", skip(combos, ignored))]
+#[hotpath::measure]
 fn without_features(combos: &[FeatureSet], ignored: &BTreeSet<String>) -> Vec<FeatureSet> {
     combos
         .iter()
@@ -136,6 +138,7 @@ fn without_features(combos: &[FeatureSet], ignored: &BTreeSet<String>) -> Vec<Fe
 /// item exists wherever it can warn, so a silent combination counts when it
 /// contains every feature common to the triggering ones.
 #[instrument(level = "debug", skip(triggering, silent, ignored))]
+#[hotpath::measure]
 fn compiled_silent(
     triggering: &[FeatureSet],
     silent: &[FeatureSet],
@@ -167,6 +170,7 @@ fn site_message(lint: &str, hits: &SiteHits) -> String {
 }
 
 #[instrument(level = "debug", skip(combo))]
+#[hotpath::measure]
 fn describe_combo(combo: &FeatureSet) -> String {
     if combo.is_empty() {
         return "--no-default-features".to_string();
@@ -192,6 +196,7 @@ fn describe_triggering(triggering: &[FeatureSet], total: usize) -> String {
 
 /// What to do about a warning, given the lint and the suggested gate.
 #[instrument(level = "debug", skip(gate))]
+#[hotpath::measure]
 pub fn advice_for(lint: &str, gate: &Gate, private_feature_threshold: usize) -> String {
     if gate.feature_count() > private_feature_threshold {
         return format!(

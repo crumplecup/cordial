@@ -25,6 +25,7 @@ pub enum VisibilityRuleId {
 impl VisibilityRuleId {
     /// Stable string form of this value.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::CrateFlat001 => "VIS-CRATE-FLAT-001",
@@ -35,6 +36,7 @@ impl VisibilityRuleId {
 
     /// Parse from the stable identifier string.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn from_attr(value: &str) -> Option<Self> {
         match value {
             "VIS-CRATE-FLAT-001" => Some(Self::CrateFlat001),
@@ -126,6 +128,7 @@ pub struct VisibilityFinding {
 impl VisibilityFinding {
     /// Start a builder for this value.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> VisibilityFindingBuilder {
         VisibilityFindingBuilder::default()
     }
@@ -187,6 +190,7 @@ pub struct VisibilityRecord {
 impl VisibilityRecord {
     /// Start a builder for this value.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> VisibilityRecordBuilder {
         VisibilityRecordBuilder::default()
     }

@@ -22,6 +22,7 @@ pub(super) use pipeline::execute_run_plugins;
 pub(super) use pipeline::{RunOptions, execute_run_plugins_locked};
 
 #[instrument(level = "debug", skip(store, progress), err(level = "warn"))]
+#[hotpath::measure]
 #[cfg(any(feature = "elicitation", feature = "homecoming_std"))]
 pub(super) fn execute_build_rustdoc(
     project_root: &Path,
@@ -66,6 +67,7 @@ pub(super) fn execute_build_rustdoc(
 }
 
 #[instrument(level = "debug", skip(progress), err(level = "warn"))]
+#[hotpath::measure]
 #[cfg(feature = "homecoming_std")]
 pub(super) fn execute_build_sysroot(
     store_home: Option<PathBuf>,
@@ -94,6 +96,7 @@ pub(super) fn execute_build_sysroot(
 /// `cordial explain`: lists etiquettes for the selected project, so
 /// etiquettes derived from its `cordial.toml` appear alongside built-ins.
 #[instrument(level = "debug", err(level = "warn"))]
+#[hotpath::measure]
 pub(super) fn execute_explain(
     project_root: &Path,
     store_home: Option<PathBuf>,
@@ -131,6 +134,7 @@ pub(super) fn execute_explain(
 }
 
 #[instrument(level = "debug", skip(store, path), err(level = "warn"))]
+#[hotpath::measure]
 pub(super) fn view_store_file(store: &StoreLayout, path: &Path) -> CordialResult<()> {
     let full = store.root().join(path);
     if !full.is_file() {
@@ -145,6 +149,7 @@ pub(super) fn view_store_file(store: &StoreLayout, path: &Path) -> CordialResult
 /// that finds none. The quality set is what `cordial quality` runs, and it needs
 /// nothing a bare project lacks; the coverage reporters in `all_plugins` do.
 #[instrument(level = "debug", skip(store), err(level = "warn"))]
+#[hotpath::measure]
 fn regenerate_ir(store: &StoreLayout, project_root: &Path) -> CordialResult<()> {
     let mut builder = SessionBuilder::new(project_root)
         .with_store_root(store.root().clone())
@@ -157,6 +162,7 @@ fn regenerate_ir(store: &StoreLayout, project_root: &Path) -> CordialResult<()> 
 }
 
 #[instrument(level = "debug", skip(store), err(level = "warn"))]
+#[hotpath::measure]
 pub(super) fn export_surreal(
     store: &StoreLayout,
     project_root: &Path,

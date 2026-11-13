@@ -4,6 +4,7 @@ use crate::loader::DatabaseSource;
 use ra_ap_syntax::{AstNode, SyntaxKind};
 
 #[tracing::instrument(level = "debug", skip(file))]
+#[hotpath::measure]
 pub(super) fn collect(file: &DatabaseSource<'_>) -> Names {
     let mut names = Names::default();
     for token in file

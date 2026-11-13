@@ -99,6 +99,7 @@ impl Assessor for DependencyFreshnessAssessor {
 }
 
 #[instrument(level = "debug", skip(node))]
+#[hotpath::measure]
 fn node_attr(node: &crate::ir::NodeRef<'_>, key: &str) -> String {
     node.attr(key)
         .and_then(serde_json::Value::as_str)
@@ -107,6 +108,7 @@ fn node_attr(node: &crate::ir::NodeRef<'_>, key: &str) -> String {
 }
 
 #[instrument(level = "debug", skip(rule_id))]
+#[hotpath::measure]
 fn snippet_for_rule(
     rule_id: DependencyFreshnessRuleId,
     dependency_name: &str,

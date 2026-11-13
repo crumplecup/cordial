@@ -23,6 +23,7 @@ pub struct UnreachableSource {
 impl UnreachableSource {
     #[track_caller]
     #[instrument(level = "debug", skip(message))]
+    #[hotpath::measure]
     pub fn new(message: impl Into<String>) -> Self {
         let loc = Location::caller();
         Self {
@@ -59,6 +60,7 @@ pub struct ApplyGapWriteOnlySource {
 impl ApplyGapWriteOnlySource {
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn new() -> Self {
         let loc = Location::caller();
         Self {
@@ -97,6 +99,7 @@ pub struct BuilderSource {
 impl BuilderSource {
     #[track_caller]
     #[instrument(level = "debug", skip(source))]
+    #[hotpath::measure]
     pub fn new(source: derive_builder::UninitializedFieldError) -> Self {
         let loc = Location::caller();
         Self {
@@ -110,6 +113,7 @@ impl BuilderSource {
 impl From<derive_builder::UninitializedFieldError> for BuilderSource {
     #[track_caller]
     #[instrument(level = "debug", skip(source))]
+    #[hotpath::measure]
     fn from(source: derive_builder::UninitializedFieldError) -> Self {
         Self::new(source)
     }
@@ -145,6 +149,7 @@ pub struct UnknownEtiquetteSource {
 impl UnknownEtiquetteSource {
     #[track_caller]
     #[instrument(level = "debug", skip(id))]
+    #[hotpath::measure]
     pub fn new(id: impl Into<String>) -> Self {
         let loc = Location::caller();
         Self {
@@ -176,6 +181,7 @@ pub struct CargoMetadataSource {
 impl CargoMetadataSource {
     #[track_caller]
     #[instrument(level = "debug", skip(source))]
+    #[hotpath::measure]
     pub fn new(source: cargo_metadata::Error) -> Self {
         let loc = Location::caller();
         Self {
@@ -189,6 +195,7 @@ impl CargoMetadataSource {
 impl From<cargo_metadata::Error> for CargoMetadataSource {
     #[track_caller]
     #[instrument(level = "debug", skip(source))]
+    #[hotpath::measure]
     fn from(source: cargo_metadata::Error) -> Self {
         Self::new(source)
     }
@@ -220,6 +227,7 @@ pub struct NotFoundSource {
 impl NotFoundSource {
     #[track_caller]
     #[instrument(level = "debug", skip(path))]
+    #[hotpath::measure]
     pub fn new(path: std::path::PathBuf) -> Self {
         let loc = Location::caller();
         Self {
@@ -253,6 +261,7 @@ pub struct NoExceptionsSource {
 impl NoExceptionsSource {
     #[track_caller]
     #[instrument(level = "debug", skip(etiquette, crate_name))]
+    #[hotpath::measure]
     pub fn new(etiquette: impl Into<String>, crate_name: impl Into<String>) -> Self {
         let loc = Location::caller();
         Self {
@@ -289,6 +298,7 @@ pub struct NoCachedIrSource {
 impl NoCachedIrSource {
     #[track_caller]
     #[instrument(level = "debug", skip(path))]
+    #[hotpath::measure]
     pub fn new(path: PathBuf) -> Self {
         let loc = Location::caller();
         Self {
@@ -326,6 +336,7 @@ pub struct MissingRustdocJsonSource {
 impl MissingRustdocJsonSource {
     #[track_caller]
     #[instrument(level = "debug", skip(crate_name, crate_root))]
+    #[hotpath::measure]
     pub fn new(crate_name: impl Into<String>, crate_root: PathBuf) -> Self {
         let loc = Location::caller();
         Self {
@@ -363,6 +374,7 @@ pub struct OpenFindingsSource {
 impl OpenFindingsSource {
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn new(count: usize) -> Self {
         let loc = Location::caller();
         Self {
@@ -393,6 +405,7 @@ impl super::CordialError {
     /// the error and callers can keep control through `?`.
     #[track_caller]
     #[instrument(level = "debug", skip(message))]
+    #[hotpath::measure]
     pub fn unreachable(message: impl Into<String>) -> Self {
         Self::from_kind(super::CordialErrorKind::Unreachable(
             UnreachableSource::new(message),
@@ -402,6 +415,7 @@ impl super::CordialError {
     /// `apply_gap` was called for `TracingApplyPolicy::Skip`.
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn apply_gap_write_only() -> Self {
         Self::from_kind(super::CordialErrorKind::ApplyGapWriteOnly(
             ApplyGapWriteOnlySource::new(),
@@ -411,6 +425,7 @@ impl super::CordialError {
     /// A [`derive_builder`] `build()` left a required field unset.
     #[track_caller]
     #[instrument(level = "debug", skip(source))]
+    #[hotpath::measure]
     pub fn builder(source: derive_builder::UninitializedFieldError) -> Self {
         Self::from(source)
     }
@@ -418,6 +433,7 @@ impl super::CordialError {
     /// No etiquette is registered under this id.
     #[track_caller]
     #[instrument(level = "debug", skip(id))]
+    #[hotpath::measure]
     pub fn unknown_etiquette(id: impl Into<String>) -> Self {
         Self::from_kind(super::CordialErrorKind::UnknownEtiquette(
             UnknownEtiquetteSource::new(id),
@@ -427,6 +443,7 @@ impl super::CordialError {
     /// Wrap a `cargo_metadata` failure.
     #[track_caller]
     #[instrument(level = "debug", skip(err))]
+    #[hotpath::measure]
     pub fn cargo_metadata(err: cargo_metadata::Error) -> Self {
         Self::from(err)
     }
@@ -434,6 +451,7 @@ impl super::CordialError {
     /// This path does not exist.
     #[track_caller]
     #[instrument(level = "debug", skip(path))]
+    #[hotpath::measure]
     pub fn not_found(path: PathBuf) -> Self {
         Self::from_kind(super::CordialErrorKind::NotFound(NotFoundSource::new(path)))
     }
@@ -441,6 +459,7 @@ impl super::CordialError {
     /// No exception file exists for this etiquette and crate.
     #[track_caller]
     #[instrument(level = "debug", skip(etiquette, crate_name))]
+    #[hotpath::measure]
     pub fn no_exceptions(etiquette: impl Into<String>, crate_name: impl Into<String>) -> Self {
         Self::from_kind(super::CordialErrorKind::NoExceptions(
             NoExceptionsSource::new(etiquette, crate_name),
@@ -450,6 +469,7 @@ impl super::CordialError {
     /// No cached IR artifact exists at this path.
     #[track_caller]
     #[instrument(level = "debug", skip(path))]
+    #[hotpath::measure]
     pub fn no_cached_ir(path: PathBuf) -> Self {
         Self::from_kind(super::CordialErrorKind::NoCachedIr(NoCachedIrSource::new(
             path,
@@ -459,6 +479,7 @@ impl super::CordialError {
     /// Rustdoc JSON is required for this crate but has not been built.
     #[track_caller]
     #[instrument(level = "debug", skip(crate_root, crate_name))]
+    #[hotpath::measure]
     pub fn missing_rustdoc_json(crate_name: impl Into<String>, crate_root: PathBuf) -> Self {
         Self::from_kind(super::CordialErrorKind::MissingRustdocJson(
             MissingRustdocJsonSource::new(crate_name, crate_root),
@@ -468,6 +489,7 @@ impl super::CordialError {
     /// Open action items were denied by a CLI gate.
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn open_findings(count: usize) -> Self {
         Self::from_kind(super::CordialErrorKind::OpenFindings(
             OpenFindingsSource::new(count),
@@ -478,6 +500,7 @@ impl super::CordialError {
 impl From<cargo_metadata::Error> for super::CordialError {
     #[track_caller]
     #[instrument(level = "debug", skip(value))]
+    #[hotpath::measure]
     fn from(value: cargo_metadata::Error) -> Self {
         Self::from_kind(super::CordialErrorKind::CargoMetadata(
             CargoMetadataSource::from(value),
@@ -488,6 +511,7 @@ impl From<cargo_metadata::Error> for super::CordialError {
 impl From<derive_builder::UninitializedFieldError> for super::CordialError {
     #[track_caller]
     #[instrument(level = "debug", skip(value))]
+    #[hotpath::measure]
     fn from(value: derive_builder::UninitializedFieldError) -> Self {
         Self::from_kind(super::CordialErrorKind::Builder(BuilderSource::from(value)))
     }

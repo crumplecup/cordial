@@ -6,6 +6,7 @@ use miette::IntoDiagnostic;
 
 use tracing::instrument;
 #[instrument(level = "info", err(level = "warn"))]
+#[hotpath::measure]
 fn main() -> miette::Result<()> {
     init_cli_tracing();
     let args: Vec<_> = std::env::args_os().collect();

@@ -12,6 +12,7 @@ use super::types::{AntipatternRuleId, build_workspace_version_in_member_summary}
 
 use tracing::instrument;
 #[instrument(level = "debug", skip(findings))]
+#[hotpath::measure]
 fn version_rows(findings: &[&dyn Finding]) -> Vec<AntipatternRow> {
     antipattern_rows(findings)
         .into_iter()

@@ -29,6 +29,7 @@ pub(crate) struct NativeFile {
 }
 impl super::super::SourcePolicyInventory {
     #[tracing::instrument(level = "debug", skip(read), err(level = "warn"))]
+    #[hotpath::measure]
     pub(crate) fn collect_native_cli_layout(
         root: &Path,
         name: &str,
@@ -136,6 +137,7 @@ impl super::super::SourcePolicyInventory {
         Ok(CliLayoutFacts::new(catalog, entry_items, snapshots))
     }
     #[tracing::instrument(level = "debug", skip(file), err(level = "warn"))]
+    #[hotpath::measure]
     pub(crate) fn native_cli_layout_file(
         file: &DatabaseSource<'_>,
         name: &str,
@@ -144,6 +146,7 @@ impl super::super::SourcePolicyInventory {
     }
 }
 #[tracing::instrument(level = "debug", skip(seen, files, read, path), err(level = "warn"))]
+#[hotpath::measure]
 fn tree(
     path: &Path,
     root: &Path,

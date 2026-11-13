@@ -5,6 +5,7 @@ use tracing::instrument;
 
 /// Absolute path of this package's library root, if it has one.
 #[instrument(level = "debug")]
+#[hotpath::measure]
 pub fn library_root_rs(crate_root: &Path) -> Option<PathBuf> {
     let default = crate_root.join("src").join("lib.rs");
     let manifest = crate_root.join("Cargo.toml");

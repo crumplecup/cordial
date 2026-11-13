@@ -111,6 +111,7 @@ impl IrEnricher for ScopeEnricher {
 }
 
 #[instrument(level = "debug", skip(ir, item))]
+#[hotpath::measure]
 fn find_enclosing_module(ir: &dyn IrView, item: crate::ir::NodeId) -> Option<crate::ir::NodeId> {
     let mut current = item;
     loop {

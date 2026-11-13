@@ -29,6 +29,7 @@ pub(super) struct LoadedWorkspace {
 impl LoadedWorkspace {
     /// Split into the workspace IR and the per-crate markers.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub(super) fn into_parts(self) -> (WorkspaceIr, HashMap<String, Vec<Box<dyn Marker>>>) {
         (self.workspace, self.markers_by_crate)
     }

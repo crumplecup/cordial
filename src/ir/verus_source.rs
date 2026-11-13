@@ -25,6 +25,7 @@ pub struct VerusFile {
 
 impl SourceVerus {
     #[tracing::instrument(level = "debug", skip(collect), err(level = "warn"))]
+    #[hotpath::measure]
     pub(crate) fn collect_with(
         root: &Path,
         mut collect: impl FnMut(&Path, &Path) -> CordialResult<VerusFile>,

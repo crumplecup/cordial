@@ -40,6 +40,7 @@ thread_local! {
 
 /// The file a test's report goes to, or `None` when this is not a profile run.
 #[tracing::instrument(level = "debug")]
+#[hotpath::measure]
 fn report_path() -> Option<PathBuf> {
     let dir = std::env::var_os("CORDIAL_PERF_PROFILE_DIR")?;
     let binary = std::env::var("NEXTEST_BINARY_ID").ok()?;
@@ -50,6 +51,7 @@ fn report_path() -> Option<PathBuf> {
 
 /// Start profiling this test if the run asked for it.
 #[tracing::instrument(level = "debug")]
+#[hotpath::measure]
 pub(super) fn start() {
     let Some(path) = report_path() else {
         return;

@@ -19,6 +19,7 @@ use super::instrument::{ApplyRecipeRecord, file_matches};
 /// caller holds a source session across this build and the edit pass. Edit
 /// planning reads frozen text checked against the graph's snapshot identity.
 #[tracing::instrument(level = "debug", skip(parsed, targets, by_file), err(level = "warn"))]
+#[hotpath::measure]
 pub(super) fn build_apply_ir(
     project_root: &Path,
     store_home: &Path,
@@ -71,6 +72,7 @@ pub(super) fn build_apply_ir(
 /// Exception suppression is applied before targets reach the edit pass.
 #[cfg(feature = "cli")]
 #[tracing::instrument(level = "debug", skip(workspace, targets, store), err(level = "warn"))]
+#[hotpath::measure]
 pub(super) fn gaps_from_ir(
     project_root: &Path,
     store_home: &Path,
@@ -143,6 +145,7 @@ pub(super) fn gaps_from_ir(
 
 /// Recover the source identity from the same inventory that supplied recipes.
 #[tracing::instrument(level = "debug", skip(workspace, path), err(level = "warn"))]
+#[hotpath::measure]
 pub(super) fn snapshot_for_file(
     workspace: &WorkspaceIr,
     crate_name: &str,
@@ -177,6 +180,7 @@ pub(super) fn snapshot_for_file(
 /// Required fields fail closed: a partial function node is a broken
 /// collection contract, not a default recipe to write into source.
 #[tracing::instrument(level = "debug", skip(workspace), err(level = "warn"))]
+#[hotpath::measure]
 pub(super) fn recipes_for_file(
     workspace: &WorkspaceIr,
     crate_name: &str,

@@ -95,6 +95,7 @@ pub static GLOB_IMPORTS_ETIQUETTE: LazyLock<StaticQualityEtiquette> = LazyLock::
 });
 
 #[instrument(level = "debug", skip(findings))]
+#[hotpath::measure]
 fn quality_area_compute(findings: &[&dyn Finding]) -> (usize, String) {
     let glob_imports = count_open_category(findings, "glob_imports");
     (glob_imports, format!("glob `use` sites **{glob_imports}**"))

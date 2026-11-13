@@ -13,6 +13,7 @@ use super::{FindingSite, SiteClassifier};
 
 impl Catalog {
     #[instrument(level = "debug", skip(self, strategy, findings), err(level = "warn"))]
+    #[hotpath::measure]
     pub(super) fn emit_field_strategy_findings(
         &self,
         strategy: ErrorFieldStrategy,

@@ -59,6 +59,7 @@ impl FunctionRole {
 
     /// Stable label stored in the IR and rendered in reports.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Constructor => "constructor",
@@ -76,6 +77,7 @@ impl FunctionRole {
 
     /// Read a role from its stored IR label.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn from_attr(value: &str) -> Option<Self> {
         match value {
             "constructor" => Some(Self::Constructor),
@@ -118,6 +120,7 @@ pub enum FunctionComplexity {
 impl FunctionComplexity {
     /// Stable label stored in the IR and rendered in reports.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Trivial => "trivial",
@@ -130,6 +133,7 @@ impl FunctionComplexity {
 
     /// Read complexity from its stored IR label.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn from_attr(value: &str) -> Option<Self> {
         match value {
             "trivial" => Some(Self::Trivial),
@@ -161,6 +165,7 @@ pub enum InstrumentLevel {
 
 impl InstrumentLevel {
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Trace => "trace",
@@ -172,6 +177,7 @@ impl InstrumentLevel {
     }
 
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn from_attr(value: &str) -> Option<Self> {
         match value {
             "trace" => Some(Self::Trace),
@@ -234,6 +240,7 @@ pub struct FnContext {
 impl FnContext {
     /// Start a builder for this value.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> FnContextBuilder {
         FnContextBuilder::default()
     }
@@ -256,6 +263,7 @@ pub struct InstrumentRecipe {
 impl InstrumentRecipe {
     /// Start a builder for this value.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> InstrumentRecipeBuilder {
         InstrumentRecipeBuilder::default()
     }
@@ -281,6 +289,7 @@ impl InstrumentRecipe {
     }
 
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     fn render_attribute(&self, name: &str) -> String {
         let mut parts = vec![format!("level = \"{}\"", self.level.as_str())];
         if !self.skip.is_empty() {

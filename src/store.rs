@@ -17,6 +17,7 @@ pub struct StoreLayout {
 impl StoreLayout {
     /// Construct a new value.
     #[instrument(level = "debug", skip(project_slug), ret)]
+    #[hotpath::measure]
     pub fn new(project_slug: impl Into<String>) -> Self {
         let project_slug = project_slug.into();
         let root = default_store_home().join(&project_slug);
@@ -25,6 +26,7 @@ impl StoreLayout {
 
     /// Build a store layout rooted at `root`.
     #[instrument(level = "debug", skip(root, project_slug), ret)]
+    #[hotpath::measure]
     pub fn from_root(root: impl Into<PathBuf>, project_slug: impl Into<String>) -> Self {
         Self {
             project_slug: project_slug.into(),
@@ -34,6 +36,7 @@ impl StoreLayout {
 
     /// Create cache, findings, and exceptions directories if missing.
     #[instrument(level = "info", skip(self), err(level = "warn"))]
+    #[hotpath::measure]
     pub fn ensure_dirs(&self) -> CordialResult<()> {
         std::fs::create_dir_all(self.cache_dir())?;
         std::fs::create_dir_all(self.findings_dir())?;
@@ -159,6 +162,7 @@ impl StoreLayout {
 
     /// Stable cache stem for upstream rustdoc built through a shadow member dependency edge.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn shadow_dep_cache_stem(shadow_crate: &str, upstream_crate: &str) -> String {
         format!("shadow-dep-{shadow_crate}-{upstream_crate}")
     }
@@ -209,12 +213,14 @@ pub struct SysrootCache {
 impl SysrootCache {
     /// Default location: `~/.cordial/sysroot` (or `$CORDIAL_HOME/sysroot`).
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn default_cache() -> Self {
         Self::from_home(default_store_home())
     }
 
     /// Place the sysroot cache under `{home}/sysroot`.
     #[instrument(level = "debug", skip(home), ret)]
+    #[hotpath::measure]
     pub fn from_home(home: impl Into<PathBuf>) -> Self {
         Self {
             root: home.into().join("sysroot"),
@@ -223,12 +229,14 @@ impl SysrootCache {
 
     /// Build a store layout rooted at `root`.
     #[instrument(level = "debug", skip(root), ret)]
+    #[hotpath::measure]
     pub fn from_root(root: impl Into<PathBuf>) -> Self {
         Self { root: root.into() }
     }
 
     /// Create the shared cache directories and identifying marker if missing.
     #[instrument(level = "info", skip(self), err(level = "warn"))]
+    #[hotpath::measure]
     pub fn ensure_dirs(&self) -> CordialResult<()> {
         std::fs::create_dir_all(self.rustdoc_cache_dir())?;
         std::fs::create_dir_all(self.builds_dir())?;
@@ -293,12 +301,14 @@ impl SysrootCache {
 
 impl Default for SysrootCache {
     #[instrument(level = "debug", ret)]
+    #[hotpath::measure]
     fn default() -> Self {
         Self::default_cache()
     }
 }
 
 #[instrument(level = "info", skip(path), err(level = "warn"))]
+#[hotpath::measure]
 fn write_marker(path: &Path) -> CordialResult<()> {
     match OpenOptions::new().write(true).create_new(true).open(path) {
         Ok(_) => Ok(()),
@@ -315,6 +325,7 @@ fn write_marker(path: &Path) -> CordialResult<()> {
 
 /// Default store home.
 #[instrument(level = "debug")]
+#[hotpath::measure]
 pub fn default_store_home() -> PathBuf {
     std::env::var_os("CORDIAL_HOME")
         .map(PathBuf::from)
@@ -324,6 +335,7 @@ pub fn default_store_home() -> PathBuf {
 
 /// Project slug from path.
 #[instrument(level = "debug")]
+#[hotpath::measure]
 pub fn project_slug_from_path(project_root: &Path) -> String {
     project_root
         .file_name()

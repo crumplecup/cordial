@@ -5,6 +5,7 @@ use crate::hooks::SourceEnrichView;
 use tracing::instrument;
 
 #[instrument(level = "debug", skip(view), err(level = "warn"))]
+#[hotpath::measure]
 pub(super) fn enrich(view: SourceEnrichView<'_>) -> CordialResult<()> {
     let (ir, source, session) = view.into_parts();
 

@@ -13,6 +13,7 @@ use crate::{
 };
 
 #[instrument(level = "debug", skip(store, progress), err(level = "warn"))]
+#[hotpath::measure]
 pub(super) fn execute_clean(
     project_root: &Path,
     store: &StoreLayout,
@@ -136,6 +137,7 @@ pub(super) fn execute_clean(
 }
 
 #[instrument(level = "debug", skip(plan), err(level = "warn"))]
+#[hotpath::measure]
 fn print_plan(plan: &CleanPlan, dry_run: bool) -> CordialResult<()> {
     let mut output = crate::host::stdout();
     if plan.paths().is_empty() {

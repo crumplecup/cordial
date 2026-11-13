@@ -25,6 +25,7 @@ pub struct DepBuildConfig {
 /// `"{crate_name}/other-feature"` syntax; a weak `"{crate_name}?/..."` entry
 /// does not activate the dependency on its own, so it is not a match.
 #[instrument(level = "debug", skip(features))]
+#[hotpath::measure]
 fn find_optional_activating_feature(
     features: &BTreeMap<String, Vec<String>>,
     crate_name: &str,
@@ -42,6 +43,7 @@ fn find_optional_activating_feature(
 /// may be spelled as the crate (`chrono_tz`) or the package (`chrono-tz`);
 /// cargo accepts only the package spelling.
 #[instrument(level = "debug", err(level = "warn"))]
+#[hotpath::measure]
 pub fn member_dependency_package_name(
     reference_workspace: &std::path::Path,
     member_crate_name: &str,
@@ -67,6 +69,7 @@ pub fn member_dependency_package_name(
 
 /// Resolve dependency features from a workspace member's `Cargo.toml`.
 #[instrument(level = "debug", err(level = "warn"))]
+#[hotpath::measure]
 pub fn collect_member_dep_build_config(
     reference_workspace: &std::path::Path,
     member_crate_name: &str,
@@ -116,6 +119,7 @@ pub fn collect_member_dep_build_config(
 
 /// Returns `(available_serde_features, expanded_activated_features)`.
 #[instrument(level = "debug", err(level = "warn"))]
+#[hotpath::measure]
 pub fn collect_dep_serde_features(
     reference_workspace: &std::path::Path,
     crate_name: &str,
@@ -148,6 +152,7 @@ pub fn collect_dep_serde_features(
 }
 
 #[instrument(level = "debug", skip(features))]
+#[hotpath::measure]
 fn collect_available_serde_features(features: &BTreeMap<String, Vec<String>>) -> Vec<String> {
     const KEYWORDS: &[&str] = &["serde", "schemars", "schema", "json"];
     let mut available: Vec<String> = features
@@ -162,6 +167,7 @@ fn collect_available_serde_features(features: &BTreeMap<String, Vec<String>>) ->
 }
 
 #[instrument(level = "debug", skip(features))]
+#[hotpath::measure]
 fn expand_same_package_features(
     features: &BTreeMap<String, Vec<String>>,
     activated: &[String],
@@ -186,6 +192,7 @@ fn expand_same_package_features(
 }
 
 #[instrument(level = "debug", skip(features))]
+#[hotpath::measure]
 fn feature_reaches_external_support(
     root: &str,
     features: &BTreeMap<String, Vec<String>>,

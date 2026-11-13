@@ -25,6 +25,7 @@ pub enum InventoryItemKind {
 
 impl InventoryItemKind {
     #[instrument(level = "debug", skip(kind), ret)]
+    #[hotpath::measure]
     fn from_rustdoc(kind: RustdocKind) -> Self {
         match kind {
             RustdocKind::Struct => Self::Struct,
@@ -44,6 +45,7 @@ impl InventoryItemKind {
 
     /// Stable string form of this value.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Struct => "Struct",
@@ -94,6 +96,7 @@ impl RustdocInventory {
 
 /// Parse rustdoc JSON into a flat inventory of public crate items.
 #[instrument(level = "debug", err(level = "warn"))]
+#[hotpath::measure]
 pub fn parse_rustdoc_json(json_path: &Path, crate_name: &str) -> CordialResult<RustdocInventory> {
     let content = std::fs::read_to_string(json_path)?;
     let krate: Crate = serde_json::from_str(&content)?;
@@ -111,6 +114,7 @@ pub fn parse_rustdoc_json(json_path: &Path, crate_name: &str) -> CordialResult<R
 }
 
 #[instrument(level = "debug", skip(krate))]
+#[hotpath::measure]
 fn extract_items(krate: &Crate, own_crate: &str) -> Vec<RustdocItem> {
     let own_key = own_crate.replace('-', "_");
     let mut seen = HashSet::new();
@@ -147,12 +151,14 @@ fn extract_items(krate: &Crate, own_crate: &str) -> Vec<RustdocItem> {
 }
 
 #[instrument(level = "debug", skip(path))]
+#[hotpath::measure]
 fn path_in_crate(path: &[String], own_key: &str) -> bool {
     path.first().is_some_and(|first| first == own_key)
 }
 
 /// Map rustdoc item kind to IR item kind.
 #[instrument(level = "debug", skip(kind))]
+#[hotpath::measure]
 pub fn ir_item_kind(kind: InventoryItemKind) -> crate::ir::ItemKind {
     match kind {
         InventoryItemKind::Struct => crate::ir::ItemKind::Struct,
@@ -166,6 +172,7 @@ pub fn ir_item_kind(kind: InventoryItemKind) -> crate::ir::ItemKind {
 
 /// Build path normalisation map from private module paths to public inventory paths.
 #[instrument(level = "debug", skip(inventory))]
+#[hotpath::measure]
 pub fn canonical_to_public_map(inventory: &RustdocInventory) -> HashMap<String, String> {
     let mut by_name: HashMap<&str, Vec<&RustdocItem>> = HashMap::new();
     for item in inventory.items() {

@@ -5,6 +5,7 @@ use crate::loader::SourceEditView;
 use crate::source_write::{SourceWrite, write_sources};
 
 #[tracing::instrument(level = "debug", skip(planned), err(level = "warn"))]
+#[hotpath::measure]
 pub(super) fn write_planned_files(
     planned: &[(&SourceEditView, String, usize)],
     dry_run: bool,

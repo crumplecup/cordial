@@ -41,6 +41,7 @@ struct SiteClassifier {
 impl SiteClassifier {
     /// Only the foreign error type is known.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     fn foreign(foreign_error_type: Option<String>) -> Self {
         Self {
             foreign_error_type,
@@ -50,6 +51,7 @@ impl SiteClassifier {
 
     /// The internal constructor, and optionally the foreign type it wraps.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     fn constructor(foreign_error_type: Option<String>, name: String) -> Self {
         Self {
             foreign_error_type,
@@ -60,6 +62,7 @@ impl SiteClassifier {
 
 impl Catalog {
     #[instrument(level = "debug", skip(self, field_strategy), err(level = "warn"))]
+    #[hotpath::measure]
     pub(crate) fn findings(
         &self,
         kind_fanout_max_call_sites: usize,
@@ -81,6 +84,7 @@ impl Catalog {
         skip(self, field_strategy, findings),
         err(level = "warn")
     )]
+    #[hotpath::measure]
     fn emit_parent_findings(
         &self,
         field_strategy: ErrorFieldStrategy,
@@ -149,6 +153,7 @@ impl Catalog {
         skip(self, parents, field_strategy, findings),
         err(level = "warn")
     )]
+    #[hotpath::measure]
     fn emit_missing_parent_findings(
         &self,
         parents: &[&StructInfo],
@@ -232,6 +237,7 @@ impl Catalog {
         skip(self, parents, field_strategy, findings),
         err(level = "warn")
     )]
+    #[hotpath::measure]
     fn emit_parent_storage_findings(
         &self,
         parents: &[&StructInfo],
@@ -322,6 +328,7 @@ impl Catalog {
         skip(self, field_strategy, findings),
         err(level = "warn")
     )]
+    #[hotpath::measure]
     fn emit_native_source_findings(
         &self,
         field_strategy: ErrorFieldStrategy,
@@ -419,6 +426,7 @@ impl Catalog {
         skip(self, rule_id, site, classifier),
         err(level = "warn")
     )]
+    #[hotpath::measure]
     fn finding(
         &self,
         rule_id: InternalErrorComplianceId,

@@ -25,6 +25,7 @@ pub enum FeatureWarningRuleId {
 impl FeatureWarningRuleId {
     /// Stable string form of this value.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Unused001 => "FEATURE-WARNING-001",
@@ -35,6 +36,7 @@ impl FeatureWarningRuleId {
 
     /// Parse from the stable identifier string.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn from_attr(value: &str) -> Option<Self> {
         match value {
             "FEATURE-WARNING-001" => Some(Self::Unused001),
@@ -46,6 +48,7 @@ impl FeatureWarningRuleId {
 
     /// The rule a rustc lint code reports under.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn for_lint(lint: &str) -> Self {
         if lint == "dead_code" {
             Self::DeadCode002
@@ -139,6 +142,7 @@ pub struct FeatureWarningFinding {
 
 impl FeatureWarningFinding {
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> FeatureWarningFindingBuilder {
         FeatureWarningFindingBuilder::default()
     }
@@ -207,6 +211,7 @@ pub struct FeatureWarningRecord {
 impl FeatureWarningRecord {
     /// Start a builder for this value.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> FeatureWarningRecordBuilder {
         FeatureWarningRecordBuilder::default()
     }

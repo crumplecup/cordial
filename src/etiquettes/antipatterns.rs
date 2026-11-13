@@ -172,6 +172,7 @@ pub static ANTIPATTERNS_ETIQUETTE: LazyLock<StaticQualityEtiquette> = LazyLock::
 /// `reporter::quality_report`), since they're specifically about untyped
 /// error carriers, not this etiquette's other, unrelated smells.
 #[instrument(level = "debug", skip(findings))]
+#[hotpath::measure]
 fn quality_area_compute(findings: &[&dyn Finding]) -> (usize, String) {
     let unused_arg = count_open_rule(findings, "ANTIPATTERN-UNUSED-UNDERSCORE-ARG-001");
     let static_ref = count_open_rule(findings, "ANTIPATTERN-STRUCT-STATIC-REF-001");

@@ -59,6 +59,7 @@ pub(super) struct VerusBlock {
 
 impl VerusBlock {
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub(super) fn into_parts(self) -> (PathBuf, String, bool, Vec<verus_syn::Item>) {
         (self.file, self.module_path, self.cfg_test, self.items)
     }
@@ -66,6 +67,7 @@ impl VerusBlock {
 
 /// Parse a loader-issued macro payload, preserving original line coordinates.
 #[tracing::instrument(level = "debug", skip(payload, file))]
+#[hotpath::measure]
 pub(super) fn block_in_payload(
     payload: &str,
     file: &Path,

@@ -6,6 +6,7 @@ impl DatabaseSource<'_> {
     /// Preserve the panic policy's broader macro grammar without changing the
     /// assertion-only call policy used by tracing. Every parse is memoized here.
     #[tracing::instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub(crate) fn panic_macro_syntax(&self) -> DatabaseMacroSyntax {
         let mut syntax = DatabaseMacroSyntax::default();
         syntax.collect_panics(self, self.tree().syntax());
@@ -72,6 +73,7 @@ impl DatabaseSource<'_> {
 
     #[cfg(not(feature = "verus_ir"))]
     #[tracing::instrument(level = "debug", skip(self, tree, collect), err(level = "warn"))]
+    #[hotpath::measure]
     fn recover_functions(
         &self,
         tree: &ast::TokenTree,
@@ -123,6 +125,7 @@ impl DatabaseSource<'_> {
     }
 
     #[tracing::instrument(level = "debug", skip(self, invocation))]
+    #[hotpath::measure]
     fn panic_macro_items(&self, invocation: &ast::MacroCall) -> Vec<ast::Item> {
         let Some(tree) = invocation.token_tree() else {
             return Vec::new();
@@ -156,6 +159,7 @@ impl DatabaseSource<'_> {
 
 impl DatabaseMacroSyntax {
     #[tracing::instrument(level = "debug", skip(self, file, root))]
+    #[hotpath::measure]
     fn collect_panics(&mut self, file: &DatabaseSource<'_>, root: &ra_ap_syntax::SyntaxNode) {
         for invocation in root.descendants().filter_map(ast::MacroCall::cast) {
             let items = file.panic_macro_items(&invocation);

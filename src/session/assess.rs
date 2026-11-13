@@ -117,6 +117,7 @@ pub(super) fn assess_targets(
 ///
 /// Raised only when the stale-exceptions etiquette is part of the run.
 #[instrument(level = "debug", skip(findings, sets))]
+#[hotpath::measure]
 fn stale_findings(
     crate_name: &str,
     findings: &[Box<dyn Finding>],

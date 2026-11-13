@@ -81,6 +81,7 @@ impl SourceEnricher for BoundaryInventoryEnricher {
 /// MAIN is for logging programs. Skip/gate crates are named in
 /// `[tracing]` as verifier targets, not as ordinary binaries.
 #[instrument(level = "debug", skip(config))]
+#[hotpath::measure]
 fn crate_skips_program_lints(crate_name: &str, config: &crate::config::TracingThresholds) -> bool {
     config
         .apply_skip_crates()

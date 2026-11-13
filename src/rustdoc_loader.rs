@@ -52,6 +52,7 @@ pub struct RustdocLoadView {
 
 impl RustdocLoadView {
     #[instrument(level = "debug", skip(inventory), ret)]
+    #[hotpath::measure]
     pub(crate) fn from_inventory(inventory: RustdocInventory) -> Self {
         Self { inventory }
     }
@@ -126,6 +127,7 @@ impl RustdocLoadView {
 
 /// Resolve rustdoc json.
 #[instrument(level = "debug", err(level = "warn"))]
+#[hotpath::measure]
 pub fn resolve_rustdoc_json(
     crate_root: &Path,
     crate_name: &str,
@@ -137,6 +139,7 @@ pub fn resolve_rustdoc_json(
 
 /// Resolve rustdoc JSON, rebuilding the workspace-member cache when absent or stale.
 #[instrument(level = "debug", skip(session, target), err(level = "warn"))]
+#[hotpath::measure]
 pub(crate) fn resolve_or_rebuild_rustdoc_json(
     session: &dyn SessionView,
     target: &CrateTarget,
@@ -178,6 +181,7 @@ pub(crate) fn resolve_or_rebuild_rustdoc_json(
 
 /// Find rustdoc JSON in the store cache, then cargo's `target/doc` output.
 #[instrument(level = "debug")]
+#[hotpath::measure]
 pub(crate) fn find_rustdoc_json(
     crate_root: &Path,
     crate_name: &str,
@@ -198,6 +202,7 @@ pub(crate) fn find_rustdoc_json(
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn store_rustdoc_candidate(store_root: Option<&Path>, crate_name: &str) -> Option<PathBuf> {
     let store_root = store_root?;
     let path = StoreLayout::from_root(store_root, String::new()).rustdoc_cache_path(crate_name);

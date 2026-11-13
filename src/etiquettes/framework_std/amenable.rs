@@ -58,6 +58,7 @@ pub struct AmenableStdRowFinding {
 impl AmenableStdRowFinding {
     /// Start a builder for this finding.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> AmenableStdRowFindingBuilder {
         AmenableStdRowFindingBuilder::default()
     }
@@ -157,6 +158,7 @@ impl Finding for AmenableStdRowFinding {
 }
 
 #[instrument(level = "debug", skip(status))]
+#[hotpath::measure]
 pub fn amenable_row_disposition(status: AmenableStdStatus) -> Disposition {
     match status {
         AmenableStdStatus::Missing | AmenableStdStatus::Partial => Disposition::Open,
@@ -166,6 +168,7 @@ pub fn amenable_row_disposition(status: AmenableStdStatus) -> Disposition {
 }
 
 #[instrument(level = "debug", skip(findings), err(level = "warn"))]
+#[hotpath::measure]
 pub fn amenable_report_from_findings(
     findings: &[&dyn Finding],
     include_nightly: bool,
@@ -259,6 +262,7 @@ pub fn amenable_report_from_findings(
 }
 
 #[instrument(level = "debug", skip(findings))]
+#[hotpath::measure]
 pub fn amenable_gaps_from_findings(findings: &[&dyn Finding]) -> Vec<AmenableStdGapEntry> {
     findings
         .iter()

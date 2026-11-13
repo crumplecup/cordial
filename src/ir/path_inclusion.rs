@@ -46,6 +46,7 @@ pub struct PathInclusionFacts {
 impl PathInclusionFacts {
     /// Build deterministic lookup indexes from loader-owned workspace evidence.
     #[instrument(level = "debug", skip(members, sources))]
+    #[hotpath::measure]
     pub(crate) fn from_evidence(
         mut members: Vec<PathInclusionMember>,
         mut sources: Vec<PathInclusionSource>,
@@ -93,6 +94,7 @@ impl PathInclusionFacts {
     /// `owning_crate_root` (splicing a file into the crate that already
     /// natively contains it isn't a real conflict).
     #[instrument(level = "debug", skip(self, file))]
+    #[hotpath::measure]
     pub fn blocking_consumer(
         &self,
         file: &Path,
@@ -121,6 +123,7 @@ impl PathInclusionFacts {
     /// whichever crate natively owns it -- the set of *other*
     /// compilation units this file's real content also compiles under.
     #[instrument(level = "debug", skip(self, file))]
+    #[hotpath::measure]
     pub fn splice_consumers(&self, file: &Path, owning_crate_root: &Path) -> Vec<&str> {
         let file = canonical_or(file);
         let owning_name = self
@@ -176,6 +179,7 @@ pub(crate) fn normalize(name: &str) -> String {
 }
 
 #[instrument(level = "debug", skip(path))]
+#[hotpath::measure]
 pub(crate) fn canonical_or(path: &Path) -> PathBuf {
     path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
 }

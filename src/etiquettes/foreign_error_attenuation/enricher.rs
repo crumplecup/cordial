@@ -156,6 +156,7 @@ struct SiteKey {
 }
 
 #[instrument(level = "debug", skip(ir), err(level = "warn"))]
+#[hotpath::measure]
 fn foreign_report_from_ir(
     ir: &dyn IrView,
     crate_root: &Path,
@@ -175,6 +176,7 @@ fn foreign_report_from_ir(
 }
 
 #[instrument(level = "debug", skip(node), err(level = "warn"))]
+#[hotpath::measure]
 fn typed_foreign_record(
     node: crate::ir::NodeRef<'_>,
     crate_name: &str,
@@ -262,6 +264,7 @@ fn typed_foreign_record(
 }
 
 #[instrument(level = "debug", skip(ir), err(level = "warn"))]
+#[hotpath::measure]
 fn chain_records_from_ir(
     ir: &dyn IrView,
     crate_root: &Path,
@@ -317,6 +320,7 @@ fn chain_records_from_ir(
 }
 
 #[instrument(level = "debug", skip(ir))]
+#[hotpath::measure]
 fn error_bridges_from_ir(ir: &dyn IrView) -> Vec<ErrorBridgeHint> {
     ir.nodes_matching(&BasicQuery::all_nodes())
         .into_iter()
@@ -347,6 +351,7 @@ fn error_bridges_from_ir(ir: &dyn IrView) -> Vec<ErrorBridgeHint> {
 }
 
 #[instrument(level = "debug", skip(ir))]
+#[hotpath::measure]
 fn index_typed_error_sites(
     ir: &dyn IrView,
     crate_root: &Path,
@@ -380,6 +385,7 @@ fn index_typed_error_sites(
 }
 
 #[instrument(level = "debug", skip(path))]
+#[hotpath::measure]
 fn relative_file(path: &str, crate_root: &Path) -> PathBuf {
     let resolved = PathBuf::from(path);
     resolved
@@ -389,6 +395,7 @@ fn relative_file(path: &str, crate_root: &Path) -> PathBuf {
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn parse_confidence(value: &str) -> crate::etiquettes::error_sites::ForeignTypeConfidence {
     if value.contains("MEDIUM") {
         crate::etiquettes::error_sites::ForeignTypeConfidence::Medium

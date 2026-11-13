@@ -14,6 +14,7 @@ use super::{ExtractedItem, item_is_public, path_matches_scope};
 /// `krate.paths`.  Walking the module tree gives us an alternative way to
 /// infer the re-export path: `parent_module_path + use_item.name`.
 #[instrument(level = "debug", skip(krate))]
+#[hotpath::measure]
 fn build_parent_module_paths(
     krate: &rustdoc_types::Crate,
 ) -> HashMap<rustdoc_types::Id, Vec<String>> {
@@ -33,6 +34,7 @@ fn build_parent_module_paths(
 }
 
 #[instrument(level = "debug", skip(krate))]
+#[hotpath::measure]
 pub(in crate::rustdoc) fn collect_public_same_crate_reexport_aliases(
     krate: &rustdoc_types::Crate,
     own_crate_key: &str,
@@ -113,6 +115,7 @@ pub(in crate::rustdoc) fn collect_public_same_crate_reexport_aliases(
     aliases
 }
 #[instrument(level = "debug", skip(krate, existing_paths))]
+#[hotpath::measure]
 pub(super) fn collect_public_reexport_dependency_items(
     krate: &rustdoc_types::Crate,
     own_crate_key: &str,
@@ -161,6 +164,7 @@ pub(super) fn collect_public_reexport_dependency_items(
     discovered
 }
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn item_path_preferred_over(candidate: &[String], incumbent: &[String]) -> bool {
     candidate.len() < incumbent.len()
         || (candidate.len() == incumbent.len() && candidate < incumbent)

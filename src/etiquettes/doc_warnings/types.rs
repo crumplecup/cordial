@@ -21,6 +21,7 @@ pub enum DocWarningRuleId {
 impl DocWarningRuleId {
     /// Stable string form of this value.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Warning001 => "DOC-WARNING-001",
@@ -29,6 +30,7 @@ impl DocWarningRuleId {
 
     /// Parse from the stable identifier string.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn from_attr(value: &str) -> Option<Self> {
         match value {
             "DOC-WARNING-001" => Some(Self::Warning001),
@@ -110,6 +112,7 @@ pub struct DocWarningFinding {
 
 impl DocWarningFinding {
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> DocWarningFindingBuilder {
         DocWarningFindingBuilder::default()
     }
@@ -164,6 +167,7 @@ pub struct DocWarningRecord {
 impl DocWarningRecord {
     /// Start a builder for this value.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> DocWarningRecordBuilder {
         DocWarningRecordBuilder::default()
     }

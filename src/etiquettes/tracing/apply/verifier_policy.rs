@@ -53,6 +53,7 @@ pub enum TracingApplyPolicy {
 /// Resolve the real tracing-apply policy for one file, given every
 /// crate whose own compilation actually includes its text.
 #[instrument(level = "debug", skip(file, config, facts))]
+#[hotpath::measure]
 pub fn resolve_tracing_apply_policy(
     crate_name: &str,
     file: &Path,
@@ -102,6 +103,7 @@ pub fn resolve_tracing_apply_policy(
 /// *within `crate_name`'s own source*," not "what governs a file `crate_
 /// name` happens to also compile under a different crate's rules."
 #[instrument(level = "debug", skip(config, facts))]
+#[hotpath::measure]
 pub(crate) fn crate_gate_cfgs(
     crate_name: &str,
     config: &TracingThresholds,
@@ -117,6 +119,7 @@ pub(crate) fn crate_gate_cfgs(
 /// cfg list: `kani` for one name, `any(creusot, kani)` for more than
 /// one.
 #[instrument(level = "debug")]
+#[hotpath::measure]
 pub fn gate_predicate(cfgs: &[String]) -> String {
     match cfgs {
         [only] => only.clone(),
@@ -132,6 +135,7 @@ pub fn gate_predicate(cfgs: &[String]) -> String {
 /// path and the checklist reporter's recipe column so the two can never
 /// drift.
 #[instrument(level = "debug")]
+#[hotpath::measure]
 pub fn gate_attr(attr: &str, predicate: &str) -> String {
     let inner = attr
         .strip_prefix('#')

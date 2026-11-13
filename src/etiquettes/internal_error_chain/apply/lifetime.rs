@@ -59,6 +59,7 @@ impl LifetimeFileFacts {
     }
 
     #[instrument(level = "debug", skip(self, strategy, sites, initializers))]
+    #[hotpath::measure]
     pub(super) fn plan_for_unit(
         &self,
         type_name: &str,
@@ -182,6 +183,7 @@ impl LifetimePlanFacts {
     }
 
     #[instrument(level = "debug", skip(self, strategy))]
+    #[hotpath::measure]
     fn type_use(&self, strategy: ErrorFieldStrategy) -> String {
         match strategy {
             ErrorFieldStrategy::Borrowed => format!("{}<'{}>", self.type_name, self.lifetime),

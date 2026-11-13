@@ -92,6 +92,7 @@ impl CleanPlan {
     /// Exclude a store whose lock could not be held.
     #[cfg(feature = "cli")]
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub(crate) fn exclude_store(&mut self, root: &Path, reason: &str) {
         self.paths.retain(|path| path.store != root);
         self.stores.retain(|store| store != root);
@@ -131,6 +132,7 @@ impl CleanReport {
 
 /// Classify stores and measure the exact allowlisted paths to remove.
 #[instrument(level = "debug", skip(scope), err(level = "warn"))]
+#[hotpath::measure]
 pub fn plan_clean(scope: CleanScope) -> CordialResult<CleanPlan> {
     let mut plan = CleanPlan {
         stores: Vec::new(),
@@ -179,6 +181,7 @@ pub fn plan_clean(scope: CleanScope) -> CordialResult<CleanPlan> {
 }
 
 #[instrument(level = "debug", skip(plan, store), err(level = "warn"))]
+#[hotpath::measure]
 fn plan_project(
     plan: &mut CleanPlan,
     store: &StoreLayout,
@@ -231,6 +234,7 @@ fn plan_project(
 }
 
 #[instrument(level = "debug", skip(plan, sysroot), err(level = "warn"))]
+#[hotpath::measure]
 fn plan_sysroot(
     plan: &mut CleanPlan,
     sysroot: &SysrootCache,
@@ -264,6 +268,7 @@ fn plan_sysroot(
 }
 
 #[instrument(level = "debug", skip(plan, path), err(level = "warn"))]
+#[hotpath::measure]
 fn add_path(plan: &mut CleanPlan, root: &Path, path: PathBuf) -> CordialResult<()> {
     match fs::symlink_metadata(&path) {
         Ok(_) => plan.paths.push(CleanPath {
@@ -278,6 +283,7 @@ fn add_path(plan: &mut CleanPlan, root: &Path, path: PathBuf) -> CordialResult<(
 }
 
 #[instrument(level = "debug", skip(path), err(level = "warn"))]
+#[hotpath::measure]
 fn size_of(path: &Path) -> io::Result<u64> {
     let metadata = fs::symlink_metadata(path)?;
     if !metadata.file_type().is_dir() {
@@ -309,11 +315,13 @@ fn refusal(root: &Path, project_root: &Path) -> CordialResult<Option<String>> {
 }
 
 #[instrument(level = "debug", skip(path))]
+#[hotpath::measure]
 fn real_dir(path: &Path) -> bool {
     fs::symlink_metadata(path).is_ok_and(|metadata| metadata.file_type().is_dir())
 }
 
 #[instrument(level = "debug", skip(path), err(level = "warn"))]
+#[hotpath::measure]
 fn regular_file(path: &Path) -> io::Result<bool> {
     match fs::symlink_metadata(path) {
         Ok(metadata) => Ok(metadata.file_type().is_file()),
@@ -324,12 +332,14 @@ fn regular_file(path: &Path) -> io::Result<bool> {
 
 /// Execute an allowlisted plan, continuing after individual removal failures.
 #[instrument(level = "info", skip(plan))]
+#[hotpath::measure]
 pub fn run_clean(plan: CleanPlan) -> CleanReport {
     run_clean_with_progress(plan, crate::noop_progress())
 }
 
 /// Execute a plan while reporting the number of paths processed.
 #[instrument(level = "info", skip(plan, progress))]
+#[hotpath::measure]
 pub fn run_clean_with_progress(plan: CleanPlan, progress: &dyn ProgressSink) -> CleanReport {
     let task = progress.bar("Cleaning store artifacts".into(), plan.paths.len() as u64);
     let mut report = CleanReport {
@@ -362,6 +372,7 @@ pub fn run_clean_with_progress(plan: CleanPlan, progress: &dyn ProgressSink) -> 
 }
 
 #[instrument(level = "debug", skip(path), err(level = "warn"))]
+#[hotpath::measure]
 fn remove_path(path: &Path) -> io::Result<()> {
     let metadata = fs::symlink_metadata(path)?;
     if metadata.file_type().is_dir() {

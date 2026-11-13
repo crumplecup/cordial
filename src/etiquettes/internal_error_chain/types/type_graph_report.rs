@@ -10,6 +10,7 @@ pub struct InternalErrorTypeGraphReport {
 
 impl InternalErrorTypeGraphReport {
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn class_counts(&self) -> InternalErrorNodeClassCounts {
         let mut counts = InternalErrorNodeClassCounts::default();
         for node in self.nodes() {

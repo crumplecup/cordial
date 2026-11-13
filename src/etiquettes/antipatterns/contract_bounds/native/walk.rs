@@ -17,6 +17,7 @@ struct Visitor<'a, 'db> {
 }
 
 #[tracing::instrument(level = "debug", skip_all, err(level = "warn"))]
+#[hotpath::measure]
 pub(super) fn collect(
     source: &DatabaseSource<'_>,
     node: &SyntaxNode,
@@ -37,6 +38,7 @@ pub(super) fn collect(
 
 impl Visitor<'_, '_> {
     #[tracing::instrument(level = "debug", skip_all, err(level = "warn"))]
+    #[hotpath::measure]
     fn walk(
         &self,
         node: &SyntaxNode,

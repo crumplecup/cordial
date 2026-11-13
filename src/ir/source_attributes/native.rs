@@ -45,6 +45,7 @@ impl SourceFileAttributes {
 }
 
 #[instrument(level = "debug", skip(file, items, out, identify))]
+#[hotpath::measure]
 fn collect_items(
     file: &DatabaseSource<'_>,
     items: impl Iterator<Item = ast::Item>,
@@ -127,6 +128,7 @@ fn collect_items(
 }
 
 #[instrument(level = "debug", skip(file, owner, out, identify))]
+#[hotpath::measure]
 fn attach(
     file: &DatabaseSource<'_>,
     owner: &dyn HasAttrs,
@@ -193,6 +195,7 @@ fn is_instrument(meta: &ast::Meta, identify: AttributeIdentity<'_>) -> bool {
 }
 
 #[instrument(level = "debug", skip(meta, identify))]
+#[hotpath::measure]
 fn attribute(meta: &ast::Meta, identify: AttributeIdentity<'_>) -> SourceAttribute {
     let path = if matches!(meta, ast::Meta::UnsafeMeta(_)) {
         "unsafe".into()
@@ -248,6 +251,7 @@ fn attribute(meta: &ast::Meta, identify: AttributeIdentity<'_>) -> SourceAttribu
 }
 
 #[instrument(level = "debug", skip(node))]
+#[hotpath::measure]
 fn token_parts(node: &SyntaxNode) -> Vec<String> {
     node.descendants_with_tokens()
         .filter_map(|element| element.into_token())
@@ -257,11 +261,13 @@ fn token_parts(node: &SyntaxNode) -> Vec<String> {
 }
 
 #[instrument(level = "debug", skip(node))]
+#[hotpath::measure]
 fn significant_tokens(node: &SyntaxNode) -> String {
     super::render_tokens(token_parts(node))
 }
 
 #[instrument(level = "debug", skip(meta, presence))]
+#[hotpath::measure]
 fn apply_meta(meta: &ast::Meta, presence: &mut SourceCrateLints) {
     if let ast::Meta::CfgAttrMeta(cfg) = meta {
         for inner in cfg.metas() {
@@ -273,6 +279,7 @@ fn apply_meta(meta: &ast::Meta, presence: &mut SourceCrateLints) {
 }
 
 #[instrument(level = "debug", skip(meta, presence))]
+#[hotpath::measure]
 fn apply_level(meta: &ast::Meta, presence: &mut SourceCrateLints) {
     let ast::Meta::TokenTreeMeta(meta) = meta else {
         return;
@@ -316,6 +323,7 @@ fn apply_level(meta: &ast::Meta, presence: &mut SourceCrateLints) {
 #[cfg(feature = "tracing")]
 impl super::SourceInstrumentSyntax {
     #[instrument(level = "debug", skip(attr, identify))]
+    #[hotpath::measure]
     pub(crate) fn from_native_attribute(
         attr: &ast::Attr,
         identify: AttributeIdentity<'_>,

@@ -17,6 +17,7 @@ pub enum ImplGapKind {
 impl ImplGapKind {
     /// Stable string form of this value.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::MissingOurTraits => "MissingOurTraits",
@@ -101,6 +102,7 @@ pub struct ImplGapFinding {
 impl ImplGapFinding {
     /// Start a builder for this finding.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> ImplGapFindingBuilder {
         ImplGapFindingBuilder::default()
     }

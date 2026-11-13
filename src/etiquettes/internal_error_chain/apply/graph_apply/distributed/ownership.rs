@@ -12,6 +12,7 @@ use super::super::declarations::{DeclarationKind, GraphFields};
 use super::{CrateTypeIndex, Declarations, ErrorEdgeTarget, ErrorGraphPlan, GraphDeclaration};
 
 #[tracing::instrument(level = "debug", skip(declarations, strategy))]
+#[hotpath::measure]
 pub(super) fn rejected_plans(
     declarations: &Declarations<'_>,
     strategy: ErrorFieldStrategy,
@@ -41,6 +42,7 @@ pub(super) fn rejected_plans(
 }
 
 #[instrument(level = "debug", skip(root_file, files, index))]
+#[hotpath::measure]
 pub(super) fn discover<'a>(
     root_file: &SourceEditView,
     files: &'a [SourceEditView],

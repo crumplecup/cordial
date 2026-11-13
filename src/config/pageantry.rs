@@ -30,12 +30,14 @@ pub struct PageantryThresholds {
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn default_max_shim_lines() -> usize {
     8
 }
 
 impl Default for PageantryThresholds {
     #[instrument(level = "debug", ret)]
+    #[hotpath::measure]
     fn default() -> Self {
         Self {
             trait_block: true,
@@ -52,6 +54,7 @@ impl PageantryThresholds {
     ///
     /// Unknown rule ids stay off.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn rule_enabled(&self, rule_id: &str) -> bool {
         match rule_id {
             "PAGEANTRY-TRAIT-001" => self.trait_block,

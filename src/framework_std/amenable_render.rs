@@ -9,6 +9,7 @@ use crate::framework_std::verifier_skip::VerifierSkipMap;
 
 use tracing::instrument;
 #[instrument(level = "debug", skip(report), err(level = "warn"))]
+#[hotpath::measure]
 pub fn render_amenable_std_coverage_csv(report: &AmenableStdReport) -> CordialResult<String> {
     let mut body = String::from(
         "type_path,type_kind,is_generic,status,evidence_link,evidence_name,kani_witness,creusot_witness,verus_witness,proof_test,skip_reason,kind,parent,note\n",
@@ -39,6 +40,7 @@ pub fn render_amenable_std_coverage_csv(report: &AmenableStdReport) -> CordialRe
 }
 
 #[instrument(level = "debug", skip(gaps), err(level = "warn"))]
+#[hotpath::measure]
 pub fn render_amenable_std_gaps_csv(gaps: &[AmenableStdGapEntry]) -> CordialResult<String> {
     let mut body = String::from("source_crate,type_path,type_kind,status,missing_layers,action\n");
     for gap in gaps {
@@ -58,6 +60,7 @@ pub fn render_amenable_std_gaps_csv(gaps: &[AmenableStdGapEntry]) -> CordialResu
 
 /// Amenable std registry coverage checklist.
 #[instrument(level = "debug", skip(report, skip_map), err(level = "warn"))]
+#[hotpath::measure]
 pub fn render_amenable_std_checklist_md(
     report: &AmenableStdReport,
     skip_map: &VerifierSkipMap,
@@ -73,6 +76,7 @@ pub fn render_amenable_std_checklist_md(
 
 /// Amenable ext (third-party crate) registry coverage checklist.
 #[instrument(level = "debug", skip(report, skip_map), err(level = "warn"))]
+#[hotpath::measure]
 pub fn render_amenable_ext_checklist_md(
     report: &AmenableStdReport,
     skip_map: &VerifierSkipMap,
@@ -96,6 +100,7 @@ pub fn render_amenable_ext_checklist_md(
 /// (scope, impl crate, source crate) already reads from `report` itself
 /// rather than assuming "std", so no further parameterization is needed.
 #[instrument(level = "debug", skip(report, skip_map), err(level = "warn"))]
+#[hotpath::measure]
 fn render_wrapped_checklist_md(
     report: &AmenableStdReport,
     skip_map: &VerifierSkipMap,
@@ -279,6 +284,7 @@ fn instantiation_suffix(entry: &crate::framework_std::amenable::AmenableStdEntry
 
 /// Amenable std registry coverage summary.
 #[instrument(level = "debug", skip(report))]
+#[hotpath::measure]
 pub fn render_amenable_std_summary_md(report: &AmenableStdReport) -> String {
     render_wrapped_summary_md(
         report,
@@ -291,6 +297,7 @@ pub fn render_amenable_std_summary_md(report: &AmenableStdReport) -> String {
 
 /// Amenable ext (third-party crate) registry coverage summary.
 #[instrument(level = "debug", skip(report))]
+#[hotpath::measure]
 pub fn render_amenable_ext_summary_md(
     report: &AmenableStdReport,
     checklist_filename: &str,
@@ -311,6 +318,7 @@ pub fn render_amenable_ext_summary_md(
 /// verbatim after the source-inventory crate name (`" (std + core +
 /// alloc)"` for std, empty for a single-crate ext target).
 #[instrument(level = "debug", skip(report))]
+#[hotpath::measure]
 fn render_wrapped_summary_md(
     report: &AmenableStdReport,
     profile_title: &str,

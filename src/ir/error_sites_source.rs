@@ -27,6 +27,7 @@ pub struct ErrorSitesFile {
 
 impl SourceErrorSites {
     #[tracing::instrument(level = "debug", skip(collect), err(level = "warn"))]
+    #[hotpath::measure]
     pub(crate) fn collect_with(
         root: &Path,
         mut collect: impl FnMut(&Path, &Path) -> CordialResult<ErrorSitesFile>,
@@ -52,6 +53,7 @@ impl SourceErrorSites {
 
     /// Project sorted rows without consulting source files or a syntax database.
     #[tracing::instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn records(&self) -> Vec<ErrorSiteRecord> {
         let mut rows: Vec<_> = self
             .files
@@ -69,6 +71,7 @@ impl SourceErrorSites {
     }
 
     #[tracing::instrument(level = "debug", skip(file), err(level = "warn"))]
+    #[hotpath::measure]
     pub(crate) fn native_file(
         file: &DatabaseSource<'_>,
         tree: &Path,

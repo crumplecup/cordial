@@ -132,6 +132,7 @@ impl Assessor for ModularityAssessor {
 }
 
 #[instrument(level = "debug", skip(pending, thresholds), err(level = "warn"))]
+#[hotpath::measure]
 fn hierarchy_findings(
     pending: &[PendingSite],
     crate_name: &str,
@@ -257,6 +258,7 @@ struct FindingArgs<'a> {
 }
 
 #[instrument(level = "debug", skip(site, args), err(level = "warn"))]
+#[hotpath::measure]
 fn finding_from_site(site: &PendingSite, args: FindingArgs<'_>) -> CordialResult<Box<dyn Finding>> {
     Ok(Box::new(
         ModularityFinding::builder()

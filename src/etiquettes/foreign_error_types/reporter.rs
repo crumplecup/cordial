@@ -29,6 +29,7 @@ struct ForeignErrorTypeRow {
 
 impl ForeignErrorTypeRow {
     #[instrument(level = "debug", skip(finding), ret)]
+    #[hotpath::measure]
     fn from_finding(finding: &dyn Finding) -> Self {
         let mut sink = MapFindingSink::default();
         finding.emit(&mut sink);
@@ -60,6 +61,7 @@ impl ForeignErrorTypeRow {
 }
 
 #[instrument(level = "debug", skip(findings))]
+#[hotpath::measure]
 fn foreign_error_type_rows(findings: &[&dyn Finding]) -> Vec<ForeignErrorTypeRow> {
     findings
         .iter()
@@ -69,12 +71,14 @@ fn foreign_error_type_rows(findings: &[&dyn Finding]) -> Vec<ForeignErrorTypeRow
 }
 
 #[instrument(level = "debug", skip(rows))]
+#[hotpath::measure]
 fn typed_rows(rows: &[ForeignErrorTypeRow]) -> impl Iterator<Item = &ForeignErrorTypeRow> {
     rows.iter()
         .filter(|row| row.record_kind == ForeignErrorRecordKind::Typed.as_attr())
 }
 
 #[instrument(level = "debug", skip(rows))]
+#[hotpath::measure]
 fn open_rows(rows: &[ForeignErrorTypeRow]) -> impl Iterator<Item = &ForeignErrorTypeRow> {
     rows.iter().filter(|row| row.disposition == "open")
 }
@@ -85,6 +89,7 @@ fn open_rows(rows: &[ForeignErrorTypeRow]) -> impl Iterator<Item = &ForeignError
 /// artifact must derive its own crate breakdown from `row.crate_name`
 /// instead (the same pattern `modularity::reporter::rows::crate_names` uses).
 #[instrument(level = "debug", skip(rows))]
+#[hotpath::measure]
 fn crate_names(rows: &[&ForeignErrorTypeRow]) -> Vec<String> {
     let mut names: Vec<String> = rows.iter().map(|row| row.crate_name.clone()).collect();
     names.sort();
@@ -93,6 +98,7 @@ fn crate_names(rows: &[&ForeignErrorTypeRow]) -> Vec<String> {
 }
 
 #[instrument(level = "debug", skip(rows), err(level = "warn"))]
+#[hotpath::measure]
 fn typed_report_from_rows(
     rows: &[ForeignErrorTypeRow],
 ) -> CordialResult<super::types::ForeignErrorTypeReport> {
@@ -134,6 +140,7 @@ fn typed_report_from_rows(
 /// a real per-crate breakdown instead of mislabeling the workspace-wide
 /// aggregate as belonging to whichever crate happened to sort first.
 #[instrument(level = "debug", skip(rows), err(level = "warn"))]
+#[hotpath::measure]
 fn typed_reports_by_crate(
     rows: &[ForeignErrorTypeRow],
 ) -> CordialResult<Vec<super::types::ForeignErrorTypeReport>> {
@@ -154,6 +161,7 @@ fn typed_reports_by_crate(
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn parse_site_kind(value: &str) -> crate::etiquettes::error_sites::ErrorSiteKind {
     use crate::etiquettes::error_sites::ErrorSiteKind;
     match value {

@@ -22,6 +22,7 @@ struct ErrorChainRow {
 
 impl ErrorChainRow {
     #[instrument(level = "debug", skip(finding), ret)]
+    #[hotpath::measure]
     fn from_finding(finding: &dyn Finding) -> Self {
         let mut sink = MapFindingSink::default();
         finding.emit(&mut sink);
@@ -46,6 +47,7 @@ impl ErrorChainRow {
 }
 
 #[instrument(level = "debug", skip(findings))]
+#[hotpath::measure]
 fn error_chain_rows(findings: &[&dyn Finding]) -> Vec<ErrorChainRow> {
     findings
         .iter()
@@ -55,6 +57,7 @@ fn error_chain_rows(findings: &[&dyn Finding]) -> Vec<ErrorChainRow> {
 }
 
 #[instrument(level = "debug", skip(rows))]
+#[hotpath::measure]
 fn open_rows(rows: &[ErrorChainRow]) -> impl Iterator<Item = &ErrorChainRow> {
     rows.iter().filter(|row| row.disposition == "open")
 }
@@ -65,6 +68,7 @@ fn open_rows(rows: &[ErrorChainRow]) -> impl Iterator<Item = &ErrorChainRow> {
 /// artifact must derive its own crate breakdown from `row.crate_name`
 /// instead (the same pattern `modularity::reporter::rows::crate_names` uses).
 #[instrument(level = "debug", skip(rows))]
+#[hotpath::measure]
 fn crate_names(rows: &[&ErrorChainRow]) -> Vec<String> {
     let mut names: Vec<String> = rows.iter().map(|row| row.crate_name.clone()).collect();
     names.sort();
@@ -73,6 +77,7 @@ fn crate_names(rows: &[&ErrorChainRow]) -> Vec<String> {
 }
 
 #[instrument(level = "debug", skip(rows))]
+#[hotpath::measure]
 fn probe_counts_from_rows(rows: &[ErrorChainRow]) -> ErrorChainProbeCounts {
     let mut counts = ErrorChainProbeCounts::default();
     for row in rows {

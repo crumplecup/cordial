@@ -32,6 +32,7 @@ pub fn scan_rust_source(
     skip(files, thresholds, path_inclusions),
     err(level = "warn")
 )]
+#[hotpath::measure]
 pub(super) fn select_records(
     files: &[DeriveFileFacts],
     crate_root: &Path,
@@ -129,6 +130,7 @@ impl DeriveScanVisitor<'_> {
     }
 
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     fn qualify(&self, local: &str) -> String {
         if self.module_prefix.is_empty() {
             local.to_string()
@@ -166,6 +168,7 @@ impl DeriveScanVisitor<'_> {
     }
 
     #[instrument(level = "debug", skip(self, args))]
+    #[hotpath::measure]
     fn push_site(&mut self, args: SiteArgs) {
         if let Some(record) = self.site(args) {
             self.findings.push(record);
@@ -174,6 +177,7 @@ impl DeriveScanVisitor<'_> {
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn setter_field_name(method_name: &str) -> Option<&str> {
     method_name
         .strip_prefix("with_")

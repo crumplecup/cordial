@@ -48,6 +48,7 @@ pub struct CrateIr {
 impl CrateIr {
     /// Construct an empty crate graph with a crate root node.
     #[instrument(level = "debug", skip(crate_name), ret)]
+    #[hotpath::measure]
     pub fn new(crate_name: impl Into<String>) -> Self {
         let crate_name = crate_name.into();
         let mut graph = StableDiGraph::new();
@@ -70,6 +71,7 @@ impl CrateIr {
 
     /// Insert a node and return its id.
     #[instrument(level = "debug", skip(self, weight))]
+    #[hotpath::measure]
     pub fn insert_node(&mut self, weight: NodeWeight) -> NodeId {
         let index = self.graph.add_node(weight);
         let id = NodeId::from_index(index);
@@ -81,6 +83,7 @@ impl CrateIr {
 
     /// Insert a directed edge of `kind`.
     #[instrument(level = "debug", skip(self, from, to, kind), err(level = "warn"))]
+    #[hotpath::measure]
     pub fn insert_edge(&mut self, from: NodeId, to: NodeId, kind: EdgeKind) -> CordialResult<()> {
         if self.graph.node_weight(from.to_index()).is_none()
             || self.graph.node_weight(to.to_index()).is_none()
@@ -94,6 +97,7 @@ impl CrateIr {
 
     /// Insert a `ContextCalls` edge resolved in the non-ordinary `context`.
     #[instrument(level = "debug", skip(self, from, to, context), err(level = "warn"))]
+    #[hotpath::measure]
     pub fn insert_context_call(
         &mut self,
         from: NodeId,
@@ -134,12 +138,14 @@ impl CrateIr {
 
     /// Rebuild the path → node index after structural edits.
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn rebuild_path_index(&mut self) {
         self.indexes.rebuild_by_path(&self.graph);
     }
 
     /// Return neighboring nodes connected by `kind` in `direction`.
     #[instrument(level = "debug", skip(self, node, kind, direction))]
+    #[hotpath::measure]
     pub fn neighbors(
         &self,
         node: NodeId,
@@ -162,6 +168,7 @@ impl CrateIr {
 
     /// Serialize the graph and indexes for cache storage.
     #[instrument(level = "debug", skip(self), err(level = "warn"))]
+    #[hotpath::measure]
     pub fn snapshot(&self) -> CordialResult<CrateIrSnapshot> {
         Ok(CrateIrSnapshot {
             crate_name: self.crate_name.clone(),
@@ -188,6 +195,7 @@ impl CrateIr {
 
     /// Rebuild from a serialized snapshot.
     #[instrument(level = "debug", skip(snapshot), err(level = "warn"))]
+    #[hotpath::measure]
     pub fn from_snapshot(snapshot: CrateIrSnapshot) -> CordialResult<Self> {
         let mut graph = StableDiGraph::new();
         let mut index_map = Vec::with_capacity(snapshot.nodes.len());
@@ -271,6 +279,7 @@ impl CrateIr {
 
     /// Store path for this crate's IR cache file.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn cache_path(cache_dir: &Path, crate_name: &str) -> PathBuf {
         cache_dir.join(format!("{crate_name}.ir.zst"))
     }

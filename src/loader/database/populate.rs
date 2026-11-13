@@ -153,6 +153,7 @@ impl Projection {
         skip(self, reading, source, invocation, graph, parent),
         err(level = "warn")
     )]
+    #[hotpath::measure]
     fn record_islands(
         &mut self,
         reading: &super::islands::Reading<'_, '_>,

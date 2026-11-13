@@ -32,6 +32,7 @@ pub(crate) enum ContractCall {
 
 impl ContractClause {
     #[tracing::instrument(level = "debug", skip_all)]
+    #[hotpath::measure]
     pub(super) fn collect(
         site: AntipatternSiteRecord,
         verifier: &str,
@@ -67,6 +68,7 @@ impl ContractClause {
 
 impl ContractCall {
     #[tracing::instrument(level = "debug", skip(clause))]
+    #[hotpath::measure]
     fn collect(verifier: &str, clause: &[Token]) -> Self {
         if verifier != "kani"
             && let Some(name) = bare_named_call_name(clause)

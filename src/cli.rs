@@ -64,6 +64,7 @@ pub struct Cli {
 impl Cli {
     /// Build session context and dispatch the selected [`Commands`] variant.
     #[instrument(level = "debug", skip(self), err(level = "warn"))]
+    #[hotpath::measure]
     pub fn act(self) -> CordialResult<()> {
         let project_root = match &self.project {
             Some(path) => path.clone(),

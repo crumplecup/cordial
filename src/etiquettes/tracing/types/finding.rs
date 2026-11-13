@@ -45,6 +45,7 @@ pub struct FunctionRecord {
 impl FunctionRecord {
     /// Start a builder for this value.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> FunctionRecordBuilder {
         FunctionRecordBuilder::default()
     }
@@ -72,6 +73,7 @@ pub enum TracingRuleKind {
 
 impl TracingRuleKind {
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn rule_id(self) -> &'static str {
         match self {
             Self::MissingInstrument => "TRACING-MISSING-INSTRUMENT",
@@ -89,6 +91,7 @@ impl TracingRuleKind {
     }
 
     #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
     pub fn description(self) -> &'static str {
         match self {
             Self::MissingInstrument => "Function missing `#[instrument]` (recipe on the finding)",
@@ -207,6 +210,7 @@ pub struct TracingFinding {
 impl TracingFinding {
     /// Start a builder for this value.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn builder() -> TracingFindingBuilder {
         TracingFindingBuilder::default()
     }

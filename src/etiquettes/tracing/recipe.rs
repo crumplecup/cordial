@@ -41,6 +41,7 @@ const IDENTITY_PARAMS: &[&str] = &["crate_name", "crate", "name", "id"];
 
 /// Target recipe for a classified function.
 #[instrument(level = "debug", skip(ctx), err(level = "warn"))]
+#[hotpath::measure]
 pub fn recipe(ctx: &FnContext, extra_skip: &[String]) -> CordialResult<InstrumentRecipe> {
     match ctx.role() {
         FunctionRole::Constructor => constructor_recipe(ctx, extra_skip),
@@ -57,6 +58,7 @@ pub fn recipe(ctx: &FnContext, extra_skip: &[String]) -> CordialResult<Instrumen
 }
 
 #[instrument(level = "debug", skip(level, err), err(level = "warn"))]
+#[hotpath::measure]
 fn make_recipe(
     level: InstrumentLevel,
     skip: Vec<String>,
@@ -74,6 +76,7 @@ fn make_recipe(
 }
 
 #[instrument(level = "debug", skip(ctx), err(level = "warn"))]
+#[hotpath::measure]
 fn constructor_recipe(ctx: &FnContext, extra_skip: &[String]) -> CordialResult<InstrumentRecipe> {
     make_recipe(
         InstrumentLevel::Debug,
@@ -85,6 +88,7 @@ fn constructor_recipe(ctx: &FnContext, extra_skip: &[String]) -> CordialResult<I
 }
 
 #[instrument(level = "debug", skip(ctx), err(level = "warn"))]
+#[hotpath::measure]
 fn getter_recipe(ctx: &FnContext, extra_skip: &[String]) -> CordialResult<InstrumentRecipe> {
     make_recipe(
         InstrumentLevel::Trace,
@@ -96,6 +100,7 @@ fn getter_recipe(ctx: &FnContext, extra_skip: &[String]) -> CordialResult<Instru
 }
 
 #[instrument(level = "debug", skip(ctx), err(level = "warn"))]
+#[hotpath::measure]
 fn setter_recipe(ctx: &FnContext, extra_skip: &[String]) -> CordialResult<InstrumentRecipe> {
     make_recipe(
         InstrumentLevel::Trace,
@@ -107,6 +112,7 @@ fn setter_recipe(ctx: &FnContext, extra_skip: &[String]) -> CordialResult<Instru
 }
 
 #[instrument(level = "debug", skip(ctx), err(level = "warn"))]
+#[hotpath::measure]
 fn predicate_recipe(ctx: &FnContext, extra_skip: &[String]) -> CordialResult<InstrumentRecipe> {
     make_recipe(
         InstrumentLevel::Trace,
@@ -118,6 +124,7 @@ fn predicate_recipe(ctx: &FnContext, extra_skip: &[String]) -> CordialResult<Ins
 }
 
 #[instrument(level = "debug", skip(ctx), err(level = "warn"))]
+#[hotpath::measure]
 fn scan_recipe(ctx: &FnContext, extra_skip: &[String]) -> CordialResult<InstrumentRecipe> {
     make_recipe(
         InstrumentLevel::Debug,
@@ -129,6 +136,7 @@ fn scan_recipe(ctx: &FnContext, extra_skip: &[String]) -> CordialResult<Instrume
 }
 
 #[instrument(level = "debug", skip(ctx), err(level = "warn"))]
+#[hotpath::measure]
 fn io_recipe(ctx: &FnContext, extra_skip: &[String]) -> CordialResult<InstrumentRecipe> {
     make_recipe(
         InstrumentLevel::Info,
@@ -140,6 +148,7 @@ fn io_recipe(ctx: &FnContext, extra_skip: &[String]) -> CordialResult<Instrument
 }
 
 #[instrument(level = "debug", skip(ctx), err(level = "warn"))]
+#[hotpath::measure]
 fn render_recipe(ctx: &FnContext, extra_skip: &[String]) -> CordialResult<InstrumentRecipe> {
     make_recipe(
         InstrumentLevel::Debug,
@@ -151,6 +160,7 @@ fn render_recipe(ctx: &FnContext, extra_skip: &[String]) -> CordialResult<Instru
 }
 
 #[instrument(level = "debug", skip(ctx), err(level = "warn"))]
+#[hotpath::measure]
 fn trait_surface_recipe(ctx: &FnContext, extra_skip: &[String]) -> CordialResult<InstrumentRecipe> {
     make_recipe(
         InstrumentLevel::Trace,
@@ -162,6 +172,7 @@ fn trait_surface_recipe(ctx: &FnContext, extra_skip: &[String]) -> CordialResult
 }
 
 #[instrument(level = "debug", skip(ctx), err(level = "warn"))]
+#[hotpath::measure]
 fn entry_recipe(ctx: &FnContext, extra_skip: &[String]) -> CordialResult<InstrumentRecipe> {
     make_recipe(
         InstrumentLevel::Info,
@@ -173,6 +184,7 @@ fn entry_recipe(ctx: &FnContext, extra_skip: &[String]) -> CordialResult<Instrum
 }
 
 #[instrument(level = "debug", skip(ctx), err(level = "warn"))]
+#[hotpath::measure]
 fn other_recipe(ctx: &FnContext, extra_skip: &[String]) -> CordialResult<InstrumentRecipe> {
     let level = if ctx.complexity() == FunctionComplexity::Hotspot {
         InstrumentLevel::Info
@@ -189,6 +201,7 @@ fn other_recipe(ctx: &FnContext, extra_skip: &[String]) -> CordialResult<Instrum
 }
 
 #[instrument(level = "debug", skip(ctx))]
+#[hotpath::measure]
 fn skip_params(ctx: &FnContext, extra_skip: &[String]) -> Vec<String> {
     ctx.param_names()
         .iter()
@@ -198,6 +211,7 @@ fn skip_params(ctx: &FnContext, extra_skip: &[String]) -> Vec<String> {
 }
 
 #[instrument(level = "debug", skip(ctx))]
+#[hotpath::measure]
 fn identity_fields(ctx: &FnContext, extra_skip: &[String]) -> Vec<String> {
     ctx.param_names()
         .iter()
@@ -217,6 +231,7 @@ fn is_skip_param(name: &str, extra_skip: &[String], unrecordable: &[String]) -> 
 }
 
 #[instrument(level = "debug", skip(ctx))]
+#[hotpath::measure]
 fn fallible_err(ctx: &FnContext) -> Option<InstrumentLevel> {
     if ctx.returns_result() && !ctx.return_borrowed() && ctx.err_is_displayable() {
         Some(InstrumentLevel::Warn)

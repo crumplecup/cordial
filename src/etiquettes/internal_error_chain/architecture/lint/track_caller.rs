@@ -13,6 +13,7 @@ use super::{FindingSite, SiteClassifier};
 
 impl Catalog {
     #[instrument(level = "debug", skip(self, findings), err(level = "warn"))]
+    #[hotpath::measure]
     pub(super) fn emit_map_err_track_caller(
         &self,
         findings: &mut Vec<InternalErrorComplianceFinding>,
@@ -45,6 +46,7 @@ impl Catalog {
     }
 
     #[instrument(level = "debug", skip(self, findings, item), err(level = "warn"))]
+    #[hotpath::measure]
     pub(super) fn emit_track_caller(
         &self,
         findings: &mut Vec<InternalErrorComplianceFinding>,
@@ -74,6 +76,7 @@ impl Catalog {
     }
 
     #[instrument(level = "debug", skip(self, findings), err(level = "warn"))]
+    #[hotpath::measure]
     pub(super) fn emit_parent_track_caller(
         &self,
         findings: &mut Vec<InternalErrorComplianceFinding>,
@@ -114,6 +117,7 @@ impl Catalog {
     }
 
     #[instrument(level = "debug", skip(self, item), err(level = "warn"))]
+    #[hotpath::measure]
     fn missing_new_finding(
         &self,
         item: &StructInfo,
@@ -134,6 +138,7 @@ impl Catalog {
     }
 
     #[instrument(level = "debug", skip(self, findings, item, ctor), err(level = "warn"))]
+    #[hotpath::measure]
     fn emit_new_track_caller_findings(
         &self,
         findings: &mut Vec<InternalErrorComplianceFinding>,
@@ -224,6 +229,7 @@ impl Catalog {
     }
 
     #[instrument(level = "debug", skip(self, findings, item, ctor), err(level = "warn"))]
+    #[hotpath::measure]
     fn emit_delegating_track_caller_findings(
         &self,
         findings: &mut Vec<InternalErrorComplianceFinding>,

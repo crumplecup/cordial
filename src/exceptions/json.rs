@@ -11,6 +11,7 @@ use crate::error::{CordialError, CordialResult};
 use super::entry::ExceptionEntry;
 
 #[instrument(level = "debug", skip(path), err(level = "warn"))]
+#[hotpath::measure]
 pub(super) fn parse_exception_file(path: &Path) -> CordialResult<Vec<ExceptionEntry>> {
     let bytes = fs::read(path)?;
     serde_json::from_slice::<Vec<ExceptionEntry>>(&bytes)
@@ -18,6 +19,7 @@ pub(super) fn parse_exception_file(path: &Path) -> CordialResult<Vec<ExceptionEn
 }
 
 #[instrument(level = "debug", skip(path), err(level = "warn"))]
+#[hotpath::measure]
 pub(super) fn parse_json_array(path: &Path) -> CordialResult<Vec<serde_json::Value>> {
     let bytes = fs::read(path)?;
     serde_json::from_slice::<Vec<serde_json::Value>>(&bytes)
@@ -25,6 +27,7 @@ pub(super) fn parse_json_array(path: &Path) -> CordialResult<Vec<serde_json::Val
 }
 
 #[instrument(level = "debug", skip(rows, path))]
+#[hotpath::measure]
 pub(super) fn json_rows_contain_path(rows: &[serde_json::Value], path: &str) -> bool {
     rows.iter().any(|row| {
         row.get("path")
@@ -34,6 +37,7 @@ pub(super) fn json_rows_contain_path(rows: &[serde_json::Value], path: &str) -> 
 }
 
 #[instrument(level = "debug", skip(path, value), err(level = "warn"))]
+#[hotpath::measure]
 pub(super) fn write_pretty_json(path: &Path, value: &impl Serialize) -> CordialResult<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;

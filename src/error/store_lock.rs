@@ -14,6 +14,7 @@ pub struct WaitingLockBusySource {
 impl WaitingLockBusySource {
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn new() -> Self {
         let loc = Location::caller();
         Self {
@@ -46,6 +47,7 @@ pub struct WaitingSysrootLockBusySource {
 impl WaitingSysrootLockBusySource {
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn new() -> Self {
         let loc = Location::caller();
         Self {
@@ -78,6 +80,7 @@ pub struct SharedLockExclusiveCommandSource {
 impl SharedLockExclusiveCommandSource {
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn new() -> Self {
         let loc = Location::caller();
         Self {
@@ -112,6 +115,7 @@ pub struct StoreLockTimedOutSource {
 impl StoreLockTimedOutSource {
     #[track_caller]
     #[instrument(level = "debug", skip(holder))]
+    #[hotpath::measure]
     pub fn new(holder: impl Into<String>) -> Self {
         let loc = Location::caller();
         Self {
@@ -155,6 +159,7 @@ pub struct StoreLockError {
 impl StoreLockError {
     #[track_caller]
     #[instrument(level = "debug", skip(kind))]
+    #[hotpath::measure]
     fn new(kind: StoreLockErrorKind) -> Self {
         let loc = Location::caller();
         Self {
@@ -194,6 +199,7 @@ impl super::CordialError {
     /// Waiting for the worklist lock returned busy.
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn waiting_lock_busy() -> Self {
         Self::from_kind(super::CordialErrorKind::StoreLock(StoreLockError::new(
             StoreLockErrorKind::WaitingLockBusy(WaitingLockBusySource::new()),
@@ -203,6 +209,7 @@ impl super::CordialError {
     /// Waiting for the sysroot lock returned busy.
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn waiting_sysroot_lock_busy() -> Self {
         Self::from_kind(super::CordialErrorKind::StoreLock(StoreLockError::new(
             StoreLockErrorKind::WaitingSysrootLockBusy(WaitingSysrootLockBusySource::new()),
@@ -212,6 +219,7 @@ impl super::CordialError {
     /// A shared lock cannot record an exclusive command.
     #[track_caller]
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn shared_lock_exclusive_command() -> Self {
         Self::from_kind(super::CordialErrorKind::StoreLock(StoreLockError::new(
             StoreLockErrorKind::SharedLockExclusiveCommand(SharedLockExclusiveCommandSource::new()),
@@ -221,6 +229,7 @@ impl super::CordialError {
     /// Timed out waiting for a store lock.
     #[track_caller]
     #[instrument(level = "debug", skip(holder))]
+    #[hotpath::measure]
     pub fn store_lock_timed_out(holder: impl Into<String>) -> Self {
         Self::from_kind(super::CordialErrorKind::StoreLock(StoreLockError::new(
             StoreLockErrorKind::StoreLockTimedOut(StoreLockTimedOutSource::new(holder)),

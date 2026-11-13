@@ -16,6 +16,7 @@ pub struct StaleSourceSnapshotSource {
 impl StaleSourceSnapshotSource {
     #[track_caller]
     #[instrument(level = "debug", skip(path))]
+    #[hotpath::measure]
     pub fn new(path: &std::path::Path) -> Self {
         let caller = Location::caller();
         Self {
@@ -55,6 +56,7 @@ pub struct MissingConversionUnitSource {
 impl MissingConversionUnitSource {
     #[track_caller]
     #[instrument(level = "debug", skip(path, type_name, field_name))]
+    #[hotpath::measure]
     pub fn new(path: &std::path::Path, type_name: &str, field_name: &str) -> Self {
         let caller = Location::caller();
         Self {

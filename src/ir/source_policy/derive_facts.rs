@@ -65,6 +65,7 @@ pub struct DeriveStructFacts {
 impl DeriveStructFacts {
     /// Start a builder for this value.
     #[tracing::instrument(level = "debug")]
+    #[hotpath::measure]
     pub(crate) fn builder() -> DeriveStructFactsBuilder {
         DeriveStructFactsBuilder::default()
     }

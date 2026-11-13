@@ -19,18 +19,21 @@ pub struct NamedRunFilter {
 impl NamedRunFilter {
     /// Select all registered plugins and etiquettes.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn all_plugins() -> Self {
         Self::default()
     }
 
     /// Select all registered plugins and etiquettes.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn all_etiquettes() -> Self {
         Self::default()
     }
 
     /// Select only the registered plugins with these ids.
     #[instrument(level = "debug", skip(ids))]
+    #[hotpath::measure]
     pub fn plugins(ids: impl IntoIterator<Item = impl AsRef<str>>) -> Self {
         Self {
             plugins: ids.into_iter().map(|id| id.as_ref().to_string()).collect(),
@@ -42,6 +45,7 @@ impl NamedRunFilter {
 
     /// Select only the resolved etiquettes with these ids.
     #[instrument(level = "debug", skip(ids))]
+    #[hotpath::measure]
     pub fn etiquettes(ids: impl IntoIterator<Item = impl AsRef<str>>) -> Self {
         Self {
             plugins: Vec::new(),

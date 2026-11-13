@@ -6,6 +6,7 @@ use ra_ap_syntax::{AstNode, ast};
 impl Scanner<'_, '_> {
     #[cfg(not(feature = "verus_ir"))]
     #[tracing::instrument(level = "debug", skip(self, invocation, context), err(level = "warn"))]
+    #[hotpath::measure]
     pub(super) fn recovered_verus(
         &mut self,
         invocation: &ast::MacroCall,
@@ -22,6 +23,7 @@ impl Scanner<'_, '_> {
     }
 
     #[tracing::instrument(level = "debug", skip(self, literal, context), err(level = "warn"))]
+    #[hotpath::measure]
     pub(super) fn embedded_program(
         &mut self,
         literal: &ast::Literal,

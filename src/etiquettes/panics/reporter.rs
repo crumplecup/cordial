@@ -22,6 +22,7 @@ struct PanicRow {
 
 impl PanicRow {
     #[instrument(level = "debug", skip(finding), ret)]
+    #[hotpath::measure]
     fn from_finding(finding: &dyn Finding) -> Self {
         let mut sink = MapFindingSink::default();
         finding.emit(&mut sink);
@@ -48,6 +49,7 @@ impl PanicRow {
 }
 
 #[instrument(level = "debug", skip(findings))]
+#[hotpath::measure]
 fn panic_rows(findings: &[&dyn Finding]) -> Vec<PanicRow> {
     findings
         .iter()
@@ -57,11 +59,13 @@ fn panic_rows(findings: &[&dyn Finding]) -> Vec<PanicRow> {
 }
 
 #[instrument(level = "debug", skip(rows))]
+#[hotpath::measure]
 fn open_panic_rows(rows: &[PanicRow]) -> impl Iterator<Item = &PanicRow> {
     rows.iter().filter(|row| row.disposition == "open")
 }
 
 #[instrument(level = "debug", skip(rows))]
+#[hotpath::measure]
 fn checklist_panic_rows(rows: &[PanicRow]) -> impl Iterator<Item = &PanicRow> {
     open_panic_rows(rows).filter(|row| row.checklist != "false")
 }
@@ -72,6 +76,7 @@ fn checklist_panic_rows(rows: &[PanicRow]) -> impl Iterator<Item = &PanicRow> {
 /// artifact must derive its own crate breakdown from `row.crate_name`
 /// instead (the same pattern `modularity::reporter::rows::crate_names` uses).
 #[instrument(level = "debug", skip(rows))]
+#[hotpath::measure]
 fn crate_names(rows: &[&PanicRow]) -> Vec<String> {
     let mut names: Vec<String> = rows.iter().map(|row| row.crate_name.clone()).collect();
     names.sort();

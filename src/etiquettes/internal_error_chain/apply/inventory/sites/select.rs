@@ -24,6 +24,7 @@ impl PathFact {
 
 impl ConversionFileFacts {
     #[tracing::instrument(level = "debug", skip(self, file, candidates, relevant, declarations))]
+    #[hotpath::measure]
     pub(in crate::etiquettes::internal_error_chain::apply::inventory) fn select(
         &self,
         file: &impl SourceSnapshot,

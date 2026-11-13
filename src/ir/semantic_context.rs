@@ -42,6 +42,7 @@ pub struct SemanticContextKey {
 impl SemanticContextKey {
     /// The ordinary build, which changes no cfg atom.
     #[instrument(level = "debug")]
+    #[hotpath::measure]
     pub fn ordinary() -> Self {
         Self::default()
     }
@@ -50,6 +51,7 @@ impl SemanticContextKey {
     /// not matter. An atom named in both is disabled-and-enabled at once, which
     /// no build can satisfy, so it is kept in neither list.
     #[instrument(level = "debug", skip(enabled, disabled))]
+    #[hotpath::measure]
     pub fn new(
         enabled: impl IntoIterator<Item = impl Into<String>>,
         disabled: impl IntoIterator<Item = impl Into<String>>,
@@ -74,6 +76,7 @@ impl SemanticContextKey {
 
     /// A context enabling `atoms` and disabling nothing.
     #[instrument(level = "debug", skip(atoms))]
+    #[hotpath::measure]
     pub fn enabling(atoms: impl IntoIterator<Item = impl Into<String>>) -> Self {
         Self::new(atoms, std::iter::empty::<String>())
     }
