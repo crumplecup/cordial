@@ -67,29 +67,36 @@ impl Watch {
     pub(crate) fn start(phase: String) -> Self {
         let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
         let flag = stop.clone();
-        let handle = std::thread::spawn(move || {
-            let mut elapsed = 0u64;
-            while !flag.load(std::sync::atomic::Ordering::Relaxed) {
-                std::thread::sleep(std::time::Duration::from_millis(250));
-                elapsed += 250;
-                if elapsed.is_multiple_of(1000)
-                    && let Some(memory) = sample()
-                {
-                    tracing::debug!(
-                        target: "cordial::metrics",
-                        phase = phase.as_str(),
-                        seconds = elapsed / 1000,
-                        resident_kib = memory.resident_kib(),
-                        peak_kib = memory.peak_kib(),
-                        "memory watch"
-                    );
+        let spawned = std::thread::Builder::new()
+            .name("cordial-memory-watch".to_owned())
+            .spawn(move || {
+                let mut elapsed = 0u64;
+                while !flag.load(std::sync::atomic::Ordering::Relaxed) {
+                    std::thread::sleep(std::time::Duration::from_millis(250));
+                    elapsed += 250;
+                    if elapsed.is_multiple_of(1000)
+                        && let Some(memory) = sample()
+                    {
+                        tracing::debug!(
+                            target: "cordial::metrics",
+                            phase = phase.as_str(),
+                            seconds = elapsed / 1000,
+                            resident_kib = memory.resident_kib(),
+                            peak_kib = memory.peak_kib(),
+                            "memory watch"
+                        );
+                    }
                 }
+            });
+        let handle = match spawned {
+            Ok(handle) => Some(handle),
+            Err(error) => {
+                // The run goes on without the climb being logged.
+                tracing::warn!(error = ?error, "could not start the memory watch");
+                None
             }
-        });
-        Self {
-            stop,
-            handle: Some(handle),
-        }
+        };
+        Self { stop, handle }
     }
 }
 

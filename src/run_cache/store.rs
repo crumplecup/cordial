@@ -66,7 +66,7 @@ impl RunCache {
         let snapshot = ir.snapshot()?;
         let dispatch = tracing::dispatcher::get_default(Clone::clone);
         let writer = std::thread::Builder::new()
-            .name("ir-cache-writer".to_owned())
+            .name("cordial-ir-cache-writer".to_owned())
             .spawn(move || {
                 tracing::dispatcher::with_default(&dispatch, || {
                     snapshot.write_cache(&partial)?;

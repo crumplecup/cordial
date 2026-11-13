@@ -79,34 +79,44 @@ impl LineProgress {
         let task_state = Arc::clone(&state);
         let output = Arc::clone(&self.output);
         let interval = self.heartbeat_interval;
-        let worker = std::thread::spawn(move || {
-            let started = Instant::now();
-            while matches!(
-                stopped.recv_timeout(interval),
-                Err(RecvTimeoutError::Timeout)
-            ) {
-                let Ok(state) = task_state.lock() else {
-                    break;
-                };
-                let count = state
-                    .total
-                    .map(|total| format!(" {}/{total}", state.position))
-                    .unwrap_or_default();
-                write_progress_line(
-                    &output,
-                    &format!(
-                        "still working: {}{count} ({}s)",
-                        state.message,
-                        started.elapsed().as_secs()
-                    ),
-                );
+        let worker = std::thread::Builder::new()
+            .name("cordial-progress".to_owned())
+            .spawn(move || {
+                let started = Instant::now();
+                while matches!(
+                    stopped.recv_timeout(interval),
+                    Err(RecvTimeoutError::Timeout)
+                ) {
+                    let Ok(state) = task_state.lock() else {
+                        break;
+                    };
+                    let count = state
+                        .total
+                        .map(|total| format!(" {}/{total}", state.position))
+                        .unwrap_or_default();
+                    write_progress_line(
+                        &output,
+                        &format!(
+                            "still working: {}{count} ({}s)",
+                            state.message,
+                            started.elapsed().as_secs()
+                        ),
+                    );
+                }
+            });
+        let worker = match worker {
+            Ok(worker) => Some(worker),
+            Err(error) => {
+                // Without the thread there is no heartbeat; the task still runs.
+                tracing::warn!(error = ?error, "could not start the progress heartbeat");
+                None
             }
-        });
+        };
         Box::new(LineTask {
             state,
             output: Arc::clone(&self.output),
             stop,
-            worker: Mutex::new(Some(worker)),
+            worker: Mutex::new(worker),
             finished: AtomicBool::new(false),
         })
     }

@@ -52,10 +52,11 @@ impl SourceDatabase {
         // A subscriber set for this thread would not see the workers' events.
         let dispatch = tracing::dispatcher::get_default(Clone::clone);
         std::thread::scope(|scope| {
-            for _ in 0..workers {
+            for index in 0..workers {
                 let db = self.db.clone();
                 let (functions, next, dispatch) = (functions, &next, dispatch.clone());
                 let spawned = std::thread::Builder::new()
+                    .name(format!("cordial-prime-{index}"))
                     .stack_size(WORKER_STACK_BYTES)
                     .spawn_scoped(scope, move || {
                         tracing::dispatcher::with_default(&dispatch, || {

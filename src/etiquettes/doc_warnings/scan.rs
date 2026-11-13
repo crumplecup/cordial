@@ -55,7 +55,7 @@ pub fn prefetch_doc_output(crate_root: &Path, crate_name: &str, policy: &DocWarn
         policy.clone(),
     );
     let started = std::thread::Builder::new()
-        .name("cargo-doc".to_owned())
+        .name("cordial-cargo-doc".to_owned())
         .spawn(move || run_cargo_doc(&cargo, &root, &name, &thresholds));
     match started {
         Ok(handle) => {
