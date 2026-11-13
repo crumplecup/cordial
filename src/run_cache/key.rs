@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 use tracing::instrument;
 
 /// Bump when the IR or what the analysis records changes shape.
-pub(crate) const SCHEMA: u32 = 11;
+pub(crate) const SCHEMA: u32 = 12;
 
 /// A short digest of a serialisable policy, to name an artifact that depends on
 /// it as well as on the entry's key.
@@ -23,6 +23,13 @@ pub(crate) fn policy_digest<T: serde::Serialize>(policy: &T) -> CordialResult<St
     let bytes = serde_json::to_vec(policy)?;
     Ok(hex(&Sha256::digest(bytes))[..16].to_owned())
 }
+
+/// The digest of the cordial sources that shape an analysis, with the
+/// dependency versions and features it was built with. `build.rs` computes it,
+/// leaving out the transport, the CLI and the performance tooling, so a rebuild
+/// after editing those keeps the cache. `tests/run_cache_scope.rs` checks that
+/// nothing left out is used by anything kept.
+const ANALYSIS_DIGEST: &str = env!("CORDIAL_ANALYSIS_DIGEST");
 
 /// Directory names never hashed: build output and version control.
 const SKIPPED_DIRECTORIES: &[&str] = &["target", ".git", "node_modules"];
@@ -88,7 +95,7 @@ pub(crate) struct KeyRequest<'a> {
 pub(crate) fn gather(request: &KeyRequest<'_>) -> CordialResult<Inputs> {
     let mut inputs = Inputs::default();
     inputs.put("schema", SCHEMA.to_string());
-    inputs.put("cordial", executable_fingerprint());
+    inputs.put("analysis", ANALYSIS_DIGEST.to_owned());
     inputs.put("options", request.options.clone());
     inputs.put("rustc", rustc_version(request.project_root));
     for (name, value) in std::env::vars().filter(|(name, _)| shapes_the_build(name)) {

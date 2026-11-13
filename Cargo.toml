@@ -68,6 +68,9 @@ ra_ap_cfg = "0.0.358"
 salsa = { version = "0.28.5", default-features = false, features = ["macros", "inventory"] }
 anyhow = "1"
 
+[build-dependencies]
+sha2 = "0.11"
+
 [features]
 default = ["full", "quick"]
 # Opt-in profiling. The dependency's macros are no-ops without this feature.
