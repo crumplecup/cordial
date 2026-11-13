@@ -3,7 +3,7 @@ pub(crate) use native_syntax::module_path as database_module_path;
 use tracing::instrument;
 mod database;
 mod native_syntax;
-pub use database::{CfgPlanning, Reporter, SemanticCargoOptions, SourceDatabase};
+pub use database::{CfgPlanning, Reporter, SemanticCargoOptions, SourceDatabase, SyncOutcome};
 #[cfg(any(
     feature = "tracing",
     feature = "internal_error_chain",

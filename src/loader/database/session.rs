@@ -5,9 +5,12 @@ mod context;
 mod inputs;
 mod packages;
 mod source;
+mod sync;
 mod workspace;
 
 use std::path::Path;
+
+pub use sync::SyncOutcome;
 
 use super::{Reporter, SourceDatabase};
 use ra_ap_hir::ChangeWithProcMacros;

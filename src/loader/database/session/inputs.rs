@@ -93,6 +93,18 @@ fn environment_value(options: &SemanticCargoOptions, key: &str) -> Option<std::f
 /// Check configuration bytes and absence before using the old crate graph.
 #[instrument(level = "trace", skip(context), err(level = "warn"))]
 pub(super) fn validate(context: &crate::SemanticWorkspaceContext) -> CordialResult<()> {
+    match first_stale(context)? {
+        None => Ok(()),
+        Some(path) => Err(crate::CordialError::semantic_context_input(path)),
+    }
+}
+
+/// The first configuration or compiled input whose bytes, or absence, differ
+/// from what the loaded graph was built from.
+#[instrument(level = "trace", skip(context), err(level = "warn"))]
+pub(super) fn first_stale(
+    context: &crate::SemanticWorkspaceContext,
+) -> CordialResult<Option<PathBuf>> {
     for input in context
         .configuration_inputs()
         .iter()
@@ -104,10 +116,8 @@ pub(super) fn validate(context: &crate::SemanticWorkspaceContext) -> CordialResu
             Err(error) => return Err(error.into()),
         };
         if &current != input.digest() {
-            return Err(crate::CordialError::semantic_context_input(
-                input.path().clone(),
-            ));
+            return Ok(Some(input.path().clone()));
         }
     }
-    Ok(())
+    Ok(None)
 }

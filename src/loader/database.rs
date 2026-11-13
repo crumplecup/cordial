@@ -23,6 +23,7 @@ pub use options::{CfgPlanning, SemanticCargoOptions};
     feature = "antipatterns"
 ))]
 pub(super) use queries::SemanticDatabase;
+pub use session::SyncOutcome;
 /// Where the loader says what it is doing, for the frontend's progress display.
 #[derive(Clone)]
 pub struct Reporter(std::sync::Arc<dyn Fn(String) + Send + Sync>);
