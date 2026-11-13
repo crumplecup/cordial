@@ -42,6 +42,13 @@ Run `cordial instructions` for the compiled agent worklist loop, then use
    runs, not a per-change check) before promoting `dev` to `main`.
 4. **Document** — update planning doc status when a phase completes.
 
+Before promoting `dev` to `main`, measure and compare (see
+[docs/planning/performance-metrics.md](docs/planning/performance-metrics.md)):
+`cordial perf workflow` on a quiet machine, then `cordial perf compare` against
+the baselines, resolving or recording each `regressed` verdict. After the merge,
+mark the new records with `cordial perf baseline <id>`. Records live in the
+default store, not the repository.
+
 Pre-commit: fix all warnings and errors introduced by the change.
 
 ---

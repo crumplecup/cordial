@@ -138,10 +138,10 @@ leaves `perf/` in place (it is a curated path of the store).
 
 Before promoting `dev` to `main`:
 
-1. Run `cordial perf workflow` and `cordial perf tests profile` on the named
-   test set, on a quiet machine (the harness checks load and refuses a noisy
-   start).
-2. Run `cordial perf compare` against the `main` baseline.
+1. Run `cordial perf workflow` and `cordial perf tests profile <set>` on a
+   named test set, on a quiet machine. The harness does not check machine load
+   yet, so the quiet machine is the maintainer's to arrange.
+2. Run `cordial perf compare` against the baselines.
 3. Resolve each `regressed` verdict (fix it, or record why it is accepted in the
    merge notes) and keep the new records.
 4. After the merge, record the new baseline.
@@ -209,12 +209,52 @@ here should replace the ad hoc numbers used there.
   hardware caution when the machine differs. Baselines are marked explicitly in
   `{store}/perf/baselines.json` and shown by `perf list`; `--strict` exits with an
   error on a regression.
-- [ ] **P7. First baseline and findings.** Record the baseline for the current
-  `dev`; write up the fixed-cost findings for the tests and the decisions they
-  imply (lockfile and offline fixtures, shared loaded workspaces, a loader path
-  for single-file fixtures, fewer real dependencies in fixtures).
-- [ ] **P8. Pre-merge step.** Add the procedure to the merge checklist and
-  `CLAUDE.md`.
+- [x] **P7. First baseline and findings.** Baselines recorded 2026-11-12 on
+  `dev` (a9f1079c for the workflow, 0adaba5d for the tests) with
+  `cordial perf baseline`; the findings are under "First baseline" below.
+- [x] **P8. Pre-merge step.** The procedure is in "Pre-merge procedure" above and
+  in `CLAUDE.md` (Workflow, step 3).
+
+## First baseline (2026-11-12, `dev`)
+
+Cordial run on itself, one repeat per state, 8 GiB virtual-memory cap, a quiet
+machine. Times are wall seconds.
+
+| State | Command | Process | `load_and_probe` | `source_ir` | Enrichers | Not in any hook |
+| --- | --- | --- | --- | --- | --- | --- |
+| cold | `open`, empty store | 591 | 581 | 334 | 48 | 199 (34%) |
+| warm | `submit`, same tree | 155 | 147 | 13 | 29 | 105 (71%) |
+| incremental | `submit`, one comment added | 676 | 666 | 383 | 59 | 224 (34%) |
+
+1. **A one-line edit costs as much as a cold run** (676 s against 591 s). The
+   incremental state gets nothing from the work already done: `source_ir` is
+   rebuilt in full (383 s). Making that incremental is the largest available
+   saving, and the counters will show it (`pipeline_ran`, and the stage times).
+2. **A third to two thirds of `load_and_probe` is in no hook** (199 s cold,
+   105 s warm). The pipeline's hooks do not explain where it goes. Instrumenting
+   that remainder comes before optimising anything else, because it is bigger
+   than every enricher together.
+3. **Warm still costs 155 s.** `source_ir` is cached (13 s) and
+   `doc-warning-inventory` drops from 20 s to 0.6 s, but `error-ir-scan` (16 s)
+   and `source-calls` (5 s) run in full every time, and the unattributed 105 s
+   remains.
+4. **The enrichers that matter** are `doc-warning-inventory` (20 s cold, cached
+   after), `error-ir-scan` (16 s) and `source-calls` (5 s). The rest of the 33
+   enrichers and all assessors and reporters together are under 10 s.
+
+The test suite on 8 threads (1,064 tests, 17,525 s of summed test time, so
+inflated by contention) ranks six dogfood tests (cordial over its own source) at
+440 to 690 s each, about 20% of the total. A profiled fixture test
+(`verus_identity`, 5.7 s) spent 4.8 s in `project_target`, of which 4.3 s in
+`package_sources`, and 0.8 s in `load_reporting`: the dependency-resolution cost
+of fixtures shows up in projection, not workspace load. The fixed-cost question
+for the other tests needs one profiled run of the whole set
+(`cordial perf tests profile all`), which is the next measurement to take.
+
+Decisions this implies, none made yet: instrument the unattributed
+`load_and_probe` remainder; investigate `package_sources` for fixtures with a
+real dependency (lockfile and offline fixtures); shared loaded workspaces for the
+dogfood tests; incremental `source_ir`.
 
 ## Known observations that motivate this
 
