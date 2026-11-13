@@ -2,11 +2,12 @@
 
 use crate::loader::{Reporter, SemanticCargoOptions, SourceDatabase};
 use crate::run_cache::RunCache;
+use crate::sync::{Mutex, MutexGuard};
 use crate::{CfgPlanning, CordialResult, CrateIr};
 use std::cell::RefCell;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::{Arc, PoisonError};
 
 use tracing::instrument;
 thread_local! {
@@ -55,17 +56,17 @@ impl Default for CacheToken {
         static NEXT: AtomicU64 = AtomicU64::new(1);
         Self {
             id: NEXT.fetch_add(1, Ordering::Relaxed),
-            slot: Mutex::new(Slot::default()),
-            recipe: Mutex::new(None),
-            cache: Mutex::new(None),
-            reporter: Mutex::new(Reporter::default()),
+            slot: crate::sync::mutex!(Slot::default(), "cache-token-slot"),
+            recipe: crate::sync::mutex!(None, "cache-token-recipe"),
+            cache: crate::sync::mutex!(None, "cache-token-cache"),
+            reporter: crate::sync::mutex!(Reporter::default(), "cache-token-reporter"),
         }
     }
 }
 
 #[instrument(level = "debug", skip(mutex))]
 #[hotpath::measure]
-fn locked<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+fn locked<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(PoisonError::into_inner)
 }
 

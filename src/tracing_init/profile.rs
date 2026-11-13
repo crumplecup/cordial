@@ -11,9 +11,9 @@
 //! a [`Finish`] instead, whose destructor tells the helper to drop the guard and
 //! waits until the report is on disk.
 
+use crate::sync::mpsc;
 use std::cell::RefCell;
 use std::path::PathBuf;
-use std::sync::mpsc;
 use std::thread::JoinHandle;
 
 /// Held by the test thread; ending the thread finishes the report.
@@ -61,8 +61,8 @@ pub(super) fn start() {
         if slot.is_some() {
             return;
         }
-        let (done, finished) = mpsc::channel::<()>();
-        let (ready, started) = mpsc::channel::<()>();
+        let (done, finished) = crate::sync::channel!((), "profile-done");
+        let (ready, started) = crate::sync::channel!((), "profile-ready");
         let spawned = std::thread::Builder::new()
             .name("cordial-profile".to_owned())
             .spawn(move || {

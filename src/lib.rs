@@ -54,6 +54,7 @@ mod session;
 mod source_write;
 mod store;
 mod store_lock;
+mod sync;
 mod targets;
 #[doc(hidden)]
 pub mod testing;

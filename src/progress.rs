@@ -1,9 +1,10 @@
 //! Runtime progress reporting hooks.
 
+use crate::sync::{Mutex, mpsc::Sender};
 use std::io::Write;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::{self, RecvTimeoutError, Sender};
-use std::sync::{Arc, Mutex};
+use std::sync::mpsc::RecvTimeoutError;
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
@@ -61,7 +62,10 @@ impl LineProgress {
     #[instrument(level = "trace", skip(writer))]
     pub fn with_writer(writer: impl Write + Send + 'static, heartbeat_interval: Duration) -> Self {
         Self {
-            output: Arc::new(Mutex::new(Box::new(writer))),
+            output: Arc::new(crate::sync::mutex!(
+                Box::new(writer) as Box<dyn Write + Send>,
+                "progress-output"
+            )),
             heartbeat_interval: heartbeat_interval.max(Duration::from_millis(1)),
         }
     }
@@ -70,12 +74,15 @@ impl LineProgress {
     #[hotpath::measure]
     fn start(&self, message: String, total: Option<u64>) -> Box<dyn ProgressTask> {
         write_progress_line(&self.output, &format!("Starting: {message}"));
-        let state = Arc::new(Mutex::new(LineTaskState {
-            message,
-            position: 0,
-            total,
-        }));
-        let (stop, stopped) = mpsc::channel();
+        let state = Arc::new(crate::sync::mutex!(
+            LineTaskState {
+                message,
+                position: 0,
+                total,
+            },
+            "progress-task"
+        ));
+        let (stop, stopped) = crate::sync::channel!((), "progress-stop");
         let task_state = Arc::clone(&state);
         let output = Arc::clone(&self.output);
         let interval = self.heartbeat_interval;
@@ -116,7 +123,7 @@ impl LineProgress {
             state,
             output: Arc::clone(&self.output),
             stop,
-            worker: Mutex::new(worker),
+            worker: crate::sync::mutex!(worker, "progress-worker"),
             finished: AtomicBool::new(false),
         })
     }

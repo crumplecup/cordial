@@ -6,13 +6,14 @@ use crate::host::{
     write_frame,
 };
 use crate::run_cache::shapes_the_build;
+use crate::sync::Mutex;
 use crate::{CordialError, CordialResult};
 use clap::Parser;
 use miette::IntoDiagnostic;
 use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::Path;
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::{Arc, PoisonError};
 use tracing::instrument;
 
 /// Sends a request's output down its connection as frames.
@@ -154,7 +155,7 @@ fn handle(stream: UnixStream) -> CordialResult<bool> {
         return Ok(false);
     }
     let sink = Arc::new(Connection {
-        stream: Mutex::new(stream),
+        stream: crate::sync::mutex!(stream, "connection-stream"),
     });
     let code = with_sink(sink.clone(), || run(request.argv()));
     write_frame(&mut reply, &Frame::Exit(code))?;

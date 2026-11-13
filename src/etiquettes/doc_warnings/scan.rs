@@ -13,11 +13,15 @@ use tracing::instrument;
 
 /// `cargo doc` runs that were started ahead of the scan that wants them, by the
 /// directory they run in, the package and the options that shape them.
-static PREFETCHED: std::sync::Mutex<
-    std::collections::BTreeMap<String, std::thread::JoinHandle<CordialResult<String>>>,
-> = std::sync::Mutex::new(std::collections::BTreeMap::new());
+static PREFETCHED: std::sync::LazyLock<
+    crate::sync::Mutex<
+        std::collections::BTreeMap<String, std::thread::JoinHandle<CordialResult<String>>>,
+    >,
+> = std::sync::LazyLock::new(|| {
+    crate::sync::mutex!(std::collections::BTreeMap::new(), "doc-prefetch")
+});
 
-fn prefetched() -> std::sync::MutexGuard<
+fn prefetched() -> crate::sync::MutexGuard<
     'static,
     std::collections::BTreeMap<String, std::thread::JoinHandle<CordialResult<String>>>,
 > {

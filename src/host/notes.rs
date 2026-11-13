@@ -1,8 +1,9 @@
 //! What the databases did during the current run, for the run log: whether one
 //! was loaded, reused, or reloaded because the disk no longer matched it.
 
+use crate::sync::Mutex;
 use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::{Mutex, PoisonError};
+use std::sync::{LazyLock, PoisonError};
 use tracing::instrument;
 
 static LOADED: AtomicU32 = AtomicU32::new(0);
@@ -10,8 +11,10 @@ static KEPT: AtomicU32 = AtomicU32::new(0);
 static RELOADED: AtomicU32 = AtomicU32::new(0);
 static FILES_CHANGED: AtomicU32 = AtomicU32::new(0);
 static CACHE_HITS: AtomicU32 = AtomicU32::new(0);
-static EVENTS: Mutex<Vec<String>> = Mutex::new(Vec::new());
-static LAST_EVENTS: Mutex<Vec<String>> = Mutex::new(Vec::new());
+static EVENTS: LazyLock<Mutex<Vec<String>>> =
+    LazyLock::new(|| crate::sync::mutex!(Vec::new(), "run-events"));
+static LAST_EVENTS: LazyLock<Mutex<Vec<String>>> =
+    LazyLock::new(|| crate::sync::mutex!(Vec::new(), "last-run-events"));
 
 /// What happened to the databases since the last [`take`].
 #[derive(Debug, Clone, Default, PartialEq, Eq, derive_getters::Getters)]

@@ -6,13 +6,15 @@
 //! dropped and the workspace is loaded again. Outside a session nothing is kept.
 
 use crate::loader::{SourceDatabase, SyncOutcome};
+use crate::sync::Mutex;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Mutex, PoisonError};
+use std::sync::{LazyLock, PoisonError};
 use tracing::instrument;
 
 static KEEPING: AtomicBool = AtomicBool::new(false);
-static KEPT: Mutex<Option<HashMap<String, SourceDatabase>>> = Mutex::new(None);
+static KEPT: LazyLock<Mutex<Option<HashMap<String, SourceDatabase>>>> =
+    LazyLock::new(|| crate::sync::mutex!(None, "kept-databases"));
 
 /// Start keeping databases between runs: this process is a session.
 #[instrument(level = "debug")]

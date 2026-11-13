@@ -25,7 +25,7 @@ pub(crate) struct RunCache {
     inputs: Inputs,
     pruned: AtomicBool,
     /// Writes of crate IR that are still running on their own threads.
-    pending: std::sync::Mutex<Vec<std::thread::JoinHandle<CordialResult<()>>>>,
+    pending: crate::sync::Mutex<Vec<std::thread::JoinHandle<CordialResult<()>>>>,
 }
 
 impl RunCache {
@@ -39,7 +39,7 @@ impl RunCache {
             root,
             inputs,
             pruned: AtomicBool::new(false),
-            pending: std::sync::Mutex::new(Vec::new()),
+            pending: crate::sync::mutex!(Vec::new(), "run-cache-writers"),
         }
     }
 
@@ -240,7 +240,7 @@ fn read_json<T: DeserializeOwned>(path: &Path) -> CordialResult<Option<T>> {
 /// Lock a mutex, taking the data even if a panicking holder poisoned it: the
 /// list of writers is still valid.
 #[instrument(level = "trace", skip(mutex))]
-fn locked<T>(mutex: &std::sync::Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+fn locked<T>(mutex: &crate::sync::Mutex<T>) -> crate::sync::MutexGuard<'_, T> {
     mutex
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
