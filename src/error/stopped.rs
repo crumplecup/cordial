@@ -1,6 +1,7 @@
 //! Native source for a run the caller asked to end after one pipeline stage.
 
 use std::fmt::{Display, Formatter, Result as FmtResult};
+use std::panic::Location;
 
 use tracing::instrument;
 
@@ -8,6 +9,23 @@ use tracing::instrument;
 #[derive(Debug, derive_getters::Getters)]
 pub struct StoppedSource {
     stage: String,
+    file: String,
+    line: u32,
+}
+
+impl StoppedSource {
+    /// A stop after `stage`, recording where the checkpoint that ended the run is.
+    #[track_caller]
+    #[instrument(level = "debug", skip(stage))]
+    #[hotpath::measure]
+    pub fn new(stage: impl Into<String>) -> Self {
+        let location = Location::caller();
+        Self {
+            stage: stage.into(),
+            file: location.file().to_string(),
+            line: location.line(),
+        }
+    }
 }
 
 impl Display for StoppedSource {
@@ -25,9 +43,7 @@ impl super::CordialError {
     #[instrument(level = "debug", skip(stage))]
     #[hotpath::measure]
     pub fn stopped_after(stage: impl Into<String>) -> Self {
-        Self::from_kind(super::CordialErrorKind::Stopped(StoppedSource {
-            stage: stage.into(),
-        }))
+        Self::from_kind(super::CordialErrorKind::Stopped(StoppedSource::new(stage)))
     }
 
     /// The stage this run was stopped after, when it was stopped on request.
