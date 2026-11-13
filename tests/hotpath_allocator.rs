@@ -65,3 +65,24 @@ fn the_manifest_forwards_the_feature_to_hotpath() {
         "hotpath-alloc turns on hotpath's counting"
     );
 }
+
+#[test]
+fn one_function_builds_every_profile_guard() {
+    let builders: Vec<_> = sources()
+        .into_iter()
+        .filter(|(path, _)| path.contains("/src/"))
+        .flat_map(|(path, text)| {
+            text.lines()
+                .enumerate()
+                .filter(|(_, line)| line.contains("HotpathGuardBuilder::new"))
+                .map(|(index, _)| format!("{path}:{}", index + 1))
+                .collect::<Vec<_>>()
+        })
+        .collect();
+    assert_eq!(
+        builders.len(),
+        1,
+        "build guards through profiling::guard: {builders:?}"
+    );
+    assert!(builders[0].contains("src/profiling.rs"), "{builders:?}");
+}

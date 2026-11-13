@@ -94,11 +94,7 @@ impl Cli {
                         .join(format!("cordial-hotpath-{}.json", std::process::id()))
                 });
             tracing::info!(path = %path.display(), "hotpath report");
-            hotpath::HotpathGuardBuilder::new("cordial")
-                .format(hotpath::Format::JsonPretty)
-                .output_path(path)
-                .functions_limit(0)
-                .build()
+            crate::profiling::guard("cordial", path)
         };
         #[cfg(feature = "quality")]
         let json_worklist = matches!(
