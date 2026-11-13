@@ -114,6 +114,10 @@ Measured by `cordial perf workflow` against the baselines recorded 2026-11-12
   cordial itself: how much a re-projection on the live database saves is the
   first number to take when measurement resumes.
 - [ ] C2. Reuse counters in the run record.
+- [x] C4b. The call graph's 195-202 s was `active_contexts` decoding the whole semantic
+  snapshot and context plan once per function (functions x project size), not work worth
+  caching. Decoding the plan once per crate: 202 s -> 0.14 s on cordial (cold, no cache).
+  The run-cache copy of the graph (C4a) now saves 0.14 s and is a candidate to remove.
 - [x] C4a. The call graph is reused from the run cache when the tree and the tracing
   policy are unchanged (`call graph: reused from the run cache`). Measured on cordial:
   call graph 194.7 s -> 0.004 s, wall 546.7 s -> 14.8 s on an unchanged tree. Any edit
