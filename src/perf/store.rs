@@ -1,6 +1,7 @@
 //! Where run records are kept: the project's default store, under `perf/`.
 
-use super::{RECORD_SCHEMA, RunRecord};
+use super::{PerfState, RECORD_SCHEMA, RunRecord};
+use std::collections::BTreeMap;
 use crate::{CordialError, CordialResult, StoreLayout};
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -85,5 +86,80 @@ impl PerfStore {
         }
         records.sort_by_key(RunRecord::id);
         Ok(records)
+    }
+
+    /// What a baseline is kept under: the subject, and the state when it has one.
+    #[instrument(level = "trace", skip(record))]
+    pub fn baseline_key(record: &RunRecord) -> String {
+        match record.state() {
+            Some(state) => format!("{} {state}", record.subject()),
+            None => record.subject().to_string(),
+        }
+    }
+
+    #[instrument(level = "trace", skip(self))]
+    fn baselines_path(&self) -> PathBuf {
+        self.dir.with_file_name("baselines.json")
+    }
+
+    /// The marked baselines: subject (and state) to record id.
+    #[instrument(level = "debug", skip(self), err(level = "warn"))]
+    pub fn baselines(&self) -> CordialResult<BTreeMap<String, String>> {
+        let path = self.baselines_path();
+        match std::fs::read_to_string(&path) {
+            Ok(text) => serde_json::from_str(&text)
+                .map_err(|error| CordialError::json_parse(path.display().to_string(), error)),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(BTreeMap::new()),
+            Err(error) => Err(error.into()),
+        }
+    }
+
+    /// Mark `record` as the baseline for its subject and state. This is an
+    /// explicit step; running a measurement never changes a baseline.
+    #[instrument(level = "trace", skip(self), err(level = "warn"))]
+    pub fn set_baseline(&self, record: &RunRecord) -> CordialResult<()> {
+        let mut baselines = self.baselines()?;
+        baselines.insert(Self::baseline_key(record), record.id());
+        std::fs::create_dir_all(&self.dir)?;
+        std::fs::write(self.baselines_path(), serde_json::to_string_pretty(&baselines)?)?;
+        Ok(())
+    }
+
+    /// The record named `query`: an id, or any prefix that names exactly one.
+    #[instrument(level = "debug", skip(self), err(level = "warn"))]
+    pub fn find(&self, query: &str) -> CordialResult<RunRecord> {
+        let mut matches: Vec<RunRecord> = self
+            .list()?
+            .into_iter()
+            .filter(|record| record.id().starts_with(query))
+            .collect();
+        if let Some(exact) = matches.iter().position(|record| record.id() == query) {
+            return Ok(matches.swap_remove(exact));
+        }
+        match matches.len() {
+            1 => Ok(matches.swap_remove(0)),
+            0 => Err(CordialError::perf(
+                self.dir.clone(),
+                format!("no record `{query}`; `cordial perf list` shows the ids"),
+            )),
+            count => Err(CordialError::perf(
+                self.dir.clone(),
+                format!("`{query}` names {count} records; give more of the id"),
+            )),
+        }
+    }
+
+    /// The newest record of `subject` (and `state`), if any.
+    #[instrument(level = "debug", skip(self), err(level = "warn"))]
+    pub fn latest(
+        &self,
+        subject: &str,
+        state: Option<PerfState>,
+    ) -> CordialResult<Option<RunRecord>> {
+        Ok(self
+            .list()?
+            .into_iter()
+            .filter(|record| record.subject().to_string() == subject && record.state() == state)
+            .next_back())
     }
 }
