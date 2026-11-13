@@ -151,11 +151,17 @@ fn a_run_that_did_not_rewrite_the_ledger_does_not_borrow_the_last_runs_stages() 
     let records =
         measure_workflow(&project, &scratch.path().join("work"), &request).into_diagnostic()?;
     let has = |index: usize, name: &str| {
-        records[index].stages().iter().any(|stage| stage.name() == name)
+        records[index]
+            .stages()
+            .iter()
+            .any(|stage| stage.name() == name)
     };
     assert!(has(0, "phase/load_and_probe"), "the cold run wrote it");
     assert_eq!(records[0].counters().get("pipeline_ran"), Some(&1));
-    assert!(!has(1, "phase/load_and_probe"), "the warm run only saw an old ledger");
+    assert!(
+        !has(1, "phase/load_and_probe"),
+        "the warm run only saw an old ledger"
+    );
     assert!(has(1, "process"));
     assert_eq!(records[1].counters().get("pipeline_ran"), Some(&0));
     Ok(())

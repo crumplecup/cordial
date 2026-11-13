@@ -71,9 +71,9 @@ fn the_ranking_lists_binaries_and_the_slowest_tests_first() -> Result<()> {
         .into_diagnostic()?;
     let record = RunRecordBuilder::default()
         .identity(identity)
-        .environment(PerfEnvironment::capture(std::path::Path::new(
-            env!("CARGO_MANIFEST_DIR"),
-        )))
+        .environment(PerfEnvironment::capture(std::path::Path::new(env!(
+            "CARGO_MANIFEST_DIR"
+        ))))
         .subject(PerfSubject::tests("sample"))
         .counters(BTreeMap::from([
             ("repeats".to_owned(), totals.len() as u64),

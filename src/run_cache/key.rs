@@ -121,7 +121,7 @@ const BUILD_VARIABLES: &[&str] = &[
 ];
 
 #[instrument(level = "debug")]
-fn shapes_the_build(name: &str) -> bool {
+pub(crate) fn shapes_the_build(name: &str) -> bool {
     BUILD_VARIABLES
         .iter()
         .any(|prefix| name.starts_with(prefix))

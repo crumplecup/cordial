@@ -54,7 +54,9 @@ impl StageSample {
         for timing in ledger.last_run_timings() {
             let nanos = u64::try_from(*timing.elapsed_nanos()).unwrap_or(u64::MAX);
             stages.insert(format!("{}/{}", timing.stage(), timing.id()), nanos);
-            *counters.entry(format!("hooks.{}", timing.stage())).or_default() += 1;
+            *counters
+                .entry(format!("hooks.{}", timing.stage()))
+                .or_default() += 1;
             *counters.entry("invocations".to_owned()).or_default() += timing.invocations();
         }
         Self { stages, counters }
@@ -135,7 +137,11 @@ fn run_once(
     if !status.success() {
         return Err(CordialError::perf(
             root.to_path_buf(),
-            format!("`cordial {}` exited with {:?}", step.arguments().join(" "), status.code()),
+            format!(
+                "`cordial {}` exited with {:?}",
+                step.arguments().join(" "),
+                status.code()
+            ),
         ));
     }
     let layout = StoreLayout::from_root(

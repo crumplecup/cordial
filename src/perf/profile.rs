@@ -85,9 +85,8 @@ pub fn read_profiles(dir: &Path) -> CordialResult<Vec<TestProfile>> {
         let Some((binary, name)) = stem.split_once('$') else {
             continue;
         };
-        let (wall, functions) = parse_report(&std::fs::read_to_string(&path)?).map_err(|_| {
-            CordialError::perf(path.clone(), "not a hotpath report".to_owned())
-        })?;
+        let (wall, functions) = parse_report(&std::fs::read_to_string(&path)?)
+            .map_err(|_| CordialError::perf(path.clone(), "not a hotpath report".to_owned()))?;
         profiles.push(TestProfile::new(
             binary.to_owned(),
             name.to_owned(),
@@ -103,7 +102,11 @@ pub fn read_profiles(dir: &Path) -> CordialResult<Vec<TestProfile>> {
 pub fn fixed_ns(functions: &[FunctionTiming]) -> u64 {
     functions
         .iter()
-        .filter(|function| FIXED_COST.iter().any(|name| function.name().ends_with(name)))
+        .filter(|function| {
+            FIXED_COST
+                .iter()
+                .any(|name| function.name().ends_with(name))
+        })
         .map(|function| function.total_ns())
         .sum()
 }
@@ -114,13 +117,17 @@ pub fn fixed_ns(functions: &[FunctionTiming]) -> u64 {
 pub fn attach(tests: Vec<TestTiming>, profiles: &[TestProfile]) -> Vec<TestTiming> {
     let by_test: BTreeMap<(&str, &str), &TestProfile> = profiles
         .iter()
-        .map(|profile| ((profile.binary().as_str(), profile.name().as_str()), profile))
+        .map(|profile| {
+            (
+                (profile.binary().as_str(), profile.name().as_str()),
+                profile,
+            )
+        })
         .collect();
     tests
         .into_iter()
         .map(|test| {
-            let Some(profile) = by_test.get(&(test.binary().as_str(), test.name().as_str()))
-            else {
+            let Some(profile) = by_test.get(&(test.binary().as_str(), test.name().as_str())) else {
                 return test;
             };
             let mut ranked: Vec<&FunctionTiming> = profile.functions().iter().collect();
@@ -160,7 +167,9 @@ pub fn aggregate(profiles: &[TestProfile]) -> Vec<FunctionTiming> {
     }
     let mut merged: Vec<_> = sums
         .into_iter()
-        .map(|(name, (calls, total, p95))| FunctionTiming::new(name.to_owned(), calls, total, 0, p95))
+        .map(|(name, (calls, total, p95))| {
+            FunctionTiming::new(name.to_owned(), calls, total, 0, p95)
+        })
         .collect();
     merged.sort_by_key(|function| std::cmp::Reverse(function.total_ns()));
     merged

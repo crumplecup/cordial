@@ -1,8 +1,8 @@
 //! Where run records are kept: the project's default store, under `perf/`.
 
 use super::{PerfState, RECORD_SCHEMA, RunRecord};
-use std::collections::BTreeMap;
 use crate::{CordialError, CordialResult, StoreLayout};
+use std::collections::BTreeMap;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use tracing::instrument;
@@ -121,7 +121,10 @@ impl PerfStore {
         let mut baselines = self.baselines()?;
         baselines.insert(Self::baseline_key(record), record.id());
         std::fs::create_dir_all(&self.dir)?;
-        std::fs::write(self.baselines_path(), serde_json::to_string_pretty(&baselines)?)?;
+        std::fs::write(
+            self.baselines_path(),
+            serde_json::to_string_pretty(&baselines)?,
+        )?;
         Ok(())
     }
 

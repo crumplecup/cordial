@@ -1,8 +1,9 @@
 //! Per-test profiles: reading `hotpath` reports and joining them to timings.
 
 use cordial::perf::{
-    PerfEnvironment, PerfIdentityBuilder, PerfSubject, RunRecord, RunRecordBuilder, Spread, TestTiming, aggregate,
-    attach, parse_duration, parse_report, profiled, read_profiles, render_profile,
+    PerfEnvironment, PerfIdentityBuilder, PerfSubject, RunRecord, RunRecordBuilder, Spread,
+    TestTiming, aggregate, attach, parse_duration, parse_report, profiled, read_profiles,
+    render_profile,
 };
 use miette::{IntoDiagnostic, Result};
 use std::collections::BTreeMap;
@@ -110,7 +111,9 @@ fn a_profile_file_that_is_not_a_report_is_an_error_naming_it() -> Result<()> {
     cordial::init_tracing();
     let directory = tempfile::tempdir().into_diagnostic()?;
     fs::write(directory.path().join("cordial::alpha$slow.json"), "nope").into_diagnostic()?;
-    let error = read_profiles(directory.path()).err().ok_or_else(|| miette::miette!("accepted"))?;
+    let error = read_profiles(directory.path())
+        .err()
+        .ok_or_else(|| miette::miette!("accepted"))?;
     assert!(error.to_string().contains("slow.json"), "{error}");
     Ok(())
 }

@@ -26,6 +26,8 @@ struct LoadRecipe {
 struct Slot {
     database: Option<SourceDatabase>,
     loaded: bool,
+    /// Where a session keeps this run's database for the next run, once loaded.
+    kept_as: Option<String>,
 }
 
 /// Identity of one load-and-probe run, shared by every view created inside it.
@@ -65,6 +67,17 @@ fn locked<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
+impl Drop for CacheToken {
+    /// A session keeps the run's loaded database for the next run.
+    #[tracing::instrument(level = "debug", skip(self))]
+    fn drop(&mut self) {
+        let slot = std::mem::take(&mut *locked(&self.slot));
+        if let (Some(key), Some(database)) = (slot.kept_as, slot.database) {
+            crate::host::keep(key, database);
+        }
+    }
+}
+
 impl CacheToken {
     /// Give this run the database that already holds its Cargo workspace.
     #[cfg(any(
@@ -77,6 +90,7 @@ impl CacheToken {
         *locked(&self.slot) = Slot {
             database: Some(database),
             loaded: true,
+            kept_as: None,
         };
     }
 
@@ -102,11 +116,20 @@ impl CacheToken {
             && let Some(recipe) = locked(&self.recipe).clone()
         {
             let reporter = locked(&self.reporter).clone();
-            let database =
-                SourceDatabase::load_reporting(&recipe.root, &recipe.options, &reporter)?;
+            let key =
+                crate::host::keeping().then(|| crate::host::key_of(&recipe.root, &recipe.options));
+            let kept = key.as_deref().and_then(crate::host::take_current);
+            let database = match kept {
+                Some(mut database) => {
+                    database.set_reporter(reporter);
+                    database
+                }
+                None => SourceDatabase::load_reporting(&recipe.root, &recipe.options, &reporter)?,
+            };
             *slot = Slot {
                 database: Some(database),
                 loaded: true,
+                kept_as: key,
             };
         }
         f(slot.database.get_or_insert_with(SourceDatabase::new))

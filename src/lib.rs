@@ -31,6 +31,7 @@ mod filter;
 #[cfg(feature = "homecoming_std")]
 mod framework_std;
 mod hooks;
+pub mod host;
 mod ir;
 mod loader;
 mod objects;
@@ -379,7 +380,8 @@ pub use ir::{
 pub use loader::path_has_fixtures;
 pub use loader::{
     CfgPlanning, CrateTarget, LoadView, SemanticCargoOptions, SourceDatabase, SourceFile,
-    SourceLoadView, SourceLoader, SourceSyntax, module_path_from_src_file, quality_scan_trees,
+    SourceLoadView, SourceLoader, SourceSyntax, SyncOutcome, module_path_from_src_file,
+    quality_scan_trees,
 };
 pub use objects::{
     Artifact, Disposition, FileSpan, Finding, FindingSink, IrAnchor, MapFindingSink, Marker,

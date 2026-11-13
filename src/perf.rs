@@ -19,11 +19,12 @@ pub use compare::{
 pub use environment::{ChangeKind, EnvironmentChange, PerfEnvironment, RA_AP_VERSION};
 pub use identity::{PerfIdentity, PerfIdentityBuilder};
 pub use nextest::{NextestRequest, TestRun, parse_events};
-pub use profile::{TestProfile, aggregate, attach, profiled, fixed_ns, parse_duration, parse_report, read_profiles};
+pub use profile::{
+    TestProfile, aggregate, attach, fixed_ns, parse_duration, parse_report, profiled, read_profiles,
+};
 pub use record::{
-    RunRecordBuilder,
-    FunctionTiming, PerfState, PerfSubject, RECORD_SCHEMA, RunRecord, StageTiming, SubjectKind,
-    TestTiming,
+    FunctionTiming, PerfState, PerfSubject, RECORD_SCHEMA, RunRecord, RunRecordBuilder,
+    StageTiming, SubjectKind, TestTiming,
 };
 pub use report::{format_nanos, render_profile, render_stages, render_timing};
 pub use spread::Spread;

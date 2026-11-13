@@ -202,11 +202,7 @@ pub fn compare(before: &RunRecord, after: &RunRecord, tolerance: f64) -> Compari
     let shrank = counters
         .iter()
         .any(|counter| counter.gated() && counter.after() < counter.before());
-    let verdicts: Vec<Verdict> = stages
-        .iter()
-        .chain(&tests)
-        .map(Delta::verdict)
-        .collect();
+    let verdicts: Vec<Verdict> = stages.iter().chain(&tests).map(Delta::verdict).collect();
     let verdict = if grew || verdicts.contains(&Verdict::Regressed) {
         Verdict::Regressed
     } else if shrank || verdicts.contains(&Verdict::Improved) {
@@ -282,7 +278,12 @@ pub fn render_comparison(comparison: &Comparison, top: usize) -> String {
         if moved.is_empty() {
             continue;
         }
-        let _ = writeln!(out, "\n{title} that moved ({} of {}):", moved.len(), deltas.len());
+        let _ = writeln!(
+            out,
+            "\n{title} that moved ({} of {}):",
+            moved.len(),
+            deltas.len()
+        );
         for delta in moved.into_iter().take(top) {
             let sign = if delta.moved() >= 0 { '+' } else { '-' };
             let _ = writeln!(

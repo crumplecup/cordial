@@ -34,7 +34,10 @@ fn record(
         .environment(environment)
         .subject(PerfSubject::workflow("cordial"))
         .state(Some(PerfState::Cold))
-        .stages(vec![StageTiming::new("phase/load_and_probe".to_owned(), time)])
+        .stages(vec![StageTiming::new(
+            "phase/load_and_probe".to_owned(),
+            time,
+        )])
         .counters(
             counters
                 .iter()
@@ -49,22 +52,55 @@ fn record(
 fn a_move_counts_only_beyond_tolerance_and_noise() {
     cordial::init_tracing();
     let base = spread(10_000, 100);
-    assert_eq!(judge(base, spread(10_500, 100), 0.10), Verdict::Unchanged, "5% is inside 10%");
+    assert_eq!(
+        judge(base, spread(10_500, 100), 0.10),
+        Verdict::Unchanged,
+        "5% is inside 10%"
+    );
     assert_eq!(judge(base, spread(13_000, 100), 0.10), Verdict::Regressed);
     assert_eq!(judge(base, spread(7_000, 100), 0.10), Verdict::Improved);
     let noisy = spread(10_000, 4_000);
-    assert_eq!(judge(noisy, spread(12_000, 4_000), 0.10), Verdict::Unchanged, "inside the noise");
+    assert_eq!(
+        judge(noisy, spread(12_000, 4_000), 0.10),
+        Verdict::Unchanged,
+        "inside the noise"
+    );
 }
 
 #[test]
 fn each_verdict_follows_from_what_moved() -> Result<()> {
     cordial::init_tracing();
-    let base = record(1, spread(10_000, 50), &[("hooks.enrich", 30)], environment())?;
-    let same = record(2, spread(10_020, 50), &[("hooks.enrich", 30)], environment())?;
-    let slower = record(3, spread(15_000, 50), &[("hooks.enrich", 30)], environment())?;
+    let base = record(
+        1,
+        spread(10_000, 50),
+        &[("hooks.enrich", 30)],
+        environment(),
+    )?;
+    let same = record(
+        2,
+        spread(10_020, 50),
+        &[("hooks.enrich", 30)],
+        environment(),
+    )?;
+    let slower = record(
+        3,
+        spread(15_000, 50),
+        &[("hooks.enrich", 30)],
+        environment(),
+    )?;
     let faster = record(4, spread(5_000, 50), &[("hooks.enrich", 30)], environment())?;
-    let more_work = record(5, spread(10_000, 50), &[("hooks.enrich", 31)], environment())?;
-    let less_work = record(6, spread(10_000, 50), &[("hooks.enrich", 29)], environment())?;
+    let more_work = record(
+        5,
+        spread(10_000, 50),
+        &[("hooks.enrich", 31)],
+        environment(),
+    )?;
+    let less_work = record(
+        6,
+        spread(10_000, 50),
+        &[("hooks.enrich", 29)],
+        environment(),
+    )?;
     assert_eq!(compare(&base, &same, 0.10).verdict(), Verdict::Unchanged);
     assert_eq!(compare(&base, &slower, 0.10).verdict(), Verdict::Regressed);
     assert_eq!(compare(&base, &faster, 0.10).verdict(), Verdict::Improved);
@@ -73,7 +109,10 @@ fn each_verdict_follows_from_what_moved() -> Result<()> {
         Verdict::Regressed,
         "a counter that grew regresses at identical time"
     );
-    assert_eq!(compare(&base, &less_work, 0.10).verdict(), Verdict::Improved);
+    assert_eq!(
+        compare(&base, &less_work, 0.10).verdict(),
+        Verdict::Improved
+    );
     Ok(())
 }
 
@@ -100,7 +139,10 @@ fn a_dependency_update_is_compared_and_attributed() -> Result<()> {
     let comparison = compare(&old, &new, 0.10);
     assert_eq!(comparison.verdict(), Verdict::Regressed, "not withheld");
     assert_eq!(comparison.changed_inputs().len(), 1);
-    assert_eq!(comparison.changed_inputs()[0].kind(), ChangeKind::Dependency);
+    assert_eq!(
+        comparison.changed_inputs()[0].kind(),
+        ChangeKind::Dependency
+    );
     assert!(!comparison.machine_changed());
     let text = render_comparison(&comparison, 10);
     assert!(text.contains("dependency"), "{text}");
@@ -137,14 +179,23 @@ fn baselines_are_marked_explicitly_and_records_found_by_prefix() -> Result<()> {
     store.save(&first).into_diagnostic()?;
     store.save(&second).into_diagnostic()?;
 
-    assert!(store.baselines().into_diagnostic()?.is_empty(), "saving marks nothing");
+    assert!(
+        store.baselines().into_diagnostic()?.is_empty(),
+        "saving marks nothing"
+    );
     store.set_baseline(&first).into_diagnostic()?;
     let key = PerfStore::baseline_key(&first);
     assert_eq!(key, "workflow:cordial cold");
-    assert_eq!(store.baselines().into_diagnostic()?.get(&key), Some(&first.id()));
+    assert_eq!(
+        store.baselines().into_diagnostic()?.get(&key),
+        Some(&first.id())
+    );
 
     assert_eq!(store.find("0000001000").into_diagnostic()?.id(), first.id());
-    assert!(store.find("00000").is_err(), "an ambiguous prefix is refused");
+    assert!(
+        store.find("00000").is_err(),
+        "an ambiguous prefix is refused"
+    );
     assert!(store.find("nope").is_err());
     let latest = store
         .latest("workflow:cordial", Some(PerfState::Cold))

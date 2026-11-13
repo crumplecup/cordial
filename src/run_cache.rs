@@ -10,5 +10,7 @@
 mod key;
 mod store;
 
+#[cfg(feature = "cli")]
+pub(crate) use key::shapes_the_build;
 pub(crate) use key::{KeyRequest, SCHEMA as RUN_CACHE_SCHEMA, gather};
 pub(crate) use store::RunCache;
