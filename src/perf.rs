@@ -20,7 +20,7 @@ pub use compare::{
 };
 pub use environment::{ChangeKind, EnvironmentChange, PerfEnvironment, RA_AP_VERSION};
 pub use identity::{PerfIdentity, PerfIdentityBuilder};
-pub use nextest::{NextestRequest, TestRun, parse_events};
+pub use nextest::{NextestRequest, TestRun, build_targets, parse_events};
 pub use profile::{
     TestProfile, aggregate, attach, fixed_ns, parse_duration, parse_report, profiled, read_profiles,
 };

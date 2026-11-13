@@ -41,6 +41,36 @@ impl NextestRequest {
     }
 }
 
+/// The test binaries to build for `filter`, when it names nothing else.
+///
+/// Nextest applies a filterset after it has built, so `-E binary(x)` still
+/// compiles every test binary in the repository, which for a new feature set is
+/// most of an hour. A filter that is only `binary(name)` terms joined by `|` can
+/// say the same thing to cargo with `--test name`, which builds just those. `None`
+/// when the filter says more than that, or a name is not a test file here, and the
+/// caller then builds everything because it cannot do better.
+#[instrument(level = "debug", skip(root))]
+#[hotpath::measure]
+pub fn build_targets(root: &Path, filter: &str) -> Option<Vec<String>> {
+    let mut targets = Vec::new();
+    for term in filter.split('|') {
+        let name = term
+            .trim()
+            .strip_prefix("binary(")?
+            .strip_suffix(')')?
+            .trim();
+        let plain = !name.is_empty()
+            && name
+                .chars()
+                .all(|c| c.is_alphanumeric() || c == '_' || c == '-');
+        if !plain || !root.join("tests").join(format!("{name}.rs")).is_file() {
+            return None;
+        }
+        targets.push(name.to_owned());
+    }
+    Some(targets)
+}
+
 /// Read the events nextest prints with `--message-format libtest-json-plus`.
 /// Only tests that ran carry a duration; skipped and ignored ones are left out.
 #[instrument(level = "debug", skip(output), err(level = "warn"))]
@@ -99,6 +129,18 @@ pub fn run(root: &Path, request: &NextestRequest, raw: &Path) -> CordialResult<V
         .stderr(Stdio::inherit());
     if request.no_default_features {
         command.arg("--no-default-features");
+    }
+    match build_targets(root, request.filter()) {
+        Some(targets) => {
+            for target in targets {
+                command.args(["--test", &target]);
+            }
+        }
+        None => tracing::warn!(
+            filter = request.filter(),
+            "the filter is more than test binaries, so every test binary is built; \
+             only the filtered tests run"
+        ),
     }
     let mut child = command.spawn()?;
     let mut events = String::new();
