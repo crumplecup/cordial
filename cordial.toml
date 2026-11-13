@@ -17,6 +17,11 @@ filter = "binary(perf_record)"
 
 # Every test: the overview run. Serialized it takes hours; --threads trades
 # exactness for time.
+# The cfg context tests: small, and they exercise the context copy, priming and
+# the query reuse that a profile reports.
+[perf.tests.context]
+filter = "binary(context_crates)"
+
 [perf.tests.all]
 filter = "all()"
 
