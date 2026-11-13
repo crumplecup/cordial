@@ -73,6 +73,7 @@ pub(super) fn build(crates: &HashMap<String, CrateIr>) -> CordialResult<Graph> {
     let mut origins: Vec<(String, Origin)> = Vec::new();
     for name in names {
         let ir = &crates[name];
+        let activity = ir.context_activity()?;
         for node in ir.nodes_matching(&BasicQuery::items()) {
             if node.kind() != &NodeKind::Item(ItemKind::Fn) {
                 continue;
@@ -82,7 +83,10 @@ pub(super) fn build(crates: &HashMap<String, CrateIr>) -> CordialResult<Graph> {
             };
             let origin = match ir.macro_island(node.id())? {
                 Some(island) => Origin::Island(island.gates().clone()),
-                None => Origin::Source(ir.active_contexts(node.id())?.unwrap_or_default()),
+                None => Origin::Source(match &activity {
+                    Some(activity) => activity.active(ir, node.id())?,
+                    None => Vec::new(),
+                }),
             };
             nodes.push((name, node.id(), ir.function_location(node.id())?));
             origins.push((qualified.to_owned(), origin));

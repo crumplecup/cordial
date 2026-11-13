@@ -94,24 +94,29 @@ macro_rules! readers {
             &self,
             id: NodeId,
         ) -> CordialResult<Option<Vec<crate::ir::SemanticContextKey>>> {
-            if self.semantic_snapshot()?.is_none() {
+            match self.context_activity()? {
+                Some(activity) => Ok(Some(activity.active(self, id)?)),
+                None => Ok(None),
+            }
+        }
+
+        /// The crate's context plan, decoded once, for reading the activity of many
+        /// functions; `None` when no semantic projection ran.
+        #[instrument(level = "trace", skip(self), err(level = "warn"))]
+        #[hotpath::measure]
+        fn context_activity(&self) -> CordialResult<Option<crate::ir::ContextActivity>> {
+            let root = self.root()?;
+            // Only whether a projection ran matters here, so the snapshot is not
+            // decoded: it holds a digest of every source file.
+            if self
+                .node(root)
+                .is_none_or(|node| node.attr(crate::ir::ATTR_SEMANTIC_SNAPSHOT).is_none())
+            {
                 return Ok(None);
             }
-            let mut active = Vec::new();
-            if self.semantic_function(id)?.is_some() {
-                active.push(crate::ir::SemanticContextKey::ordinary());
-            }
-            if let (Some(plan), Some(indexes)) = (
+            Ok(Some(crate::ir::ContextActivity::new(
                 self.semantic_context_plan()?,
-                evidence::optional::<Vec<u32>>(self, id, crate::ir::ATTR_SEMANTIC_ACTIVITY)?,
-            ) {
-                active.extend(
-                    indexes
-                        .into_iter()
-                        .filter_map(|index| plan.contexts().get(index as usize).cloned()),
-                );
-            }
-            Ok(Some(active))
+            )))
         }
     };
 }

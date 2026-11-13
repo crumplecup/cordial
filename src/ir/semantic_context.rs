@@ -131,3 +131,51 @@ pub struct SemanticContextPlan {
     /// analysed contexts reports no active context: a gap, not a proof.
     complete: bool,
 }
+
+/// Which analysed cfg contexts leave each function of one crate active, read from
+/// the crate's evidence once. The snapshot and the plan are whole-crate records;
+/// decoding them per function made a pass over every function cost the size of
+/// the project for each of them.
+#[derive(Debug, Clone)]
+pub struct ContextActivity {
+    plan: Option<SemanticContextPlan>,
+}
+
+impl ContextActivity {
+    /// Wrap a crate's decoded plan, if it has one.
+    #[tracing::instrument(level = "trace", skip(plan))]
+    pub fn new(plan: Option<SemanticContextPlan>) -> Self {
+        Self { plan }
+    }
+
+    /// The contexts in which `id` is active: the ordinary one when the source
+    /// database resolved it, then each planned context its activity names.
+    #[tracing::instrument(level = "trace", skip(self, view), err(level = "warn"))]
+    pub fn active(
+        &self,
+        view: &(impl crate::ir::IrView + ?Sized),
+        id: crate::NodeId,
+    ) -> crate::CordialResult<Vec<SemanticContextKey>> {
+        let attribute = |key: &str| view.node(id).and_then(|node| node.attr(key).cloned());
+        let mut active = Vec::new();
+        if view
+            .node(id)
+            .is_some_and(|node| node.attr(super::ATTR_SEMANTIC_FUNCTION).is_some())
+        {
+            active.push(SemanticContextKey::ordinary());
+        }
+        if let (Some(plan), Some(indexes)) = (
+            &self.plan,
+            attribute(ATTR_SEMANTIC_ACTIVITY)
+                .map(serde_json::from_value::<Vec<u32>>)
+                .transpose()?,
+        ) {
+            active.extend(
+                indexes
+                    .into_iter()
+                    .filter_map(|index| plan.contexts().get(index as usize).cloned()),
+            );
+        }
+        Ok(active)
+    }
+}

@@ -205,6 +205,7 @@ pub use semantic::{
     SemanticFunction, SemanticItemId, SemanticReturnContract, SemanticSnapshot, SemanticType,
 };
 pub use semantic_callee::SemanticCallee;
+pub use semantic_context::ContextActivity;
 pub use semantic_context::{
     ATTR_SEMANTIC_ACTIVITY, ATTR_SEMANTIC_CONTEXT_FUNCTIONS, ATTR_SEMANTIC_CONTEXT_PLAN,
     SemanticContextFunction, SemanticContextKey, SemanticContextPlan,
