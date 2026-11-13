@@ -229,6 +229,15 @@ Measured by `cordial perf workflow` against the baselines recorded 2026-11-12
   call graph 194.7 s -> 0.004 s, wall 546.7 s -> 14.8 s on an unchanged tree. Any edit
   still rebuilds it, because the entry is keyed on the whole tree.
 - [ ] C4. Facts as tracked queries: milestones 1-3 of the settled design above.
+  Milestone 1 (per-file collectors) so far, each a tracked query keyed by file with the
+  direct path as fallback and an edit-locality assertion in `tests/semantic_backend.rs`:
+  `file_facts` (module scope and attributes), `error_sites_file`, `error_chains_file`,
+  `error_types_file`, `error_compliance_file`, `observability_file`, `verus_file`,
+  `error_apply_file`, `visibility_file`, `policy_file` (the allows/cfg/glob/inline-test/
+  modularity/pageantry/derive bundle). Remaining there, by recorded cost on cordial:
+  antipatterns 2.9 s, panics 2.4 s, architecture 1.1 s, signatures 0.7 s, then the
+  per-function syntax facts in `populate` and the tracing inventories (4.7 s). CLI layout
+  (0.8 s) is left alone: its per-file value holds syntax nodes, which cannot be a query value.
 - [ ] C5. Whole-crate passes as queries (milestone 2) and cfg contexts as coexisting crates (milestone 4).
 - [ ] C1. Cache key hygiene: analysis-source digest in place of the binary fingerprint.
 - [ ] C6. Re-baseline and record the acceptance numbers.
