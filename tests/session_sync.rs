@@ -19,12 +19,19 @@ fn project(session: &mut SourceDatabase, root: &Path) -> Result<CrateIr> {
         .into_diagnostic()
 }
 
-/// Drop the database's interned `definition` ids, which are not stable between
-/// two databases and say nothing about what the code means.
+/// Drop the database's interned ids (a function's `definition` and the function
+/// a call's `target` names), which are not stable between two databases and say
+/// nothing about what the code means: they follow the order the database
+/// happened to evaluate functions in, and several threads evaluate them.
 fn without_ids(value: &mut serde_json::Value) {
     match value {
         serde_json::Value::Object(map) => {
             map.remove("definition");
+            if let Some(serde_json::Value::Object(target)) = map.get_mut("target")
+                && let Some(id) = target.get_mut("Function")
+            {
+                *id = serde_json::Value::from(0);
+            }
             map.values_mut().for_each(without_ids);
         }
         serde_json::Value::Array(items) => items.iter_mut().for_each(without_ids),
