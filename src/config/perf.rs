@@ -11,10 +11,22 @@ pub struct PerfTestSet {
     filter: String,
 }
 
+/// One named workflow measured by `cordial perf workflow`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, derive_getters::Getters)]
+pub struct PerfWorkflow {
+    /// A file, relative to the project, that the incremental state edits with
+    /// one comment line and restores. Without it only cold and warm are measured.
+    #[serde(default)]
+    edit: Option<std::path::PathBuf>,
+}
+
 /// Performance settings loaded from `[perf]` in `cordial.toml`.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, derive_getters::Getters)]
 pub struct PerfConfig {
     /// Named test sets, from `[perf.tests.<name>]`.
     #[serde(default)]
     tests: BTreeMap<String, PerfTestSet>,
+    /// Named workflows, from `[perf.workflows.<name>]`.
+    #[serde(default)]
+    workflows: BTreeMap<String, PerfWorkflow>,
 }

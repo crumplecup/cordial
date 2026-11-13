@@ -20,6 +20,11 @@ filter = "binary(perf_record)"
 [perf.tests.all]
 filter = "all()"
 
+# Cordial on cordial: `cordial perf workflow cordial` runs the pipeline cold,
+# warm, and after one comment line is added to the file below (then restored).
+[perf.workflows.cordial]
+edit = "src/perf/spread.rs"
+
 [perf.tests.verus]
 filter = "binary(verus_ir) | binary(panics_verus) | binary(verus_identity) | binary(proof_patterns_etiquette) | binary(verus_warnings_etiquette)"
 
