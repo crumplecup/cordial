@@ -1,7 +1,7 @@
 //! `cordial exceptions` command bodies. Clap types in `cli::commands` call these after `act` dispatch.
 
 use std::fs;
-use std::io::{self, Write};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use crate::{
@@ -142,7 +142,7 @@ pub(super) fn list_exceptions(store: &StoreLayout) -> CordialResult<()> {
         return Ok(());
     }
     for path in files {
-        writeln!(io::stdout(), "{}", path.display())?;
+        writeln!(crate::host::stdout(), "{}", path.display())?;
     }
     Ok(())
 }
@@ -186,9 +186,9 @@ pub(super) fn show_exceptions(
         alias
     };
     let bytes = fs::read(&path)?;
-    io::stdout().write_all(&bytes)?;
+    crate::host::stdout().write_all(&bytes)?;
     if !bytes.ends_with(b"\n") {
-        writeln!(io::stdout())?;
+        writeln!(crate::host::stdout())?;
     }
     Ok(())
 }

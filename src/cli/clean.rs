@@ -1,7 +1,7 @@
 //! Output and dispatch for `cordial clean`.
 
 use std::collections::BTreeSet;
-use std::io::{self, Write};
+use std::io::Write;
 use std::path::Path;
 
 use tracing::instrument;
@@ -104,7 +104,7 @@ pub(super) fn execute_clean(
         return Ok(());
     }
     let report = run_clean_with_progress(plan, progress);
-    let mut output = io::stdout().lock();
+    let mut output = crate::host::stdout();
     if report.removed().is_empty() {
         writeln!(output, "Nothing was removed.")?;
     } else {
@@ -137,7 +137,7 @@ pub(super) fn execute_clean(
 
 #[instrument(level = "debug", skip(plan), err(level = "warn"))]
 fn print_plan(plan: &CleanPlan, dry_run: bool) -> CordialResult<()> {
-    let mut output = io::stdout().lock();
+    let mut output = crate::host::stdout();
     if plan.paths().is_empty() {
         writeln!(output, "Nothing to clean.")?;
     } else {

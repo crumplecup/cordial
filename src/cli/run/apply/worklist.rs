@@ -1,6 +1,6 @@
 //! Record apply claims against a current worklist after source writes succeed.
 
-use std::io::{self, Write};
+use std::io::Write;
 use std::path::Path;
 
 use crate::{CordialResult, ItemState, StoreLayout, Validity, Worklist, WorklistItem};
@@ -18,7 +18,7 @@ pub(super) fn report(
 ) -> CordialResult<()> {
     let Some(mut list) = Worklist::read(store)? else {
         writeln!(
-            io::stdout(),
+            crate::host::stdout(),
             "{label} apply: no current worklist; run `cordial open` to track remaining items."
         )?;
         return Ok(());
@@ -26,7 +26,7 @@ pub(super) fn report(
     let config = crate::load_cordial_config(project_root, store_home);
     if list.validity(&config)? != Validity::Current {
         writeln!(
-            io::stdout(),
+            crate::host::stdout(),
             "{label} apply: worklist is out of date; run `cordial open` to track remaining items."
         )?;
         return Ok(());
@@ -56,7 +56,7 @@ pub(super) fn report(
         .filter(|item| ids.iter().any(|id| id == item.id().as_str()))
         .count();
     writeln!(
-        io::stdout(),
+        crate::host::stdout(),
         "{label} apply: {} worklist item(s) checked off; {remaining} {} item(s) remain open {}.",
         if dry_run { 0 } else { ids.len() },
         label.to_lowercase(),
@@ -68,7 +68,7 @@ pub(super) fn report(
     )?;
     if dry_run {
         writeln!(
-            io::stdout(),
+            crate::host::stdout(),
             "Dry run: {} worklist item(s) would be checked off; {} would remain open for manual repair; no source or worklist changes.",
             ids.len(),
             remaining - proposed_open

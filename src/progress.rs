@@ -1,6 +1,6 @@
 //! Runtime progress reporting hooks.
 
-use std::io::{self, Write};
+use std::io::Write;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, RecvTimeoutError, Sender};
 use std::sync::{Arc, Mutex};
@@ -50,7 +50,7 @@ impl LineProgress {
     /// Write progress lines to stderr with a ten-second heartbeat.
     #[instrument(level = "debug")]
     pub fn new() -> Self {
-        Self::with_writer(io::stderr(), Duration::from_secs(10))
+        Self::with_writer(crate::host::stderr(), Duration::from_secs(10))
     }
 
     /// Write progress lines to `writer` at the given heartbeat interval.

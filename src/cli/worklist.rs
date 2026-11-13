@@ -1,6 +1,6 @@
 //! Human-facing worklist commands.
 
-use std::io::{self, Write};
+use std::io::Write;
 
 use tracing::instrument;
 
@@ -44,7 +44,7 @@ impl Commands {
                 json,
             } => execute_stats(ctx, verbose, area.as_deref(), all, json),
             Self::Instructions => {
-                write!(io::stdout(), "{WORKLIST_INSTRUCTIONS}").map_err(Into::into)
+                write!(crate::host::stdout(), "{WORKLIST_INSTRUCTIONS}").map_err(Into::into)
             }
             Self::Next => Err(CordialError::next_command_unrecognized()),
             _ => Err(CordialError::not_a_worklist_command()),
@@ -59,7 +59,7 @@ impl Commands {
 
 #[instrument(level = "trace", skip(value), err(level = "warn"))]
 fn write_json(value: serde_json::Value) -> CordialResult<()> {
-    writeln!(io::stdout(), "{value}")?;
+    writeln!(crate::host::stdout(), "{value}")?;
     Ok(())
 }
 
@@ -73,7 +73,7 @@ pub(super) fn execute_submit(
     let _lock = WorklistLock::exclusive(ctx.store(), "submit", ctx.progress().as_ref())?;
     let Some(previous) = Worklist::read(ctx.store())? else {
         if !json {
-            writeln!(io::stdout(), "No list yet.\n\nNEXT: cordial open")?;
+            writeln!(crate::host::stdout(), "No list yet.\n\nNEXT: cordial open")?;
         }
         return Err(CordialError::no_current_worklist());
     };
@@ -82,7 +82,7 @@ pub(super) fn execute_submit(
     if previous.validity(&config)? != Validity::Current {
         if !json {
             writeln!(
-                io::stdout(),
+                crate::host::stdout(),
                 "List {} is out of date.\n\nNEXT: cordial open",
                 previous.record().generation()
             )?;
@@ -131,7 +131,7 @@ pub(super) fn execute_open(ctx: &ActCtx, json: bool) -> CordialResult<()> {
     if validity != Some(Validity::Current) {
         if !json {
             match (&existing, validity) {
-                (None, _) => writeln!(io::stdout(), "No list yet. Building one now.")?,
+                (None, _) => writeln!(crate::host::stdout(), "No list yet. Building one now.")?,
                 (Some(list), Some(reason)) => {
                     let checked = list
                         .items()
@@ -139,7 +139,7 @@ pub(super) fn execute_open(ctx: &ActCtx, json: bool) -> CordialResult<()> {
                         .filter(|item| *item.state() == ItemState::Done)
                         .count();
                     writeln!(
-                        io::stdout(),
+                        crate::host::stdout(),
                         "List {} is out of date ({}). Rebuilding; {checked} checked-off item(s) will be discarded.",
                         list.record().generation(),
                         invalid_reason(reason)
@@ -177,7 +177,7 @@ pub(super) fn execute_peek(ctx: &ActCtx, json: bool) -> CordialResult<()> {
             if json {
                 write_json(json_status("peek", ctx.store(), None, "no_list"))?;
             } else {
-                writeln!(io::stdout(), "No list yet.\n\nNEXT: cordial open")?;
+                writeln!(crate::host::stdout(), "No list yet.\n\nNEXT: cordial open")?;
             }
             return Ok(());
         };
@@ -186,7 +186,7 @@ pub(super) fn execute_peek(ctx: &ActCtx, json: bool) -> CordialResult<()> {
                 write_json(json_status("peek", ctx.store(), Some(&list), "out_of_date"))?;
             } else {
                 writeln!(
-                    io::stdout(),
+                    crate::host::stdout(),
                     "List {} is out of date.\n\nNEXT: cordial open",
                     list.record().generation()
                 )?;
@@ -207,7 +207,7 @@ pub(super) fn execute_peek(ctx: &ActCtx, json: bool) -> CordialResult<()> {
         if json {
             write_json(json_status("peek", ctx.store(), None, "no_list"))?;
         } else {
-            writeln!(io::stdout(), "No list yet.\n\nNEXT: cordial open")?;
+            writeln!(crate::host::stdout(), "No list yet.\n\nNEXT: cordial open")?;
         }
         return Ok(());
     };
@@ -216,7 +216,7 @@ pub(super) fn execute_peek(ctx: &ActCtx, json: bool) -> CordialResult<()> {
             write_json(json_status("peek", ctx.store(), Some(&list), "out_of_date"))?;
         } else {
             writeln!(
-                io::stdout(),
+                crate::host::stdout(),
                 "List {} is out of date.\n\nNEXT: cordial open",
                 list.record().generation()
             )?;
@@ -242,7 +242,7 @@ pub(super) fn execute_claim(
     let _lock = WorklistLock::exclusive(ctx.store(), command, ctx.progress().as_ref())?;
     let Some(mut list) = Worklist::read(ctx.store())? else {
         if !json {
-            writeln!(io::stdout(), "No list yet.\n\nNEXT: cordial open")?;
+            writeln!(crate::host::stdout(), "No list yet.\n\nNEXT: cordial open")?;
         }
         return Err(CordialError::no_current_worklist());
     };
@@ -251,7 +251,7 @@ pub(super) fn execute_claim(
     if list.validity(&config)? != Validity::Current {
         if !json {
             writeln!(
-                io::stdout(),
+                crate::host::stdout(),
                 "List {} is out of date.\n\nNEXT: cordial open",
                 list.record().generation()
             )?;
@@ -267,9 +267,9 @@ pub(super) fn execute_claim(
         Ok(changes) => changes,
         Err(error) => {
             if !json && ids.is_empty() {
-                writeln!(io::stdout(), "NEXT: cordial open")?;
+                writeln!(crate::host::stdout(), "NEXT: cordial open")?;
             } else if !json {
-                writeln!(io::stdout(), "NEXT: cordial stats --verbose --all")?;
+                writeln!(crate::host::stdout(), "NEXT: cordial stats --verbose --all")?;
             }
             return Err(error);
         }
@@ -289,14 +289,14 @@ pub(super) fn execute_claim(
     for change in &changes {
         if change.was() == change.now() {
             writeln!(
-                io::stdout(),
+                crate::host::stdout(),
                 "{} was already {}. Nothing changed.",
                 change.id(),
                 if skip { "set aside" } else { "checked off" }
             )?;
         } else {
             writeln!(
-                io::stdout(),
+                crate::host::stdout(),
                 "{} {}: {}",
                 if skip { "Set aside" } else { "Checked off" },
                 change.id(),
@@ -306,12 +306,12 @@ pub(super) fn execute_claim(
     }
     if skip && changes.iter().any(|change| change.was() != change.now()) {
         writeln!(
-            io::stdout(),
+            crate::host::stdout(),
             "It stays unchecked, and `cordial submit` brings it back on the next list."
         )?;
     }
-    writeln!(io::stdout())?;
-    write!(io::stdout(), "{}", render_open(&list))?;
+    writeln!(crate::host::stdout())?;
+    write!(crate::host::stdout(), "{}", render_open(&list))?;
     Ok(())
 }
 
@@ -328,7 +328,7 @@ pub(super) fn execute_stats(
         if json {
             write_json(json_status("stats", ctx.store(), None, "no_list"))?;
         } else {
-            writeln!(io::stdout(), "No list yet.\n\nNEXT: cordial open")?;
+            writeln!(crate::host::stdout(), "No list yet.\n\nNEXT: cordial open")?;
         }
         return Ok(());
     };
@@ -340,8 +340,12 @@ pub(super) fn execute_stats(
             if json {
                 write_json(json_stats(ctx.store(), &list, &stale, verbose, area, all))?;
             } else {
-                writeln!(io::stdout(), "{}", staleness_line(&stale))?;
-                write!(io::stdout(), "{}", render_stats(&list, verbose, area, all))?;
+                writeln!(crate::host::stdout(), "{}", staleness_line(&stale))?;
+                write!(
+                    crate::host::stdout(),
+                    "{}",
+                    render_stats(&list, verbose, area, all)
+                )?;
             }
         }
         reason if json => write_json(json_status(
@@ -351,7 +355,7 @@ pub(super) fn execute_stats(
             invalid_reason(reason),
         ))?,
         reason => writeln!(
-            io::stdout(),
+            crate::host::stdout(),
             "List {} is out of date ({}).\n\nNEXT: cordial open",
             list.record().generation(),
             invalid_reason(reason)
@@ -374,9 +378,9 @@ fn write_open(ctx: &ActCtx, list: &Worklist, command: &str, json: bool) -> Cordi
     }
     let stale = list.staleness(ctx.project_root());
     if *stale.age_secs() >= OPEN_STALE_SECS {
-        writeln!(io::stdout(), "{}", staleness_line(&stale))?;
+        writeln!(crate::host::stdout(), "{}", staleness_line(&stale))?;
     }
-    write!(io::stdout(), "{}", render_open(list))?;
+    write!(crate::host::stdout(), "{}", render_open(list))?;
     Ok(())
 }
 

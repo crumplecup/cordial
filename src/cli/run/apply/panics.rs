@@ -1,7 +1,7 @@
 //! Show concrete panic conversion obligations and claim only repaired sites.
 
 use crate::{CordialResult, PanicApplySummary};
-use std::io::{self, Write};
+use std::io::Write;
 use std::path::Path;
 
 #[tracing::instrument(level = "debug", skip(summary), err(level = "warn"))]
@@ -11,7 +11,7 @@ pub(super) fn report(
     dry_run: bool,
 ) -> CordialResult<()> {
     writeln!(
-        io::stdout(),
+        crate::host::stdout(),
         "Panic apply{}: {} site(s) {}; {} candidate site(s) blocked.",
         if dry_run { " dry run" } else { "" },
         summary.repairs().len(),
@@ -25,7 +25,7 @@ pub(super) fn report(
     for repair in summary.repairs() {
         let site = repair.site();
         writeln!(
-            io::stdout(),
+            crate::host::stdout(),
             "{}: {}:{} — {} — {}",
             if dry_run { "Would repair" } else { "Repaired" },
             site.file()
@@ -37,7 +37,7 @@ pub(super) fn report(
             site.rule_id()
         )?;
         writeln!(
-            io::stdout(),
+            crate::host::stdout(),
             "  Owned error: {}, {}; sources: {}; Result signatures: {}",
             repair.error_names().parent(),
             repair.error_names().kind(),
@@ -51,13 +51,13 @@ pub(super) fn report(
             repair.functions().join(", ")
         )?;
         writeln!(
-            io::stdout(),
+            crate::host::stdout(),
             "  Failure policy: panic becomes returned error; Rust Result main termination prints Debug and exits with status 1."
         )?;
     }
     for (site, reason) in summary.blockers() {
         writeln!(
-            io::stdout(),
+            crate::host::stdout(),
             "Blocked: {}:{} — {} — {reason:?}",
             site.file()
                 .strip_prefix(project_root)

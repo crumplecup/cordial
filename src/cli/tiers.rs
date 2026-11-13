@@ -2,7 +2,7 @@
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
-use std::io::{self, Write as _};
+use std::io::Write as _;
 use std::path::{Path, PathBuf};
 
 use crate::{
@@ -19,7 +19,11 @@ pub(super) fn execute_tiers(project_root: &Path, store_home: Option<PathBuf>) ->
     let config = crate::load_session_config(&session);
     let owned = etiquettes_from_plugins(&all_plugins(), &session);
     let etiquettes: Vec<&dyn Etiquette> = owned.iter().map(|item| item.as_ref()).collect();
-    write!(io::stdout(), "{}", render_tiers(&etiquettes, &config))?;
+    write!(
+        crate::host::stdout(),
+        "{}",
+        render_tiers(&etiquettes, &config)
+    )?;
     Ok(())
 }
 

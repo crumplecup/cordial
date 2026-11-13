@@ -1,7 +1,7 @@
 //! Cold and warm per-etiquette measurements using isolated Cargo targets.
 
 use std::fs;
-use std::io::{self, Write};
+use std::io::Write;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
@@ -178,7 +178,7 @@ pub(super) fn execute_timings(
         render_markdown(&report),
     )?;
     writeln!(
-        io::stdout(),
+        crate::host::stdout(),
         "Measured {} etiquette(s): {} and {}",
         report.entries.len(),
         ctx.store().root().join("timings.md").display(),

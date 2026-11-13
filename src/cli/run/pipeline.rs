@@ -1,6 +1,6 @@
 //! Check execution, result reporting, and worklist scoring under one store lock.
 
-use std::io::{self, Write};
+use std::io::Write;
 
 use super::super::commands::ActCtx;
 use super::super::gate_args::GateSelectionArgs;
@@ -123,7 +123,7 @@ pub(in crate::cli) fn execute_run_plugins_locked(
         if let Some(summary) =
             scored.filter(|_| !json_submit || !deny_open || open_action_items == 0)
         {
-            write!(io::stdout(), "{summary}")?;
+            write!(crate::host::stdout(), "{summary}")?;
         }
         open_action_items
     } else {
@@ -137,7 +137,7 @@ pub(in crate::cli) fn execute_run_plugins_locked(
     ));
     if deny_open && !outcome.skipped_tiers().is_empty() {
         writeln!(
-            io::stderr(),
+            crate::host::stderr(),
             "Tiers not run: {}",
             outcome.skipped_tiers().join(", ")
         )?;

@@ -1,6 +1,6 @@
 //! Present error-policy conversion coverage and claim exact repaired findings.
 
-use std::io::{self, Write};
+use std::io::Write;
 use std::path::Path;
 
 use crate::{CordialResult, ErrorFieldApplySummary};
@@ -13,7 +13,7 @@ pub(super) fn report(
     dry_run: bool,
 ) -> CordialResult<()> {
     writeln!(
-        io::stdout(),
+        crate::host::stdout(),
         "Error handling apply{}: {} field(s) {} in {} file(s); {} candidate field(s) blocked.",
         if dry_run { " dry run" } else { "" },
         summary.converted_fields(),
@@ -31,7 +31,7 @@ pub(super) fn report(
             .strip_prefix(project_root)
             .unwrap_or(repair.file());
         writeln!(
-            io::stdout(),
+            crate::host::stdout(),
             "{}: {}:{} — {} — {}",
             if dry_run { "Would repair" } else { "Repaired" },
             path.display(),
@@ -46,7 +46,7 @@ pub(super) fn report(
             .strip_prefix(project_root)
             .unwrap_or(blocker.path());
         writeln!(
-            io::stdout(),
+            crate::host::stdout(),
             "Blocked: {} — {}::{} — {:?}",
             path.display(),
             blocker.type_name(),

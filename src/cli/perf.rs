@@ -1,16 +1,15 @@
 //! `cordial perf`: measure cordial's own cost and compare runs.
 
 use clap::Subcommand;
-use std::io::{self, Write};
+use std::io::Write;
 use std::path::PathBuf;
 use tracing::instrument;
 
 use crate::CordialResult;
 use crate::perf::{
     DEFAULT_TOLERANCE, NextestRequest, PerfStore, RunRecord, TimingRequest, Verdict,
-    WorkflowRequestBuilder, compare, measure,
-    measure_from, measure_workflow, profiled, read_profiles, render_comparison, render_profile,
-    render_stages, render_timing,
+    WorkflowRequestBuilder, compare, measure, measure_from, measure_workflow, profiled,
+    read_profiles, render_comparison, render_profile, render_stages, render_timing,
 };
 use crate::{CordialError, load_cordial_config};
 
@@ -223,7 +222,7 @@ fn list(ctx: &ActCtx, json: bool) -> CordialResult<()> {
     let store = PerfStore::new(ctx.store());
     let records = store.list()?;
     let baselines = store.baselines()?;
-    let mut output = io::stdout().lock();
+    let mut output = crate::host::stdout();
     if json {
         writeln!(output, "{}", serde_json::to_string_pretty(&records)?)?;
     } else if records.is_empty() {
@@ -293,7 +292,7 @@ fn timing(ctx: &ActCtx, name: &str, options: TimingOptions) -> CordialResult<()>
         measure_from(ctx.project_root(), name, options.threads, &options.from)?
     };
     let path = store.save(&record)?;
-    let mut output = io::stdout().lock();
+    let mut output = crate::host::stdout();
     write!(output, "{}", render_timing(&record, options.top))?;
     writeln!(output, "\nSaved {}", path.display())?;
     Ok(())
@@ -331,7 +330,7 @@ fn workflow(
         .build()?;
     let store = PerfStore::new(ctx.store());
     let work = ctx.store().perf_dir().join("work");
-    let mut output = io::stdout().lock();
+    let mut output = crate::host::stdout();
     for record in measure_workflow(ctx.project_root(), &work, &request)? {
         let path = store.save(&record)?;
         write!(output, "{}", render_stages(&record, top))?;
@@ -348,7 +347,11 @@ fn profile(ctx: &ActCtx, name: &str, options: TimingOptions) -> CordialResult<()
     let stamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)?
         .as_secs();
-    let directory = ctx.store().perf_dir().join("profiles").join(format!("{stamp}-{name}"));
+    let directory = ctx
+        .store()
+        .perf_dir()
+        .join("profiles")
+        .join(format!("{stamp}-{name}"));
     std::fs::create_dir_all(&directory)?;
     let request = TimingRequest::new(
         name.to_owned(),
@@ -364,7 +367,7 @@ fn profile(ctx: &ActCtx, name: &str, options: TimingOptions) -> CordialResult<()
     let timed = measure(ctx.project_root(), &request, &store.raw_dir())?;
     let record = profiled(&timed, name, &read_profiles(&directory)?)?;
     let path = store.save(&record)?;
-    let mut output = io::stdout().lock();
+    let mut output = crate::host::stdout();
     write!(output, "{}", render_profile(&record, options.top))?;
     writeln!(output, "\nSaved {}", path.display())?;
     Ok(())
@@ -376,7 +379,7 @@ fn baseline(ctx: &ActCtx, query: &str) -> CordialResult<()> {
     let store = PerfStore::new(ctx.store());
     let record = store.find(query)?;
     store.set_baseline(&record)?;
-    let mut output = io::stdout().lock();
+    let mut output = crate::host::stdout();
     writeln!(
         output,
         "Baseline for {}: {}",
@@ -435,7 +438,7 @@ fn compare_records(
 ) -> CordialResult<()> {
     let store = PerfStore::new(ctx.store());
     let pairs = pairs(&store, first, second)?;
-    let mut output = io::stdout().lock();
+    let mut output = crate::host::stdout();
     if pairs.is_empty() {
         writeln!(
             output,

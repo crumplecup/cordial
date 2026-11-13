@@ -9,7 +9,7 @@ use crate::{
     lookup_etiquette, quality_plugins,
 };
 use std::fs;
-use std::io::{self, Write};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use tracing::instrument;
 
@@ -110,7 +110,7 @@ pub(super) fn execute_explain(
     match id {
         None => {
             write!(
-                io::stdout(),
+                crate::host::stdout(),
                 "{}",
                 super::tiers::render_explain_list_with_tiers(&etiquettes, &config)
             )?;
@@ -121,7 +121,7 @@ pub(super) fn execute_explain(
                 return Err(CordialError::unknown_etiquette(query));
             };
             write!(
-                io::stdout(),
+                crate::host::stdout(),
                 "{}",
                 super::tiers::render_explain_page_with_tier(etiquette, &config)
             )?;
@@ -137,7 +137,7 @@ pub(super) fn view_store_file(store: &StoreLayout, path: &Path) -> CordialResult
         return Err(CordialError::not_found(full));
     }
     let bytes = fs::read(&full)?;
-    io::stdout().write_all(&bytes)?;
+    crate::host::stdout().write_all(&bytes)?;
     Ok(())
 }
 
@@ -191,7 +191,7 @@ pub(super) fn export_surreal(
         fs::write(path, body)?;
         tracing::info!(path = %path.display(), "wrote surreal export");
     } else {
-        write!(io::stdout(), "{body}")?;
+        write!(crate::host::stdout(), "{body}")?;
     }
     Ok(())
 }
