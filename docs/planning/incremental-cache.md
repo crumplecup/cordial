@@ -114,7 +114,12 @@ Measured by `cordial perf workflow` against the baselines recorded 2026-11-12
   cordial itself: how much a re-projection on the live database saves is the
   first number to take when measurement resumes.
 - [ ] C2. Reuse counters in the run record.
-- [ ] C4. Facts as tracked queries, in order of measured cost.
+- [x] C4a. The call graph is reused from the run cache when the tree and the tracing
+  policy are unchanged (`call graph: reused from the run cache`). Measured on cordial:
+  call graph 194.7 s -> 0.004 s, wall 546.7 s -> 14.8 s on an unchanged tree. Any edit
+  still rebuilds it, because the entry is keyed on the whole tree.
+- [ ] C4. Facts as tracked queries, in order of measured cost (the call graph first, so an
+  edit redoes only the functions it touched; then enrich, about 61 s per run).
 - [ ] C5. Whole-crate passes and cfg contexts as queries.
 - [ ] C1. Cache key hygiene: analysis-source digest in place of the binary fingerprint.
 - [ ] C6. Re-baseline and record the acceptance numbers.
