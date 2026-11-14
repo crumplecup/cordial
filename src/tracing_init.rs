@@ -31,7 +31,24 @@ pub fn init_tracing() {
 #[tracing::instrument(level = "debug")]
 #[hotpath::measure]
 pub fn init_cli_tracing() {
-    init_tracing_with_default("warn");
+    use tracing_subscriber::Layer as _;
+    use tracing_subscriber::layer::SubscriberExt as _;
+    use tracing_subscriber::util::SubscriberInitExt as _;
+    // The install site reads `RUST_LOG` itself; the subscriber policy checks
+    // for `try_from_default_env` + `unwrap_or*` in the function that installs.
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("warn"));
+    // The live status counts Salsa's query executions whatever `RUST_LOG` says, so its
+    // layer has a filter of its own and the log's filter applies to the log alone.
+    let _ = tracing_subscriber::registry()
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_writer(crate::host::stderr)
+                .with_filter(filter),
+        )
+        .with(crate::LiveLayer.with_filter(crate::live_filter()))
+        .try_init();
+    // The run's clock starts here.
+    let _ = crate::LiveStatus::global();
 }
 
 /// A `fmt` layer for tests that install their own thread-local subscriber.

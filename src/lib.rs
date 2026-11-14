@@ -33,6 +33,7 @@ mod framework_std;
 mod hooks;
 pub mod host;
 mod ir;
+mod live_status;
 mod loader;
 mod objects;
 pub mod perf;
@@ -280,6 +281,7 @@ pub use etiquettes::framework_std::{AMENABLE_STD_ETIQUETTE, AmenableStdReporter}
 pub use etiquettes::quality_etiquettes;
 #[cfg(feature = "amenable_ext")]
 pub use etiquettes::{AMENABLE_EXT_JIFF_ETIQUETTE, ExtReporter};
+pub use live_status::{LiveLayer, LiveStatus, live_filter};
 #[cfg(all(feature = "rustdoc", feature = "impl_coverage"))]
 pub use plugin::classify_elicit_complete_gap;
 #[cfg(feature = "elicitation")]

@@ -46,6 +46,8 @@ impl ProgressSink for IndicatifProgress {
         let bar = self.multi.add(ProgressBar::new(len));
         bar.set_style(bar_style());
         bar.set_message(message);
+        // The live status moves while the position does not.
+        bar.enable_steady_tick(Duration::from_millis(500));
         Box::new(IndicatifTask::new(bar))
     }
 
@@ -102,15 +104,22 @@ impl Drop for IndicatifTask {
 #[instrument(level = "debug")]
 #[hotpath::measure]
 fn spinner_style() -> ProgressStyle {
-    ProgressStyle::with_template("{spinner:.green} {msg}")
+    ProgressStyle::with_template("{spinner:.green} {msg} {live}")
         .unwrap_or_else(|_| ProgressStyle::default_spinner())
+        .with_key("live", live)
         .tick_strings(&["-", "\\", "|", "/"])
 }
 
 #[instrument(level = "debug")]
 #[hotpath::measure]
 fn bar_style() -> ProgressStyle {
-    ProgressStyle::with_template("{wide_bar:.cyan/blue} {pos}/{len} {msg}")
+    ProgressStyle::with_template("{wide_bar:.cyan/blue} {pos}/{len} {msg} {live}")
         .unwrap_or_else(|_| ProgressStyle::default_bar())
+        .with_key("live", live)
         .progress_chars("=>-")
+}
+
+/// What the run is doing, drawn with every refresh.
+fn live(_: &indicatif::ProgressState, writer: &mut dyn std::fmt::Write) {
+    let _ = write!(writer, "[{}]", crate::LiveStatus::global().line());
 }

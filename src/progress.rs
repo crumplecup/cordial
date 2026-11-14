@@ -104,9 +104,10 @@ impl LineProgress {
                     write_progress_line(
                         &output,
                         &format!(
-                            "still working: {}{count} ({}s)",
+                            "still working: {}{count} ({}s) [{}]",
                             state.message,
-                            started.elapsed().as_secs()
+                            started.elapsed().as_secs(),
+                            crate::LiveStatus::global().line()
                         ),
                     );
                 }
