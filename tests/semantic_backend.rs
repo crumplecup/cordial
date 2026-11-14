@@ -312,6 +312,8 @@ fn assert_edit_invalidates_only_dependents(
         "antipattern_contracts_file:",
         "panic_proofs_file:",
         "panic_scan_file:",
+        "architecture_file:",
+        "signature_file:",
     ] {
         assert!(
             facts_before.keys().any(|key| key.starts_with(query)),

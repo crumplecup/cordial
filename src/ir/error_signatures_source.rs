@@ -28,6 +28,39 @@ pub struct ErrorSignatureAssessment {
 }
 
 impl SourceErrorSignatures {
+    /// The source files this evidence is read from, in the order they are read.
+    #[tracing::instrument(level = "debug", err(level = "warn"))]
+    pub(crate) fn input_paths(root: &Path) -> CordialResult<Vec<PathBuf>> {
+        let tree = root.join("src");
+        let mut paths = Vec::new();
+        if tree.is_dir() {
+            for entry in walkdir::WalkDir::new(&tree).sort_by_file_name() {
+                let entry = entry.map_err(anyhow::Error::new)?;
+                if entry.file_type().is_file()
+                    && entry.path().extension().is_some_and(|ext| ext == "rs")
+                    && !path_has_fixtures(entry.path(), root)
+                {
+                    paths.push(entry.path().to_path_buf());
+                }
+            }
+        }
+        Ok(paths)
+    }
+
+    /// The inventory of a crate whose index is joined from per-file parts.
+    #[tracing::instrument(level = "trace", skip(files, index))]
+    pub(crate) fn from_parts(
+        root: &Path,
+        files: Vec<FileSnapshot>,
+        index: SignatureChainIndex,
+    ) -> Self {
+        Self {
+            crate_root: root.to_path_buf(),
+            files,
+            index,
+        }
+    }
+
     #[tracing::instrument(level = "debug", skip(collect), err(level = "warn"))]
     #[hotpath::measure]
     pub(crate) fn collect_with(
@@ -37,16 +70,8 @@ impl SourceErrorSignatures {
         let tree = root.join("src");
         let mut files = Vec::new();
         let mut index = SignatureChainIndex::default();
-        if tree.is_dir() {
-            for entry in walkdir::WalkDir::new(&tree).sort_by_file_name() {
-                let entry = entry.map_err(anyhow::Error::new)?;
-                if entry.file_type().is_file()
-                    && entry.path().extension().is_some_and(|ext| ext == "rs")
-                    && !path_has_fixtures(entry.path(), root)
-                {
-                    files.push(collect(&mut index, entry.path(), &tree)?);
-                }
-            }
+        for path in Self::input_paths(root)? {
+            files.push(collect(&mut index, &path, &tree)?);
         }
         Ok(Self {
             crate_root: root.to_path_buf(),

@@ -67,6 +67,13 @@ for that instead of building a second invalidation scheme.
   `crate_files.rs`). An edit that leaves the file's graph equal re-scans only
   that file; a new proof that changes what is reached re-scans every file.
   `tests/panic_queries.rs` pins both.
+- **Error architecture and signatures are per-file parts and a join.** Both
+  collectors only ever add to their catalog or index, so each file's part is a
+  query keyed by the file and the crate's value is a query that joins the parts
+  in file order (`architecture_queries.rs`, `signature_queries.rs`). A body edit
+  recomputes the edited file's part and no other. An edit that adds an item
+  changes the crate's name resolution and rightly recomputes more widely.
+  `tests/error_evidence_queries.rs` pins both.
 - **Cfg contexts are query arguments.** The context pass today mutates the one
   database's cfg inputs for each context (`LocalCfgs::enter`), which invalidates
   what the previous context computed. A context key as a query argument lets

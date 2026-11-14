@@ -1,5 +1,7 @@
 //! Architecture module selection and collection use canonical database trees.
 use super::SourceDatabase;
+use crate::loader::database::architecture_queries as queries;
+use crate::loader::database::crate_files::CrateKey;
 use crate::{
     CordialResult, CrateTarget, FileSnapshot, ir::SourceErrorArchitecture, loader::DatabaseSource,
 };
@@ -22,6 +24,30 @@ impl SourceDatabase {
         target: &CrateTarget,
     ) -> CordialResult<SourceErrorArchitecture> {
         let paths = self.error_module_files(target.crate_root())?;
+        let files = paths
+            .iter()
+            .map(|path| {
+                Ok((
+                    self.file_id(path)?,
+                    path.clone(),
+                    target.crate_root().join("src"),
+                ))
+            })
+            .collect::<CordialResult<Vec<_>>>()?;
+        let key = queries::NamedCrateKey::new(
+            &self.db,
+            CrateKey::new(&self.db, files, target.crate_root().to_path_buf()),
+            target.crate_name().to_owned(),
+        );
+        // A file a query declines sends the crate down the direct path, which
+        // reports why.
+        if let Some(joined) = queries::architecture_catalog(&self.db, key) {
+            return Ok(SourceErrorArchitecture::from_parts(
+                target.crate_root(),
+                joined.files.clone(),
+                joined.catalog.clone(),
+            ));
+        }
         SourceErrorArchitecture::collect_with(
             target.crate_root(),
             target.crate_name(),

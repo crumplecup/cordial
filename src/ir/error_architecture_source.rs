@@ -46,6 +46,20 @@ impl SourceErrorArchitecture {
         })
     }
 
+    /// The inventory of a crate whose catalog is joined from per-file parts.
+    #[tracing::instrument(level = "trace", skip(files, catalog))]
+    pub(crate) fn from_parts(
+        root: &Path,
+        files: Vec<FileSnapshot>,
+        catalog: ErrorArchitectureCatalog,
+    ) -> Self {
+        Self {
+            crate_root: root.to_path_buf(),
+            files,
+            catalog,
+        }
+    }
+
     /// Evaluate a policy using graph evidence alone; no source access is needed.
     #[tracing::instrument(level = "debug", skip(self, strategy), err(level = "warn"))]
     #[hotpath::measure(impl_type = "SourceErrorArchitecture")]

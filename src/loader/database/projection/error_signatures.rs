@@ -1,6 +1,8 @@
 //! Collect signature-chain evidence from canonical database inputs.
 
 use super::SourceDatabase;
+use crate::loader::database::crate_files::CrateKey;
+use crate::loader::database::signature_queries as queries;
 use crate::{CordialResult, FileSnapshot, ir::SourceErrorSignatures, loader::DatabaseSource};
 use ra_ap_hir::Semantics;
 use ra_ap_ide_db::base_db::SourceDatabase as RaSourceDatabase;
@@ -12,6 +14,21 @@ impl SourceDatabase {
         &self,
         root: &std::path::Path,
     ) -> CordialResult<SourceErrorSignatures> {
+        let tree = root.join("src");
+        let files = SourceErrorSignatures::input_paths(root)?
+            .into_iter()
+            .map(|path| Ok((self.file_id(&path)?, path, tree.clone())))
+            .collect::<CordialResult<Vec<_>>>()?;
+        let key = CrateKey::new(&self.db, files, root.to_path_buf());
+        // A file a query declines sends the crate down the direct path, which
+        // reports why.
+        if let Some(joined) = queries::signature_index(&self.db, key) {
+            return Ok(SourceErrorSignatures::from_parts(
+                root,
+                joined.files.clone(),
+                joined.index.clone(),
+            ));
+        }
         let sema = Semantics::new(&self.db);
         SourceErrorSignatures::collect_with(root, |index, path, tree| {
             let file = self.file_id(path)?;

@@ -145,6 +145,47 @@ impl Catalog {
         }
     }
 
+    /// What one file adds to a catalog: its declarations, constructors and sites.
+    #[instrument(level = "debug", skip(file))]
+    #[hotpath::measure]
+    pub(crate) fn of_file(file: &DatabaseSource<'_>, root: &Path) -> Self {
+        let mut part = Self::new("");
+        part.collect(file, root);
+        part
+    }
+
+    /// The crate's catalog from each file's, in file order: collection only ever
+    /// adds, so adding each file's part in turn is collecting the files in turn.
+    #[instrument(level = "debug", skip(parts))]
+    #[hotpath::measure]
+    pub(crate) fn join<'a>(crate_name: &str, parts: impl Iterator<Item = &'a Self>) -> Self {
+        let mut catalog = Self::new(crate_name);
+        for part in parts {
+            catalog
+                .structs
+                .extend(part.structs.iter().map(|(k, v)| (k.clone(), v.clone())));
+            catalog
+                .enums
+                .extend(part.enums.iter().map(|(k, v)| (k.clone(), v.clone())));
+            catalog
+                .constructors
+                .extend(part.constructors.iter().cloned());
+            catalog
+                .map_err_sites
+                .extend(part.map_err_sites.iter().cloned());
+            catalog
+                .fanout_wrappers
+                .extend(part.fanout_wrappers.iter().cloned());
+            catalog
+                .fanout_calls
+                .extend(part.fanout_calls.iter().cloned());
+            catalog.error_impls.extend(part.error_impls.iter().cloned());
+            catalog.fields.extend(part.fields.iter().cloned());
+            catalog.copy_impls.extend(part.copy_impls.iter().cloned());
+        }
+        catalog
+    }
+
     #[instrument(level = "debug")]
     #[hotpath::measure]
     pub(super) fn last_ident(label: &str) -> &str {

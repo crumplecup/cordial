@@ -66,6 +66,7 @@ fn an_edit_that_leaves_the_facts_equal_rewalks_only_its_file() -> Result<()> {
     }
     let mut session = SourceDatabase::load(root.path()).into_diagnostic()?;
     project(&mut session, root.path())?;
+    let facts_before = counts(&metrics, "antipattern_facts_file:");
     let walks = counts(&metrics, "antipattern_sites_file:");
     assert_eq!(walks.len(), 3, "every file is walked once: {walks:?}");
     assert!(walks.values().all(|count| *count == 1), "{walks:?}");
@@ -81,6 +82,18 @@ fn an_edit_that_leaves_the_facts_equal_rewalks_only_its_file() -> Result<()> {
         .change_file(&a, "pub fn quiet() -> u32 { 2 }\n".to_owned())
         .into_diagnostic()?;
     project(&mut session, root.path())?;
+    for (key, count) in &counts(&metrics, "antipattern_facts_file:") {
+        let was = facts_before.get(key).copied().unwrap_or(0);
+        if key.ends_with("a.rs") {
+            assert_eq!(
+                *count,
+                was + 1,
+                "the edited file's facts were reused: {key}"
+            );
+        } else {
+            assert_eq!(*count, was, "another file's facts were recomputed: {key}");
+        }
+    }
     let after = counts(&metrics, "antipattern_sites_file:");
     for (key, count) in &after {
         let was = walks.get(key).copied().unwrap_or(0);

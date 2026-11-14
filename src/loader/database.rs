@@ -4,9 +4,15 @@ use tracing::instrument;
 mod antipattern_queries;
 #[cfg(feature = "internal_error_chain")]
 mod apply_queries;
+#[cfg(feature = "internal_error_chain")]
+mod architecture_queries;
 mod context_crates;
 mod contexts;
-#[cfg(any(feature = "antipatterns", feature = "panics"))]
+#[cfg(any(
+    feature = "antipatterns",
+    feature = "panics",
+    feature = "internal_error_chain"
+))]
 mod crate_files;
 mod external;
 mod identity;
@@ -23,6 +29,8 @@ mod queries;
 mod recording;
 mod scan_queries;
 mod session;
+#[cfg(feature = "internal_error_chain")]
+mod signature_queries;
 mod types;
 
 pub(super) use super::native_syntax::DatabaseSource;

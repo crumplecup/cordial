@@ -15,6 +15,56 @@ mod shapes;
 mod sources;
 
 impl SignatureChainIndex {
+    /// What one file adds to an index.
+    #[tracing::instrument(level = "debug", skip(file))]
+    #[hotpath::measure]
+    pub(crate) fn of_file(file: &DatabaseSource<'_>, tree: &Path) -> Self {
+        let mut part = Self::default();
+        part.collect(file, tree);
+        part
+    }
+
+    /// The crate's index from each file's, in file order. Collection only adds
+    /// (pushes and extends), so adding each part in turn is collecting the files
+    /// in turn.
+    #[tracing::instrument(level = "debug", skip(parts))]
+    #[hotpath::measure]
+    pub(crate) fn join<'a>(parts: impl Iterator<Item = &'a Self>) -> Self {
+        let mut index = Self::default();
+        for part in parts {
+            for (key, items) in &part.functions {
+                index
+                    .functions
+                    .entry(key.clone())
+                    .or_default()
+                    .extend(items.iter().cloned());
+            }
+            for (key, items) in &part.errors {
+                index
+                    .errors
+                    .entry(key.clone())
+                    .or_default()
+                    .extend(items.iter().cloned());
+            }
+            for (key, items) in &part.manual_impls {
+                index
+                    .manual_impls
+                    .entry(key.clone())
+                    .or_default()
+                    .extend(items.iter().cloned());
+            }
+            for (scope, names) in &part.imports {
+                index
+                    .imports
+                    .entry(scope.clone())
+                    .or_default()
+                    .extend(names.iter().map(|(k, v)| (k.clone(), v.clone())));
+            }
+            index.conversions.extend(part.conversions.iter().cloned());
+        }
+        index
+    }
+
     #[tracing::instrument(level = "debug", skip(self, file))]
     #[hotpath::measure]
     pub(crate) fn collect(&mut self, file: &DatabaseSource<'_>, tree: &Path) {
