@@ -53,6 +53,13 @@ for that instead of building a second invalidation scheme.
   edited file's facts. Known limit: a file's facts carry its text digest, so any
   edit changes `apply_source` and the phases above it re-run; they stop being
   per-edit work only when those phases are split per file.
+- **Antipatterns are per-file queries with a joined fact.** A file's walk reads
+  crate-wide facts (local traits, error types, constants), so each file's
+  contribution is a query, the join is a query over them, and the walk is keyed
+  by the file and the joined facts (`antipattern_queries.rs`). An edit whose
+  file facts come out equal never re-runs the join, and only the edited file is
+  walked; one that adds an error type re-walks every file, as it must. Contract
+  clauses are a per-file query too. `tests/antipattern_queries.rs` pins both.
 - **Cfg contexts are query arguments.** The context pass today mutates the one
   database's cfg inputs for each context (`LocalCfgs::enter`), which invalidates
   what the previous context computed. A context key as a query argument lets

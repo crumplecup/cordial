@@ -10,13 +10,15 @@ use ra_ap_syntax::{
     ast::{HasAttrs, HasName},
 };
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeSet, HashMap, HashSet},
     path::{Path, PathBuf},
 };
 mod facts;
 mod fields;
 mod functions;
 mod types;
+
+pub(crate) use facts::FileFacts;
 
 /// Shared selection for production collection and Cargo-backed projection.
 #[tracing::instrument(level = "debug", skip(root), err(level = "warn"))]
@@ -43,12 +45,13 @@ pub(crate) fn input_paths(root: &Path, contracts: bool) -> CordialResult<Vec<(Pa
     Ok(paths)
 }
 
-#[derive(Default)]
-struct CrateFacts {
-    traits: HashSet<String>,
-    errors: HashSet<String>,
-    constants: HashSet<String>,
-    runtime: HashSet<String>,
+/// The crate-wide relationships the per-file walk reads.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
+pub(crate) struct CrateFacts {
+    traits: BTreeSet<String>,
+    errors: BTreeSet<String>,
+    constants: BTreeSet<String>,
+    runtime: BTreeSet<String>,
 }
 
 #[derive(Clone, Default)]
@@ -79,13 +82,11 @@ impl AntipatternCatalog {
             .iter()
             .filter(|(_, source)| !crate::loader::path_has_fixtures(source.path(), root))
             .collect();
-        let mut facts = CrateFacts::default();
-        for (_, source) in &ordinary {
-            facts.collect(source);
-        }
-        for (_, source) in &ordinary {
-            facts.collect_kinds(source.tree().syntax());
-        }
+        let per_file: Vec<FileFacts> = ordinary
+            .iter()
+            .map(|(_, source)| FileFacts::collect(source))
+            .collect();
+        let facts = CrateFacts::join(per_file.iter());
         let mut sites = Vec::new();
         let mut snapshots = Vec::new();
         for (tree, source) in ordinary {
@@ -93,28 +94,10 @@ impl AntipatternCatalog {
                 source.path().to_path_buf(),
                 source.source_digest(),
             ));
-            let mut collector = Collector {
-                source,
-                root,
-                facts: &facts,
-                sites: Vec::new(),
-            };
-            let context = Context {
-                modules: module_path_from_src_file(tree, source.path()),
-                siblings: functions::siblings(source.tree().syntax()),
-                ..Context::default()
-            };
-            collector.walk(source.tree().syntax(), &context)?;
-            sites.extend(collector.sites);
+            sites.extend(file_candidates(source, tree, root, &facts)?);
         }
         let contracts = super::contract_bounds::collect(root, crate_name, files, &mut snapshots)?;
-        snapshots.sort_by(|a, b| a.path().cmp(b.path()));
-        snapshots.dedup();
-        Ok(Self::new(
-            snapshots,
-            AntipatternSyntaxFacts::new(sites),
-            contracts,
-        ))
+        Ok(Self::from_parts(snapshots, sites, contracts))
     }
 }
 
@@ -126,13 +109,26 @@ pub(super) fn collect_file(
     tree: &Path,
     root: &Path,
 ) -> CordialResult<AntipatternSyntaxFacts> {
-    let mut facts = CrateFacts::default();
-    facts.collect(source);
-    facts.collect_kinds(source.tree().syntax());
+    let facts = CrateFacts::join(std::iter::once(&FileFacts::collect(source)));
+    Ok(AntipatternSyntaxFacts::new(file_candidates(
+        source, tree, root, &facts,
+    )?))
+}
+
+/// One file's antipattern candidates, given the crate's facts: a function of the
+/// file's syntax and those facts.
+#[tracing::instrument(level = "debug", skip_all, err(level = "warn"))]
+#[hotpath::measure]
+pub(crate) fn file_candidates(
+    source: &DatabaseSource<'_>,
+    tree: &Path,
+    root: &Path,
+    facts: &CrateFacts,
+) -> CordialResult<Vec<AntipatternCandidate>> {
     let mut collector = Collector {
         source,
         root,
-        facts: &facts,
+        facts,
         sites: Vec::new(),
     };
     let context = Context {
@@ -141,7 +137,7 @@ pub(super) fn collect_file(
         ..Context::default()
     };
     collector.walk(source.tree().syntax(), &context)?;
-    Ok(AntipatternSyntaxFacts::new(collector.sites))
+    Ok(collector.sites)
 }
 
 impl Context {

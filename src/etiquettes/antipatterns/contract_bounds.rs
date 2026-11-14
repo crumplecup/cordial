@@ -55,6 +55,7 @@ mod index;
 mod native;
 pub(super) use native::collect;
 pub(crate) use native::collect_payload;
+pub(crate) use native::{ContractFile, file_clauses, join_clauses};
 mod registry;
 mod token_tree;
 pub(super) use token_tree::shape as clause_shape;

@@ -33,40 +33,14 @@ impl CrateFacts {
         self.placement(source.tree().syntax(), false);
     }
 
-    #[tracing::instrument(level = "debug", skip(self, node))]
+    /// Add the `kind` field types of every error struct among `pairs`, in order:
+    /// a kind named by one struct can make the next struct an error.
+    #[tracing::instrument(level = "debug", skip(self, pairs))]
     #[hotpath::measure]
-    pub(super) fn collect_kinds(&mut self, node: &SyntaxNode) {
-        for structure in node.descendants().filter_map(ast::Struct::cast) {
-            if structure
-                .name()
-                .is_none_or(|name| !self.errors.contains(name.text()))
-            {
-                continue;
-            }
-            let Some(ast::FieldList::RecordFieldList(list)) = structure.field_list() else {
-                continue;
-            };
-            for field in list
-                .fields()
-                .filter(|field| field.name().is_some_and(|name| name.text() == "kind"))
-            {
-                let Some(ty) = field.ty() else {
-                    continue;
-                };
-                let inner = match &ty {
-                    ast::Type::RefType(reference) => reference.ty(),
-                    _ if types::label(&ty) == "Box" => types::arguments(&ty).into_iter().next(),
-                    _ => Some(ty),
-                };
-                if let Some(name) = inner
-                    .as_ref()
-                    .and_then(types::path)
-                    .as_ref()
-                    .and_then(types::path_name)
-                    && name.ends_with("Kind")
-                {
-                    self.errors.insert(name);
-                }
+    pub(super) fn collect_kinds(&mut self, pairs: &[(String, String)]) {
+        for (structure, kind) in pairs {
+            if self.errors.contains(structure) {
+                self.errors.insert(kind.clone());
             }
         }
     }
@@ -194,4 +168,94 @@ fn derives_error(adt: &ast::Adt) -> bool {
                         .any(|token| token.text() == "Error")
                 })
     })
+}
+
+/// What one file contributes to the crate's facts: its own declarations and
+/// uses, and every `kind` field it declares on a struct, whether or not that
+/// struct turns out to be an error. Which structs are errors is crate-wide, so
+/// the pairs wait for the join.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct FileFacts {
+    contribution: CrateFacts,
+    kinds: Vec<(String, String)>,
+}
+
+impl FileFacts {
+    #[tracing::instrument(level = "debug", skip(source))]
+    #[hotpath::measure]
+    pub(crate) fn collect(source: &DatabaseSource<'_>) -> Self {
+        let mut contribution = CrateFacts::default();
+        contribution.collect(source);
+        Self {
+            contribution,
+            kinds: kind_pairs(source.tree().syntax()),
+        }
+    }
+}
+
+impl CrateFacts {
+    /// The crate's facts from every file's contribution, in file order.
+    #[tracing::instrument(level = "debug", skip(files))]
+    #[hotpath::measure]
+    pub(crate) fn join<'a>(files: impl Iterator<Item = &'a FileFacts> + Clone) -> Self {
+        let mut facts = Self::default();
+        for file in files.clone() {
+            facts
+                .traits
+                .extend(file.contribution.traits.iter().cloned());
+            facts
+                .errors
+                .extend(file.contribution.errors.iter().cloned());
+            facts
+                .constants
+                .extend(file.contribution.constants.iter().cloned());
+            facts
+                .runtime
+                .extend(file.contribution.runtime.iter().cloned());
+        }
+        for file in files {
+            facts.collect_kinds(&file.kinds);
+        }
+        facts
+    }
+}
+
+/// Each `kind` field of each named struct under `node`, as the struct's name and
+/// the name of the type the field holds (through a reference or a `Box`) when it
+/// ends in `Kind`.
+#[tracing::instrument(level = "debug", skip(node))]
+#[hotpath::measure]
+fn kind_pairs(node: &SyntaxNode) -> Vec<(String, String)> {
+    let mut pairs = Vec::new();
+    for structure in node.descendants().filter_map(ast::Struct::cast) {
+        let Some(name) = structure.name() else {
+            continue;
+        };
+        let Some(ast::FieldList::RecordFieldList(list)) = structure.field_list() else {
+            continue;
+        };
+        for field in list
+            .fields()
+            .filter(|field| field.name().is_some_and(|name| name.text() == "kind"))
+        {
+            let Some(ty) = field.ty() else {
+                continue;
+            };
+            let inner = match &ty {
+                ast::Type::RefType(reference) => reference.ty(),
+                _ if types::label(&ty) == "Box" => types::arguments(&ty).into_iter().next(),
+                _ => Some(ty),
+            };
+            if let Some(kind) = inner
+                .as_ref()
+                .and_then(types::path)
+                .as_ref()
+                .and_then(types::path_name)
+                && kind.ends_with("Kind")
+            {
+                pairs.push((name.text().to_string(), kind));
+            }
+        }
+    }
+    pairs
 }

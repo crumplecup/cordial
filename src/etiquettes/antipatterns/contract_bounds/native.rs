@@ -17,36 +17,54 @@ use std::path::{Path, PathBuf};
 mod kani;
 mod walk;
 
+/// One file's contract clauses, or `None` for a file this policy does not read:
+/// outside `src`, or under a `gallery` directory. The snapshot is the file's.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ContractFile {
+    snapshot: FileSnapshot,
+    clauses: Vec<ContractClause>,
+}
+
 #[tracing::instrument(level = "debug", skip_all, err(level = "warn"))]
 #[hotpath::measure]
-pub(in crate::etiquettes::antipatterns) fn collect(
+pub(crate) fn file_clauses(
     root: &Path,
     crate_name: &str,
-    files: &[(PathBuf, &DatabaseSource<'_>)],
-    snapshots: &mut Vec<FileSnapshot>,
-) -> CordialResult<Vec<ContractClause>> {
+    source: &DatabaseSource<'_>,
+) -> CordialResult<Option<ContractFile>> {
     let Some(verifier) = verifier_for_crate(crate_name) else {
-        return Ok(Vec::new());
+        return Ok(None);
     };
     let src = root.join("src");
-    let mut clauses = Vec::new();
-    for (_, source) in files {
-        let Ok(relative) = source.path().strip_prefix(&src) else {
-            continue;
-        };
-        if relative
-            .components()
-            .any(|part| part.as_os_str() == "gallery")
-        {
-            continue;
-        }
-        snapshots.push(FileSnapshot::new(
-            source.path().to_path_buf(),
-            source.source_digest(),
-        ));
-        clauses.extend(collect_file(source, &src, verifier)?);
+    let Ok(relative) = source.path().strip_prefix(&src) else {
+        return Ok(None);
+    };
+    if relative
+        .components()
+        .any(|part| part.as_os_str() == "gallery")
+    {
+        return Ok(None);
     }
+    Ok(Some(ContractFile {
+        snapshot: FileSnapshot::new(source.path().to_path_buf(), source.source_digest()),
+        clauses: collect_file(source, &src, verifier)?,
+    }))
+}
 
+/// The crate's clauses from each file's, in report order, with paths relative
+/// to the crate root. Each file's snapshot is added to `snapshots`.
+#[tracing::instrument(level = "debug", skip_all)]
+#[hotpath::measure]
+pub(crate) fn join_clauses<'a>(
+    root: &Path,
+    files: impl Iterator<Item = &'a ContractFile>,
+    snapshots: &mut Vec<FileSnapshot>,
+) -> Vec<ContractClause> {
+    let mut clauses = Vec::new();
+    for file in files {
+        snapshots.push(file.snapshot.clone());
+        clauses.extend(file.clauses.iter().cloned());
+    }
     clauses.sort_by(|a, b| {
         a.site()
             .file()
@@ -57,7 +75,22 @@ pub(in crate::etiquettes::antipatterns) fn collect(
     for clause in &mut clauses {
         clause.strip_file_prefix(root);
     }
-    Ok(clauses)
+    clauses
+}
+
+#[tracing::instrument(level = "debug", skip_all, err(level = "warn"))]
+#[hotpath::measure]
+pub(in crate::etiquettes::antipatterns) fn collect(
+    root: &Path,
+    crate_name: &str,
+    files: &[(PathBuf, &DatabaseSource<'_>)],
+    snapshots: &mut Vec<FileSnapshot>,
+) -> CordialResult<Vec<ContractClause>> {
+    let mut found = Vec::new();
+    for (_, source) in files {
+        found.extend(file_clauses(root, crate_name, source)?);
+    }
+    Ok(join_clauses(root, found.iter(), snapshots))
 }
 
 #[tracing::instrument(level = "debug", skip_all, err(level = "warn"))]

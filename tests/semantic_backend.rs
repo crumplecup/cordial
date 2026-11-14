@@ -307,6 +307,9 @@ fn assert_edit_invalidates_only_dependents(
         "visibility_file:",
         "policy_file:",
         "verus_file:",
+        "antipattern_facts_file:",
+        "antipattern_sites_file:",
+        "antipattern_contracts_file:",
     ] {
         assert!(
             facts_before.keys().any(|key| key.starts_with(query)),

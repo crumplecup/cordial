@@ -33,6 +33,15 @@ impl SourceAntipatterns {
         })
     }
 
+    /// The inventory of a crate whose catalog was assembled from per-file parts.
+    #[tracing::instrument(level = "trace", skip(catalog))]
+    pub(crate) fn from_catalog(root: &Path, catalog: AntipatternCatalog) -> Self {
+        Self {
+            crate_root: root.into(),
+            catalog,
+        }
+    }
+
     /// Fingerprints of every inspected source file, including empty files.
     #[tracing::instrument(level = "trace", skip(self))]
     pub fn snapshots(&self) -> &[FileSnapshot] {

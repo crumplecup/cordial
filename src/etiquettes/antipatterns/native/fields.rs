@@ -8,7 +8,7 @@ use ra_ap_syntax::{
     AstNode, ast,
     ast::{HasGenericArgs, HasName},
 };
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 
 impl Collector<'_, '_> {
     #[tracing::instrument(level = "debug", skip_all, err(level = "warn"))]
@@ -76,7 +76,7 @@ fn static_ref(ty: &ast::RefType) -> bool {
 }
 
 #[tracing::instrument(level = "trace", skip(ty, traits))]
-fn local_spine(ty: &ast::Type, traits: &HashSet<String>) -> bool {
+fn local_spine(ty: &ast::Type, traits: &BTreeSet<String>) -> bool {
     match ty {
         ast::Type::DynTraitType(object) => types::bounds(object)
             .iter()
@@ -152,7 +152,7 @@ fn children(ty: &ast::Type) -> Vec<ast::Type> {
 }
 
 #[tracing::instrument(level = "trace", skip(ty, traits))]
-fn disallowed(ty: &ast::Type, traits: &HashSet<String>) -> bool {
+fn disallowed(ty: &ast::Type, traits: &BTreeSet<String>) -> bool {
     if let ast::Type::RefType(reference) = ty
         && static_ref(reference)
         && reference
