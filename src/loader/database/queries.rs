@@ -305,6 +305,38 @@ pub(super) fn function_evidence<'db>(
     collect_reachable(db, key)
 }
 
+/// The evidence of a function the way the saved database can keep it: keyed by the
+/// function's description, which means the same in every process. Computed by the
+/// process-local query, and valid for as long as nothing it read has changed.
+#[salsa::tracked(persist, returns(ref))]
+#[instrument(level = "debug", skip(db, key))]
+#[hotpath::measure]
+pub(super) fn persisted_evidence<'db>(
+    db: &'db dyn SemanticDatabase,
+    key: super::item_key::ItemKey<'db>,
+) -> Option<SemanticFunction> {
+    let function = super::item_key::function_of(db, key)?;
+    function_evidence(db, FunctionKey::new(db, function)).clone()
+}
+
+/// The evidence of `function`. From the persisted query when its description finds this
+/// same function again (so a restored database can answer without computing it), from the
+/// process-local one when it cannot (a function a macro generated, say).
+#[instrument(level = "trace", skip(db, function))]
+pub(super) fn evidence_of<'db>(
+    db: &'db dyn SemanticDatabase,
+    function: Function,
+) -> &'db Option<SemanticFunction> {
+    let root = db.root_database();
+    let definition = ra_ap_hir::ModuleDef::Function(function);
+    let key = super::item_key::key_of(root, definition);
+    if super::item_key::finds(db, key, definition) {
+        persisted_evidence(db, key)
+    } else {
+        function_evidence(db, FunctionKey::new(db, function))
+    }
+}
+
 #[instrument(level = "debug", skip(db, key))]
 #[hotpath::measure]
 fn collect_reachable(db: &dyn SemanticDatabase, key: FunctionKey<'_>) -> Option<SemanticFunction> {

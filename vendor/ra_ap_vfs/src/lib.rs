@@ -195,6 +195,12 @@ impl Vfs {
         self.interner.lookup(file_id)
     }
 
+    /// Every path that has been given an id, in id order, deleted ones included: the
+    /// paths a new `Vfs` must be given, in this order, to hand out the same ids.
+    pub fn interned_paths(&self) -> impl Iterator<Item = &VfsPath> + '_ {
+        (0..self.data.len()).map(|index| self.interner.lookup(FileId(index as u32)))
+    }
+
     /// Returns an iterator over the stored ids and their corresponding paths.
     ///
     /// This will skip deleted files.

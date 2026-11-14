@@ -1968,8 +1968,6 @@ dependencies = [
 [[package]]
 name = "ra_ap_load-cargo"
 version = "0.0.358"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ee8bbf755a6d81544cd576150986601069918ab46fa5677275ce3b9cc875bc73"
 dependencies = [
  "anyhow",
  "crossbeam-channel",

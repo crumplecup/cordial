@@ -41,6 +41,31 @@ pub(super) fn identity(db: &RootDatabase, definition: ModuleDef) -> SemanticItem
     SemanticItemId::new(ItemKey::new(db, describe(db, definition)).as_id().as_bits())
 }
 
+/// The interned description of `definition`.
+#[instrument(level = "trace", skip(db, definition))]
+pub(super) fn key_of(db: &RootDatabase, definition: ModuleDef) -> ItemKey<'_> {
+    ItemKey::new(db, describe(db, definition))
+}
+
+/// Whether `key`'s description finds `definition` again: the test of whether a result
+/// computed for the description may stand for this definition.
+#[instrument(level = "trace", skip(db, key, definition))]
+pub(super) fn finds(db: &dyn SemanticDatabase, key: ItemKey<'_>, definition: ModuleDef) -> bool {
+    resolve(db, key) == Some(definition)
+}
+
+/// The function `key` describes, when it describes one that can be found again.
+#[instrument(level = "trace", skip(db, key))]
+pub(super) fn function_of(
+    db: &dyn SemanticDatabase,
+    key: ItemKey<'_>,
+) -> Option<ra_ap_hir::Function> {
+    match resolve(db, key)? {
+        ModuleDef::Function(function) => Some(function),
+        _ => None,
+    }
+}
+
 /// What `id` describes, as text.
 #[instrument(level = "trace", skip(db, id))]
 pub(super) fn description(db: &RootDatabase, id: SemanticItemId) -> String {

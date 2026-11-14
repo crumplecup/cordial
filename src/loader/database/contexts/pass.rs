@@ -11,10 +11,7 @@ use super::flips::Flips;
 use super::merge::{Pending, declares_a_name_twice, group};
 use super::plan::{Covered, asked};
 use crate::loader::database::{
-    SourceDatabase,
-    populate::expanded_definition,
-    queries::{FunctionKey, function_evidence},
-    types,
+    SourceDatabase, populate::expanded_definition, queries::evidence_of, types,
 };
 use crate::{
     CfgPlanning, CordialResult, CrateIr, NodeId, SemanticContextFunction, SemanticContextKey,
@@ -310,7 +307,7 @@ impl SourceDatabase {
                     if !(new || flips.touches(range) || flips.mentions(function.syntax())) {
                         continue;
                     }
-                    let facts = function_evidence(&self.db, FunctionKey::new(&self.db, definition))
+                    let facts = evidence_of(&self.db, definition)
                         .as_ref()
                         .ok_or_else(|| {
                             crate::CordialError::workspace_source_facts_missing(

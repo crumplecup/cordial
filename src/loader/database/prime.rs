@@ -84,8 +84,7 @@ impl SourceDatabase {
 fn evaluate(db: &RootDatabase, functions: &[Function], next: &AtomicUsize) {
     attach_db(db, || {
         while let Some(function) = functions.get(next.fetch_add(1, Ordering::Relaxed)) {
-            let key = queries::FunctionKey::new(db, *function);
-            let _ = queries::function_evidence(db, key);
+            let _ = queries::evidence_of(db, *function);
         }
     });
 }

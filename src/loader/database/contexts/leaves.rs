@@ -7,7 +7,7 @@
 
 use super::plan::{Covered, asked};
 use crate::loader::database::{
-    SourceDatabase, populate::expanded_definition, queries::FunctionKey, queries::function_evidence,
+    SourceDatabase, populate::expanded_definition, queries::evidence_of,
 };
 use crate::{CordialResult, CrateIr, FunctionLocation, LeafFunction, SemanticContextKey};
 use ra_ap_hir::{Semantics, attach_db};
@@ -182,10 +182,7 @@ impl SourceDatabase {
                         );
                         continue;
                     };
-                    let Some(facts) =
-                        function_evidence(&self.db, FunctionKey::new(&self.db, definition))
-                            .as_ref()
-                    else {
+                    let Some(facts) = evidence_of(&self.db, definition).as_ref() else {
                         continue;
                     };
                     let callees = facts

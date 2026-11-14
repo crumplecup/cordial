@@ -492,8 +492,7 @@ fn collect_function(
     let Some(definition) = definition else {
         return Ok(None);
     };
-    let key = queries::FunctionKey::new(db, definition);
-    let facts = queries::function_evidence(db, key)
+    let facts = queries::evidence_of(db, definition)
         .as_ref()
         .ok_or_else(|| CordialError::workspace_source_facts_missing("semantic function source"))?;
     weight.set_attr(crate::ATTR_SEMANTIC_FUNCTION, serde_json::to_value(facts)?);

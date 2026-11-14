@@ -17,7 +17,7 @@ use ra_ap_syntax::{AstNode, TextRange, ast};
 use tracing::instrument;
 
 use super::populate::expanded_definition;
-use super::queries::{self, FileKey, FunctionKey, SemanticDatabase};
+use super::queries::{self, FileKey, SemanticDatabase};
 use crate::ir::SourceTracingInventory;
 
 /// One file's tracing inventory, or `None` when the file did not parse.
@@ -48,9 +48,7 @@ pub(super) fn tracing_inventory_file<'db>(
             else {
                 continue;
             };
-            if let Some(found) =
-                queries::function_evidence(db, FunctionKey::new(db, definition)).as_ref()
-            {
+            if let Some(found) = queries::evidence_of(db, definition).as_ref() {
                 semantics.insert(function.syntax().text_range(), found.clone());
             }
         }

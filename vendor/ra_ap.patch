@@ -29,7 +29,7 @@
  
  [dependencies.vfs]
 --- a/ra_ap_base_db-0.0.358/src/change.rs	2006-07-23 18:21:28.000000000 -0700
-+++ b/ra_ap_base_db/src/change.rs	2026-11-14 10:47:21.002841868 -0800
++++ b/ra_ap_base_db/src/change.rs	2026-11-14 11:19:48.911375550 -0800
 @@ -69,8 +69,15 @@
  
                  db.set_source_root_with_durability(root_id, Arc::new(root), durability);
@@ -49,7 +49,7 @@
  
          for (file_id, text) in self.files_changed {
 --- a/ra_ap_base_db-0.0.358/src/input.rs	2006-07-23 18:21:28.000000000 -0700
-+++ b/ra_ap_base_db/src/input.rs	2026-11-14 09:38:27.000000000 -0800
++++ b/ra_ap_base_db/src/input.rs	2026-11-14 11:19:48.912352566 -0800
 @@ -80,6 +80,7 @@
  }
  
@@ -170,7 +170,7 @@
      pub fn add_crate_root(
          &mut self,
 --- a/ra_ap_base_db-0.0.358/src/lib.rs	2006-07-23 18:21:28.000000000 -0700
-+++ b/ra_ap_base_db/src/lib.rs	2026-11-14 10:11:12.355887760 -0800
++++ b/ra_ap_base_db/src/lib.rs	2026-11-14 11:19:48.910025327 -0800
 @@ -76,7 +76,54 @@
      file_source_roots: Arc<DashMap<vfs::FileId, FileSourceRootInput, BuildHasherDefault<FxHasher>>>,
  }
@@ -528,7 +528,7 @@
      files: FxHashMap<VfsPath, FileId>,
      paths: IndexMap<FileId, VfsPath, FxBuildHasher>,
 --- a/ra_ap_vfs-0.0.358/src/lib.rs	2006-07-23 18:21:28.000000000 -0700
-+++ b/ra_ap_vfs/src/lib.rs	2026-11-14 09:38:27.000000000 -0800
++++ b/ra_ap_vfs/src/lib.rs	2026-11-14 11:21:37.906406589 -0800
 @@ -63,6 +63,7 @@
  ///
  /// Most functions in rust-analyzer use this when they need to refer to a file.
@@ -537,6 +537,19 @@
  pub struct FileId(u32);
  // pub struct FileId(NonMaxU32);
  
+@@ -194,6 +195,12 @@
+         self.interner.lookup(file_id)
+     }
+ 
++    /// Every path that has been given an id, in id order, deleted ones included: the
++    /// paths a new `Vfs` must be given, in this order, to hand out the same ids.
++    pub fn interned_paths(&self) -> impl Iterator<Item = &VfsPath> + '_ {
++        (0..self.data.len()).map(|index| self.interner.lookup(FileId(index as u32)))
++    }
++
+     /// Returns an iterator over the stored ids and their corresponding paths.
+     ///
+     /// This will skip deleted files.
 --- a/ra_ap_vfs-0.0.358/src/vfs_path.rs	2006-07-23 18:21:28.000000000 -0700
 +++ b/ra_ap_vfs/src/vfs_path.rs	2026-11-14 09:38:27.000000000 -0800
 @@ -10,6 +10,7 @@
@@ -691,3 +704,29 @@
      pub fn new(lru_capacity: Option<u16>) -> RootDatabase {
          let mut db = RootDatabase {
              storage: ManuallyDrop::new(salsa::Storage::default()),
+--- a/ra_ap_load-cargo-0.0.358/src/lib.rs	2006-07-23 18:21:28.000000000 -0700
++++ b/ra_ap_load-cargo/src/lib.rs	2026-11-14 11:19:49.363036262 -0800
+@@ -100,8 +100,22 @@
+     load_config: &LoadCargoConfig,
+     db: &mut RootDatabase,
+ ) -> anyhow::Result<(vfs::Vfs, Option<ProcMacroClient>)> {
++    load_workspace_into_db_with_vfs(ws, extra_env, load_config, db, vfs::Vfs::default())
++}
++
++/// [`load_workspace_into_db`], loading into a `vfs` that already knows some paths. A VFS
++/// hands out file ids in the order files are first seen, and the loader's threads deliver
++/// them in no fixed order; a VFS seeded with the paths of an earlier load, in their order,
++/// gives each of them the id it had, which a database restored from that load depends on.
++pub fn load_workspace_into_db_with_vfs(
++    ws: ProjectWorkspace,
++    extra_env: &FxHashMap<String, Option<String>>,
++    load_config: &LoadCargoConfig,
++    db: &mut RootDatabase,
++    vfs: vfs::Vfs,
++) -> anyhow::Result<(vfs::Vfs, Option<ProcMacroClient>)> {
+     let (sender, receiver) = unbounded();
+-    let mut vfs = vfs::Vfs::default();
++    let mut vfs = vfs;
+     let mut loader = {
+         let loader = vfs_notify::NotifyHandle::spawn(sender);
+         Box::new(loader)

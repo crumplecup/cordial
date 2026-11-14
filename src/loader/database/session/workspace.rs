@@ -6,7 +6,7 @@ use super::SourceDatabase;
 use crate::loader::database::{Reporter, SavedState};
 use crate::{CordialResult, SemanticCargoOptions, SemanticContextGap};
 use ra_ap_ide_db::RootDatabase;
-use ra_ap_load_cargo::{LoadCargoConfig, ProcMacroServerChoice, load_workspace_into_db};
+use ra_ap_load_cargo::{LoadCargoConfig, ProcMacroServerChoice, load_workspace_into_db_with_vfs};
 use ra_ap_project_model::CargoConfig;
 use ra_ap_project_model::{ProjectManifest, ProjectWorkspace};
 use ra_ap_vfs::AbsPathBuf;
@@ -217,21 +217,32 @@ fn load_database(
         num_worker_threads: 1,
         proc_macro_processes: 1,
     };
-    let (mut db, restored) = match saved.map(SavedState::restore) {
-        Some(Ok(database)) => {
+    let (mut db, mut vfs, restored) = match saved.map(SavedState::restore) {
+        Some(Ok(restored)) => {
             crate::host::event(
                 "analysis state: restored from the last run; the workspace is loaded onto it"
                     .to_owned(),
             );
-            (database, true)
+            // Hand out the ids the saved database was built with: the same path, the same
+            // id, in whatever order the loader's threads deliver the files.
+            let mut vfs = ra_ap_vfs::Vfs::default();
+            for path in restored.paths {
+                vfs.set_file_contents(path, None);
+            }
+            (restored.database, vfs, true)
         }
         Some(Err(reason)) => {
             crate::host::event(format!("analysis state: not used ({reason}); loading cold"));
-            (RootDatabase::new(None), false)
+            (RootDatabase::new(None), ra_ap_vfs::Vfs::default(), false)
         }
-        None => (RootDatabase::new(None), false),
+        None => (RootDatabase::new(None), ra_ap_vfs::Vfs::default(), false),
     };
-    let (vfs, server) =
-        load_workspace_into_db(workspace, &config.extra_env, &load_config, &mut db)?;
+    let (vfs, server) = load_workspace_into_db_with_vfs(
+        workspace,
+        &config.extra_env,
+        &load_config,
+        &mut db,
+        std::mem::take(&mut vfs),
+    )?;
     Ok((db, vfs, server, restored))
 }

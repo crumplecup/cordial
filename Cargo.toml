@@ -682,3 +682,4 @@ ra_ap_intern = { path = "vendor/ra_ap_intern" }
 ra_ap_span = { path = "vendor/ra_ap_span" }
 ra_ap_edition = { path = "vendor/ra_ap_edition" }
 ra_ap_ide_db = { path = "vendor/ra_ap_ide_db" }
+ra_ap_load-cargo = { path = "vendor/ra_ap_load-cargo" }

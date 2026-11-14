@@ -10,6 +10,16 @@ use cordial::{SavedState, SemanticCargoOptions, SemanticItemId, SourceDatabase};
 use identity_specimen::{caller_identities, paths, project, specimen};
 use miette::{IntoDiagnostic, Result};
 
+/// How many functions the run evaluated, from the line it logs (the process-wide notes are
+/// taken, so each call reads the run since the last).
+fn evaluated() -> Option<usize> {
+    let notes = cordial::host::take_notes();
+    notes.events().iter().find_map(|event| {
+        let rest = event.strip_prefix("function evidence (workspace): ")?;
+        rest.split_whitespace().next()?.parse().ok()
+    })
+}
+
 /// One run: load (restoring when there is a state), project, and say what `caller` calls.
 fn run(
     root: &Path,
@@ -97,5 +107,49 @@ fn a_state_that_cannot_be_used_is_ignored_and_the_run_goes_on_cold() -> Result<(
     std::fs::remove_dir_all(saved.directory()).into_diagnostic()?;
     let (restored, _, _) = run(root.path(), &saved)?;
     assert!(!restored);
+    Ok(())
+}
+
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn a_restored_run_does_not_compute_the_evidence_it_was_saved_with() -> Result<()> {
+    cordial::init_tracing();
+    let root = specimen()?;
+    let state = tempfile::tempdir().into_diagnostic()?;
+    let saved = SavedState::at(state.path().join("analysis-state"));
+    let _ = evaluated();
+
+    let (_, first_targets, _) = run(root.path(), &saved)?;
+    let cold = evaluated().ok_or_else(|| miette::miette!("the cold run logs its evaluation"))?;
+    assert!(
+        cold > 0,
+        "a cold run computes the evidence of the crate's functions"
+    );
+
+    // Nothing changed: the saved evidence answers. What is computed is the two `helper`s a
+    // macro generates, which no description can find again, so they have no saved evidence.
+    let (restored, targets, _) = run(root.path(), &saved)?;
+    assert!(restored);
+    assert_eq!(
+        evaluated(),
+        Some(2),
+        "only the macro-generated functions are computed again; the other {} are reused",
+        cold - 2
+    );
+    assert_eq!(targets, first_targets);
+
+    // An edit to one file: what reads it is computed again, and the answer is right.
+    let first = root.path().join("src/first.rs");
+    std::fs::write(&first, "pub fn alpha() {}\n// an edit\n").into_diagnostic()?;
+    let (restored, targets, _) = run(root.path(), &saved)?;
+    assert!(restored);
+    assert!(
+        evaluated().is_some_and(|count| count > 0),
+        "an edit invalidates the evidence that read the file"
+    );
+    assert_eq!(
+        targets, first_targets,
+        "and the callees are the same definitions"
+    );
     Ok(())
 }

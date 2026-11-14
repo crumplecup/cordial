@@ -15,8 +15,8 @@ red-green algorithm, made durable.
 
 ## What was patched
 
-`vendor/` holds ten `ra_ap_*` crates at 0.0.358, wired in through `[patch.crates-io]`.
-`vendor/ra_ap.patch` is the whole difference from the published sources (about 240 changed lines;
+`vendor/` holds eleven `ra_ap_*` crates at 0.0.358, wired in through `[patch.crates-io]`.
+`vendor/ra_ap.patch` is the whole difference from the published sources (about 260 changed lines;
 the copied crates are 106k lines of Rust, 3.7 MB, none of it ours to maintain):
 
 - the nine `#[salsa::input]` structs rust-analyzer defines are marked `persist`:
@@ -29,6 +29,8 @@ the copied crates are 106k lines of Rust, 3.7 MB, none of it ours to maintain):
 - `RootDatabase::empty()`, because `new` allocates singleton inputs that a restore must not
   find already there, and `Files::dump`/`restore` and `CratesMap::dump`/`restore` for the
   handle tables rust-analyzer keeps outside Salsa;
+- `Vfs::interned_paths`, and `load_workspace_into_db_with_vfs` in `ra_ap_load-cargo`, so a load
+  can start from a VFS that already knows some paths (see "stable file ids" below);
 - compare-before-set in `Files`' setters and in the local and library root sets, because Salsa
   does not compare a new input with the old one and an unchanged value must not invalidate what
   read it.
@@ -100,10 +102,37 @@ Salsa invalidates what a difference reaches.
 - `SourceDatabase::load_saved` and `restored()` expose it; the run's deferred load uses it
   whenever the run cache has a key.
 
+## Stable file ids (found by a failing test)
+
+Salsa's inputs are keyed by `FileId`, and the VFS hands those out in the order files are first
+seen, which with the loader's threads is not the same on two runs: a restored run found file
+27's inputs describing a different file and overwrote most of them, invalidating everything.
+The saved state therefore also carries the VFS's paths in id order
+(`Vfs::interned_paths`, deleted ones included), and the next load seeds its VFS with them
+before loading (`set_file_contents(path, None)` allocates an id and records no change), so every
+known path gets the id it had and new paths follow.
+
+## Persisted function evidence (done)
+
+`persisted_evidence(db, ItemKey)` in `loader/database/queries.rs` is a `persist` query keyed by a
+function's description, computed by the process-local `function_evidence`. Every lookup goes
+through `evidence_of(db, function)`, which uses the persisted query when the description finds
+that same function again and the process-local one when it does not (a function a macro
+generates). So a restored database answers from the saved evidence without computing it, for as
+long as no input it read has changed; any edit to the crate's sources recomputes it, the
+per-crate granularity above.
+
+Measured on the test specimen: a cold run evaluates all five functions; the restored run
+evaluates only the two macro-generated ones; after an edit to one file, what read it is
+evaluated again. What this buys: evidence survives anything that does not change what
+rust-analyzer read: a policy or configuration change, an edit to a fixture or a document, an
+edit in another crate of a workspace.
+
 ## Status of the work
 
 1. Vendor the patched crates; build and test cordial against them. **Done.**
 2. Make item identity stable across processes. **Done.**
 3. Save the database and restore it in the next run. **Done**, see below.
-4. Persist cordial's queries, with stable keys.
+4. Persist cordial's queries, with stable keys. **Started**: function evidence is done; the
+   per-file collectors and the joins are not.
 5. Measure on a multi-crate workspace.

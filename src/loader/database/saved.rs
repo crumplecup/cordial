@@ -16,6 +16,7 @@ use std::path::{Path, PathBuf};
 
 use ra_ap_ide_db::RootDatabase;
 use ra_ap_ide_db::base_db::SourceDatabase as RaSourceDatabase;
+use ra_ap_vfs::{Vfs, VfsPath};
 use tracing::instrument;
 
 use crate::{CordialError, CordialResult};
@@ -24,6 +25,15 @@ const KEY: &str = "key";
 const SALSA: &str = "salsa";
 const FILES: &str = "files";
 const CRATES: &str = "crates";
+const PATHS: &str = "paths";
+
+/// What a saved state restores to: the database, and the paths of the VFS it was saved with,
+/// in id order. Salsa's inputs are keyed by file id, so the next load must hand out the same
+/// ids to the same paths: it seeds its VFS with these.
+pub(super) struct Restored {
+    pub(super) database: RootDatabase,
+    pub(super) paths: Vec<VfsPath>,
+}
 
 /// Where a database is saved between runs.
 #[derive(Debug, Clone)]
@@ -43,7 +53,7 @@ impl SavedState {
     /// written.
     #[instrument(level = "debug", skip(self, database), err(level = "warn"))]
     #[hotpath::measure(impl_type = "SavedState")]
-    pub(super) fn save(&self, database: &mut RootDatabase) -> CordialResult<usize> {
+    pub(super) fn save(&self, database: &mut RootDatabase, vfs: &Vfs) -> CordialResult<usize> {
         let name = self
             .dir
             .file_name()
@@ -53,6 +63,8 @@ impl SavedState {
             .with_file_name(format!("{name}.writing-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&writing);
         std::fs::create_dir_all(&writing)?;
+        let paths: Vec<&VfsPath> = vfs.interned_paths().collect();
+        let paths = postcard::to_stdvec(&paths).map_err(|error| self.encoding(&error))?;
         let files =
             postcard::to_stdvec(&database.files().dump()).map_err(|error| self.encoding(&error))?;
         let crates = postcard::to_stdvec(&database.crates_map().dump())
@@ -63,6 +75,7 @@ impl SavedState {
         std::fs::write(writing.join(SALSA), &salsa)?;
         std::fs::write(writing.join(FILES), &files)?;
         std::fs::write(writing.join(CRATES), &crates)?;
+        std::fs::write(writing.join(PATHS), &paths)?;
         std::fs::write(
             writing.join(KEY),
             crate::run_cache::executable_fingerprint(),
@@ -72,13 +85,13 @@ impl SavedState {
             _ => {}
         }
         std::fs::rename(&writing, &self.dir)?;
-        Ok(salsa.len() + files.len() + crates.len())
+        Ok(salsa.len() + files.len() + crates.len() + paths.len())
     }
 
     /// The saved database, or why there is none to use.
     #[instrument(level = "debug", skip(self))]
     #[hotpath::measure(impl_type = "SavedState")]
-    pub(super) fn restore(&self) -> Result<RootDatabase, String> {
+    pub(super) fn restore(&self) -> Result<Restored, String> {
         let key = std::fs::read_to_string(self.dir.join(KEY))
             .map_err(|error| format!("none saved ({error})"))?;
         if key != crate::run_cache::executable_fingerprint() {
@@ -88,7 +101,8 @@ impl SavedState {
             std::fs::read(self.dir.join(name))
                 .map_err(|error| format!("{name} unreadable ({error})"))
         };
-        let (salsa, files, crates) = (read(SALSA)?, read(FILES)?, read(CRATES)?);
+        let (salsa, files, crates, paths) =
+            (read(SALSA)?, read(FILES)?, read(CRATES)?, read(PATHS)?);
         // Salsa asserts on state it does not expect; whatever happens in there, the run
         // goes on without it.
         catch_unwind(AssertUnwindSafe(|| {
@@ -105,7 +119,9 @@ impl SavedState {
                 postcard::from_bytes(&crates)
                     .map_err(|error| format!("crates unreadable ({error})"))?,
             );
-            Ok(database)
+            let paths = postcard::from_bytes(&paths)
+                .map_err(|error| format!("paths unreadable ({error})"))?;
+            Ok(Restored { database, paths })
         }))
         .unwrap_or_else(|_| Err("restoring it panicked".to_owned()))
     }
@@ -140,7 +156,7 @@ impl super::SourceDatabase {
             return;
         }
         let started = std::time::Instant::now();
-        match saved.save(&mut self.db) {
+        match saved.save(&mut self.db, &self.vfs) {
             Ok(bytes) => crate::host::event(format!(
                 "analysis state: saved for the next run, {bytes} bytes in {:?}",
                 started.elapsed()
