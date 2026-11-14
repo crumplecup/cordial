@@ -80,22 +80,6 @@ impl SourceDatabase {
         Ok((snapshots, outline))
     }
 
-    /// Compute every module's tracing inventory query now, without the graph's context
-    /// facts, so that what does not depend on a context is part of the saved database.
-    #[cfg(feature = "tracing")]
-    #[tracing::instrument(level = "debug", skip_all)]
-    #[hotpath::measure(impl_type = "SourceDatabase")]
-    pub(super) fn warm_tracing_inventories(&self, outline: &Outline) {
-        ra_ap_hir::attach_db(&self.db, || {
-            for (path, _) in outline.modules() {
-                if let Ok(file) = self.file_id(path) {
-                    let key = queries::FileKey::new(&self.db, file, path.clone());
-                    let _ = tracing_queries::tracing_inventory_file(&self.db, key);
-                }
-            }
-        });
-    }
-
     /// Assemble each file's tracing inventory from the facts now in `graph`: a
     /// function's ordinary facts, or those of the first context that resolved it.
     #[cfg(feature = "tracing")]

@@ -81,7 +81,12 @@ impl SourceDatabase {
         let context = context::WorkspaceInputs::capture(&workspace, options, gaps)?;
         let external_packages = packages::collect_external(&workspace);
         reporter.say("Loading the workspace into rust-analyzer");
-        let (db, vfs, server, restored) = load_database(workspace, &config, saved.as_ref())?;
+        let Loaded {
+            db,
+            vfs,
+            server,
+            kept,
+        } = load_database(workspace, &config, saved.as_ref())?;
         let context = context.finish(&db, &vfs, server.as_ref())?;
         crate::process_memory::log("workspace loaded");
         let loaded = Self {
@@ -92,11 +97,11 @@ impl SourceDatabase {
             external_packages,
             cargo_options: Some(options.clone()),
             proc_macro_server: server,
-            context_crates: Vec::new(),
+            restored: kept.is_some(),
+            context_crates: kept.unwrap_or_default(),
             reporter: reporter.clone(),
             saved,
             saved_once: false,
-            restored,
             #[cfg(feature = "cfg_hygiene")]
             workspace_root: Some(root),
         };
@@ -208,12 +213,7 @@ fn load_database(
     workspace: ProjectWorkspace,
     config: &CargoConfig,
     saved: Option<&SavedState>,
-) -> CordialResult<(
-    RootDatabase,
-    ra_ap_vfs::Vfs,
-    Option<ra_ap_proc_macro_api::ProcMacroClient>,
-    bool,
-)> {
+) -> CordialResult<Loaded> {
     let load_config = LoadCargoConfig {
         load_out_dirs_from_check: true,
         with_proc_macro_server: ProcMacroServerChoice::Sysroot,
@@ -233,13 +233,13 @@ fn load_database(
             for path in restored.paths {
                 vfs.set_file_contents(path, None);
             }
-            (restored.database, vfs, true)
+            (restored.database, vfs, Some(restored.contexts))
         }
         Some(Err(reason)) => {
             crate::host::event(format!("analysis state: not used ({reason}); loading cold"));
-            (RootDatabase::new(None), ra_ap_vfs::Vfs::default(), false)
+            (RootDatabase::new(None), ra_ap_vfs::Vfs::default(), None)
         }
-        None => (RootDatabase::new(None), ra_ap_vfs::Vfs::default(), false),
+        None => (RootDatabase::new(None), ra_ap_vfs::Vfs::default(), None),
     };
     let (vfs, server) = load_workspace_into_db_with_vfs(
         workspace,
@@ -248,5 +248,19 @@ fn load_database(
         &mut db,
         std::mem::take(&mut vfs),
     )?;
-    Ok((db, vfs, server, restored))
+    Ok(Loaded {
+        db,
+        vfs,
+        server,
+        kept: restored,
+    })
+}
+
+/// What loading the workspace produced.
+struct Loaded {
+    db: RootDatabase,
+    vfs: ra_ap_vfs::Vfs,
+    server: Option<ra_ap_proc_macro_api::ProcMacroClient>,
+    /// The cfg contexts of the saved state the database was restored from, when it was.
+    kept: Option<Vec<crate::ContextCrates>>,
 }

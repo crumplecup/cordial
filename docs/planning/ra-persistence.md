@@ -16,7 +16,7 @@ red-green algorithm, made durable.
 ## What was patched
 
 `vendor/` holds eleven `ra_ap_*` crates at 0.0.358, wired in through `[patch.crates-io]`.
-`vendor/ra_ap.patch` is the whole difference from the published sources (about 260 changed lines;
+`vendor/ra_ap.patch` is the whole difference from the published sources (about 315 changed lines;
 the copied crates are 106k lines of Rust, 3.7 MB, none of it ours to maintain):
 
 - the nine `#[salsa::input]` structs rust-analyzer defines are marked `persist`:
@@ -128,6 +128,32 @@ evaluated again. What this buys: evidence survives anything that does not change
 rust-analyzer read: a policy or configuration change, an edit to a fixture or a document, an
 edit in another crate of a workspace.
 
+## Persisted cfg contexts (done)
+
+A context is shadow crates and copies of the workspace's files (virtual paths, source roots from
+`TOOL_SOURCE_ROOTS` up), added by `add_context_crates`. They are now part of the saved state, and
+a restored run takes them up instead of making them again: `contexts` in the state records, per
+context, its crates (as positions in `all_crates`) and its file copies, and the VFS seed carries the
+copies' paths so their file ids are the same.
+
+The problem was not what to save but what saving did to the other memos. A persisted memo's edges
+are flattened to base inputs, so a memo that read `AllCrates` is stale as soon as `AllCrates`
+changes, and adding shadows changed it after the ordinary memos were computed: every per-file query
+re-ran in the next run. Backdating cannot help there, because the intermediate rust-analyzer query
+that would have absorbed the change (`source_root_crates`) is not in the saved edges.
+
+So tool-owned crates live in an input of their own, `ToolCrates`, and `source_root_crates` reads it
+only for a tool source root; `all_crates` is the graph's crates then the tool's, and `set_in_db`
+compares against the graph's only. Nothing about the graph's own roots reads `ToolCrates`, so
+adding a context leaves every ordinary memo valid. `a_restored_run_takes_the_contexts_up_again...`
+checks that: the only queries a restored run executes are the five joins.
+
+On the next run a kept context is reconciled when asked for: its copies' text and source root,
+and each shadow's data, cfg, env and the rest, are written only where they differ from this run's
+sources (Salsa does not compare an input to its old value), and shadows whose original crate is
+gone are dropped. The state is now saved at the end of the first projection, after the contexts
+and the leaf pass, so their evidence is in it.
+
 ## Persisted per-file collectors (done)
 
 The per-file queries the projection runs are `persist` queries: `file_facts`, `file_items`, the
@@ -152,22 +178,10 @@ as two offsets). In a restored run on an unchanged tree none of them executes
   persisted query gaining such a dependency without being warmed fails the restored-run test.
   The proper fix is in Salsa (initialise every function ingredient's view caster on
   deserialize), and belongs in the upstream conversation.
-- **The tracing inventories** are computed after the contexts, which is after the save, so the
-  part that does not depend on a context is computed just before the save
-  (`warm_tracing_inventories`); the pass afterwards finds it done.
 
 ## What is not persisted, and why
 
-- **The cfg contexts and the leaf pass** (about the last of the rust-analyzer-bound work in a
-  restored run). A context adds shadow crates and copies of the workspace's files to the
-  database, and the saved state is taken before them, because saving after would carry shadow
-  crates that the next run creates again. Persisting their evidence needs the shadows to be
-  reused, not recreated, and that runs into `AllCrates`: nearly every saved memo has an edge to
-  it, so any change to it between save and restore invalidates them all. A saved state that
-  includes shadows would have the next load set `AllCrates` back to the ordinary crates (a
-  change) unless the loader keeps the shadows in it. The shapes this could take: keep tool-owned
-  crates in `set_in_db` (a patch to rust-analyzer that marks them); a second saved database for
-  the contexts; or leave contexts uncached. Not started; it needs a decision.
+- **The cfg contexts and the leaf pass are persisted** (see the next section).
 - **A workspace with several targets** saves at the first target's checkpoint, since a later
   target's ordinary projection happens after an earlier target's contexts have added shadows.
   Function evidence for every local package is primed once and is in that save; the later

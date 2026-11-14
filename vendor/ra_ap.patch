@@ -1,5 +1,5 @@
---- a/ra_ap_base_db-0.0.358/Cargo.toml	2006-07-23 18:21:28.000000000 -0700
-+++ b/ra_ap_base_db/Cargo.toml	2026-11-14 09:38:27.000000000 -0800
+--- a/ra_ap_base_db-0.0.358/Cargo.toml	2026-11-14 13:39:08.493969578 -0800
++++ b/ra_ap_base_db/Cargo.toml	2026-11-14 13:39:08.772025490 -0800
 @@ -65,6 +65,10 @@
  [dependencies.rustc-hash]
  version = "2.1.1"
@@ -28,8 +28,8 @@
  default-features = false
  
  [dependencies.vfs]
---- a/ra_ap_base_db-0.0.358/src/change.rs	2006-07-23 18:21:28.000000000 -0700
-+++ b/ra_ap_base_db/src/change.rs	2026-11-14 11:19:48.911375550 -0800
+--- a/ra_ap_base_db-0.0.358/src/change.rs	2026-11-14 13:39:08.494204499 -0800
++++ b/ra_ap_base_db/src/change.rs	2026-11-14 13:39:08.772168347 -0800
 @@ -69,8 +69,15 @@
  
                  db.set_source_root_with_durability(root_id, Arc::new(root), durability);
@@ -48,17 +48,34 @@
          }
  
          for (file_id, text) in self.files_changed {
---- a/ra_ap_base_db-0.0.358/src/input.rs	2006-07-23 18:21:28.000000000 -0700
-+++ b/ra_ap_base_db/src/input.rs	2026-11-14 11:19:48.912352566 -0800
-@@ -80,6 +80,7 @@
+--- a/ra_ap_base_db-0.0.358/src/input.rs	2026-11-14 13:39:08.631390225 -0800
++++ b/ra_ap_base_db/src/input.rs	2026-11-14 13:39:08.772547099 -0800
+@@ -23,7 +23,7 @@
+ use vfs::{AbsPathBuf, AnchoredPath, FileId, VfsPath, file_set::FileSet};
+ 
+ use crate::{
+-    CrateWorkspaceData, EditionedFileId, FxIndexSet, SourceDatabase, all_crates,
++    CrateWorkspaceData, EditionedFileId, FxIndexSet, SourceDatabase, all_crates, graph_crates,
+     set_all_crates_with_durability,
+ };
+ 
+@@ -80,8 +80,15 @@
  }
  
  #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 +#[derive(serde::Serialize, serde::Deserialize)]
  pub struct SourceRootId(pub u32);
  
++/// Source roots from this id up hold files a tool made up, such as copies of a workspace's
++/// sources analysed under another cfg; the loader never hands out ids this high. A crate
++/// rooted in one of them belongs to the tool, not to the graph the loader builds, and is
++/// registered apart from the graph's crates (see `tool_crates`).
++pub const TOOL_SOURCE_ROOTS: u32 = 0x4000_0000;
++
  /// Files are grouped into source roots. A source root is a directory on the
-@@ -90,6 +91,7 @@
+ /// file systems which is watched for changes. Typically it corresponds to a
+ /// Rust crate. Source roots *might* be nested: in this case, a file belongs to
+@@ -90,6 +97,7 @@
  /// all. So, a file from one source root can't refer to a file in another source
  /// root by path.
  #[derive(Clone, Debug, PartialEq, Eq)]
@@ -66,7 +83,7 @@
  pub struct SourceRoot {
      /// Sysroot or crates.io library.
      ///
-@@ -158,6 +160,7 @@
+@@ -158,6 +166,7 @@
  }
  
  #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -74,7 +91,7 @@
  pub struct CrateName(Symbol);
  
  impl CrateName {
-@@ -193,6 +196,7 @@
+@@ -193,6 +202,7 @@
  
  /// Origin of the crates.
  #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -82,7 +99,7 @@
  pub enum CrateOrigin {
      /// Crates that are from the rustc workspace.
      Rustc { name: Symbol },
-@@ -219,6 +223,7 @@
+@@ -219,6 +229,7 @@
  }
  
  #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -90,7 +107,7 @@
  pub enum LangCrateOrigin {
      Alloc,
      Core,
-@@ -257,6 +262,7 @@
+@@ -257,6 +268,7 @@
  }
  
  #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -98,7 +115,7 @@
  pub struct CrateDisplayName {
      /// The name we use to display various paths (with `_`).
      crate_name: CrateName,
-@@ -344,12 +350,14 @@
+@@ -344,12 +356,14 @@
  /// another crate, in which case we store all data for one of them (if one is a dependency of
  /// the other, we store for it, because it has more dependencies to be invalidated).
  #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -113,7 +130,7 @@
  pub struct CrateData<Id> {
      pub root_file_id: FileId,
      pub edition: Edition,
-@@ -375,6 +383,7 @@
+@@ -375,6 +389,7 @@
  
  /// Crate data unrelated to analysis.
  #[derive(Debug, Clone, PartialEq, Eq)]
@@ -121,7 +138,7 @@
  pub struct ExtraCrateData {
      pub version: Option<String>,
      /// A name used in the package's project declaration: for Cargo projects,
-@@ -389,6 +398,7 @@
+@@ -389,6 +404,7 @@
  }
  
  #[derive(Default, Clone, PartialEq, Eq)]
@@ -129,7 +146,7 @@
  pub struct Env {
      entries: FxHashMap<String, String>,
  }
-@@ -413,6 +423,7 @@
+@@ -413,6 +429,7 @@
  }
  
  #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -137,7 +154,7 @@
  pub struct Dependency<Id> {
      pub crate_id: Id,
      pub name: CrateName,
-@@ -452,7 +463,7 @@
+@@ -452,7 +469,7 @@
  
  pub type CratesIdMap = FxHashMap<CrateBuilderId, Crate>;
  
@@ -146,7 +163,7 @@
  #[derive(Debug, PartialOrd, Ord)]
  pub struct Crate {
      #[returns(ref)]
-@@ -530,6 +541,22 @@
+@@ -530,6 +547,22 @@
  #[derive(Debug, Default)]
  pub struct CratesMap(DashMap<UniqueCrateData, Crate, BuildHasherDefault<FxHasher>>);
  
@@ -169,9 +186,28 @@
  impl CrateGraphBuilder {
      pub fn add_crate_root(
          &mut self,
---- a/ra_ap_base_db-0.0.358/src/lib.rs	2006-07-23 18:21:28.000000000 -0700
-+++ b/ra_ap_base_db/src/lib.rs	2026-11-14 11:19:48.910025327 -0800
-@@ -76,7 +76,54 @@
+@@ -595,7 +628,7 @@
+     }
+ 
+     pub fn set_in_db(self, db: &mut dyn SourceDatabase) -> CratesIdMap {
+-        let old_all_crates = all_crates(db);
++        let old_all_crates = graph_crates(db);
+ 
+         // For some reason in some repositories we have duplicate crates, so we use a set and not `Vec`.
+         // We use an `IndexSet` because the list needs to be topologically sorted.
+--- a/ra_ap_base_db-0.0.358/src/lib.rs	2026-11-14 13:39:08.768392549 -0800
++++ b/ra_ap_base_db/src/lib.rs	2026-11-14 13:39:08.772355078 -0800
+@@ -30,7 +30,8 @@
+         BuiltCrateData, BuiltDependency, Crate, CrateBuilder, CrateBuilderId, CrateDataBuilder,
+         CrateDisplayName, CrateGraphBuilder, CrateName, CrateOrigin, CratesIdMap, CratesMap,
+         DependencyBuilder, Env, ExtraCrateData, LangCrateOrigin, ProcMacroLoadingError,
+-        ProcMacroPaths, ReleaseChannel, SourceRoot, SourceRootId, UniqueCrateData,
++        ProcMacroPaths, ReleaseChannel, SourceRoot, SourceRootId, TOOL_SOURCE_ROOTS,
++        UniqueCrateData,
+     },
+ };
+ use dashmap::{DashMap, mapref::entry::Entry};
+@@ -76,7 +77,54 @@
      file_source_roots: Arc<DashMap<vfs::FileId, FileSourceRootInput, BuildHasherDefault<FxHasher>>>,
  }
  
@@ -226,7 +262,7 @@
      pub fn file_text(&self, file_id: vfs::FileId) -> FileText {
          match self.files.get(&file_id) {
              Some(text) => *text,
-@@ -89,7 +136,11 @@
+@@ -89,7 +137,11 @@
      pub fn set_file_text(&self, db: &mut dyn SourceDatabase, file_id: vfs::FileId, text: &str) {
          match self.files.entry(file_id) {
              Entry::Occupied(mut occupied) => {
@@ -239,7 +275,7 @@
              }
              Entry::Vacant(vacant) => {
                  let text = FileText::new(db, Arc::from(text), file_id);
-@@ -107,7 +158,9 @@
+@@ -107,7 +159,9 @@
      ) {
          match self.files.entry(file_id) {
              Entry::Occupied(mut occupied) => {
@@ -250,7 +286,7 @@
              }
              Entry::Vacant(vacant) => {
                  let text =
-@@ -138,7 +191,13 @@
+@@ -138,7 +192,13 @@
      ) {
          match self.source_roots.entry(source_root_id) {
              Entry::Occupied(mut occupied) => {
@@ -265,7 +301,7 @@
              }
              Entry::Vacant(vacant) => {
                  let source_root =
-@@ -183,11 +242,13 @@
+@@ -183,11 +243,13 @@
      ) {
          match self.file_source_roots.entry(id) {
              Entry::Occupied(mut occupied) => {
@@ -284,7 +320,7 @@
              }
              Entry::Vacant(vacant) => {
                  let file_source_root =
-@@ -200,7 +261,7 @@
+@@ -200,7 +262,7 @@
  
  /// The set of roots for crates.io libraries.
  /// Files in libraries are assumed to never change.
@@ -293,7 +329,7 @@
  pub struct LibraryRoots {
      #[returns(ref)]
      pub roots: FxHashSet<SourceRootId>,
-@@ -208,26 +269,44 @@
+@@ -208,26 +270,44 @@
  
  /// The set of "local" (that is, from the current workspace) roots.
  /// Files in local roots are assumed to change frequently.
@@ -342,7 +378,7 @@
  pub struct SourceRootInput {
      #[returns(clone)]
      pub source_root: Arc<SourceRoot>,
-@@ -308,6 +387,7 @@
+@@ -308,6 +388,7 @@
  
  /// Crate related data shared by the whole workspace.
  #[derive(Debug, PartialEq, Eq, Hash, Clone)]
@@ -350,7 +386,7 @@
  pub struct CrateWorkspaceData {
      pub target: Result<target::TargetData, target::TargetLoadError>,
      /// Toolchain version used to compile the crate.
-@@ -331,7 +411,7 @@
+@@ -331,7 +412,7 @@
      krate.workspace_data(db).toolchain.as_ref().and_then(|v| ReleaseChannel::from_str(&v.pre).ok())
  }
  
@@ -359,8 +395,74 @@
  struct AllCrates {
      #[returns(clone)]
      crates: std::sync::Arc<[Crate]>,
---- a/ra_ap_base_db-0.0.358/src/target.rs	2006-07-23 18:21:28.000000000 -0700
-+++ b/ra_ap_base_db/src/target.rs	2026-11-14 09:38:27.000000000 -0800
+@@ -349,11 +430,47 @@
+         .to(crates.into_iter().collect());
+ }
+ 
+-/// Returns the crates in topological order.
++/// The crates a tool added beside the graph the loader built (see `TOOL_SOURCE_ROOTS`).
++///
++/// They are registered in an input of their own because adding one is a change of what is
++/// registered, and a result that depends on `AllCrates` is stale after it. A tool that adds
++/// crates after results exist, and saves those results, would find every one of them stale
++/// when it next starts. Only a lookup of the tool's source roots reads this input.
++#[salsa::input(singleton, debug, persist)]
++struct ToolCrates {
++    #[returns(clone)]
++    crates: std::sync::Arc<[Crate]>,
++}
++
++pub fn set_tool_crates_with_durability(
++    db: &mut dyn salsa::Database,
++    crates: impl IntoIterator<Item = Crate>,
++    durability: Durability,
++) {
++    ToolCrates::try_get(db)
++        .unwrap_or_else(|| ToolCrates::new(db, std::sync::Arc::default()))
++        .set_crates(db)
++        .with_durability(durability)
++        .to(crates.into_iter().collect());
++}
++
++/// The crates the tool added, in the order it registered them.
++pub fn tool_crates(db: &dyn salsa::Database) -> std::sync::Arc<[Crate]> {
++    ToolCrates::try_get(db).map_or(std::sync::Arc::default(), |crates| crates.crates(db))
++}
++
++/// The crates of the graph the loader built, in topological order.
++pub fn graph_crates(db: &dyn salsa::Database) -> std::sync::Arc<[Crate]> {
++    AllCrates::try_get(db).map_or(std::sync::Arc::default(), |all_crates| all_crates.crates(db))
++}
++
++/// Returns the crates in topological order, then the crates a tool added.
+ ///
+ /// **Warning**: do not use this query in `hir-*` crates! It kills incrementality across crate metadata modifications.
+ pub fn all_crates(db: &dyn salsa::Database) -> std::sync::Arc<[Crate]> {
+-    AllCrates::try_get(db).map_or(std::sync::Arc::default(), |all_crates| all_crates.crates(db))
++    let graph = graph_crates(db);
++    let tool = tool_crates(db);
++    if tool.is_empty() { graph } else { graph.iter().chain(tool.iter()).copied().collect() }
+ }
+ 
+ // FIXME: VFS rewrite should allow us to get rid of this wrapper
+@@ -371,8 +488,14 @@
+         db: &'db dyn SourceDatabase,
+         id: InternedSourceRootId<'db>,
+     ) -> Box<[Crate]> {
+-        let crates = AllCrates::get(db).crates(db);
+         let id = id.id(db);
++        // A tool's source roots are looked up among the tool's crates only, so what is asked
++        // about the graph's own roots does not depend on the tool's.
++        let crates = if id.0 >= crate::input::TOOL_SOURCE_ROOTS {
++            ToolCrates::try_get(db).map_or(std::sync::Arc::default(), |crates| crates.crates(db))
++        } else {
++            AllCrates::get(db).crates(db)
++        };
+         crates
+             .iter()
+             .copied()
+--- a/ra_ap_base_db-0.0.358/src/target.rs	2026-11-14 13:39:08.769303356 -0800
++++ b/ra_ap_base_db/src/target.rs	2026-11-14 13:39:08.772437318 -0800
 @@ -5,6 +5,7 @@
  use triomphe::Arc;
  
@@ -393,8 +495,72 @@
  impl fmt::Debug for TargetLoadError {
      fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
          fmt::Debug::fmt(&self.0, f)
---- a/ra_ap_hir_def-0.0.358/Cargo.toml	2006-07-23 18:21:28.000000000 -0700
-+++ b/ra_ap_hir_def/Cargo.toml	2026-11-14 09:38:27.000000000 -0800
+--- a/ra_ap_cfg-0.0.358/Cargo.toml	2026-11-14 13:39:09.503715775 -0800
++++ b/ra_ap_cfg/Cargo.toml	2026-11-14 13:39:09.669488613 -0800
+@@ -33,6 +33,10 @@
+ syntax = ["dep:syntax"]
+ tt = ["dep:tt"]
+ 
++[dependencies.serde]
++version = "1"
++features = ["derive", "rc"]
++
+ [lib]
+ name = "ra_ap_cfg"
+ path = "src/lib.rs"
+--- a/ra_ap_cfg-0.0.358/src/cfg_expr.rs	2026-11-14 13:39:09.532405512 -0800
++++ b/ra_ap_cfg/src/cfg_expr.rs	2026-11-14 13:39:09.669616397 -0800
+@@ -8,6 +8,7 @@
+ 
+ /// A simple configuration value passed in from the outside.
+ #[derive(Debug, Clone, PartialEq, Eq, Hash)]
++#[derive(serde::Serialize, serde::Deserialize)]
+ pub enum CfgAtom {
+     /// eg. `#[cfg(test)]`
+     Flag(Symbol),
+--- a/ra_ap_cfg-0.0.358/src/lib.rs	2026-11-14 13:39:09.575406242 -0800
++++ b/ra_ap_cfg/src/lib.rs	2026-11-14 13:39:09.669787756 -0800
+@@ -30,6 +30,7 @@
+ ///
+ /// See: <https://doc.rust-lang.org/reference/conditional-compilation.html#set-configuration-options>
+ #[derive(Clone, PartialEq, Eq)]
++#[derive(serde::Serialize, serde::Deserialize)]
+ pub struct CfgOptions {
+     enabled: FxHashSet<CfgAtom>,
+ }
+@@ -282,6 +283,7 @@
+ 
+ /// A `CfgOptions` that implements `Hash`, for the sake of hashing only.
+ #[derive(Debug, Clone, PartialEq, Eq, Hash)]
++#[derive(serde::Serialize, serde::Deserialize)]
+ pub struct HashableCfgOptions {
+     _enabled: Box<[CfgAtom]>,
+ }
+--- a/ra_ap_edition-0.0.358/Cargo.toml	2026-11-14 13:39:09.725006262 -0800
++++ b/ra_ap_edition/Cargo.toml	2026-11-14 13:39:09.726839956 -0800
+@@ -27,6 +27,10 @@
+ repository = "https://github.com/rust-lang/rust-analyzer"
+ resolver = "2"
+ 
++[dependencies.serde]
++version = "1"
++features = ["derive"]
++
+ [lib]
+ name = "ra_ap_edition"
+ path = "src/lib.rs"
+--- a/ra_ap_edition-0.0.358/src/lib.rs	2026-11-14 13:39:09.725162053 -0800
++++ b/ra_ap_edition/src/lib.rs	2026-11-14 13:39:09.726935131 -0800
+@@ -2,6 +2,7 @@
+ // This should live in a separate crate because we use it in both actual code and codegen.
+ use std::fmt;
+ 
++#[derive(serde::Serialize, serde::Deserialize)]
+ #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+ #[repr(u8)]
+ pub enum Edition {
+--- a/ra_ap_hir_def-0.0.358/Cargo.toml	2026-11-14 13:39:09.879411400 -0800
++++ b/ra_ap_hir_def/Cargo.toml	2026-11-14 13:39:14.793865439 -0800
 @@ -101,6 +101,10 @@
  [dependencies.rustc_apfloat]
  version = "0.2.3"
@@ -406,8 +572,8 @@
  [dependencies.salsa]
  version = "0.28.5"
  features = [
---- a/ra_ap_hir_def-0.0.358/src/lib.rs	2006-07-23 18:21:28.000000000 -0700
-+++ b/ra_ap_hir_def/src/lib.rs	2026-11-14 09:38:27.000000000 -0800
+--- a/ra_ap_hir_def-0.0.358/src/lib.rs	2026-11-14 13:39:13.872479159 -0800
++++ b/ra_ap_hir_def/src/lib.rs	2026-11-14 13:39:14.796559076 -0800
 @@ -103,7 +103,7 @@
  ///
  /// Note: this struct shouldn't be exposed to ide crates -- consider using
@@ -417,8 +583,8 @@
  pub(crate) struct ExpandProcAttrMacros {
      #[returns(copy)]
      pub(crate) enabled: bool,
---- a/ra_ap_hir_expand-0.0.358/Cargo.toml	2006-07-23 18:21:28.000000000 -0700
-+++ b/ra_ap_hir_expand/Cargo.toml	2026-11-14 09:38:27.000000000 -0800
+--- a/ra_ap_hir_expand-0.0.358/Cargo.toml	2026-11-14 13:39:14.852738158 -0800
++++ b/ra_ap_hir_expand/Cargo.toml	2026-11-14 13:39:15.234798884 -0800
 @@ -71,6 +71,10 @@
  [dependencies.rustc-hash]
  version = "2.1.1"
@@ -430,8 +596,8 @@
  [dependencies.salsa]
  version = "0.28.5"
  features = [
---- a/ra_ap_hir_expand-0.0.358/src/proc_macro.rs	2006-07-23 18:21:28.000000000 -0700
-+++ b/ra_ap_hir_expand/src/proc_macro.rs	2026-11-14 09:38:27.000000000 -0800
+--- a/ra_ap_hir_expand-0.0.358/src/proc_macro.rs	2026-11-14 13:39:15.223502088 -0800
++++ b/ra_ap_hir_expand/src/proc_macro.rs	2026-11-14 13:39:15.236104188 -0800
 @@ -114,7 +114,29 @@
  pub struct CrateProcMacros(StoredProcMacroLoadResult);
  
@@ -463,223 +629,8 @@
  pub struct ProcMacros {
      #[returns(ref)]
      pub by_crate: FxHashMap<Crate, Arc<CrateProcMacros>>,
---- a/ra_ap_cfg-0.0.358/Cargo.toml	2006-07-23 18:21:28.000000000 -0700
-+++ b/ra_ap_cfg/Cargo.toml	2026-11-14 09:38:27.000000000 -0800
-@@ -33,6 +33,10 @@
- syntax = ["dep:syntax"]
- tt = ["dep:tt"]
- 
-+[dependencies.serde]
-+version = "1"
-+features = ["derive", "rc"]
-+
- [lib]
- name = "ra_ap_cfg"
- path = "src/lib.rs"
---- a/ra_ap_cfg-0.0.358/src/cfg_expr.rs	2006-07-23 18:21:28.000000000 -0700
-+++ b/ra_ap_cfg/src/cfg_expr.rs	2026-11-14 09:38:27.000000000 -0800
-@@ -8,6 +8,7 @@
- 
- /// A simple configuration value passed in from the outside.
- #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-+#[derive(serde::Serialize, serde::Deserialize)]
- pub enum CfgAtom {
-     /// eg. `#[cfg(test)]`
-     Flag(Symbol),
---- a/ra_ap_cfg-0.0.358/src/lib.rs	2006-07-23 18:21:28.000000000 -0700
-+++ b/ra_ap_cfg/src/lib.rs	2026-11-14 09:38:27.000000000 -0800
-@@ -30,6 +30,7 @@
- ///
- /// See: <https://doc.rust-lang.org/reference/conditional-compilation.html#set-configuration-options>
- #[derive(Clone, PartialEq, Eq)]
-+#[derive(serde::Serialize, serde::Deserialize)]
- pub struct CfgOptions {
-     enabled: FxHashSet<CfgAtom>,
- }
-@@ -282,6 +283,7 @@
- 
- /// A `CfgOptions` that implements `Hash`, for the sake of hashing only.
- #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-+#[derive(serde::Serialize, serde::Deserialize)]
- pub struct HashableCfgOptions {
-     _enabled: Box<[CfgAtom]>,
- }
---- a/ra_ap_vfs-0.0.358/Cargo.toml	2006-07-23 18:21:28.000000000 -0700
-+++ b/ra_ap_vfs/Cargo.toml	2026-11-14 09:38:27.000000000 -0800
-@@ -27,6 +27,10 @@
- repository = "https://github.com/rust-lang/rust-analyzer"
- resolver = "2"
- 
-+[dependencies.serde]
-+version = "1"
-+features = ["derive", "rc"]
-+
- [lib]
- name = "ra_ap_vfs"
- path = "src/lib.rs"
---- a/ra_ap_vfs-0.0.358/src/file_set.rs	2006-07-23 18:21:28.000000000 -0700
-+++ b/ra_ap_vfs/src/file_set.rs	2026-11-14 09:38:27.000000000 -0800
-@@ -12,6 +12,7 @@
- 
- /// A set of [`VfsPath`]s identified by [`FileId`]s.
- #[derive(Default, Clone, Eq, PartialEq)]
-+#[derive(serde::Serialize, serde::Deserialize)]
- pub struct FileSet {
-     files: FxHashMap<VfsPath, FileId>,
-     paths: IndexMap<FileId, VfsPath, FxBuildHasher>,
---- a/ra_ap_vfs-0.0.358/src/lib.rs	2006-07-23 18:21:28.000000000 -0700
-+++ b/ra_ap_vfs/src/lib.rs	2026-11-14 11:21:37.906406589 -0800
-@@ -63,6 +63,7 @@
- ///
- /// Most functions in rust-analyzer use this when they need to refer to a file.
- #[derive(Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq, Hash)]
-+#[derive(serde::Serialize, serde::Deserialize)]
- pub struct FileId(u32);
- // pub struct FileId(NonMaxU32);
- 
-@@ -194,6 +195,12 @@
-         self.interner.lookup(file_id)
-     }
- 
-+    /// Every path that has been given an id, in id order, deleted ones included: the
-+    /// paths a new `Vfs` must be given, in this order, to hand out the same ids.
-+    pub fn interned_paths(&self) -> impl Iterator<Item = &VfsPath> + '_ {
-+        (0..self.data.len()).map(|index| self.interner.lookup(FileId(index as u32)))
-+    }
-+
-     /// Returns an iterator over the stored ids and their corresponding paths.
-     ///
-     /// This will skip deleted files.
---- a/ra_ap_vfs-0.0.358/src/vfs_path.rs	2006-07-23 18:21:28.000000000 -0700
-+++ b/ra_ap_vfs/src/vfs_path.rs	2026-11-14 09:38:27.000000000 -0800
-@@ -10,6 +10,7 @@
- ///
- /// [`Vfs`]: crate::Vfs
- #[derive(Clone, Ord, PartialOrd, Eq, PartialEq, Hash)]
-+#[derive(serde::Serialize, serde::Deserialize)]
- pub struct VfsPath(VfsPathRepr);
- 
- impl VfsPath {
-@@ -262,6 +263,7 @@
- 
- /// Internal, private representation of [`VfsPath`].
- #[derive(Clone, Ord, PartialOrd, Eq, PartialEq, Hash)]
-+#[derive(serde::Serialize, serde::Deserialize)]
- enum VfsPathRepr {
-     PathBuf(AbsPathBuf),
-     VirtualPath(VirtualPath),
-@@ -314,6 +316,7 @@
- /// `/`-separated virtual path.
- ///
- /// This is used to describe files that do not reside on the file system.
-+#[derive(serde::Serialize, serde::Deserialize)]
- #[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq, Hash)]
- struct VirtualPath(String);
- 
---- a/ra_ap_paths-0.0.358/Cargo.toml	2006-07-23 18:21:28.000000000 -0700
-+++ b/ra_ap_paths/Cargo.toml	2026-11-14 09:38:27.000000000 -0800
-@@ -30,6 +30,10 @@
- [features]
- serde1 = ["camino/serde1"]
- 
-+[dependencies.serde]
-+version = "1"
-+features = ["derive", "rc"]
-+
- [lib]
- name = "ra_ap_paths"
- path = "src/lib.rs"
-@@ -37,6 +41,7 @@
- 
- [dependencies.camino]
- version = "1.2.2"
-+features = ["serde1"]
- 
- [lints.clippy]
- assigning_clones = "allow"
---- a/ra_ap_paths-0.0.358/src/lib.rs	2006-07-23 18:21:28.000000000 -0700
-+++ b/ra_ap_paths/src/lib.rs	2026-11-14 09:38:27.000000000 -0800
-@@ -12,6 +12,7 @@
- 
- /// A [`Utf8PathBuf`] that is guaranteed to be absolute.
- #[derive(Debug, Clone, Ord, PartialOrd, Eq, Hash)]
-+#[derive(serde::Serialize, serde::Deserialize)]
- pub struct AbsPathBuf(Utf8PathBuf);
- 
- impl From<AbsPathBuf> for Utf8PathBuf {
---- a/ra_ap_intern-0.0.358/Cargo.toml	2006-07-23 18:21:28.000000000 -0700
-+++ b/ra_ap_intern/Cargo.toml	2026-11-14 09:38:27.000000000 -0800
-@@ -30,6 +30,10 @@
- [features]
- prevent-gc = []
- 
-+[dependencies.serde]
-+version = "1"
-+features = ["derive", "rc"]
-+
- [lib]
- name = "ra_ap_intern"
- path = "src/lib.rs"
---- a/ra_ap_intern-0.0.358/src/symbol.rs	2006-07-23 18:21:28.000000000 -0700
-+++ b/ra_ap_intern/src/symbol.rs	2026-11-14 09:38:27.000000000 -0800
-@@ -121,6 +121,19 @@
-     repr: TaggedArcPtr,
- }
- 
-+impl serde::Serialize for Symbol {
-+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-+        serializer.serialize_str(self.as_str())
-+    }
-+}
-+
-+impl<'de> serde::Deserialize<'de> for Symbol {
-+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-+        let text = <std::borrow::Cow<'de, str> as serde::Deserialize>::deserialize(deserializer)?;
-+        Ok(Symbol::intern(&text))
-+    }
-+}
-+
- impl fmt::Debug for Symbol {
-     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-         self.as_str().fmt(f)
---- a/ra_ap_span-0.0.358/Cargo.toml	2006-07-23 18:21:28.000000000 -0700
-+++ b/ra_ap_span/Cargo.toml	2026-11-14 09:38:27.000000000 -0800
-@@ -31,6 +31,10 @@
- default = ["salsa"]
- in-rust-tree = []
- 
-+[dependencies.serde]
-+version = "1"
-+features = ["derive", "rc"]
-+
- [lib]
- name = "ra_ap_span"
- path = "src/lib.rs"
---- a/ra_ap_edition-0.0.358/Cargo.toml	2006-07-23 18:21:28.000000000 -0700
-+++ b/ra_ap_edition/Cargo.toml	2026-11-14 09:38:27.000000000 -0800
-@@ -27,6 +27,10 @@
- repository = "https://github.com/rust-lang/rust-analyzer"
- resolver = "2"
- 
-+[dependencies.serde]
-+version = "1"
-+features = ["derive"]
-+
- [lib]
- name = "ra_ap_edition"
- path = "src/lib.rs"
---- a/ra_ap_edition-0.0.358/src/lib.rs	2006-07-23 18:21:28.000000000 -0700
-+++ b/ra_ap_edition/src/lib.rs	2026-11-14 09:38:27.000000000 -0800
-@@ -2,6 +2,7 @@
- // This should live in a separate crate because we use it in both actual code and codegen.
- use std::fmt;
- 
-+#[derive(serde::Serialize, serde::Deserialize)]
- #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
- #[repr(u8)]
- pub enum Edition {
---- a/ra_ap_ide_db-0.0.358/src/lib.rs	2006-07-23 18:21:28.000000000 -0700
-+++ b/ra_ap_ide_db/src/lib.rs	2026-11-14 09:38:27.000000000 -0800
+--- a/ra_ap_ide_db-0.0.358/src/lib.rs	2026-11-14 13:39:15.595508402 -0800
++++ b/ra_ap_ide_db/src/lib.rs	2026-11-14 13:39:15.921789534 -0800
 @@ -190,6 +190,23 @@
  }
  
@@ -704,8 +655,43 @@
      pub fn new(lru_capacity: Option<u16>) -> RootDatabase {
          let mut db = RootDatabase {
              storage: ManuallyDrop::new(salsa::Storage::default()),
---- a/ra_ap_load-cargo-0.0.358/src/lib.rs	2006-07-23 18:21:28.000000000 -0700
-+++ b/ra_ap_load-cargo/src/lib.rs	2026-11-14 11:19:49.363036262 -0800
+--- a/ra_ap_intern-0.0.358/Cargo.toml	2026-11-14 13:39:15.974027047 -0800
++++ b/ra_ap_intern/Cargo.toml	2026-11-14 13:39:16.024686859 -0800
+@@ -30,6 +30,10 @@
+ [features]
+ prevent-gc = []
+ 
++[dependencies.serde]
++version = "1"
++features = ["derive", "rc"]
++
+ [lib]
+ name = "ra_ap_intern"
+ path = "src/lib.rs"
+--- a/ra_ap_intern-0.0.358/src/symbol.rs	2026-11-14 13:39:16.021515632 -0800
++++ b/ra_ap_intern/src/symbol.rs	2026-11-14 13:39:16.025098942 -0800
+@@ -121,6 +121,19 @@
+     repr: TaggedArcPtr,
+ }
+ 
++impl serde::Serialize for Symbol {
++    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
++        serializer.serialize_str(self.as_str())
++    }
++}
++
++impl<'de> serde::Deserialize<'de> for Symbol {
++    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
++        let text = <std::borrow::Cow<'de, str> as serde::Deserialize>::deserialize(deserializer)?;
++        Ok(Symbol::intern(&text))
++    }
++}
++
+ impl fmt::Debug for Symbol {
+     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+         self.as_str().fmt(f)
+--- a/ra_ap_load-cargo-0.0.358/src/lib.rs	2026-11-14 13:39:16.051516142 -0800
++++ b/ra_ap_load-cargo/src/lib.rs	2026-11-14 13:39:16.054549519 -0800
 @@ -100,8 +100,22 @@
      load_config: &LoadCargoConfig,
      db: &mut RootDatabase,
@@ -730,3 +716,119 @@
      let mut loader = {
          let loader = vfs_notify::NotifyHandle::spawn(sender);
          Box::new(loader)
+--- a/ra_ap_paths-0.0.358/Cargo.toml	2026-11-14 13:39:16.058483848 -0800
++++ b/ra_ap_paths/Cargo.toml	2026-11-14 13:39:16.071221305 -0800
+@@ -30,6 +30,10 @@
+ [features]
+ serde1 = ["camino/serde1"]
+ 
++[dependencies.serde]
++version = "1"
++features = ["derive", "rc"]
++
+ [lib]
+ name = "ra_ap_paths"
+ path = "src/lib.rs"
+@@ -37,6 +41,7 @@
+ 
+ [dependencies.camino]
+ version = "1.2.2"
++features = ["serde1"]
+ 
+ [lints.clippy]
+ assigning_clones = "allow"
+--- a/ra_ap_paths-0.0.358/src/lib.rs	2026-11-14 13:39:16.069516447 -0800
++++ b/ra_ap_paths/src/lib.rs	2026-11-14 13:39:16.071283763 -0800
+@@ -12,6 +12,7 @@
+ 
+ /// A [`Utf8PathBuf`] that is guaranteed to be absolute.
+ #[derive(Debug, Clone, Ord, PartialOrd, Eq, Hash)]
++#[derive(serde::Serialize, serde::Deserialize)]
+ pub struct AbsPathBuf(Utf8PathBuf);
+ 
+ impl From<AbsPathBuf> for Utf8PathBuf {
+--- a/ra_ap_span-0.0.358/Cargo.toml	2026-11-14 13:39:16.099198837 -0800
++++ b/ra_ap_span/Cargo.toml	2026-11-14 13:39:16.136194134 -0800
+@@ -31,6 +31,10 @@
+ default = ["salsa"]
+ in-rust-tree = []
+ 
++[dependencies.serde]
++version = "1"
++features = ["derive", "rc"]
++
+ [lib]
+ name = "ra_ap_span"
+ path = "src/lib.rs"
+--- a/ra_ap_vfs-0.0.358/Cargo.toml	2026-11-14 13:39:16.169424031 -0800
++++ b/ra_ap_vfs/Cargo.toml	2026-11-14 13:39:16.227862471 -0800
+@@ -27,6 +27,10 @@
+ repository = "https://github.com/rust-lang/rust-analyzer"
+ resolver = "2"
+ 
++[dependencies.serde]
++version = "1"
++features = ["derive", "rc"]
++
+ [lib]
+ name = "ra_ap_vfs"
+ path = "src/lib.rs"
+--- a/ra_ap_vfs-0.0.358/src/file_set.rs	2026-11-14 13:39:16.173518212 -0800
++++ b/ra_ap_vfs/src/file_set.rs	2026-11-14 13:39:16.228035478 -0800
+@@ -12,6 +12,7 @@
+ 
+ /// A set of [`VfsPath`]s identified by [`FileId`]s.
+ #[derive(Default, Clone, Eq, PartialEq)]
++#[derive(serde::Serialize, serde::Deserialize)]
+ pub struct FileSet {
+     files: FxHashMap<VfsPath, FileId>,
+     paths: IndexMap<FileId, VfsPath, FxBuildHasher>,
+--- a/ra_ap_vfs-0.0.358/src/lib.rs	2026-11-14 13:39:16.202518705 -0800
++++ b/ra_ap_vfs/src/lib.rs	2026-11-14 13:39:16.228162159 -0800
+@@ -63,6 +63,7 @@
+ ///
+ /// Most functions in rust-analyzer use this when they need to refer to a file.
+ #[derive(Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq, Hash)]
++#[derive(serde::Serialize, serde::Deserialize)]
+ pub struct FileId(u32);
+ // pub struct FileId(NonMaxU32);
+ 
+@@ -194,6 +195,12 @@
+         self.interner.lookup(file_id)
+     }
+ 
++    /// Every path that has been given an id, in id order, deleted ones included: the
++    /// paths a new `Vfs` must be given, in this order, to hand out the same ids.
++    pub fn interned_paths(&self) -> impl Iterator<Item = &VfsPath> + '_ {
++        (0..self.data.len()).map(|index| self.interner.lookup(FileId(index as u32)))
++    }
++
+     /// Returns an iterator over the stored ids and their corresponding paths.
+     ///
+     /// This will skip deleted files.
+--- a/ra_ap_vfs-0.0.358/src/vfs_path.rs	2026-11-14 13:39:16.225519095 -0800
++++ b/ra_ap_vfs/src/vfs_path.rs	2026-11-14 13:39:16.228319120 -0800
+@@ -10,6 +10,7 @@
+ ///
+ /// [`Vfs`]: crate::Vfs
+ #[derive(Clone, Ord, PartialOrd, Eq, PartialEq, Hash)]
++#[derive(serde::Serialize, serde::Deserialize)]
+ pub struct VfsPath(VfsPathRepr);
+ 
+ impl VfsPath {
+@@ -262,6 +263,7 @@
+ 
+ /// Internal, private representation of [`VfsPath`].
+ #[derive(Clone, Ord, PartialOrd, Eq, PartialEq, Hash)]
++#[derive(serde::Serialize, serde::Deserialize)]
+ enum VfsPathRepr {
+     PathBuf(AbsPathBuf),
+     VirtualPath(VirtualPath),
+@@ -314,6 +316,7 @@
+ /// `/`-separated virtual path.
+ ///
+ /// This is used to describe files that do not reside on the file system.
++#[derive(serde::Serialize, serde::Deserialize)]
+ #[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq, Hash)]
+ struct VirtualPath(String);
+ 

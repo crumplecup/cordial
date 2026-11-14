@@ -30,7 +30,8 @@ pub use crate::{
         BuiltCrateData, BuiltDependency, Crate, CrateBuilder, CrateBuilderId, CrateDataBuilder,
         CrateDisplayName, CrateGraphBuilder, CrateName, CrateOrigin, CratesIdMap, CratesMap,
         DependencyBuilder, Env, ExtraCrateData, LangCrateOrigin, ProcMacroLoadingError,
-        ProcMacroPaths, ReleaseChannel, SourceRoot, SourceRootId, UniqueCrateData,
+        ProcMacroPaths, ReleaseChannel, SourceRoot, SourceRootId, TOOL_SOURCE_ROOTS,
+        UniqueCrateData,
     },
 };
 use dashmap::{DashMap, mapref::entry::Entry};
@@ -429,11 +430,47 @@ pub fn set_all_crates_with_durability(
         .to(crates.into_iter().collect());
 }
 
-/// Returns the crates in topological order.
+/// The crates a tool added beside the graph the loader built (see `TOOL_SOURCE_ROOTS`).
+///
+/// They are registered in an input of their own because adding one is a change of what is
+/// registered, and a result that depends on `AllCrates` is stale after it. A tool that adds
+/// crates after results exist, and saves those results, would find every one of them stale
+/// when it next starts. Only a lookup of the tool's source roots reads this input.
+#[salsa::input(singleton, debug, persist)]
+struct ToolCrates {
+    #[returns(clone)]
+    crates: std::sync::Arc<[Crate]>,
+}
+
+pub fn set_tool_crates_with_durability(
+    db: &mut dyn salsa::Database,
+    crates: impl IntoIterator<Item = Crate>,
+    durability: Durability,
+) {
+    ToolCrates::try_get(db)
+        .unwrap_or_else(|| ToolCrates::new(db, std::sync::Arc::default()))
+        .set_crates(db)
+        .with_durability(durability)
+        .to(crates.into_iter().collect());
+}
+
+/// The crates the tool added, in the order it registered them.
+pub fn tool_crates(db: &dyn salsa::Database) -> std::sync::Arc<[Crate]> {
+    ToolCrates::try_get(db).map_or(std::sync::Arc::default(), |crates| crates.crates(db))
+}
+
+/// The crates of the graph the loader built, in topological order.
+pub fn graph_crates(db: &dyn salsa::Database) -> std::sync::Arc<[Crate]> {
+    AllCrates::try_get(db).map_or(std::sync::Arc::default(), |all_crates| all_crates.crates(db))
+}
+
+/// Returns the crates in topological order, then the crates a tool added.
 ///
 /// **Warning**: do not use this query in `hir-*` crates! It kills incrementality across crate metadata modifications.
 pub fn all_crates(db: &dyn salsa::Database) -> std::sync::Arc<[Crate]> {
-    AllCrates::try_get(db).map_or(std::sync::Arc::default(), |all_crates| all_crates.crates(db))
+    let graph = graph_crates(db);
+    let tool = tool_crates(db);
+    if tool.is_empty() { graph } else { graph.iter().chain(tool.iter()).copied().collect() }
 }
 
 // FIXME: VFS rewrite should allow us to get rid of this wrapper
@@ -451,8 +488,14 @@ pub fn source_root_crates(db: &dyn SourceDatabase, id: SourceRootId) -> &[Crate]
         db: &'db dyn SourceDatabase,
         id: InternedSourceRootId<'db>,
     ) -> Box<[Crate]> {
-        let crates = AllCrates::get(db).crates(db);
         let id = id.id(db);
+        // A tool's source roots are looked up among the tool's crates only, so what is asked
+        // about the graph's own roots does not depend on the tool's.
+        let crates = if id.0 >= crate::input::TOOL_SOURCE_ROOTS {
+            ToolCrates::try_get(db).map_or(std::sync::Arc::default(), |crates| crates.crates(db))
+        } else {
+            AllCrates::get(db).crates(db)
+        };
         crates
             .iter()
             .copied()

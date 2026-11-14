@@ -26,6 +26,7 @@ const SALSA: &str = "salsa";
 const FILES: &str = "files";
 const CRATES: &str = "crates";
 const PATHS: &str = "paths";
+const CONTEXTS: &str = "contexts";
 
 /// What a saved state restores to: the database, and the paths of the VFS it was saved with,
 /// in id order. Salsa's inputs are keyed by file id, so the next load must hand out the same
@@ -33,6 +34,8 @@ const PATHS: &str = "paths";
 pub(super) struct Restored {
     pub(super) database: RootDatabase,
     pub(super) paths: Vec<VfsPath>,
+    /// The cfg contexts the saved run had added, as that run left them.
+    pub(super) contexts: Vec<super::ContextCrates>,
 }
 
 /// Where a database is saved between runs.
@@ -53,7 +56,12 @@ impl SavedState {
     /// written.
     #[instrument(level = "debug", skip(self, database), err(level = "warn"))]
     #[hotpath::measure(impl_type = "SavedState")]
-    pub(super) fn save(&self, database: &mut RootDatabase, vfs: &Vfs) -> CordialResult<usize> {
+    pub(super) fn save(
+        &self,
+        database: &mut RootDatabase,
+        vfs: &Vfs,
+        contexts: &[super::ContextCrates],
+    ) -> CordialResult<usize> {
         let name = self
             .dir
             .file_name()
@@ -70,6 +78,12 @@ impl SavedState {
             rmp_serde::to_vec(&database.files().dump()).map_err(|error| self.encoding(&error))?;
         let crates = rmp_serde::to_vec(&database.crates_map().dump())
             .map_err(|error| self.encoding(&error))?;
+        let order = ra_ap_ide_db::base_db::all_crates(&*database);
+        let contexts: Vec<_> = contexts
+            .iter()
+            .filter_map(|context| context.to_saved(&order))
+            .collect();
+        let contexts = rmp_serde::to_vec(&contexts).map_err(|error| self.encoding(&error))?;
         let database: &mut dyn salsa::Database = database;
         let salsa =
             rmp_serde::to_vec(&database.as_serialize()).map_err(|error| self.encoding(&error))?;
@@ -77,6 +91,7 @@ impl SavedState {
         std::fs::write(writing.join(FILES), &files)?;
         std::fs::write(writing.join(CRATES), &crates)?;
         std::fs::write(writing.join(PATHS), &paths)?;
+        std::fs::write(writing.join(CONTEXTS), &contexts)?;
         std::fs::write(
             writing.join(KEY),
             crate::run_cache::executable_fingerprint(),
@@ -86,7 +101,7 @@ impl SavedState {
             _ => {}
         }
         std::fs::rename(&writing, &self.dir)?;
-        Ok(salsa.len() + files.len() + crates.len() + paths.len())
+        Ok(salsa.len() + files.len() + crates.len() + paths.len() + contexts.len())
     }
 
     /// The saved database, or why there is none to use.
@@ -102,8 +117,13 @@ impl SavedState {
             std::fs::read(self.dir.join(name))
                 .map_err(|error| format!("{name} unreadable ({error})"))
         };
-        let (salsa, files, crates, paths) =
-            (read(SALSA)?, read(FILES)?, read(CRATES)?, read(PATHS)?);
+        let (salsa, files, crates, paths, contexts) = (
+            read(SALSA)?,
+            read(FILES)?,
+            read(CRATES)?,
+            read(PATHS)?,
+            read(CONTEXTS)?,
+        );
         // Salsa asserts on state it does not expect; whatever happens in there, the run
         // goes on without it.
         catch_unwind(AssertUnwindSafe(|| {
@@ -124,7 +144,19 @@ impl SavedState {
             );
             let paths = rmp_serde::from_slice(&paths)
                 .map_err(|error| format!("paths unreadable ({error})"))?;
-            Ok(Restored { database, paths })
+            let saved: Vec<super::context_crates::SavedContext> = rmp_serde::from_slice(&contexts)
+                .map_err(|error| format!("contexts unreadable ({error})"))?;
+            let order = ra_ap_ide_db::base_db::all_crates(&database);
+            let contexts = saved
+                .into_iter()
+                .map(|context| super::ContextCrates::from_saved(context, &order))
+                .collect::<Option<Vec<_>>>()
+                .ok_or_else(|| "a saved context names a crate that is not there".to_owned())?;
+            Ok(Restored {
+                database,
+                paths,
+                contexts,
+            })
         }))
         .unwrap_or_else(|_| Err("restoring it panicked".to_owned()))
     }
@@ -173,12 +205,12 @@ impl SavedState {
 
 impl super::SourceDatabase {
     /// Save this session's database as the next run's starting point. Once per session, at
-    /// the checkpoint after the ordinary projection: the contexts' copies are made fresh by
-    /// each run and are not part of what is kept. Failing to save is said and never fails
-    /// the run.
+    /// the end of the first projection, with the contexts' crates and file copies: the next
+    /// run takes them up again, so what was computed for them is not computed again.
+    /// Failing to save is said and never fails the run.
     #[instrument(level = "debug", skip(self))]
     #[hotpath::measure(impl_type = "SourceDatabase")]
-    pub(super) fn save_checkpoint(&mut self) {
+    pub(super) fn save_state(&mut self) {
         let Some(saved) = self.saved.clone() else {
             return;
         };
@@ -186,7 +218,7 @@ impl super::SourceDatabase {
             return;
         }
         let started = std::time::Instant::now();
-        match saved.save(&mut self.db, &self.vfs) {
+        match saved.save(&mut self.db, &self.vfs, &self.context_crates) {
             Ok(bytes) => crate::host::event(format!(
                 "analysis state: saved for the next run, {bytes} bytes in {:?}",
                 started.elapsed()

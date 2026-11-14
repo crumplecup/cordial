@@ -14,11 +14,12 @@ use triomphe::Arc;
 use ra_ap_hir::{AssocItem, Crate, Function, HasSource, ModuleDef, attach_db};
 use ra_ap_ide_db::RootDatabase;
 use ra_ap_ide_db::base_db::{
-    Crate as InputCrate, SourceDatabase as RaSourceDatabase, SourceRoot, SourceRootId, all_crates,
-    set_all_crates_with_durability,
+    Crate as InputCrate, SourceDatabase as RaSourceDatabase, SourceRoot, SourceRootId,
+    set_tool_crates_with_durability, tool_crates,
 };
 use ra_ap_vfs::{FileId, VfsPath, file_set::FileSet};
 use salsa::Durability;
+use salsa::Setter as _;
 use tracing::instrument;
 
 use super::SourceDatabase;
@@ -41,7 +42,7 @@ pub(super) fn original_path(path: &VfsPath) -> Option<std::path::PathBuf> {
 
 /// The first id given to the source roots that hold a context's file copies, far
 /// above any id the workspace loader used.
-const FIRST_COPY_ROOT: u32 = 0x4000_0000;
+const FIRST_COPY_ROOT: u32 = ra_ap_ide_db::base_db::TOOL_SOURCE_ROOTS;
 
 /// A context's copy of the workspace: the same source files under a source root of
 /// its own, and a copy of each local crate rooted at them under the context's cfg.
@@ -62,9 +63,60 @@ pub struct ContextCrates {
     /// same place in the source, so facts about the copy can speak of the original.
     #[getter(skip)]
     counterparts: HashMap<ModuleDef, ModuleDef>,
+    /// Whether this came from a saved state and has not been brought up to date with the
+    /// sources of this run since: its copies and crates are the ones the last run made.
+    #[getter(skip)]
+    kept: bool,
+}
+
+/// What of a context is saved with the database: which crates and files are its, by where
+/// they are in the saved database. The copies are inputs of the database already; this
+/// is the way back to them.
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+pub(super) struct SavedContext {
+    context: SemanticContextKey,
+    /// Each original crate with its copy, as positions in `all_crates`.
+    crates: Vec<(usize, usize)>,
+    files: Vec<(FileId, FileId)>,
 }
 
 impl ContextCrates {
+    /// What to save of this context, or `None` when a crate of it is not registered.
+    #[instrument(level = "trace", skip(self, order))]
+    pub(super) fn to_saved(&self, order: &[InputCrate]) -> Option<SavedContext> {
+        let position = |wanted: &InputCrate| order.iter().position(|krate| krate == wanted);
+        let crates = self
+            .crates
+            .iter()
+            .map(|(original, copy)| Some((position(original)?, position(copy)?)))
+            .collect::<Option<Vec<_>>>()?;
+        let mut files: Vec<(FileId, FileId)> = self.files.iter().map(|(a, b)| (*a, *b)).collect();
+        files.sort_by_key(|(original, _)| original.index());
+        Some(SavedContext {
+            context: self.context.clone(),
+            crates,
+            files,
+        })
+    }
+
+    /// The context a saved one was, found again in the restored database whose
+    /// `all_crates` is `order`. It is as the last run left it until it is asked for.
+    #[instrument(level = "trace", skip(saved, order))]
+    pub(super) fn from_saved(saved: SavedContext, order: &[InputCrate]) -> Option<Self> {
+        let crates = saved
+            .crates
+            .into_iter()
+            .map(|(original, copy)| Some((*order.get(original)?, *order.get(copy)?)))
+            .collect::<Option<Vec<_>>>()?;
+        Some(Self {
+            context: saved.context,
+            crates,
+            files: saved.files.into_iter().collect(),
+            counterparts: HashMap::new(),
+            kept: true,
+        })
+    }
+
     /// The crates this context added, as a set.
     #[instrument(level = "trace", skip(self))]
     pub(super) fn crate_set(&self) -> BTreeSet<InputCrate> {
@@ -103,21 +155,50 @@ impl SourceDatabase {
     /// asking again for a context already added returns it. The ordinary crates'
     /// and files' inputs are not written, so nothing computed for them is
     /// invalidated.
+    ///
+    /// A context the last run saved is taken up again, not made again: its crates and
+    /// files are the ones in the restored database, and only what differs from the
+    /// sources of this run is written, so what the database memoised for them stays.
     #[instrument(level = "debug", skip(self), err(level = "warn"))]
     #[hotpath::measure(impl_type = "SourceDatabase")]
     pub fn add_context_crates(
         &mut self,
         context: &SemanticContextKey,
     ) -> CordialResult<ContextCrates> {
-        if let Some(existing) = self
+        let position = self
             .context_crates
             .iter()
-            .find(|added| added.context() == context)
-        {
-            return Ok(existing.clone());
+            .position(|added| added.context() == context);
+        match position {
+            Some(position) if !self.context_crates[position].kept => {
+                Ok(self.context_crates[position].clone())
+            }
+            Some(position) => {
+                let previous = self.context_crates[position].clone();
+                let added = self.build_context(context, position, Some(&previous))?;
+                self.context_crates[position] = added.clone();
+                Ok(added)
+            }
+            None => {
+                let added = self.build_context(context, self.context_crates.len(), None)?;
+                self.context_crates.push(added.clone());
+                Ok(added)
+            }
         }
+    }
+
+    /// Make context number `index`, or bring `previous` (the same context, as the last
+    /// run left it) up to date.
+    #[instrument(level = "debug", skip(self, previous), err(level = "warn"))]
+    #[hotpath::measure(impl_type = "SourceDatabase")]
+    fn build_context(
+        &mut self,
+        context: &SemanticContextKey,
+        index: usize,
+        previous: Option<&ContextCrates>,
+    ) -> CordialResult<ContextCrates> {
         let ordinary = LocalCfgs::capture_excluding(&self.db, &self.shadow_crates());
-        let files = self.copy_local_files(self.context_crates.len())?;
+        let files = self.copy_local_files(index, previous.map(|kept| &kept.files))?;
         let mut shadows: Vec<(InputCrate, InputCrate)> = Vec::new();
         for (krate, options) in ordinary.cfgs() {
             let mut changed = options.clone();
@@ -137,20 +218,43 @@ impl SourceDatabase {
                     dependency.crate_id = *copy;
                 }
             }
-            let copy = InputCrate::builder(
-                data,
-                krate.extra_data(&self.db).clone(),
-                krate.workspace_data(&self.db).clone(),
-                changed,
-                krate.env(&self.db).clone(),
-            )
-            .durability(Durability::MEDIUM)
-            .new(&self.db);
+            let extra = krate.extra_data(&self.db).clone();
+            let workspace = krate.workspace_data(&self.db).clone();
+            let env = krate.env(&self.db).clone();
+            let kept = previous.and_then(|kept| {
+                kept.crates
+                    .iter()
+                    .find(|(original, _)| original == krate)
+                    .map(|(_, copy)| *copy)
+            });
+            let copy = if let Some(copy) = kept {
+                // A crate a restored database holds is written only where it differs
+                // from this run's sources: Salsa does not compare an input to its old
+                // value, so writing an equal one would invalidate what read it.
+                macro_rules! write_if_different {
+                    ($field:ident, $set:ident, $value:expr) => {{
+                        let value = $value;
+                        if *copy.$field(&self.db) != value {
+                            copy.$set(&mut self.db)
+                                .with_durability(Durability::MEDIUM)
+                                .to(value);
+                        }
+                    }};
+                }
+                write_if_different!(data, set_data, data);
+                write_if_different!(extra_data, set_extra_data, extra);
+                write_if_different!(workspace_data, set_workspace_data, workspace);
+                write_if_different!(cfg_options, set_cfg_options, changed);
+                write_if_different!(env, set_env, env);
+                copy
+            } else {
+                InputCrate::builder(data, extra, workspace, changed, env)
+                    .durability(Durability::MEDIUM)
+                    .new(&self.db)
+            };
             shadows.push((*krate, copy));
         }
-        let mut registered: Vec<InputCrate> = all_crates(&self.db).iter().copied().collect();
-        registered.extend(shadows.iter().map(|(_, copy)| *copy));
-        set_all_crates_with_durability(&mut self.db, registered, Durability::MEDIUM);
+        self.register_shadows(&shadows, previous);
         let counterparts = self.counterparts_of(&shadows, &files);
         let bytes: usize = files
             .values()
@@ -162,21 +266,51 @@ impl SourceDatabase {
             bytes,
             shadows.len(),
         );
-        let added = ContextCrates {
+        Ok(ContextCrates {
             context: context.clone(),
             crates: shadows,
             files,
             counterparts,
-        };
-        self.context_crates.push(added.clone());
-        Ok(added)
+            kept: false,
+        })
+    }
+
+    /// Register `shadows` among the database's crates, and drop from them the crates of
+    /// `previous` that this run has no original for. Nothing is written when the list is
+    /// the one already there.
+    #[instrument(level = "debug", skip(self, shadows, previous))]
+    #[hotpath::measure(impl_type = "SourceDatabase")]
+    fn register_shadows(
+        &mut self,
+        shadows: &[(InputCrate, InputCrate)],
+        previous: Option<&ContextCrates>,
+    ) {
+        let current = tool_crates(&self.db);
+        let mut registered: Vec<InputCrate> = current.iter().copied().collect();
+        let used: BTreeSet<InputCrate> = shadows.iter().map(|(_, copy)| *copy).collect();
+        if let Some(kept) = previous {
+            let gone: BTreeSet<InputCrate> = kept.shadows().filter(|s| !used.contains(s)).collect();
+            registered.retain(|krate| !gone.contains(krate));
+        }
+        for (_, copy) in shadows {
+            if !registered.contains(copy) {
+                registered.push(*copy);
+            }
+        }
+        if registered.as_slice() != &*current {
+            set_tool_crates_with_durability(&mut self.db, registered, Durability::MEDIUM);
+        }
     }
 
     /// Copy every file of the workspace's own source roots to virtual paths under
     /// a source root of its own, returning each original with its copy.
     #[instrument(level = "debug", skip(self), err(level = "warn"))]
     #[hotpath::measure(impl_type = "SourceDatabase")]
-    fn copy_local_files(&mut self, index: usize) -> CordialResult<HashMap<FileId, FileId>> {
+    fn copy_local_files(
+        &mut self,
+        index: usize,
+        known: Option<&HashMap<FileId, FileId>>,
+    ) -> CordialResult<HashMap<FileId, FileId>> {
         let root_id = SourceRootId(FIRST_COPY_ROOT + u32::try_from(index).unwrap_or(u32::MAX >> 2));
         let roots: BTreeSet<SourceRootId> = attach_db(&self.db, || {
             Crate::all(&self.db)
@@ -210,18 +344,38 @@ impl SourceDatabase {
                     .vfs
                     .file_id(&copy_path)
                     .ok_or_else(|| CordialError::not_found(real.as_str().into()))?;
-                self.db.set_file_text(copy, &text);
-                self.db
-                    .set_file_source_root_with_durability(copy, root_id, Durability::LOW);
+                // A copy the database already holds is written only if it differs.
+                if known.and_then(|known| known.get(&original)) == Some(&copy) {
+                    if &**self.db.file_text(copy).text(&self.db) != text.as_str() {
+                        self.db.set_file_text(copy, &text);
+                    }
+                    if self.db.file_source_root(copy).source_root_id(&self.db) != root_id {
+                        self.db.set_file_source_root_with_durability(
+                            copy,
+                            root_id,
+                            Durability::LOW,
+                        );
+                    }
+                } else {
+                    self.db.set_file_text(copy, &text);
+                    self.db
+                        .set_file_source_root_with_durability(copy, root_id, Durability::LOW);
+                }
                 set.insert(copy, copy_path);
                 copies.insert(original, copy);
             }
         }
-        self.db.set_source_root_with_durability(
-            root_id,
-            Arc::new(SourceRoot::new_local(set)),
-            Durability::LOW,
-        );
+        let unchanged = known.is_some() && {
+            let current = self.db.source_root(root_id).source_root(&self.db).clone();
+            current.iter().collect::<BTreeSet<_>>() == set.iter().collect::<BTreeSet<_>>()
+        };
+        if !unchanged {
+            self.db.set_source_root_with_durability(
+                root_id,
+                Arc::new(SourceRoot::new_local(set)),
+                Durability::LOW,
+            );
+        }
         Ok(copies)
     }
 

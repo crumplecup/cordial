@@ -23,7 +23,7 @@ use triomphe::Arc;
 use vfs::{AbsPathBuf, AnchoredPath, FileId, VfsPath, file_set::FileSet};
 
 use crate::{
-    CrateWorkspaceData, EditionedFileId, FxIndexSet, SourceDatabase, all_crates,
+    CrateWorkspaceData, EditionedFileId, FxIndexSet, SourceDatabase, all_crates, graph_crates,
     set_all_crates_with_durability,
 };
 
@@ -82,6 +82,12 @@ impl fmt::Display for ProcMacroLoadingError {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct SourceRootId(pub u32);
+
+/// Source roots from this id up hold files a tool made up, such as copies of a workspace's
+/// sources analysed under another cfg; the loader never hands out ids this high. A crate
+/// rooted in one of them belongs to the tool, not to the graph the loader builds, and is
+/// registered apart from the graph's crates (see `tool_crates`).
+pub const TOOL_SOURCE_ROOTS: u32 = 0x4000_0000;
 
 /// Files are grouped into source roots. A source root is a directory on the
 /// file systems which is watched for changes. Typically it corresponds to a
@@ -622,7 +628,7 @@ impl CrateGraphBuilder {
     }
 
     pub fn set_in_db(self, db: &mut dyn SourceDatabase) -> CratesIdMap {
-        let old_all_crates = all_crates(db);
+        let old_all_crates = graph_crates(db);
 
         // For some reason in some repositories we have duplicate crates, so we use a set and not `Vec`.
         // We use an `IndexSet` because the list needs to be topologically sorted.
