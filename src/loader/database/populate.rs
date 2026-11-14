@@ -11,7 +11,11 @@ use ra_ap_syntax::{
 
 use super::contexts::FunctionNodes;
 use super::items;
-use crate::{CordialResult, CrateIr, EdgeKind, NodeId, SemanticItemId};
+use crate::ir::Resolved;
+use crate::{
+    CordialResult, CrateIr, EdgeKind, FunctionCallFlow, NodeId, ResolvedFunctionCall,
+    SemanticItemId, SourceCallResolution,
+};
 
 /// Graph-local lookup tables, discarded once this projection is complete.
 #[derive(Default)]
@@ -20,6 +24,10 @@ pub(super) struct Projection {
     calls: Vec<(NodeId, SemanticItemId)>,
     /// Every function item's node, for the cfg-context passes that follow.
     functions: FunctionNodes,
+    /// Each function's resolved calls, written once every file is in.
+    flows: Vec<(NodeId, FunctionCallFlow)>,
+    /// Whether any file withdraws trust from the crate's names.
+    shadows_extern_crates: bool,
 }
 
 impl Projection {
@@ -73,6 +81,37 @@ impl Projection {
             }
             nodes.push(node);
         }
+        self.shadows_extern_crates |= file_items.shadows_extern_crates();
+        for (record, node) in file_items.items().iter().zip(&nodes) {
+            let Some(flow) = record.flow() else {
+                continue;
+            };
+            let calls = flow
+                .calls()
+                .iter()
+                .map(|(range, resolved)| {
+                    ResolvedFunctionCall::new(
+                        range.clone(),
+                        match resolved {
+                            Resolved::Source {
+                                target,
+                                source_digest,
+                            } => SourceCallResolution::Source {
+                                function: nodes[*target],
+                                source_digest: *source_digest,
+                            },
+                            Resolved::Unresolved(failure) => {
+                                SourceCallResolution::Unresolved(*failure)
+                            }
+                        },
+                    )
+                })
+                .collect();
+            self.flows.push((
+                *node,
+                FunctionCallFlow::new(*flow.source_digest(), flow.trusted(), calls),
+            ));
+        }
         Ok(module)
     }
 
@@ -96,6 +135,34 @@ impl Projection {
             .collect();
         for (caller, callee) in pairs {
             graph.insert_edge(caller, callee, EdgeKind::Calls)?;
+        }
+        for (node, flow) in self.flows {
+            let flow = if self.shadows_extern_crates {
+                // Names cannot be trusted anywhere in this crate: the calls stay
+                // visible and authorize nothing.
+                FunctionCallFlow::new(
+                    flow.source_digest(),
+                    false,
+                    flow.calls()
+                        .iter()
+                        .map(|call| {
+                            ResolvedFunctionCall::new(
+                                call.range().clone(),
+                                SourceCallResolution::Unresolved(
+                                    crate::CallResolutionFailure::OpaqueScope,
+                                ),
+                            )
+                        })
+                        .collect(),
+                )
+            } else {
+                flow
+            };
+            graph.set_attr(
+                node,
+                crate::ATTR_FUNCTION_CALL_FLOW,
+                serde_json::to_value(flow)?,
+            )?;
         }
         for (id, node) in &self.definitions {
             locator.record_trait_implementation(graph, *id, *node)?;

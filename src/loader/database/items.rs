@@ -21,6 +21,7 @@ use tracing::instrument;
 
 use super::populate::expanded_definition;
 use super::queries::{self, FileKey, SemanticDatabase};
+use crate::ir::{Resolved, TargetFacts, resolve_call};
 use crate::loader::{SourceLoader, module_path_from_src_file};
 use crate::{
     CordialError, CordialResult, ItemKind, NodeKind, NodeWeight, SemanticCallTarget, SemanticItemId,
@@ -50,6 +51,19 @@ pub(super) struct IslandRecord {
     calls: Vec<SemanticItemId>,
 }
 
+/// The calls of a top-level free function, resolved against the file's own items.
+/// A target is the place of its item in the file's list, because node ids do not
+/// exist until the projection inserts the items.
+#[derive(Debug, Clone, PartialEq, Eq, derive_getters::Getters)]
+pub(super) struct RecordedFlow {
+    source_digest: [u8; 32],
+    /// Whether the file's own module scope is one names can be trusted in. The
+    /// crate-wide part of that decision is made once every file is in.
+    #[getter(copy)]
+    trusted: bool,
+    calls: Vec<(crate::SourceByteRange, Resolved<usize>)>,
+}
+
 /// One item of a file: its node weight and where it hangs.
 #[derive(Debug, Clone, PartialEq, Eq, derive_getters::Getters)]
 pub(super) struct ItemRecord {
@@ -65,6 +79,8 @@ pub(super) struct ItemRecord {
     calls: Vec<SemanticItemId>,
     /// Functions read from an invocation's tokens.
     islands: Vec<IslandRecord>,
+    /// How the calls of a top-level free function resolved.
+    flow: Option<RecordedFlow>,
 }
 
 /// Everything a file adds to the graph: its module node, and its items in order.
@@ -72,6 +88,11 @@ pub(super) struct ItemRecord {
 pub(super) struct FileItems {
     module: NodeWeight,
     items: Vec<ItemRecord>,
+    /// Whether this file makes names in the crate untrustworthy: it declares
+    /// `std` or `core`, or its scope has extern crate aliases or is opaque at the
+    /// root. One such file withdraws trust from every call in the crate.
+    #[getter(copy)]
+    shadows_extern_crates: bool,
 }
 
 /// The file's items, or `None` when it did not parse, which the projection has
@@ -206,9 +227,89 @@ pub(super) fn collect_items(
             definition,
             calls,
             islands,
+            flow: None,
         });
     }
-    Ok(FileItems { module, items })
+    let shadows_extern_crates = resolve_flows(facts.scope(), &module_path, &mut items)?;
+    Ok(FileItems {
+        module,
+        items,
+        shadows_extern_crates,
+    })
+}
+
+/// Resolve the calls of every top-level free function that has semantic facts,
+/// against the file's other items. Returns whether the file withdraws trust from
+/// the crate's names.
+#[instrument(level = "debug", skip(scope, items), err(level = "warn"))]
+#[hotpath::measure]
+fn resolve_flows(
+    scope: &crate::ir::SourceModuleScope,
+    module_path: &str,
+    items: &mut [ItemRecord],
+) -> CordialResult<bool> {
+    // In older editions a root declaration can shadow an absolute standard-library
+    // path, and root macros or attributes can introduce extern aliases that
+    // affect absolute paths in files below the root. Refuse these in every edition.
+    let shadows = matches!(module_path, "std" | "core")
+        || items
+            .iter()
+            .any(|item| matches!(item.weight.name().as_deref(), Some("std" | "core")))
+        || scope.extern_crates()
+        || (module_path.is_empty() && scope.opaque());
+    let trusted = !scope.opaque();
+    let syntax: Vec<Option<crate::ir::FunctionSourceSyntax>> = items
+        .iter()
+        .map(|item| {
+            item.weight
+                .attr(crate::ir::ATTR_FUNCTION_SOURCE_SYNTAX)
+                .map(|value| serde_json::from_value(value.clone()))
+                .transpose()
+        })
+        .collect::<Result<_, _>>()?;
+    let by_definition: HashMap<SemanticItemId, usize> = items
+        .iter()
+        .enumerate()
+        .filter_map(|(index, item)| Some((item.definition?, index)))
+        .collect();
+    let mut flows = Vec::new();
+    for (index, item) in items.iter().enumerate() {
+        let (Some(facts), true) = (&syntax[index], item.parent.is_none()) else {
+            continue;
+        };
+        let Some(semantic) = item
+            .weight
+            .attr(crate::ATTR_SEMANTIC_FUNCTION)
+            .map(|value| serde_json::from_value::<crate::SemanticFunction>(value.clone()))
+            .transpose()?
+        else {
+            continue;
+        };
+        let mut calls = Vec::new();
+        for call in facts.calls() {
+            let resolved = resolve_call(trusted, facts, call, Some(&semantic), &mut |target| {
+                Ok(by_definition.get(&target).map(|place| TargetFacts {
+                    key: *place,
+                    beside_the_caller: items[*place].parent.is_none(),
+                    is_function: items[*place].weight.kind() == &NodeKind::Item(ItemKind::Fn),
+                    syntax: syntax[*place].clone(),
+                }))
+            })?;
+            calls.push((call.range().clone(), resolved));
+        }
+        flows.push((
+            index,
+            RecordedFlow {
+                source_digest: facts.source_digest(),
+                trusted,
+                calls,
+            },
+        ));
+    }
+    for (index, flow) in flows {
+        items[index].flow = Some(flow);
+    }
+    Ok(shadows)
 }
 
 /// The module path of a file: its module's path from the crate root, or, for a

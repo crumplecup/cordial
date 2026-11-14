@@ -226,6 +226,7 @@ pub use source_calls::{
     ResolvedFunctionCall, SourceCallResolution, SourceModuleScope, SourcePathUse,
     SourceUseInventory,
 };
+pub(crate) use source_calls::{Resolved, TargetFacts, resolve_call};
 #[cfg(feature = "homecoming_std")]
 pub use trait_impls::collect_trait_impl_type_paths_from_ir;
 pub use view::{IrMut, IrView};

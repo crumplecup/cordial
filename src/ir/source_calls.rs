@@ -4,6 +4,9 @@ use super::{FunctionBoundary, NodeId, SourceByteRange};
 use serde::{Deserialize, Serialize};
 
 mod native;
+mod resolve;
+
+pub(crate) use resolve::{Resolved, TargetFacts, resolve_call};
 
 /// A value path, including uses outside the direct-call graph.
 ///
