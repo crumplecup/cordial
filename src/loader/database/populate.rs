@@ -17,6 +17,15 @@ use crate::{
     SemanticItemId, SourceCallResolution,
 };
 
+/// What the projection leaves for the passes after it.
+pub(super) struct Connected {
+    /// Every function item's node, for the cfg-context passes.
+    pub(super) functions: FunctionNodes,
+    /// What the observability pass reads of each function's ordinary facts.
+    #[cfg(feature = "tracing")]
+    pub(super) observed: HashMap<NodeId, super::items::ObservedCalls>,
+}
+
 /// Graph-local lookup tables, discarded once this projection is complete.
 #[derive(Default)]
 pub(super) struct Projection {
@@ -28,6 +37,9 @@ pub(super) struct Projection {
     flows: Vec<(NodeId, FunctionCallFlow)>,
     /// Whether any file withdraws trust from the crate's names.
     shadows_extern_crates: bool,
+    /// What the observability pass reads of each function's ordinary facts.
+    #[cfg(feature = "tracing")]
+    observed: HashMap<NodeId, super::items::ObservedCalls>,
 }
 
 impl Projection {
@@ -65,6 +77,10 @@ impl Projection {
             graph.insert_edge(parent, node, EdgeKind::Contains)?;
             if let Some(range) = record.function() {
                 self.functions.insert(path, *range, node);
+            }
+            #[cfg(feature = "tracing")]
+            if let Some(observed) = record.observed() {
+                self.observed.insert(node, observed.clone());
             }
             if let Some(definition) = record.definition() {
                 self.definitions.insert(*definition, node);
@@ -121,7 +137,7 @@ impl Projection {
         self,
         graph: &mut CrateIr,
         locator: &super::external::Locator<'_>,
-    ) -> CordialResult<FunctionNodes> {
+    ) -> CordialResult<Connected> {
         // One edge per caller and callee: the relationship. Each call's own
         // range and contract stay in the caller's semantic facts.
         let pairs: std::collections::BTreeSet<(NodeId, NodeId)> = self
@@ -191,7 +207,11 @@ impl Projection {
                 serde_json::to_value(calls)?,
             )?;
         }
-        Ok(self.functions)
+        Ok(Connected {
+            functions: self.functions,
+            #[cfg(feature = "tracing")]
+            observed: self.observed,
+        })
     }
 }
 

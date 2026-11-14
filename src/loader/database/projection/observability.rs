@@ -111,32 +111,33 @@ impl SourceDatabase {
                         )
                     });
             };
-            let mut facts = Vec::new();
-            match graph.semantic_function(node) {
-                Ok(ordinary) => facts.extend(ordinary),
-                Err(error) => failure = Some(error),
-            }
+            // The ordinary facts were typed when the file's items were built; only
+            // a cfg context's are read back from the graph.
+            let ordinary = outline.observed().get(&node);
+            let mut callees: Vec<crate::ir::SemanticCallee> = ordinary
+                .map(|observed| observed.callees().clone())
+                .unwrap_or_default();
+            let mut fallible = ordinary.is_some_and(|observed| *observed.fallible());
             let mut keys = Vec::new();
             match graph.semantic_context_functions(node) {
                 Ok(contexts) => {
                     for entry in contexts {
                         keys.push(entry.context().clone());
-                        facts.push(entry.function().clone());
+                        let function = entry.function();
+                        callees.extend(
+                            function
+                                .calls()
+                                .iter()
+                                .filter_map(|call| call.callee().clone()),
+                        );
+                        fallible |= matches!(
+                            function.result_recording(),
+                            crate::SemanticResultRecording::Result { .. }
+                        );
                     }
                 }
                 Err(error) => failure = Some(error),
             }
-            let fallible = facts.iter().any(|function| {
-                matches!(
-                    function.result_recording(),
-                    crate::SemanticResultRecording::Result { .. }
-                )
-            });
-            let callees = facts
-                .iter()
-                .flat_map(|function| function.calls())
-                .filter_map(|call| call.callee().clone())
-                .collect();
             let mut targets = graph.children(node, crate::EdgeKind::Calls);
             for key in keys {
                 targets.extend(graph.context_children(node, &key));

@@ -19,6 +19,7 @@ fn sources() -> Vec<(String, String)> {
 
 #[test]
 fn no_thread_is_started_without_a_name() {
+    cordial::init_tracing();
     let mut unnamed = Vec::new();
     for (file, text) in sources() {
         for (index, line) in text.lines().enumerate() {

@@ -21,6 +21,7 @@ fn sources() -> Vec<(String, String)> {
 
 #[test]
 fn the_counting_allocator_is_declared_exactly_once_and_behind_its_feature() {
+    cordial::init_tracing();
     let declared: Vec<_> = sources()
         .into_iter()
         .filter(|(path, _)| !path.ends_with("tests/hotpath_allocator.rs"))
@@ -57,6 +58,7 @@ fn the_counting_allocator_is_declared_exactly_once_and_behind_its_feature() {
 
 #[test]
 fn the_manifest_forwards_the_feature_to_hotpath() {
+    cordial::init_tracing();
     let manifest =
         std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml"))
             .unwrap_or_default();
@@ -68,6 +70,7 @@ fn the_manifest_forwards_the_feature_to_hotpath() {
 
 #[test]
 fn one_function_builds_every_profile_guard() {
+    cordial::init_tracing();
     let builders: Vec<_> = sources()
         .into_iter()
         .filter(|(path, _)| path.contains("/src/"))

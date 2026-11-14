@@ -37,6 +37,7 @@ impl SourcePanics {
     /// The inventory of a crate whose per-file parts are collected: the records
     /// in report order.
     #[tracing::instrument(level = "debug", skip_all)]
+    #[hotpath::measure]
     pub(crate) fn from_parts(
         root: &Path,
         snapshots: Vec<FileSnapshot>,
@@ -57,6 +58,7 @@ impl SourcePanics {
 /// The functions one file defines and the calls they make, for the proofs'
 /// reachable set.
 #[tracing::instrument(level = "debug", skip(file))]
+#[hotpath::measure]
 pub(crate) fn file_proofs(file: &DatabaseSource<'_>) -> PanicProofGraph {
     proof::ProofCollector::of_file(file)
 }

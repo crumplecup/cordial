@@ -30,6 +30,7 @@ const SHARED_ERRORS: &[&str] = &[
 
 #[test]
 fn locks_and_channels_come_from_the_sync_module() {
+    cordial::init_tracing();
     let mut raw = Vec::new();
     for (file, text) in sources() {
         if file == "sync.rs" {
@@ -65,6 +66,7 @@ fn locks_and_channels_come_from_the_sync_module() {
 
 #[test]
 fn every_lock_and_channel_has_a_name_of_its_own() {
+    cordial::init_tracing();
     let mut seen: BTreeMap<String, Vec<String>> = BTreeMap::new();
     for (file, text) in sources() {
         for (at, _) in text

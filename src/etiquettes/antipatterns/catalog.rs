@@ -46,6 +46,7 @@ pub(crate) enum StaticFieldShape {
 impl AntipatternCatalog {
     /// The catalog of a crate whose per-file parts are already collected.
     #[tracing::instrument(level = "debug", skip_all)]
+    #[hotpath::measure]
     pub(crate) fn from_parts(
         mut snapshots: Vec<FileSnapshot>,
         sites: Vec<AntipatternCandidate>,

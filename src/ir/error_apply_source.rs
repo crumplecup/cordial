@@ -67,6 +67,7 @@ impl SourceErrorApply {
 
     /// The crate's files, joined, in path order.
     #[tracing::instrument(level = "debug", skip(files))]
+    #[hotpath::measure]
     pub(crate) fn from_files(root: &Path, mut files: Vec<ErrorApplyFile>) -> Self {
         files.sort_by(|a, b| a.snapshot.path().cmp(b.snapshot.path()));
         Self {

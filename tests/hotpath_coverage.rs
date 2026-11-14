@@ -53,6 +53,7 @@ fn level_of(attribute: &str) -> &str {
 
 #[test]
 fn every_operation_is_measured() {
+    cordial::init_tracing();
     let mut missing = Vec::new();
     for (file, lines) in sources() {
         let mut index = 0;

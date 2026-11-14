@@ -69,6 +69,7 @@ impl SourceDatabase {
     /// One file's source evidence read without the query, to report why the
     /// query declined it.
     #[tracing::instrument(level = "debug", skip(self, package, path, id), err(level = "warn"))]
+    #[hotpath::measure]
     fn path_inclusion_directly(
         &self,
         package: &str,

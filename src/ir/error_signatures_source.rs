@@ -30,6 +30,7 @@ pub struct ErrorSignatureAssessment {
 impl SourceErrorSignatures {
     /// The source files this evidence is read from, in the order they are read.
     #[tracing::instrument(level = "debug", err(level = "warn"))]
+    #[hotpath::measure]
     pub(crate) fn input_paths(root: &Path) -> CordialResult<Vec<PathBuf>> {
         let tree = root.join("src");
         let mut paths = Vec::new();

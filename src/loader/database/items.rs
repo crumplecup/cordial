@@ -51,6 +51,16 @@ pub(super) struct IslandRecord {
     calls: Vec<SemanticItemId>,
 }
 
+/// What the observability pass reads of a function's ordinary facts: the callees
+/// of its calls and whether it returns a `Result`. Typed here, so the pass does not
+/// decode the whole facts back out of the graph for every function.
+#[cfg(feature = "tracing")]
+#[derive(Debug, Clone, PartialEq, Eq, derive_getters::Getters)]
+pub(in crate::loader::database) struct ObservedCalls {
+    callees: Vec<crate::ir::SemanticCallee>,
+    fallible: bool,
+}
+
 /// The calls of a top-level free function, resolved against the file's own items.
 /// A target is the place of its item in the file's list, because node ids do not
 /// exist until the projection inserts the items.
@@ -81,6 +91,9 @@ pub(super) struct ItemRecord {
     islands: Vec<IslandRecord>,
     /// How the calls of a top-level free function resolved.
     flow: Option<RecordedFlow>,
+    /// What the observability pass reads of the function's ordinary facts.
+    #[cfg(feature = "tracing")]
+    observed: Option<ObservedCalls>,
 }
 
 /// Everything a file adds to the graph: its module node, and its items in order.
@@ -192,13 +205,17 @@ pub(super) fn collect_items(
             source.line(item.syntax().text_range().start()),
         );
         weight.set_attr("qualified_path", qualified.clone().into());
+        #[cfg(feature = "tracing")]
+        let mut observed = None;
         let (mut function, mut definition, mut calls) = (None, None, Vec::new());
         if let ast::Item::Fn(declared) = &item {
-            if let Some((identity, targets)) =
-                collect_function(db, &sema, &source, declared, &mut weight)?
-            {
-                definition = Some(identity);
-                calls = targets;
+            if let Some(collected) = collect_function(db, &sema, &source, declared, &mut weight)? {
+                definition = Some(collected.identity);
+                calls = collected.targets;
+                #[cfg(feature = "tracing")]
+                {
+                    observed = Some(collected.observed);
+                }
             }
             weight.set_attr(
                 crate::ir::ATTR_FUNCTION_LOCATION,
@@ -228,6 +245,8 @@ pub(super) fn collect_items(
             calls,
             islands,
             flow: None,
+            #[cfg(feature = "tracing")]
+            observed,
         });
     }
     let shadows_extern_crates = resolve_flows(facts.scope(), &module_path, &mut items)?;
@@ -421,6 +440,15 @@ fn item_kind(item: &ast::Item) -> (String, NodeKind) {
     )
 }
 
+/// What a function's collection found: the identity it resolved to, the functions
+/// its evidence says it calls, and what the observability pass reads.
+struct Collected {
+    identity: SemanticItemId,
+    targets: Vec<SemanticItemId>,
+    #[cfg(feature = "tracing")]
+    observed: ObservedCalls,
+}
+
 /// Add a function's syntax facts and semantic evidence to its weight, and return
 /// the identity it resolved to and the functions its evidence says it calls.
 #[instrument(
@@ -434,7 +462,7 @@ fn collect_function(
     source: &DatabaseSource<'_>,
     function: &ast::Fn,
     weight: &mut NodeWeight,
-) -> CordialResult<Option<(SemanticItemId, Vec<SemanticItemId>)>> {
+) -> CordialResult<Option<Collected>> {
     // The current transform contract describes top-level free
     // functions. Methods/nested items retain their own nodes and
     // semantic facts without acquiring a free-function contract.
@@ -477,5 +505,20 @@ fn collect_function(
             _ => None,
         })
         .collect();
-    Ok(Some((*facts.definition(), targets)))
+    Ok(Some(Collected {
+        identity: *facts.definition(),
+        targets,
+        #[cfg(feature = "tracing")]
+        observed: ObservedCalls {
+            callees: facts
+                .calls()
+                .iter()
+                .filter_map(|call| call.callee().clone())
+                .collect(),
+            fallible: matches!(
+                facts.result_recording(),
+                crate::SemanticResultRecording::Result { .. }
+            ),
+        },
+    }))
 }

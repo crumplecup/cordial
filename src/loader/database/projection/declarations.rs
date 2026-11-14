@@ -15,6 +15,10 @@ use std::path::{Path, PathBuf};
 #[derive(Debug, Default, derive_getters::Getters)]
 pub(in crate::loader::database) struct Outline {
     functions: FunctionNodes,
+    /// What the observability pass reads of each function's ordinary facts.
+    #[cfg(feature = "tracing")]
+    observed:
+        std::collections::HashMap<crate::NodeId, crate::loader::database::items::ObservedCalls>,
     #[cfg(feature = "tracing")]
     modules: Vec<(PathBuf, crate::NodeId)>,
 }
@@ -65,9 +69,11 @@ impl SourceDatabase {
             .map(|package| package.root().clone())
             .collect();
         let locator = super::super::external::Locator::new(&self.db, &self.vfs, roots);
-        let functions = projection.connect(graph, &locator)?;
+        let connected = projection.connect(graph, &locator)?;
         let outline = Outline {
-            functions,
+            functions: connected.functions,
+            #[cfg(feature = "tracing")]
+            observed: connected.observed,
             #[cfg(feature = "tracing")]
             modules,
         };

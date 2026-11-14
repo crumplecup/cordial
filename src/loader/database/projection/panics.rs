@@ -88,6 +88,7 @@ impl SourceDatabase {
 
     /// The files the panic policy reads, with the scan tree each was found under.
     #[tracing::instrument(level = "debug", skip(self), err(level = "warn"))]
+    #[hotpath::measure]
     fn panic_inputs(&self, root: &Path) -> CordialResult<Vec<(PathBuf, PathBuf)>> {
         let mut paths = Vec::new();
         for tree in crate::loader::quality_scan_trees(root) {

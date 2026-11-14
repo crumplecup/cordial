@@ -190,6 +190,7 @@ impl PathInclusionSource {
     /// What one file of `package` contributes: its fingerprint and the module
     /// targets its syntax declares.
     #[instrument(level = "debug", skip(file))]
+    #[hotpath::measure]
     pub(crate) fn of_file(package: &str, file: &crate::loader::DatabaseSource<'_>) -> Self {
         Self::new(
             package.to_owned(),

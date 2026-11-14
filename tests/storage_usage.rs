@@ -13,6 +13,7 @@ fn write(root: &Path, relative: &str, bytes: usize) -> Result<()> {
 
 #[test]
 fn a_store_is_counted_by_its_top_level_entries() -> Result<()> {
+    cordial::init_tracing();
     let scratch = tempfile::tempdir().into_diagnostic()?;
     write(scratch.path(), "cache/run/abc/ir/a.ir.zst", 1000)?;
     write(scratch.path(), "cache/run/abc/inputs.json", 24)?;
@@ -37,12 +38,14 @@ fn a_store_is_counted_by_its_top_level_entries() -> Result<()> {
 
 #[test]
 fn a_missing_store_holds_nothing() {
+    cordial::init_tracing();
     assert!(store_usage(Path::new("/nonexistent/store/root")).is_empty());
     let _ = StoreLayout::from_root("/nonexistent", "x");
 }
 
 #[test]
 fn the_values_come_from_the_places_that_know_them() -> Result<()> {
+    cordial::init_tracing();
     let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
     let read = |file: &str| std::fs::read_to_string(src.join(file)).into_diagnostic();
     assert!(

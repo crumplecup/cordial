@@ -54,6 +54,7 @@ fn attributes_before(text: &str, declared: usize, needle: &str) -> bool {
 
 #[test]
 fn every_tracked_query_is_measured_and_delegates_to_a_measured_function() {
+    cordial::init_tracing();
     let sources = sources();
     // Every function carrying a measure, by name.
     let mut measured: BTreeSet<String> = BTreeSet::new();
