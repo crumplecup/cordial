@@ -74,6 +74,11 @@ for that instead of building a second invalidation scheme.
   recomputes the edited file's part and no other. An edit that adds an item
   changes the crate's name resolution and rightly recomputes more widely.
   `tests/error_evidence_queries.rs` pins both.
+- **Path inclusions are a per-file query.** A file's `#[path]` targets are a
+  function of its syntax and its package, so each is a query keyed by the file
+  and the package (`path_inclusion_queries.rs`); the workspace graph that joins
+  them is cheap and stays where it is asked for. `tests/path_inclusion_queries.rs`
+  pins that a body edit recomputes only the edited file's targets.
 - **Cfg contexts are query arguments.** The context pass today mutates the one
   database's cfg inputs for each context (`LocalCfgs::enter`), which invalidates
   what the previous context computed. A context key as a query argument lets

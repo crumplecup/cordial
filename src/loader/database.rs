@@ -11,7 +11,8 @@ mod contexts;
 #[cfg(any(
     feature = "antipatterns",
     feature = "panics",
-    feature = "internal_error_chain"
+    feature = "internal_error_chain",
+    feature = "derives"
 ))]
 mod crate_files;
 mod external;
@@ -22,6 +23,8 @@ mod items;
 mod options;
 #[cfg(feature = "panics")]
 mod panic_queries;
+#[cfg(feature = "derives")]
+mod path_inclusion_queries;
 mod populate;
 mod prime;
 mod projection;

@@ -26,6 +26,11 @@ pub(super) struct FileKey<'db> {
 }
 
 /// The files whose contributions are joined.
+#[cfg(any(
+    feature = "antipatterns",
+    feature = "panics",
+    feature = "internal_error_chain"
+))]
 #[salsa::interned]
 pub(super) struct CrateKey<'db> {
     #[returns(ref)]
@@ -34,6 +39,11 @@ pub(super) struct CrateKey<'db> {
     pub(super) root: PathBuf,
 }
 
+#[cfg(any(
+    feature = "antipatterns",
+    feature = "panics",
+    feature = "internal_error_chain"
+))]
 impl<'db> CrateKey<'db> {
     /// The key of each file the crate key lists, in order.
     #[instrument(level = "trace", skip(self, db))]

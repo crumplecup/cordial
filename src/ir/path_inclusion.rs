@@ -1,6 +1,8 @@
 //! Shared workspace source, proof-call, module-splice and Cargo evidence.
 
 use crate::FileSnapshot;
+use ra_ap_syntax::ast::HasAttrs as _;
+use ra_ap_syntax::ast::HasModuleItem as _;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::path::{Path, PathBuf};
@@ -182,4 +184,52 @@ pub(crate) fn normalize(name: &str) -> String {
 #[hotpath::measure]
 pub(crate) fn canonical_or(path: &Path) -> PathBuf {
     path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
+}
+
+impl PathInclusionSource {
+    /// What one file of `package` contributes: its fingerprint and the module
+    /// targets its syntax declares.
+    #[instrument(level = "debug", skip(file))]
+    pub(crate) fn of_file(package: &str, file: &crate::loader::DatabaseSource<'_>) -> Self {
+        Self::new(
+            package.to_owned(),
+            FileSnapshot::new(file.path().to_path_buf(), file.source_digest()),
+            targets(file.tree().items()),
+        )
+    }
+}
+
+#[tracing::instrument(level = "trace", skip(items))]
+fn targets(items: impl Iterator<Item = ra_ap_syntax::ast::Item>) -> Vec<String> {
+    let mut out = Vec::new();
+    for item in items {
+        if let ra_ap_syntax::ast::Item::Module(module) = item {
+            if let Some(target) = module.attrs().find_map(path_value) {
+                out.push(target);
+            }
+            if let Some(list) = module.item_list() {
+                out.extend(targets(list.items()));
+            }
+        }
+    }
+    out
+}
+
+#[tracing::instrument(level = "trace", skip(attr))]
+fn path_value(attr: ra_ap_syntax::ast::Attr) -> Option<String> {
+    if attr.simple_name().as_deref() != Some("path") {
+        return None;
+    }
+    match attr.meta()? {
+        ra_ap_syntax::ast::Meta::KeyValueMeta(value) => match value.expr()? {
+            ra_ap_syntax::ast::Expr::Literal(literal) => match literal.kind() {
+                ra_ap_syntax::ast::LiteralKind::String(value) => {
+                    value.value().ok().map(|text| text.into_owned())
+                }
+                _ => None,
+            },
+            _ => None,
+        },
+        _ => None,
+    }
 }
