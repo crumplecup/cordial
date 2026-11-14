@@ -31,6 +31,7 @@ mod prime;
 mod projection;
 mod queries;
 mod recording;
+mod saved;
 mod scan_queries;
 mod session;
 #[cfg(feature = "internal_error_chain")]
@@ -50,6 +51,7 @@ pub use options::{CfgPlanning, SemanticCargoOptions};
     feature = "antipatterns"
 ))]
 pub(super) use queries::SemanticDatabase;
+pub use saved::SavedState;
 pub use session::SyncOutcome;
 /// Where the loader says what it is doing, for the frontend's progress display.
 #[derive(Clone)]
@@ -103,6 +105,11 @@ pub struct SourceDatabase {
     proc_macro_server: Option<ra_ap_proc_macro_api::ProcMacroClient>,
     // Progress messages for long loads and projections.
     reporter: Reporter,
+    // Where this session's database is saved for the next run, and whether it has been.
+    saved: Option<SavedState>,
+    saved_once: bool,
+    // Whether the database was restored from a saved state.
+    restored: bool,
     #[cfg(feature = "cfg_hygiene")]
     workspace_root: Option<std::path::PathBuf>,
 }

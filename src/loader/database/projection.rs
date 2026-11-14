@@ -100,6 +100,7 @@ impl SourceDatabase {
         })?;
         drop(ordinary_watch);
         crate::process_memory::log("ordinary projection done");
+        self.save_checkpoint();
         // Gated code is analysed by changing the database's cfg input, which
         // needs the exclusive borrow the ordinary pass does not have.
         self.project_contexts(paths, outline.functions(), &mut graph)?;

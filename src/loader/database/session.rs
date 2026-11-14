@@ -37,6 +37,9 @@ impl SourceDatabase {
             proc_macro_server: None,
             context_crates: Vec::new(),
             reporter: Reporter::default(),
+            saved: None,
+            saved_once: false,
+            restored: false,
             #[cfg(feature = "cfg_hygiene")]
             workspace_root: None,
         }

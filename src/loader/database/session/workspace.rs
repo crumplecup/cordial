@@ -3,7 +3,7 @@
 use super::{context, inputs, packages};
 
 use super::SourceDatabase;
-use crate::loader::database::Reporter;
+use crate::loader::database::{Reporter, SavedState};
 use crate::{CordialResult, SemanticCargoOptions, SemanticContextGap};
 use ra_ap_ide_db::RootDatabase;
 use ra_ap_load_cargo::{LoadCargoConfig, ProcMacroServerChoice, load_workspace_into_db};
@@ -38,6 +38,36 @@ impl SourceDatabase {
         options: &SemanticCargoOptions,
         reporter: &Reporter,
     ) -> CordialResult<Self> {
+        Self::load_saved_reporting(root, options, reporter, None)
+    }
+
+    /// [`Self::load_with`], starting from the database a previous run saved in `saved`
+    /// when there is one this build can use, and saving this session's database there once
+    /// its ordinary projection is done. A saved state that cannot be used is said so and
+    /// the load is cold.
+    #[instrument(level = "debug", skip(root, options, saved), err(level = "warn"))]
+    #[hotpath::measure]
+    pub fn load_saved(
+        root: &Path,
+        options: &SemanticCargoOptions,
+        saved: Option<SavedState>,
+    ) -> CordialResult<Self> {
+        Self::load_saved_reporting(root, options, &Reporter::default(), saved)
+    }
+
+    /// [`Self::load_saved`], saying each phase through `reporter` as it starts.
+    #[instrument(
+        level = "debug",
+        skip(root, options, reporter, saved),
+        err(level = "warn")
+    )]
+    #[hotpath::measure]
+    pub(crate) fn load_saved_reporting(
+        root: &Path,
+        options: &SemanticCargoOptions,
+        reporter: &Reporter,
+        saved: Option<SavedState>,
+    ) -> CordialResult<Self> {
         let root = root.canonicalize()?;
         // canonicalize established absoluteness; check UTF-8 before the
         // upstream path constructor's assertion boundary.
@@ -51,7 +81,7 @@ impl SourceDatabase {
         let context = context::WorkspaceInputs::capture(&workspace, options, gaps)?;
         let external_packages = packages::collect_external(&workspace);
         reporter.say("Loading the workspace into rust-analyzer");
-        let (db, vfs, server) = load_database(workspace, &config)?;
+        let (db, vfs, server, restored) = load_database(workspace, &config, saved.as_ref())?;
         let context = context.finish(&db, &vfs, server.as_ref())?;
         crate::process_memory::log("workspace loaded");
         Ok(Self {
@@ -64,6 +94,9 @@ impl SourceDatabase {
             proc_macro_server: server,
             context_crates: Vec::new(),
             reporter: reporter.clone(),
+            saved,
+            saved_once: false,
+            restored,
             #[cfg(feature = "cfg_hygiene")]
             workspace_root: Some(root),
         })
@@ -165,15 +198,17 @@ fn run_build_scripts(
 }
 
 /// Load the workspace into a fresh database with the proc-macro server.
-#[instrument(level = "debug", skip(workspace, config), err(level = "warn"))]
+#[instrument(level = "debug", skip(workspace, config, saved), err(level = "warn"))]
 #[hotpath::measure]
 fn load_database(
     workspace: ProjectWorkspace,
     config: &CargoConfig,
+    saved: Option<&SavedState>,
 ) -> CordialResult<(
     RootDatabase,
     ra_ap_vfs::Vfs,
     Option<ra_ap_proc_macro_api::ProcMacroClient>,
+    bool,
 )> {
     let load_config = LoadCargoConfig {
         load_out_dirs_from_check: true,
@@ -182,8 +217,21 @@ fn load_database(
         num_worker_threads: 1,
         proc_macro_processes: 1,
     };
-    let mut db = RootDatabase::new(None);
+    let (mut db, restored) = match saved.map(SavedState::restore) {
+        Some(Ok(database)) => {
+            crate::host::event(
+                "analysis state: restored from the last run; the workspace is loaded onto it"
+                    .to_owned(),
+            );
+            (database, true)
+        }
+        Some(Err(reason)) => {
+            crate::host::event(format!("analysis state: not used ({reason}); loading cold"));
+            (RootDatabase::new(None), false)
+        }
+        None => (RootDatabase::new(None), false),
+    };
     let (vfs, server) =
         load_workspace_into_db(workspace, &config.extra_env, &load_config, &mut db)?;
-    Ok((db, vfs, server))
+    Ok((db, vfs, server, restored))
 }

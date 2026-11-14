@@ -119,9 +119,17 @@ impl CacheToken {
         {
             let reporter = locked(&self.reporter).clone();
             crate::host::loaded();
-            crate::host::event("database: loaded from scratch".to_owned());
-            let database =
-                SourceDatabase::load_reporting(&recipe.root, &recipe.options, &reporter)?;
+            crate::host::event("database: workspace loaded".to_owned());
+            // The run cache's store also keeps the database a run leaves for the next.
+            let saved = locked(&self.cache)
+                .as_ref()
+                .map(|cache| crate::loader::SavedState::at(cache.state_dir()));
+            let database = SourceDatabase::load_saved_reporting(
+                &recipe.root,
+                &recipe.options,
+                &reporter,
+                saved,
+            )?;
             *slot = Slot {
                 database: Some(database),
                 loaded: true,

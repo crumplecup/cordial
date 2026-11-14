@@ -1,7 +1,9 @@
 # rust-analyzer persistence: reuse across processes without a resident process
 
 **Status:** Experiment, 2026-11-14. The patched crates are vendored and cordial builds against
-them. Item identity is now stable across processes. Nothing saves or restores a database yet.
+them. Item identity is stable across processes, and a run saves its database for the next one
+to start from. Cordial's own queries are not persisted yet, so what carries over is rust-analyzer's
+inputs and the identity table.
 
 ## Why
 
@@ -14,7 +16,7 @@ red-green algorithm, made durable.
 ## What was patched
 
 `vendor/` holds ten `ra_ap_*` crates at 0.0.358, wired in through `[patch.crates-io]`.
-`vendor/ra_ap.patch` is the whole difference from the published sources (about 230 changed lines;
+`vendor/ra_ap.patch` is the whole difference from the published sources (about 240 changed lines;
 the copied crates are 106k lines of Rust, 3.7 MB, none of it ours to maintain):
 
 - the nine `#[salsa::input]` structs rust-analyzer defines are marked `persist`:
@@ -27,8 +29,9 @@ the copied crates are 106k lines of Rust, 3.7 MB, none of it ours to maintain):
 - `RootDatabase::empty()`, because `new` allocates singleton inputs that a restore must not
   find already there, and `Files::dump`/`restore` and `CratesMap::dump`/`restore` for the
   handle tables rust-analyzer keeps outside Salsa;
-- compare-before-set in `Files`' setters, because Salsa does not compare a new input with the
-  old one and an unchanged text must not invalidate what read it.
+- compare-before-set in `Files`' setters and in the local and library root sets, because Salsa
+  does not compare a new input with the old one and an unchanged value must not invalidate what
+  read it.
 
 Only inputs need to be persistable. Salsa flattens a memo's edges through non-persistable
 queries, interned structs and tracked structs down to the base inputs.
@@ -76,11 +79,31 @@ from its description, and refuses to return anything that does not describe itse
   their text; a fact about one reads back as an unknown definition, never a wrong one.
 - `SourceDatabase::describe_item` and `knows_item` expose this for tests and diagnostics.
 
+## Saving and restoring (done)
+
+`loader/database/saved.rs`. A run saves its database once, at the checkpoint between the ordinary
+projection and the cfg contexts, into `{store}/cache/analysis-state/` (one slot, replaced). The
+contexts are left out on purpose: each run makes their shadow crates and copied files fresh, and
+saving them would pile up orphans. The next run restores that state into `RootDatabase::empty()`
+and loads the workspace onto it; the loader's changes then bring the inputs up to date, and
+Salsa invalidates what a difference reaches.
+
+- The state is the Salsa data (rust-analyzer's inputs, the identity table), the handle tables
+  rust-analyzer keeps outside Salsa, and a key: the fingerprint of the cordial binary that wrote
+  it. Another build's state is ignored, because the facts and descriptions in it are that
+  build's. It is written beside the slot and moved into place with the key last.
+- Any failure reading it (missing, wrong build, damaged, a panic inside Salsa) is said in the run
+  log, for example `analysis state: not used (saved by another build of cordial); loading cold`,
+  and the run goes on cold. A saved state never decides whether a run succeeds.
+- Size: about 57 MB for a two-function project, nearly all of it library file text. Space is
+  traded for time. Saving took 84 ms there; neither number is measured on cordial itself.
+- `SourceDatabase::load_saved` and `restored()` expose it; the run's deferred load uses it
+  whenever the run cache has a key.
+
 ## Status of the work
 
 1. Vendor the patched crates; build and test cordial against them. **Done.**
 2. Make item identity stable across processes. **Done.**
-3. Save the database when a run ends and restore it when the next begins, keyed by the cordial
-   binary that wrote it; any failure to restore starts cold.
+3. Save the database and restore it in the next run. **Done**, see below.
 4. Persist cordial's queries, with stable keys.
 5. Measure on a multi-crate workspace.

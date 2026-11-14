@@ -29,6 +29,15 @@ pub(crate) struct RunCache {
 }
 
 impl RunCache {
+    /// Where the saved analysis database lives: one slot beside the run cache,
+    /// replaced each time a run saves.
+    pub(crate) fn state_dir(&self) -> PathBuf {
+        self.root
+            .parent()
+            .unwrap_or(&self.root)
+            .join("analysis-state")
+    }
+
     /// The entry for `inputs` in `store`; nothing is created until a write.
     #[instrument(level = "debug", skip(store, inputs))]
     #[hotpath::measure]

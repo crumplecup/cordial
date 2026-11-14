@@ -4,7 +4,8 @@ use tracing::instrument;
 mod database;
 mod native_syntax;
 pub use database::{
-    CfgPlanning, ContextCrates, Reporter, SemanticCargoOptions, SourceDatabase, SyncOutcome,
+    CfgPlanning, ContextCrates, Reporter, SavedState, SemanticCargoOptions, SourceDatabase,
+    SyncOutcome,
 };
 #[cfg(any(
     feature = "tracing",

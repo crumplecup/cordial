@@ -69,8 +69,15 @@ impl FileChange {
 
                 db.set_source_root_with_durability(root_id, Arc::new(root), durability);
             }
-            LocalRoots::get(db).set_roots(db).to(local_roots);
-            LibraryRoots::get(db).set_roots(db).to(library_roots);
+            // Salsa does not compare a new input with the old one.
+            let local = LocalRoots::get(db);
+            if *local.roots(db) != local_roots {
+                local.set_roots(db).to(local_roots);
+            }
+            let library = LibraryRoots::get(db);
+            if *library.roots(db) != library_roots {
+                library.set_roots(db).to(library_roots);
+            }
         }
 
         for (file_id, text) in self.files_changed {

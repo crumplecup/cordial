@@ -28,6 +28,26 @@
  default-features = false
  
  [dependencies.vfs]
+--- a/ra_ap_base_db-0.0.358/src/change.rs	2006-07-23 18:21:28.000000000 -0700
++++ b/ra_ap_base_db/src/change.rs	2026-11-14 10:47:21.002841868 -0800
+@@ -69,8 +69,15 @@
+ 
+                 db.set_source_root_with_durability(root_id, Arc::new(root), durability);
+             }
+-            LocalRoots::get(db).set_roots(db).to(local_roots);
+-            LibraryRoots::get(db).set_roots(db).to(library_roots);
++            // Salsa does not compare a new input with the old one.
++            let local = LocalRoots::get(db);
++            if *local.roots(db) != local_roots {
++                local.set_roots(db).to(local_roots);
++            }
++            let library = LibraryRoots::get(db);
++            if *library.roots(db) != library_roots {
++                library.set_roots(db).to(library_roots);
++            }
+         }
+ 
+         for (file_id, text) in self.files_changed {
 --- a/ra_ap_base_db-0.0.358/src/input.rs	2006-07-23 18:21:28.000000000 -0700
 +++ b/ra_ap_base_db/src/input.rs	2026-11-14 09:38:27.000000000 -0800
 @@ -80,6 +80,7 @@

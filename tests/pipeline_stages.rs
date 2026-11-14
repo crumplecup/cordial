@@ -36,7 +36,15 @@ fn a_run_stops_after_the_stage_it_is_asked_to_and_says_what_it_reused() -> Resul
     // Cold: nothing cached, so it analyses, and says so.
     let (source, said) = stop_after(&project, "source_ir")?;
     assert!(said.contains("crate IR mini: not cached"), "{said}");
-    assert!(said.contains("database: loaded from scratch"), "{said}");
+    assert!(said.contains("database: workspace loaded"), "{said}");
+    assert!(
+        said.contains("analysis state: not used (none saved"),
+        "the first run has nothing to start from: {said}"
+    );
+    assert!(
+        said.contains("analysis state: saved for the next run"),
+        "and leaves its database for the next: {said}"
+    );
     assert!(
         said.contains("function evidence (workspace):") && said.contains("evaluated for"),
         "the run says how much of the per-function work was new: {said}"
@@ -61,7 +69,11 @@ fn a_run_stops_after_the_stage_it_is_asked_to_and_says_what_it_reused() -> Resul
         said.contains("path inclusions: not cached; projecting them"),
         "{said}"
     );
-    assert!(said.contains("database: loaded from scratch"), "{said}");
+    assert!(said.contains("database: workspace loaded"), "{said}");
+    assert!(
+        said.contains("analysis state: restored from the last run"),
+        "the database the first run saved is the one this run starts from: {said}"
+    );
     assert!(
         graph["cache"].contains("reused from the run cache"),
         "{graph:?}"
