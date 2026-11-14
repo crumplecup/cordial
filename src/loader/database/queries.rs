@@ -47,9 +47,9 @@ pub(super) struct FunctionKey<'db> {
 #[salsa::interned]
 pub(super) struct FileKey<'db> {
     #[returns(copy)]
-    file: ra_ap_vfs::FileId,
+    pub(super) file: ra_ap_vfs::FileId,
     #[returns(ref)]
-    path: std::path::PathBuf,
+    pub(super) path: std::path::PathBuf,
 }
 
 /// What the projection derives from one file alone: its module scope and its

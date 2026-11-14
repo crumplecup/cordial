@@ -2,6 +2,8 @@
 
 use super::SourceDatabase;
 use crate::loader::database::{DatabaseSource, contexts::FunctionNodes, populate::Projection};
+#[cfg(feature = "tracing")]
+use crate::loader::database::{queries, tracing_queries};
 use crate::{CordialResult, CrateIr, FileSnapshot};
 use ra_ap_hir::Semantics;
 use ra_ap_ide_db::{RootDatabase, base_db::SourceDatabase as RaSourceDatabase};
@@ -85,38 +87,62 @@ impl SourceDatabase {
         ra_ap_hir::attach_db(&self.db, || {
             let sema = Semantics::new(&self.db);
             for (path, module) in outline.modules() {
+                let file = self.file_id(path)?;
+                let key = queries::FileKey::new(&self.db, file, path.clone());
                 let (_, source) = self.declaration_source(&sema, path)?;
-                let attributes =
-                    crate::ir::SourceFileAttributes::collect(&source, &|path, scope| {
-                        super::super::identity::macro_at(&sema, scope, path)
-                    });
-                let mut semantics = std::collections::HashMap::new();
-                for item in attributes.items() {
-                    let range = ra_ap_syntax::TextRange::new(
-                        (item.range().start() as u32).into(),
-                        (item.range().end() as u32).into(),
-                    );
-                    let Some(node) = outline.functions().get(path, range) else {
-                        continue;
-                    };
-                    let facts = match crate::IrView::semantic_function(graph, node)? {
-                        Some(facts) => Some(facts),
-                        None => crate::IrView::semantic_context_functions(graph, node)?
-                            .first()
-                            .map(|entry| entry.function().clone()),
-                    };
-                    if let Some(facts) = facts {
-                        semantics.insert(range, facts);
+                let Some(facts) = queries::file_facts(&self.db, key) else {
+                    return Err(crate::CordialError::workspace_source_facts_missing(
+                        "file facts",
+                    ));
+                };
+                let attributes = facts.attributes();
+                let ranges: Vec<_> = attributes
+                    .items()
+                    .iter()
+                    .filter_map(|item| {
+                        let range = ra_ap_syntax::TextRange::new(
+                            (item.range().start() as u32).into(),
+                            (item.range().end() as u32).into(),
+                        );
+                        Some((range, outline.functions().get(path, range)?))
+                    })
+                    .collect();
+                // A function only a cfg context resolves has its facts in the
+                // graph, not the database: noticed without decoding any facts.
+                let mut context_only = false;
+                for (_, node) in &ranges {
+                    if !crate::IrView::node(graph, *node)
+                        .is_some_and(|found| found.attr(crate::ATTR_SEMANTIC_FUNCTION).is_some())
+                        && !crate::IrView::semantic_context_functions(graph, *node)?.is_empty()
+                    {
+                        context_only = true;
+                        break;
                     }
                 }
+                let inventory = match tracing_queries::tracing_inventory_file(&self.db, key) {
+                    Some(found) if !context_only => found.clone(),
+                    // A context-only function, or a file the query declined: read
+                    // it with the facts the graph holds, which reports why.
+                    _ => {
+                        let mut semantics = std::collections::HashMap::new();
+                        for (range, node) in &ranges {
+                            let facts = match crate::IrView::semantic_function(graph, *node)? {
+                                Some(facts) => Some(facts),
+                                None => crate::IrView::semantic_context_functions(graph, *node)?
+                                    .first()
+                                    .map(|entry| entry.function().clone()),
+                            };
+                            if let Some(facts) = facts {
+                                semantics.insert(*range, facts);
+                            }
+                        }
+                        crate::ir::SourceTracingInventory::collect(&source, attributes, &semantics)?
+                    }
+                };
                 graph.set_attr(
                     *module,
                     crate::ir::ATTR_SOURCE_TRACING_INVENTORY,
-                    serde_json::to_value(crate::ir::SourceTracingInventory::collect(
-                        &source,
-                        &attributes,
-                        &semantics,
-                    )?)?,
+                    serde_json::to_value(inventory)?,
                 )?;
             }
             Ok(())

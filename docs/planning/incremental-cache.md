@@ -79,6 +79,15 @@ for that instead of building a second invalidation scheme.
   and the package (`path_inclusion_queries.rs`); the workspace graph that joins
   them is cheap and stays where it is asked for. `tests/path_inclusion_queries.rs`
   pins that a body edit recomputes only the edited file's targets.
+- **A file's tracing inventory is a query.** It is a function of the file's
+  syntax, its attribute evidence (`file_facts`) and its functions' semantic facts
+  (`function_evidence`), so it is keyed by the file alone and reads the rest from
+  the database (`tracing_queries.rs`). An edit recomputes the inventories of the
+  files whose functions' facts changed, which includes callers, whose facts hold
+  the errors that reach them. A file with a function only a cfg context resolves
+  is read directly by the projection, which has the context facts in the graph.
+  Still to do: the observability call attachment, which reads the `Calls` edges,
+  function locations and context facts of the assembled graph.
 - **Cfg contexts are query arguments.** The context pass today mutates the one
   database's cfg inputs for each context (`LocalCfgs::enter`), which invalidates
   what the previous context computed. A context key as a query argument lets

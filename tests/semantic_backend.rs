@@ -314,6 +314,7 @@ fn assert_edit_invalidates_only_dependents(
         "panic_scan_file:",
         "architecture_file:",
         "signature_file:",
+        "tracing_inventory_file:",
     ] {
         assert!(
             facts_before.keys().any(|key| key.starts_with(query)),
@@ -325,8 +326,10 @@ fn assert_edit_invalidates_only_dependents(
         // The items of a file hold its functions' evidence, which includes the
         // errors they reach. So the files of the callers of the edited function
         // (`root` in lib.rs, `middle` in middle.rs) are rebuilt too, as they
-        // should be; no other file's items are.
-        let callers = file.starts_with("file_items:")
+        // should be, and so are their tracing inventories, which read the same
+        // facts; no other file's items or inventories are.
+        let callers = (file.starts_with("file_items:")
+            || file.starts_with("tracing_inventory_file:"))
             && (file.ends_with("src/lib.rs") || file.ends_with("src/middle.rs"));
         if file.ends_with("src/leaf.rs") {
             assert!(*count > was, "the edited file's facts were reused: {file}");

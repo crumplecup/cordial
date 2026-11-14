@@ -34,6 +34,8 @@ mod scan_queries;
 mod session;
 #[cfg(feature = "internal_error_chain")]
 mod signature_queries;
+#[cfg(feature = "tracing")]
+mod tracing_queries;
 mod types;
 
 pub(super) use super::native_syntax::DatabaseSource;
