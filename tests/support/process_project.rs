@@ -16,7 +16,7 @@ pub(crate) struct Project {
 }
 
 impl Project {
-    fn cordial(&self, args: &[&str], session: bool) -> Command {
+    fn cordial(&self, args: &[&str]) -> Command {
         let mut command = Command::new(env!("CARGO_BIN_EXE_cordial"));
         command
             .arg("--project")
@@ -26,17 +26,12 @@ impl Project {
             .args(args)
             .env("CORDIAL_NO_PROGRESS", "1")
             .stdin(Stdio::null());
-        if session {
-            command.env_remove("CORDIAL_NO_SESSION");
-        } else {
-            command.env("CORDIAL_NO_SESSION", "1");
-        }
         command
     }
 
-    /// Run `args`, through the session when there is one and `session` is set.
-    pub(crate) fn run(&self, args: &[&str], session: bool) -> Result<Output> {
-        let output = self.cordial(args, session).output().into_diagnostic()?;
+    /// Run `args` in a process of its own.
+    pub(crate) fn run(&self, args: &[&str]) -> Result<Output> {
+        let output = self.cordial(args).output().into_diagnostic()?;
         assert!(
             output.status.success(),
             "cordial {args:?} failed: {}",
@@ -63,8 +58,8 @@ impl Project {
             .ok_or_else(|| miette::miette!("no run was logged"))
     }
 
-    /// The findings a plain process finds on this tree, in a store of its own so
-    /// that it runs the whole pipeline instead of reusing a list.
+    /// The findings a whole run finds on this tree, in a store of its own so that
+    /// it runs the whole pipeline instead of reusing a list.
     pub(crate) fn plain_findings(&self, label: &str) -> Result<String> {
         let plain = Project {
             project: self.project.clone(),
@@ -72,7 +67,7 @@ impl Project {
                 .home
                 .with_file_name(format!("plain-{}", label.replace(' ', "-"))),
         };
-        plain.run(&["open"], false)?;
+        plain.run(&["open"])?;
         Ok(plain.last()?["findings"].clone())
     }
 }

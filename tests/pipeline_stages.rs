@@ -4,10 +4,10 @@
 
 mod support {
     pub mod mini_workspace;
-    pub mod session_project;
+    pub mod process_project;
 }
 use miette::{IntoDiagnostic, Result};
-use support::session_project::{Project, Row};
+use support::process_project::{Project, Row};
 
 fn seconds(row: &Row, column: &str) -> f64 {
     row[column].parse().unwrap_or(f64::NAN)
@@ -15,7 +15,7 @@ fn seconds(row: &Row, column: &str) -> f64 {
 
 /// Stop after `stage`, returning the logged row and what the program said it did.
 fn stop_after(project: &Project, stage: &str) -> Result<(Row, String)> {
-    let output = project.run(&["open", "--stop-after", stage], false)?;
+    let output = project.run(&["open", "--stop-after", stage])?;
     let text = String::from_utf8_lossy(&output.stdout).into_owned();
     assert!(text.contains(&format!("Stopped after {stage}")), "{text}");
     let row = project.last()?;
@@ -104,7 +104,7 @@ fn a_run_stops_after_the_stage_it_is_asked_to_and_says_what_it_reused() -> Resul
     assert_eq!(seconds(&assess, "render_s"), 0.0);
 
     // Without the flag the run completes and logs no stage.
-    project.run(&["open"], false)?;
+    project.run(&["open"])?;
     let whole = project.last()?;
     assert_eq!(whole["stopped_after"], "");
     assert!(seconds(&whole, "render_s") > 0.0);
@@ -127,7 +127,6 @@ fn an_unknown_stage_is_refused_and_names_the_choices() -> Result<()> {
         .arg("--store-home")
         .arg(&project.home)
         .args(["open", "--stop-after", "nope"])
-        .env("CORDIAL_NO_SESSION", "1")
         .output()
         .into_diagnostic()?;
     assert!(!output.status.success());

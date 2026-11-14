@@ -12,7 +12,5 @@ mod store;
 
 #[cfg(feature = "tracing")]
 pub(crate) use key::policy_digest;
-#[cfg(feature = "cli")]
-pub(crate) use key::shapes_the_build;
-pub(crate) use key::{KeyRequest, SCHEMA as RUN_CACHE_SCHEMA, executable_fingerprint, gather};
+pub(crate) use key::{KeyRequest, SCHEMA as RUN_CACHE_SCHEMA, gather};
 pub(crate) use store::RunCache;

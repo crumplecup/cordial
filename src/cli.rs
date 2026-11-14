@@ -21,7 +21,6 @@ mod gate_args;
 mod perf;
 mod progress;
 mod run;
-mod session;
 mod tiers;
 mod timings;
 #[cfg(feature = "quality")]

@@ -8,6 +8,10 @@ use std::path::PathBuf;
 use tracing::instrument;
 
 /// The columns, in order. Append only: a reader finds a column by name.
+///
+/// `mode`, `kept`, `reloaded` and `files_changed` described a resident session
+/// that kept databases between commands. There is none, so they are always
+/// `process` and 0; they stay so that logs written before keep their alignment.
 pub const COLUMNS: &[&str] = &[
     "at",
     "commit",
@@ -30,6 +34,12 @@ pub const COLUMNS: &[&str] = &[
     "stopped_after",
     "cache",
 ];
+
+/// What the retired `mode` column always says.
+const RETIRED_MODE: &str = "process";
+
+/// What the retired `kept`, `reloaded` and `files_changed` columns always say.
+const RETIRED_COUNT: u32 = 0;
 
 /// The log of this store's runs.
 #[instrument(level = "trace", skip(store))]
@@ -65,20 +75,15 @@ pub struct RunFacts {
 #[hotpath::measure]
 pub fn row(at: u64, commit: &str, dirty: bool, facts: &RunFacts, notes: RunNotes) -> String {
     let timings = facts.timings();
-    let mode = if crate::host::keeping() {
-        "session"
-    } else {
-        "process"
-    };
     let fields = [
         at.to_string(),
         commit.replace(',', ""),
         u8::from(dirty).to_string(),
-        mode.to_owned(),
+        RETIRED_MODE.to_owned(),
         notes.loaded().to_string(),
-        notes.kept().to_string(),
-        notes.reloaded().to_string(),
-        notes.files_changed().to_string(),
+        RETIRED_COUNT.to_string(),
+        RETIRED_COUNT.to_string(),
+        RETIRED_COUNT.to_string(),
         notes.cache_hits().to_string(),
         facts.findings().to_string(),
         format!("{:.3}", facts.wall_secs()),

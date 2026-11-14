@@ -66,8 +66,7 @@ fn init_tracing_with_default(default_filter: &str) {
     // for `try_from_default_env` + `unwrap_or*` in the function that installs.
     let filter =
         EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(default_filter));
-    // Through `host::stderr`, so a session server sends a request's log lines to
-    // the client that asked; anywhere else it is the process's standard error.
+    // Through `host::stderr`, as every command's output is.
     let _ = tracing_subscriber::fmt()
         .with_env_filter(filter)
         .with_writer(crate::host::stderr)

@@ -27,12 +27,6 @@ pub struct WorkflowRequest {
     /// A file the incremental state edits (one comment line, restored after).
     #[builder(default)]
     edit: Option<PathBuf>,
-    /// Run through the session `open` starts, which keeps the database, so the
-    /// edits are measured against a live database. Without it every command runs
-    /// in its own process, as before sessions existed.
-    #[builder(default)]
-    #[getter(copy)]
-    session: bool,
 }
 
 /// What one run of the pipeline left behind.
@@ -139,11 +133,6 @@ fn run_once(
         .arg(work_home)
         .args(step.arguments())
         .env("CORDIAL_NO_PROGRESS", "1")
-        .envs(
-            (!request.session())
-                .then_some(("CORDIAL_NO_SESSION", "1"))
-                .into_iter(),
-        )
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .status()?;
@@ -168,35 +157,6 @@ fn run_once(
         process,
         fresh,
     ))
-}
-
-/// `session start` or `session stop` for the work store, with output discarded.
-#[instrument(level = "debug", skip(request), err(level = "warn"))]
-#[hotpath::measure]
-fn control(
-    request: &WorkflowRequest,
-    root: &Path,
-    work_home: &Path,
-    verb: &str,
-) -> CordialResult<()> {
-    let status = Command::new(request.program())
-        .arg("--project")
-        .arg(root)
-        .arg("--store-home")
-        .arg(work_home)
-        .args(["session", verb])
-        .env("CORDIAL_NO_PROGRESS", "1")
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .status()?;
-    if status.success() {
-        Ok(())
-    } else {
-        Err(CordialError::perf(
-            root.to_path_buf(),
-            format!("`cordial session {verb}` exited with {:?}", status.code()),
-        ))
-    }
 }
 
 /// Edit `file`, run `submit`, and put the file back whatever happened.
@@ -240,44 +200,23 @@ pub fn measure_workflow(
     let identity = PerfIdentity::capture(root)?;
     let environment = PerfEnvironment::capture(root);
     let slug_dir = work_home.join(project_slug_from_path(root));
-    let (mut cold, mut warm, mut incremental, mut followup) =
-        (Vec::new(), Vec::new(), Vec::new(), Vec::new());
+    let (mut cold, mut warm, mut incremental) = (Vec::new(), Vec::new(), Vec::new());
     for round in 1..=request.repeat().max(1) {
-        if request.session() {
-            // A session from an earlier round holds a database this round's cold
-            // run must not borrow.
-            control(request, root, work_home, "stop")?;
-        }
         if slug_dir.exists() {
             std::fs::remove_dir_all(&slug_dir)?;
         }
-        let measured = (|| -> CordialResult<()> {
-            cold.push(run_once(request, root, work_home, Step::Open)?);
-            warm.push(run_once(request, root, work_home, Step::Submit)?);
-            if let Some(file) = request.edit() {
-                incremental.push(edited_run(request, root, work_home, file, round)?);
-                if request.session() {
-                    followup.push(edited_run(request, root, work_home, file, round + 1000)?);
-                }
-            }
-            Ok(())
-        })();
-        if request.session() {
-            control(request, root, work_home, "stop")?;
+        cold.push(run_once(request, root, work_home, Step::Open)?);
+        warm.push(run_once(request, root, work_home, Step::Submit)?);
+        if let Some(file) = request.edit() {
+            incremental.push(edited_run(request, root, work_home, file, round)?);
         }
-        measured?;
     }
-    let name = if request.session() {
-        format!("{}+session", request.name())
-    } else {
-        request.name().clone()
-    };
+    let name = request.name().clone();
     let mut records = Vec::new();
     for (state, samples) in [
         (PerfState::Cold, cold),
         (PerfState::Warm, warm),
         (PerfState::Incremental, incremental),
-        (PerfState::Followup, followup),
     ] {
         if samples.is_empty() {
             continue;

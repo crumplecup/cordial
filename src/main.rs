@@ -9,9 +9,5 @@ use tracing::instrument;
 #[hotpath::measure]
 fn main() -> miette::Result<()> {
     init_cli_tracing();
-    let args: Vec<_> = std::env::args_os().collect();
-    if let Some(code) = cordial::host::forward(&args) {
-        std::process::exit(code);
-    }
     Cli::parse().act().into_diagnostic()
 }

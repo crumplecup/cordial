@@ -92,13 +92,17 @@ for that instead of building a second invalidation scheme.
   database's cfg inputs for each context (`LocalCfgs::enter`), which invalidates
   what the previous context computed. A context key as a query argument lets
   contexts coexist.
-- **The session survives between commands.** Salsa memoizes in memory, and each
-  command is a process. The session database is kept by a persistent session
-  process, so `open`, `done` and `submit` reuse it, and a file change reaches it
-  as an input change. rust-analyzer's database is not persistable (its inputs
-  and queries are not `persist`), so a daemon is the route that works with it as
-  it is. Salsa 0.28.5's experimental `persistence` feature may later save the
-  cordial-owned layer across restarts; that is untested and is not on the path.
+- **No process outlives its command.** Salsa memoizes in memory, and each
+  command is a process, so a memo lives exactly as long as the command that
+  computed it. A resident session process was built (C3) to carry the database
+  from `open` to `done` to `submit`, and removed: holding cordial's own workspace
+  in rust-analyzer, with the cfg contexts' copies of it, took about 10 GB
+  resident, and an agent clearing a worklist would hold that for the whole
+  session. Memory is spent only while work is running. rust-analyzer's database
+  is not persistable (its inputs and queries are not `persist`), and Salsa
+  0.28.5's `persistence` feature is experimental, so reuse across commands is
+  limited to what the run cache can restore; edit locality holds within a process
+  and is what the tests establish.
 - **What a cold start still pays.** A fresh process has an empty database and
   loads the workspace once. After that, only what an edit invalidates is
   recomputed.
@@ -215,11 +219,11 @@ graph 218 s (cordial's own loop, nothing memoized), `load_reporting` 60 s, and
 writing the run cache 18 s. The cfg-context passes are 25 s and are not the
 problem. So the order is:
 
-1. **The persistent session (C3).** A process that owns the session database
-   across commands. After the first load, an edit is an input change; the
-   rust-analyzer queries it does not touch are answered from memory, which is
-   the largest share of the cold cost. This is the step that makes `open`,
-   `done` and `submit` stop reloading, and it needs no query conversion to pay.
+1. **The persistent session (C3), built and removed.** A process that owned the
+   session database across commands made an edit an input change. It cost about
+   10 GB resident for as long as it lived, which is not acceptable while an
+   agent works a list, so it exits with its command and nothing replaces it. The
+   order below now starts at the counters.
 2. **Reuse counters (C2).** Executed and reused queries per run, so every later
    step has a number to move.
 3. **Facts as tracked queries (C4),** for what cordial computes itself and
@@ -244,24 +248,19 @@ Measured by `cordial perf workflow` against the baselines recorded 2026-11-12
 - [ ] a signature edit recomputes its callers' facts and no more;
 - [ ] the incremental state costs a fraction of cold, with the fraction recorded
   in the baseline;
-- [ ] `done` after `open` reloads nothing.
+- [ ] ~~`done` after `open` reloads nothing~~ dropped: it needed a resident
+  process, which is not allowed. What `done` and `submit` reuse is what the run
+  cache restores for an unchanged tree.
 
 ## Checklist
 
-- [x] C3. Persistent session process (first). `open` starts a session when none is running (set `CORDIAL_NO_SESSION` to
-  opt out); it ends with the terminal that started it (the server polls for its
-  process-session leader), and `cordial session start|stop|status` is the
-  explicit control, `start` meaning a fresh session. A server per project
-  (a short socket under `$XDG_RUNTIME_DIR`, named from the store). Clients forward `open`,
-  `peek`, `done`, `skip`, `submit`, `next` and `stats`; the server runs them in
-  its own process with output routed back, keeps the run's loaded database, and
-  on the next run brings it up to date with `SourceDatabase::sync_from_disk`
-  (source edits become input changes; a changed manifest, compiled input, or the
-  set of source files drops it for a reload). A command the session cannot take,
-  or declines because the build environment differs, runs locally. Tested for
-  agreement with a fresh load after each kind of edit. **Not yet measured** on
-  cordial itself: how much a re-projection on the live database saves is the
-  first number to take when measurement resumes.
+- [x] C3. Persistent session process: built, then removed. The server, client,
+  protocol, `cordial session`, the auto-start in `open`, the kept-database store
+  and the workflow benchmark's session mode are gone. A process holding the
+  loaded workspace between commands measured about 10 GB resident, and nothing
+  may stay loaded while no command is running. The run log keeps its `mode`,
+  `kept`, `reloaded` and `files_changed` columns, always `process` and 0, so
+  logs written before stay aligned.
 - [ ] C2. Reuse counters in the run record.
 - [x] C4b. The call graph's 195-202 s was `active_contexts` decoding the whole semantic
   snapshot and context plan once per function (functions x project size), not work worth

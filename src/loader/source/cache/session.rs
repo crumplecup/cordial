@@ -27,8 +27,6 @@ struct LoadRecipe {
 struct Slot {
     database: Option<SourceDatabase>,
     loaded: bool,
-    /// Where a session keeps this run's database for the next run, once loaded.
-    kept_as: Option<String>,
 }
 
 /// Identity of one load-and-probe run, shared by every view created inside it.
@@ -71,17 +69,14 @@ fn locked<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 }
 
 impl Drop for CacheToken {
-    /// A session keeps the run's loaded database for the next run.
+    /// The run's database ends with the run: nothing stays loaded once the work
+    /// that needed it is done.
     #[tracing::instrument(level = "debug", skip(self))]
     fn drop(&mut self) {
         // The run is over; the cache files it started are finished before it
         // returns, so nothing reads or exits on a half-written entry.
         if let Some(cache) = locked(&self.cache).as_ref() {
             cache.finish_writes();
-        }
-        let slot = std::mem::take(&mut *locked(&self.slot));
-        if let (Some(key), Some(database)) = (slot.kept_as, slot.database) {
-            crate::host::keep(key, database);
         }
     }
 }
@@ -98,7 +93,6 @@ impl CacheToken {
         *locked(&self.slot) = Slot {
             database: Some(database),
             loaded: true,
-            kept_as: None,
         };
     }
 
@@ -124,26 +118,13 @@ impl CacheToken {
             && let Some(recipe) = locked(&self.recipe).clone()
         {
             let reporter = locked(&self.reporter).clone();
-            let key =
-                crate::host::keeping().then(|| crate::host::key_of(&recipe.root, &recipe.options));
-            let kept = key.as_deref().and_then(crate::host::take_current);
-            let database = match kept {
-                Some(mut database) => {
-                    database.set_reporter(reporter);
-                    database
-                }
-                None => {
-                    crate::host::loaded();
-                    crate::host::event(
-                        "database: loaded from scratch (none kept for this workspace)".to_owned(),
-                    );
-                    SourceDatabase::load_reporting(&recipe.root, &recipe.options, &reporter)?
-                }
-            };
+            crate::host::loaded();
+            crate::host::event("database: loaded from scratch".to_owned());
+            let database =
+                SourceDatabase::load_reporting(&recipe.root, &recipe.options, &reporter)?;
             *slot = Slot {
                 database: Some(database),
                 loaded: true,
-                kept_as: key,
             };
         }
         f(slot.database.get_or_insert_with(SourceDatabase::new))

@@ -1,5 +1,5 @@
-//! What the databases did during the current run, for the run log: whether one
-//! was loaded, reused, or reloaded because the disk no longer matched it.
+//! What the databases did during the current run, for the run log: whether the
+//! workspace was loaded, or the run was answered from the cache.
 
 use crate::sync::Mutex;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -7,9 +7,6 @@ use std::sync::{LazyLock, PoisonError};
 use tracing::instrument;
 
 static LOADED: AtomicU32 = AtomicU32::new(0);
-static KEPT: AtomicU32 = AtomicU32::new(0);
-static RELOADED: AtomicU32 = AtomicU32::new(0);
-static FILES_CHANGED: AtomicU32 = AtomicU32::new(0);
 static CACHE_HITS: AtomicU32 = AtomicU32::new(0);
 static EVENTS: LazyLock<Mutex<Vec<String>>> =
     LazyLock::new(|| crate::sync::mutex!(Vec::new(), "run-events"));
@@ -22,15 +19,6 @@ pub struct RunNotes {
     /// Workspaces loaded from scratch.
     #[getter(copy)]
     loaded: u32,
-    /// Kept databases reused.
-    #[getter(copy)]
-    kept: u32,
-    /// Kept databases dropped because the disk no longer matched them.
-    #[getter(copy)]
-    reloaded: u32,
-    /// Source files fed into kept databases as edits.
-    #[getter(copy)]
-    files_changed: u32,
     /// Targets answered from the run cache without a database.
     #[getter(copy)]
     cache_hits: u32,
@@ -43,19 +31,6 @@ pub struct RunNotes {
 #[instrument(level = "trace")]
 pub(crate) fn loaded() {
     LOADED.fetch_add(1, Ordering::Relaxed);
-}
-
-/// A kept database was reused after `files` source files were brought up to date.
-#[instrument(level = "trace")]
-pub(crate) fn kept(files: usize) {
-    KEPT.fetch_add(1, Ordering::Relaxed);
-    FILES_CHANGED.fetch_add(u32::try_from(files).unwrap_or(u32::MAX), Ordering::Relaxed);
-}
-
-/// A kept database could not follow the disk and was dropped.
-#[instrument(level = "trace")]
-pub(crate) fn reloaded() {
-    RELOADED.fetch_add(1, Ordering::Relaxed);
 }
 
 /// A target was answered from the run cache.
@@ -94,9 +69,6 @@ pub fn take() -> RunNotes {
     *LAST_EVENTS.lock().unwrap_or_else(PoisonError::into_inner) = events.clone();
     RunNotes {
         loaded: LOADED.swap(0, Ordering::Relaxed),
-        kept: KEPT.swap(0, Ordering::Relaxed),
-        reloaded: RELOADED.swap(0, Ordering::Relaxed),
-        files_changed: FILES_CHANGED.swap(0, Ordering::Relaxed),
         cache_hits: CACHE_HITS.swap(0, Ordering::Relaxed),
         events,
     }

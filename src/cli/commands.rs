@@ -27,12 +27,6 @@ pub enum Commands {
         #[arg(long)]
         dry_run: bool,
     },
-    /// Keep one process holding the loaded workspace between commands.
-    Session {
-        /// What to do with the session.
-        #[command(subcommand)]
-        command: super::session::SessionCommands,
-    },
     /// Measure cordial's own cost and compare runs.
     Perf {
         /// What to do with performance records.
@@ -341,7 +335,6 @@ impl Commands {
                 dry_run,
             ),
             Self::Perf { command } => command.act(&ctx),
-            Self::Session { command } => command.act(&ctx),
             #[cfg(feature = "quality")]
             command @ (Self::Open { .. }
             | Self::Peek { .. }
