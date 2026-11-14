@@ -11,6 +11,7 @@ mod assertions;
 mod embedded;
 mod native;
 mod proof;
+pub(crate) use native::{FileScan, file_proofs, file_scan};
 mod sites;
 mod syntax;
 
@@ -47,6 +48,29 @@ pub struct PanicProofGraph {
 }
 
 impl PanicProofGraph {
+    /// The crate's graph from each file's: the same names across files are one
+    /// function, as the bare-name contract has always had it.
+    #[tracing::instrument(level = "debug", skip(parts))]
+    #[hotpath::measure]
+    pub(crate) fn merge<'a>(parts: impl Iterator<Item = &'a Self>) -> Self {
+        let mut calls: BTreeMap<String, Vec<String>> = BTreeMap::new();
+        let mut roots = BTreeSet::new();
+        for part in parts {
+            for (name, callees) in &part.calls {
+                calls
+                    .entry(name.clone())
+                    .or_default()
+                    .extend(callees.iter().cloned());
+            }
+            roots.extend(part.roots.iter().cloned());
+        }
+        for callees in calls.values_mut() {
+            callees.sort();
+            callees.dedup();
+        }
+        Self { calls, roots }
+    }
+
     /// Compute the fixed-point proof exemption from persisted graph facts.
     #[tracing::instrument(level = "debug", skip(self))]
     #[hotpath::measure]

@@ -1,5 +1,5 @@
 //! Panic policy over canonical source carriers. Parsing stays in the loader.
-use super::{Context, Scanner, SourcePanics, assertions, proof, syntax};
+use super::{Context, PanicProofGraph, Scanner, SourcePanics, assertions, proof, syntax};
 use crate::loader::{DatabaseSource, module_path_from_src_file};
 use crate::{CordialResult, FileSnapshot};
 use ra_ap_syntax::{AstNode, SyntaxNode, ast, ast::HasName};
@@ -14,29 +14,35 @@ impl SourcePanics {
         files: &[(PathBuf, DatabaseSource<'_>)],
         #[cfg(feature = "verus_ir")] verus: &crate::VerusCrateIr,
     ) -> CordialResult<Self> {
-        let mut proofs = proof::ProofCollector::default();
-        for (_, file) in files {
-            proofs.walk(file.tree().syntax(), &file.panic_macro_syntax(), false);
-        }
-        let proof_graph = proofs.finish();
+        let proof_graph = PanicProofGraph::merge(
+            files
+                .iter()
+                .map(|(_, file)| file_proofs(file))
+                .collect::<Vec<_>>()
+                .iter(),
+        );
         let reachable = proof_graph.reachable();
         let mut records = Vec::new();
         let mut snapshots = Vec::new();
         for (tree, file) in files {
-            snapshots.push(FileSnapshot::new(
-                file.path().to_path_buf(),
-                file.source_digest(),
-            ));
-            let context = Context {
-                modules: module_path_from_src_file(tree, file.path()),
-                ..Context::default()
-            };
-            let mut scan = Scanner::new(file, root, &reachable, false);
-            scan.walk(file.tree().syntax(), &context)?;
-            records.extend(scan.records);
+            let scanned = file_scan(root, tree, file, &reachable)?;
+            snapshots.push(scanned.snapshot);
+            records.extend(scanned.records);
         }
         #[cfg(feature = "verus_ir")]
         records.extend(crate::etiquettes::panics::verus_findings(verus, root)?);
+        Ok(Self::from_parts(root, snapshots, proof_graph, records))
+    }
+
+    /// The inventory of a crate whose per-file parts are collected: the records
+    /// in report order.
+    #[tracing::instrument(level = "debug", skip_all)]
+    pub(crate) fn from_parts(
+        root: &Path,
+        snapshots: Vec<FileSnapshot>,
+        proof_graph: PanicProofGraph,
+        mut records: Vec<crate::etiquettes::panics::PanicSiteRecord>,
+    ) -> Self {
         records.sort_by(|a, b| {
             a.file()
                 .cmp(b.file())
@@ -44,13 +50,44 @@ impl SourcePanics {
                 .then(a.context().cmp(b.context()))
                 .then(a.snippet().cmp(b.snippet()))
         });
-        Ok(Self::new(
-            root.to_path_buf(),
-            snapshots,
-            proof_graph,
-            records,
-        ))
+        Self::new(root.to_path_buf(), snapshots, proof_graph, records)
     }
+}
+
+/// The functions one file defines and the calls they make, for the proofs'
+/// reachable set.
+#[tracing::instrument(level = "debug", skip(file))]
+pub(crate) fn file_proofs(file: &DatabaseSource<'_>) -> PanicProofGraph {
+    proof::ProofCollector::of_file(file)
+}
+
+/// What scanning one file found, with the file's fingerprint.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct FileScan {
+    pub(crate) snapshot: FileSnapshot,
+    pub(crate) records: Vec<crate::etiquettes::panics::PanicSiteRecord>,
+}
+
+/// One file's panic sites, given the functions the proofs reach: a function of
+/// the file's syntax and that set.
+#[tracing::instrument(level = "debug", skip_all, err(level = "warn"))]
+#[hotpath::measure]
+pub(crate) fn file_scan(
+    root: &Path,
+    tree: &Path,
+    file: &DatabaseSource<'_>,
+    reachable: &BTreeSet<String>,
+) -> CordialResult<FileScan> {
+    let context = Context {
+        modules: module_path_from_src_file(tree, file.path()),
+        ..Context::default()
+    };
+    let mut scan = Scanner::new(file, root, reachable, false);
+    scan.walk(file.tree().syntax(), &context)?;
+    Ok(FileScan {
+        snapshot: FileSnapshot::new(file.path().to_path_buf(), file.source_digest()),
+        records: scan.records,
+    })
 }
 
 impl Context {

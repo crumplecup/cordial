@@ -8,39 +8,14 @@
 //! re-walks only the edited file; one that changes them re-walks the files the
 //! change can reach, as it must.
 
-use std::path::PathBuf;
-
-use ra_ap_hir::Semantics;
 use tracing::instrument;
 
+use super::crate_files::{CrateKey, FileKey, carried};
 use super::queries::SemanticDatabase;
 use crate::FileSnapshot;
 use crate::etiquettes::antipatterns::{
     AntipatternCandidate, ContractFile, CrateFacts, FileFacts, file_candidates, file_clauses,
 };
-
-/// A file as the antipattern collectors read it.
-#[salsa::interned]
-pub(super) struct FileKey<'db> {
-    #[returns(copy)]
-    pub(super) file: ra_ap_vfs::FileId,
-    #[returns(ref)]
-    pub(super) path: PathBuf,
-    /// The scan tree the file was found under.
-    #[returns(ref)]
-    pub(super) tree: PathBuf,
-    #[returns(ref)]
-    pub(super) root: PathBuf,
-}
-
-/// The files whose facts are joined.
-#[salsa::interned]
-pub(super) struct CrateKey<'db> {
-    #[returns(ref)]
-    pub(super) files: Vec<(ra_ap_vfs::FileId, PathBuf, PathBuf)>,
-    #[returns(ref)]
-    pub(super) root: PathBuf,
-}
 
 /// A file's walk, under the crate's joined facts.
 #[salsa::interned]
@@ -67,20 +42,6 @@ pub(super) struct FileSites {
     pub(super) sites: Vec<AntipatternCandidate>,
 }
 
-#[instrument(level = "trace", skip(db, key, read), fields(query = query))]
-fn carried<T>(
-    db: &dyn SemanticDatabase,
-    key: FileKey<'_>,
-    query: &str,
-    read: impl FnOnce(&crate::loader::DatabaseSource<'_>) -> crate::CordialResult<T>,
-) -> Option<T> {
-    let root_db = db.root_database();
-    let sema = Semantics::new(root_db);
-    let source = super::projection::source_of(root_db, &sema, key.file(db), key.path(db)).ok()?;
-    tracing::debug!(target: "cordial::semantic::queries", function = %key.path(db).display(), query, "semantic query executed");
-    read(&source).ok()
-}
-
 /// What one file contributes to the crate's facts.
 #[salsa::tracked(returns(ref))]
 #[instrument(level = "debug", skip(db, key))]
@@ -104,13 +65,9 @@ pub(super) fn antipattern_crate_facts<'db>(
 ) -> Option<CrateFacts> {
     tracing::debug!(target: "cordial::semantic::queries", function = %key.root(db).display(), query = "antipattern_crate_facts", "semantic query executed");
     let parts = key
-        .files(db)
-        .iter()
-        .map(|(file, path, tree)| {
-            let file_key =
-                FileKey::new(db, *file, path.clone(), tree.clone(), key.root(db).clone());
-            antipattern_facts_file(db, file_key).as_ref()
-        })
+        .file_keys(db)
+        .into_iter()
+        .map(|file| antipattern_facts_file(db, file).as_ref())
         .collect::<Option<Vec<_>>>()?;
     Some(CrateFacts::join(parts.into_iter()))
 }

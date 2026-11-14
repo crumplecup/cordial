@@ -1,6 +1,7 @@
 //! Project antipattern source inventories from canonical database snapshots.
 use super::SourceDatabase;
-use crate::loader::database::antipattern_queries::{self as queries, CrateKey, FileKey, WalkKey};
+use crate::loader::database::antipattern_queries::{self as queries, WalkKey};
+use crate::loader::database::crate_files::{CrateKey, FileKey};
 use crate::{CordialResult, SourceAntipatterns};
 
 impl SourceDatabase {

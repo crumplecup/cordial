@@ -73,6 +73,15 @@ impl ProofCollector {
         }
     }
 
+    /// The graph of one file's functions and the calls they make.
+    #[tracing::instrument(level = "debug", skip(file))]
+    #[hotpath::measure]
+    pub(super) fn of_file(file: &crate::loader::DatabaseSource<'_>) -> PanicProofGraph {
+        let mut proofs = Self::default();
+        proofs.walk(file.tree().syntax(), &file.panic_macro_syntax(), false);
+        proofs.finish()
+    }
+
     #[tracing::instrument(level = "trace", skip(self))]
     pub(super) fn finish(mut self) -> PanicProofGraph {
         for calls in self.calls.values_mut() {

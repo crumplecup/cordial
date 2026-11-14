@@ -310,6 +310,8 @@ fn assert_edit_invalidates_only_dependents(
         "antipattern_facts_file:",
         "antipattern_sites_file:",
         "antipattern_contracts_file:",
+        "panic_proofs_file:",
+        "panic_scan_file:",
     ] {
         assert!(
             facts_before.keys().any(|key| key.starts_with(query)),

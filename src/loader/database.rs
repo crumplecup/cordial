@@ -6,12 +6,16 @@ mod antipattern_queries;
 mod apply_queries;
 mod context_crates;
 mod contexts;
+#[cfg(any(feature = "antipatterns", feature = "panics"))]
+mod crate_files;
 mod external;
 mod identity;
 #[cfg(feature = "tracing")]
 mod islands;
 mod items;
 mod options;
+#[cfg(feature = "panics")]
+mod panic_queries;
 mod populate;
 mod prime;
 mod projection;

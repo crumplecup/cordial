@@ -60,6 +60,13 @@ for that instead of building a second invalidation scheme.
   file facts come out equal never re-runs the join, and only the edited file is
   walked; one that adds an error type re-walks every file, as it must. Contract
   clauses are a per-file query too. `tests/antipattern_queries.rs` pins both.
+- **Panics follow the same shape.** Each file contributes its part of the Kani
+  proof graph, a query joins them, the set of functions the proofs reach is
+  derived from the join, and each file's scan is keyed by the file and that set
+  (`panic_queries.rs`; the key types shared with antipatterns are in
+  `crate_files.rs`). An edit that leaves the file's graph equal re-scans only
+  that file; a new proof that changes what is reached re-scans every file.
+  `tests/panic_queries.rs` pins both.
 - **Cfg contexts are query arguments.** The context pass today mutates the one
   database's cfg inputs for each context (`LocalCfgs::enter`), which invalidates
   what the previous context computed. A context key as a query argument lets

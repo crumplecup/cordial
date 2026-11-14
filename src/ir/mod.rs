@@ -250,3 +250,5 @@ pub use verus_source::{ATTR_SOURCE_VERUS, SourceVerus, VerusFile};
 mod panic_source;
 #[cfg(feature = "panics")]
 pub use panic_source::{ATTR_SOURCE_PANICS, PanicProofGraph, SourcePanics};
+#[cfg(feature = "panics")]
+pub(crate) use panic_source::{FileScan, file_proofs, file_scan};
