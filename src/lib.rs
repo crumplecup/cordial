@@ -252,9 +252,7 @@ pub use enricher::resolve_source_path;
 #[cfg(feature = "_attribute_scan")]
 pub use enricher::{AttributeEnricher, member_crate_root, resolve_parent};
 #[cfg(feature = "error_sites")]
-pub use enricher::{
-    ERROR_IR_ENRICHERS, ErrorFlowEnricher, ErrorIrScanEnricher, error_ir_enricher_ids,
-};
+pub use enricher::{ERROR_IR_ENRICHERS, ErrorFlowEnricher, error_ir_enricher_ids};
 #[cfg(feature = "impl_coverage")]
 pub use enricher::{
     FeatureProbeEnricher, ProofHarnessEnricher, TraitImplEnricher, WrapperCoverageEnricher,

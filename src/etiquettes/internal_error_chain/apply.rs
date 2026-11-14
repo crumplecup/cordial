@@ -148,7 +148,7 @@ pub use ErrorFieldApplySummary as ErrorFileApplySummary;
 /// to the same crate IR used by the normal error scan and by apply.
 #[instrument(level = "debug", skip(ir, source, strategy), err(level = "warn"))]
 #[hotpath::measure]
-pub(crate) fn enrich_error_apply_evidence(
+fn enrich_error_apply_evidence(
     ir: &mut dyn IrMut,
     source: &SourceLoadView,
     strategy: ErrorFieldStrategy,

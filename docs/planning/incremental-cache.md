@@ -39,9 +39,15 @@ for that instead of building a second invalidation scheme.
 - **Facts carry no positions.** A fact is the same before and after a comment
   line is inserted above it; line numbers and byte ranges are anchors attached
   from a fresh parse. That is what lets a comment edit reuse the whole tree.
-- **Whole-crate passes are queries over facts.** The call graph, `error-ir-scan`
-  and `source-calls` read function facts through queries, so an edit that leaves
+- **Whole-crate passes are queries over facts.** The call graph and
+  `source-calls` read function facts through queries, so an edit that leaves
   a function's facts equal leaves every pass that read them untouched.
+  `source-calls` is now part of the per-file items query. `error-ir-scan` is gone
+  as a hook: its evidence (type index, conversion units, graph plans) had one
+  reader, error-field apply, which computes it itself. The design is for that
+  evidence to be crate-wide queries over the per-file `error_apply_file` results
+  (type index, then units, then graphs), asked for by apply, so an edit re-runs
+  only the phases whose inputs changed; no analysis run computes it.
 - **Cfg contexts are query arguments.** The context pass today mutates the one
   database's cfg inputs for each context (`LocalCfgs::enter`), which invalidates
   what the previous context computed. A context key as a query argument lets

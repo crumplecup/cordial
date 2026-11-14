@@ -11,14 +11,12 @@ mod architecture;
 mod chains;
 #[cfg(feature = "internal_error_chain")]
 mod compliance;
-mod inventory;
 #[cfg(feature = "internal_error_chain")]
 mod signatures;
 mod sites;
 #[cfg(feature = "internal_error_chain")]
 mod types;
 
-pub use inventory::ErrorIrScanEnricher;
 use sites::ErrorSiteInventoryEnricher;
 
 use crate::enricher::{AttributeEnricher, ErrorFlowEnricher, ScopeEnricher};
@@ -27,7 +25,6 @@ use crate::plugin::ErrorHandlingLayers;
 
 static SCOPE_ENRICHER: ScopeEnricher = ScopeEnricher;
 static ATTRIBUTE_ENRICHER: AttributeEnricher = AttributeEnricher;
-static ERROR_IR_SCAN: ErrorIrScanEnricher = ErrorIrScanEnricher;
 static ERROR_SITE_INVENTORY: ErrorSiteInventoryEnricher = ErrorSiteInventoryEnricher;
 #[cfg(feature = "error_chain")]
 static ERROR_CHAIN_INVENTORY: chains::ErrorChainInventoryEnricher =
@@ -46,7 +43,7 @@ mod attenuation {
 
 /// Canonical enricher stack for error-handling runs (feature-gated layers).
 ///
-/// Order after session priority sort: scope → attribute (6) → site inventory (49) → chain / type inventory / error-ir-scan (50) →
+/// Order after session priority sort: scope → attribute (6) → site inventory (49) → chain / type inventory (50) →
 /// error-flow (51) → attenuation (52).
 pub static ERROR_IR_ENRICHERS: &[&'static dyn IrEnricher] = &[
     &SCOPE_ENRICHER,
@@ -63,8 +60,6 @@ pub static ERROR_IR_ENRICHERS: &[&'static dyn IrEnricher] = &[
     #[cfg(feature = "internal_error_chain")]
     &architecture::ERROR_ARCHITECTURE_INVENTORY,
     #[cfg(feature = "error_sites")]
-    &ERROR_IR_SCAN,
-    #[cfg(feature = "error_sites")]
     &ERROR_FLOW,
     #[cfg(feature = "foreign_error_attenuation")]
     &attenuation::FOREIGN_ERROR_ATTENUATION_INVENTORY,
@@ -80,7 +75,6 @@ pub fn error_ir_enricher_ids(layers: ErrorHandlingLayers) -> Vec<&'static str> {
         #[cfg(feature = "error_sites")]
         {
             ids.push(ErrorSiteInventoryEnricher::ID);
-            ids.push(ErrorIrScanEnricher::ID);
             ids.push(ErrorFlowEnricher::ID);
         }
     }

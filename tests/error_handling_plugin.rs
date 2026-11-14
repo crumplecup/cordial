@@ -58,16 +58,14 @@ fn error_ir_enrichers_include_full_stack_layers() {
     assert!(
         ERROR_IR_ENRICHERS
             .iter()
-            .any(|enricher| enricher.id() == "error-ir-scan")
-    );
-    assert!(
-        ERROR_IR_ENRICHERS
-            .iter()
             .any(|enricher| enricher.id() == "error-flow")
     );
 
     let ids = error_ir_enricher_ids(ErrorHandlingLayers::FULL);
-    assert!(ids.contains(&"error-ir-scan"));
+    assert!(
+        !ids.contains(&"error-ir-scan"),
+        "apply evidence is computed when apply asks, not by a hook on every run"
+    );
     assert!(ids.contains(&"error-flow"));
     assert!(ids.contains(&"foreign-error-attenuation-inventory"));
 }

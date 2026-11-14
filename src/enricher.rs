@@ -36,7 +36,7 @@ pub use attribute_paths::{member_crate_root, resolve_parent};
 #[cfg(feature = "internal_error_chain")]
 #[cfg(feature = "_attribute_scan")]
 #[cfg(feature = "error_sites")]
-pub use error::{ERROR_IR_ENRICHERS, ErrorIrScanEnricher, error_ir_enricher_ids};
+pub use error::{ERROR_IR_ENRICHERS, error_ir_enricher_ids};
 pub(crate) use error_family::ErrorFamilyEnricher;
 #[cfg(feature = "error_sites")]
 pub use error_flow::ErrorFlowEnricher;
