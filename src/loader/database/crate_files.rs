@@ -12,7 +12,7 @@ use tracing::instrument;
 use super::queries::SemanticDatabase;
 
 /// A file as a whole-crate collector reads it.
-#[salsa::interned]
+#[salsa::interned(persist)]
 pub(super) struct FileKey<'db> {
     #[returns(copy)]
     pub(super) file: ra_ap_vfs::FileId,
@@ -31,7 +31,7 @@ pub(super) struct FileKey<'db> {
     feature = "panics",
     feature = "internal_error_chain"
 ))]
-#[salsa::interned]
+#[salsa::interned(persist)]
 pub(super) struct CrateKey<'db> {
     #[returns(ref)]
     pub(super) files: Vec<(ra_ap_vfs::FileId, PathBuf, PathBuf)>,

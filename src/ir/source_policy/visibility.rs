@@ -72,6 +72,7 @@ impl VisibilityKind {
     }
 }
 
+#[derive(serde::Serialize, serde::Deserialize)]
 // Transient loader assembly inputs; consumers only receive the resolved tree above.
 #[derive(Debug, Clone, PartialEq, Eq, Default, derive_new::new)]
 pub(crate) struct VisibilityBody {
@@ -79,14 +80,14 @@ pub(crate) struct VisibilityBody {
     leaf_crate: usize,
     children: Vec<VisibilityChild>,
 }
-#[derive(Debug, Clone, PartialEq, Eq, derive_new::new)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq, Eq, derive_new::new)]
 pub(crate) struct VisibilityChild {
     name: String,
     line: u32,
     visibility: VisibilityKind,
     body: VisibilityChildBody,
 }
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq, Eq)]
 pub(crate) enum VisibilityChildBody {
     Inline(VisibilityBody),
     External(Option<String>),

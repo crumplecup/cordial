@@ -100,6 +100,11 @@ impl SourceDatabase {
         })?;
         drop(ordinary_watch);
         crate::process_memory::log("ordinary projection done");
+        // The inventories are assembled after the contexts, which is after the database is
+        // saved; asking for them now puts the part that does not depend on a context into
+        // what is saved, and the later pass finds it already computed.
+        #[cfg(feature = "tracing")]
+        self.warm_tracing_inventories(&outline);
         self.save_checkpoint();
         // Gated code is analysed by changing the database's cfg input, which
         // needs the exclusive borrow the ordinary pass does not have.

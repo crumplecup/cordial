@@ -44,7 +44,7 @@ pub(super) struct FunctionKey<'db> {
 
 /// A source file the per-file queries read, by the database's id for it and the
 /// path the IR names it by.
-#[salsa::interned]
+#[salsa::interned(persist)]
 pub(super) struct FileKey<'db> {
     #[returns(copy)]
     pub(super) file: ra_ap_vfs::FileId,
@@ -52,6 +52,7 @@ pub(super) struct FileKey<'db> {
     pub(super) path: std::path::PathBuf,
 }
 
+#[derive(serde::Serialize, serde::Deserialize)]
 /// What the projection derives from one file alone: its module scope and its
 /// attribute evidence. Both are functions of the file's text and what its
 /// macros resolve to, so Salsa recomputes them only for a file whose own text,
@@ -78,7 +79,7 @@ impl FileFacts {
 
 /// The file's facts, or `None` for a file that did not parse (the projection
 /// has already refused it by then).
-#[salsa::tracked(returns(ref))]
+#[salsa::tracked(persist, returns(ref))]
 #[instrument(level = "debug", skip(db, key))]
 #[hotpath::measure]
 pub(super) fn file_facts<'db>(

@@ -12,7 +12,7 @@ use super::queries::SemanticDatabase;
 use crate::ir::PathInclusionSource;
 
 /// A file read for one package of the workspace.
-#[salsa::interned]
+#[salsa::interned(persist)]
 pub(super) struct PackageFileKey<'db> {
     #[returns(copy)]
     pub(super) file: FileKey<'db>,
@@ -21,7 +21,7 @@ pub(super) struct PackageFileKey<'db> {
 }
 
 /// One file's fingerprint and the module targets it declares.
-#[salsa::tracked(returns(ref))]
+#[salsa::tracked(persist, returns(ref))]
 #[instrument(level = "debug", skip(db, key))]
 #[hotpath::measure]
 pub(super) fn path_inclusion_file<'db>(

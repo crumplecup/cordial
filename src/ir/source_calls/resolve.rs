@@ -26,6 +26,7 @@ pub(crate) struct TargetFacts<K> {
     pub(crate) syntax: Option<FunctionSourceSyntax>,
 }
 
+#[derive(serde::Serialize, serde::Deserialize)]
 /// The resolution of one call, naming a target by `K`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Resolved<K> {

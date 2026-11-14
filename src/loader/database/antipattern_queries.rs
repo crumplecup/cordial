@@ -18,7 +18,7 @@ use crate::etiquettes::antipatterns::{
 };
 
 /// A file's walk, under the crate's joined facts.
-#[salsa::interned]
+#[salsa::interned(persist)]
 pub(super) struct WalkKey<'db> {
     #[returns(copy)]
     pub(super) file: FileKey<'db>,
@@ -27,7 +27,7 @@ pub(super) struct WalkKey<'db> {
 }
 
 /// A file's contract clauses, for the crate the clauses are read as.
-#[salsa::interned]
+#[salsa::interned(persist)]
 pub(super) struct ContractKey<'db> {
     #[returns(copy)]
     pub(super) file: FileKey<'db>,
@@ -35,6 +35,7 @@ pub(super) struct ContractKey<'db> {
     pub(super) crate_name: String,
 }
 
+#[derive(serde::Serialize, serde::Deserialize)]
 /// What a file's walk found, with the file's fingerprint.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct FileSites {
@@ -43,7 +44,7 @@ pub(super) struct FileSites {
 }
 
 /// What one file contributes to the crate's facts.
-#[salsa::tracked(returns(ref))]
+#[salsa::tracked(persist, returns(ref))]
 #[instrument(level = "debug", skip(db, key))]
 #[hotpath::measure]
 pub(super) fn antipattern_facts_file<'db>(
@@ -73,7 +74,7 @@ pub(super) fn antipattern_crate_facts<'db>(
 }
 
 /// A file's candidates under the crate's facts.
-#[salsa::tracked(returns(ref))]
+#[salsa::tracked(persist, returns(ref))]
 #[instrument(level = "debug", skip(db, key))]
 #[hotpath::measure]
 pub(super) fn antipattern_sites_file<'db>(
@@ -90,7 +91,7 @@ pub(super) fn antipattern_sites_file<'db>(
 }
 
 /// A file's contract clauses, or `None` when this policy does not read the file.
-#[salsa::tracked(returns(ref))]
+#[salsa::tracked(persist, returns(ref))]
 #[instrument(level = "debug", skip(db, key))]
 #[hotpath::measure]
 pub(super) fn antipattern_contracts_file<'db>(

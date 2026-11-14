@@ -102,7 +102,7 @@ use super::queries::SemanticDatabase;
 
 /// A file as one collector reads it: the database's id for it, the path the IR
 /// names it by, the scan tree it was found under, and the crate root.
-#[salsa::interned]
+#[salsa::interned(persist)]
 pub(super) struct ScanKey<'db> {
     #[returns(copy)]
     file: ra_ap_vfs::FileId,
@@ -156,7 +156,7 @@ fn scanned<T>(
 }
 
 #[cfg(feature = "error_sites")]
-#[salsa::tracked(returns(ref))]
+#[salsa::tracked(persist, returns(ref))]
 #[instrument(level = "debug", skip(db, key))]
 #[hotpath::measure]
 pub(super) fn error_sites_file<'db>(
@@ -172,7 +172,7 @@ pub(super) fn error_sites_file<'db>(
 }
 
 #[cfg(feature = "error_chain")]
-#[salsa::tracked(returns(ref))]
+#[salsa::tracked(persist, returns(ref))]
 #[instrument(level = "debug", skip(db, key))]
 #[hotpath::measure]
 pub(super) fn error_chains_file<'db>(
@@ -188,7 +188,7 @@ pub(super) fn error_chains_file<'db>(
 }
 
 #[cfg(feature = "internal_error_chain")]
-#[salsa::tracked(returns(ref))]
+#[salsa::tracked(persist, returns(ref))]
 #[instrument(level = "debug", skip(db, key))]
 #[hotpath::measure]
 pub(super) fn error_types_file<'db>(
@@ -204,7 +204,7 @@ pub(super) fn error_types_file<'db>(
 }
 
 #[cfg(feature = "internal_error_chain")]
-#[salsa::tracked(returns(ref))]
+#[salsa::tracked(persist, returns(ref))]
 #[instrument(level = "debug", skip(db, key))]
 #[hotpath::measure]
 pub(super) fn error_compliance_file<'db>(
@@ -227,7 +227,7 @@ pub(super) fn error_compliance_file<'db>(
 }
 
 #[cfg(feature = "tracing")]
-#[salsa::tracked(returns(ref))]
+#[salsa::tracked(persist, returns(ref))]
 #[instrument(level = "debug", skip(db, key))]
 #[hotpath::measure]
 pub(super) fn observability_file<'db>(
@@ -254,7 +254,7 @@ pub(super) fn observability_file<'db>(
 }
 
 #[cfg(feature = "verus_ir")]
-#[salsa::tracked(returns(ref))]
+#[salsa::tracked(persist, returns(ref))]
 #[instrument(level = "debug", skip(db, key))]
 #[hotpath::measure]
 pub(super) fn verus_file<'db>(
@@ -282,7 +282,7 @@ pub(super) fn verus_file<'db>(
 }
 
 #[cfg(feature = "internal_error_chain")]
-#[salsa::tracked(returns(ref))]
+#[salsa::tracked(persist, returns(ref))]
 #[instrument(level = "debug", skip(db, key))]
 #[hotpath::measure]
 pub(super) fn error_apply_file<'db>(
@@ -298,7 +298,7 @@ pub(super) fn error_apply_file<'db>(
 }
 
 #[cfg(feature = "visibility")]
-#[salsa::tracked(returns(ref))]
+#[salsa::tracked(persist, returns(ref))]
 #[instrument(level = "debug", skip(db, key))]
 #[hotpath::measure]
 pub(super) fn visibility_file<'db>(
@@ -341,7 +341,7 @@ pub(super) fn visibility_file<'db>(
     feature = "visibility",
     feature = "cli_layout"
 ))]
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq, Eq)]
 pub(super) struct PolicyFile {
     part: crate::ir::SourcePolicyInventory,
     snapshot: crate::FileSnapshot,
@@ -385,7 +385,7 @@ impl PolicyFile {
     feature = "visibility",
     feature = "cli_layout"
 ))]
-#[salsa::tracked(returns(ref))]
+#[salsa::tracked(persist, returns(ref))]
 #[instrument(level = "debug", skip(db, key))]
 #[hotpath::measure]
 pub(super) fn policy_file<'db>(

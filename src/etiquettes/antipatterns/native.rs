@@ -45,6 +45,7 @@ pub(crate) fn input_paths(root: &Path, contracts: bool) -> CordialResult<Vec<(Pa
     Ok(paths)
 }
 
+#[derive(serde::Serialize, serde::Deserialize)]
 /// The crate-wide relationships the per-file walk reads.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
 pub(crate) struct CrateFacts {

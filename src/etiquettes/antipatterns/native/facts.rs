@@ -170,6 +170,7 @@ fn derives_error(adt: &ast::Adt) -> bool {
     })
 }
 
+#[derive(serde::Serialize, serde::Deserialize)]
 /// What one file contributes to the crate's facts: its own declarations and
 /// uses, and every `kind` field it declares on a struct, whether or not that
 /// struct turns out to be an error. Which structs are errors is crate-wide, so

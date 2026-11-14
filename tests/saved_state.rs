@@ -153,3 +153,73 @@ fn a_restored_run_does_not_compute_the_evidence_it_was_saved_with() -> Result<()
     );
     Ok(())
 }
+
+mod support {
+    pub mod semantic_metrics;
+}
+
+/// What a restored run must not compute: each of the per-file queries the projection runs.
+const PER_FILE: [&str; 17] = [
+    "file_facts:",
+    "file_items:",
+    "error_sites_file:",
+    "error_chains_file:",
+    "error_types_file:",
+    "error_compliance_file:",
+    "error_apply_file:",
+    "observability_file:",
+    "visibility_file:",
+    "policy_file:",
+    "verus_file:",
+    "antipattern_facts_file:",
+    "antipattern_sites_file:",
+    "panic_proofs_file:",
+    "panic_scan_file:",
+    "architecture_file:",
+    "signature_file:",
+];
+
+fn executed(metrics: &support::semantic_metrics::QueryMetrics, family: &str) -> usize {
+    metrics
+        .snapshot()
+        .iter()
+        .filter(|(key, _)| key.starts_with(family))
+        .map(|(_, count)| *count)
+        .sum()
+}
+
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn a_restored_run_computes_none_of_the_per_file_collectors() -> Result<()> {
+    use tracing_subscriber::prelude::*;
+    cordial::init_tracing();
+    let metrics = support::semantic_metrics::QueryMetrics::default();
+    let subscriber = tracing_subscriber::registry()
+        .with(metrics.clone())
+        .with(cordial::tracing_fmt_layer());
+    let _subscriber = tracing::subscriber::set_default(subscriber);
+    let root = specimen()?;
+    let state = tempfile::tempdir().into_diagnostic()?;
+    let saved = SavedState::at(state.path().join("analysis-state"));
+
+    run(root.path(), &saved)?;
+    let cold: Vec<usize> = PER_FILE
+        .iter()
+        .map(|family| executed(&metrics, family))
+        .collect();
+    assert!(
+        cold.iter().all(|count| *count > 0),
+        "every family runs in a cold run: {cold:?}"
+    );
+
+    let (restored, _, _) = run(root.path(), &saved)?;
+    assert!(restored);
+    for (family, before) in PER_FILE.iter().zip(&cold) {
+        assert_eq!(
+            executed(&metrics, family),
+            *before,
+            "{family} ran again in the restored run"
+        );
+    }
+    Ok(())
+}

@@ -13,7 +13,7 @@ use crate::FileSnapshot;
 use crate::etiquettes::internal_error_chain::ErrorArchitectureCatalog;
 
 /// The crate and the name it is catalogued under.
-#[salsa::interned]
+#[salsa::interned(persist)]
 pub(super) struct NamedCrateKey<'db> {
     #[returns(copy)]
     pub(super) files: CrateKey<'db>,
@@ -21,6 +21,7 @@ pub(super) struct NamedCrateKey<'db> {
     pub(super) name: String,
 }
 
+#[derive(serde::Serialize, serde::Deserialize)]
 /// One file's part of the catalog, with the file's fingerprint.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct FilePart {
@@ -28,6 +29,7 @@ pub(super) struct FilePart {
     pub(super) catalog: ErrorArchitectureCatalog,
 }
 
+#[derive(serde::Serialize, serde::Deserialize)]
 /// The crate's catalog and the fingerprints of the files it was joined from.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct Joined {
@@ -36,7 +38,7 @@ pub(super) struct Joined {
 }
 
 /// What one file adds to the architecture catalog.
-#[salsa::tracked(returns(ref))]
+#[salsa::tracked(persist, returns(ref))]
 #[instrument(level = "debug", skip(db, key))]
 #[hotpath::measure]
 pub(super) fn architecture_file<'db>(

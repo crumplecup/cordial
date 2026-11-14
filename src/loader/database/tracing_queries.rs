@@ -21,7 +21,7 @@ use super::queries::{self, FileKey, SemanticDatabase};
 use crate::ir::SourceTracingInventory;
 
 /// One file's tracing inventory, or `None` when the file did not parse.
-#[salsa::tracked(returns(ref))]
+#[salsa::tracked(persist, returns(ref))]
 #[instrument(level = "debug", skip(db, key))]
 #[hotpath::measure]
 pub(super) fn tracing_inventory_file<'db>(

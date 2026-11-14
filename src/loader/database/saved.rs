@@ -64,14 +64,14 @@ impl SavedState {
         let _ = std::fs::remove_dir_all(&writing);
         std::fs::create_dir_all(&writing)?;
         let paths: Vec<&VfsPath> = vfs.interned_paths().collect();
-        let paths = postcard::to_stdvec(&paths).map_err(|error| self.encoding(&error))?;
+        let paths = rmp_serde::to_vec(&paths).map_err(|error| self.encoding(&error))?;
         let files =
-            postcard::to_stdvec(&database.files().dump()).map_err(|error| self.encoding(&error))?;
-        let crates = postcard::to_stdvec(&database.crates_map().dump())
+            rmp_serde::to_vec(&database.files().dump()).map_err(|error| self.encoding(&error))?;
+        let crates = rmp_serde::to_vec(&database.crates_map().dump())
             .map_err(|error| self.encoding(&error))?;
         let database: &mut dyn salsa::Database = database;
         let salsa =
-            postcard::to_stdvec(&database.as_serialize()).map_err(|error| self.encoding(&error))?;
+            rmp_serde::to_vec(&database.as_serialize()).map_err(|error| self.encoding(&error))?;
         std::fs::write(writing.join(SALSA), &salsa)?;
         std::fs::write(writing.join(FILES), &files)?;
         std::fs::write(writing.join(CRATES), &crates)?;
@@ -109,17 +109,19 @@ impl SavedState {
             let mut database = RootDatabase::empty();
             let target: &mut dyn salsa::Database = &mut database;
             target
-                .deserialize(&mut postcard::Deserializer::from_bytes(&salsa))
+                .deserialize(&mut rmp_serde::Deserializer::from_read_ref(
+                    salsa.as_slice(),
+                ))
                 .map_err(|error| format!("salsa state unreadable ({error})"))?;
             database.files().restore(
-                postcard::from_bytes(&files)
+                rmp_serde::from_slice(&files)
                     .map_err(|error| format!("files unreadable ({error})"))?,
             );
             database.crates_map().restore(
-                postcard::from_bytes(&crates)
+                rmp_serde::from_slice(&crates)
                     .map_err(|error| format!("crates unreadable ({error})"))?,
             );
-            let paths = postcard::from_bytes(&paths)
+            let paths = rmp_serde::from_slice(&paths)
                 .map_err(|error| format!("paths unreadable ({error})"))?;
             Ok(Restored { database, paths })
         }))
@@ -127,7 +129,7 @@ impl SavedState {
     }
 
     #[instrument(level = "trace", skip(self, error))]
-    fn encoding(&self, error: &postcard::Error) -> CordialError {
+    fn encoding(&self, error: &rmp_serde::encode::Error) -> CordialError {
         CordialError::perf(
             self.dir.clone(),
             format!("could not encode the state: {error}"),
@@ -172,5 +174,45 @@ impl super::SourceDatabase {
     #[instrument(level = "trace", skip(self))]
     pub fn restored(&self) -> bool {
         self.restored
+    }
+
+    /// Call once the persisted queries that other persisted queries depend on.
+    ///
+    /// Salsa sets up a tracked function the first time it is called in a process, and
+    /// verifying a restored memo checks the memos it depends on, which needs the callee set
+    /// up. A persisted query that depends on another persisted query would otherwise panic
+    /// when it is the first to be asked for. Those dependencies are `file_facts` and
+    /// `persisted_evidence` (read by `file_items` and the tracing inventory); asking each of
+    /// them one harmless question sets them up. The saved-state test that a restored run computes
+    /// no per-file query panics here when a persisted query gains a persisted dependency that
+    /// is not listed.
+    #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure(impl_type = "SourceDatabase")]
+    pub(super) fn warm_persisted_dependencies(&self) {
+        ra_ap_hir::attach_db(&self.db, || {
+            let nothing = super::item_key::ItemKey::new(&self.db, String::new());
+            let _ = super::queries::persisted_evidence(&self.db, nothing);
+            // A file of the workspace itself, which the projection asks about anyway.
+            let roots: Vec<PathBuf> = self
+                .projection_context()
+                .map(|context| {
+                    context
+                        .packages()
+                        .iter()
+                        .map(|package| package.root().clone())
+                        .collect()
+                })
+                .unwrap_or_default();
+            let real = self.vfs.iter().find_map(|(file, path)| {
+                let path: &Path = path.as_path()?.as_ref();
+                (path.extension().is_some_and(|ext| ext == "rs")
+                    && roots.iter().any(|root| path.starts_with(root)))
+                .then(|| (file, path.to_path_buf()))
+            });
+            if let Some((file, path)) = real {
+                let key = super::queries::FileKey::new(&self.db, file, path);
+                let _ = super::queries::file_facts(&self.db, key);
+            }
+        });
     }
 }

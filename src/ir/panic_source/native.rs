@@ -63,6 +63,7 @@ pub(crate) fn file_proofs(file: &DatabaseSource<'_>) -> PanicProofGraph {
     proof::ProofCollector::of_file(file)
 }
 
+#[derive(serde::Serialize, serde::Deserialize)]
 /// What scanning one file found, with the file's fingerprint.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct FileScan {

@@ -11,6 +11,7 @@ use super::queries::SemanticDatabase;
 use crate::FileSnapshot;
 use crate::etiquettes::internal_error_chain::SignatureChainIndex;
 
+#[derive(serde::Serialize, serde::Deserialize)]
 /// One file's part of the index, with the file's fingerprint.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct FilePart {
@@ -18,6 +19,7 @@ pub(super) struct FilePart {
     pub(super) index: SignatureChainIndex,
 }
 
+#[derive(serde::Serialize, serde::Deserialize)]
 /// The crate's index and the fingerprints of the files it was joined from.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct Joined {
@@ -26,7 +28,7 @@ pub(super) struct Joined {
 }
 
 /// What one file adds to the signature index.
-#[salsa::tracked(returns(ref))]
+#[salsa::tracked(persist, returns(ref))]
 #[instrument(level = "debug", skip(db, key))]
 #[hotpath::measure]
 pub(super) fn signature_file<'db>(

@@ -128,11 +128,39 @@ evaluated again. What this buys: evidence survives anything that does not change
 rust-analyzer read: a policy or configuration change, an edit to a fixture or a document, an
 edit in another crate of a workspace.
 
+## Persisted per-file collectors (done)
+
+The per-file queries the projection runs are `persist` queries: `file_facts`, `file_items`, the
+`error_*_file` and `observability`, `visibility`, `policy`, `verus` and `error_apply` collectors,
+the antipattern facts, walks and contracts, the panic proof graph parts and scans, the
+architecture and signature parts, the path-inclusion targets and the tracing inventory. Their
+keys are interned structs of a file id, a path and strings, which are stable now; their values are
+the IR types they always produced, with serde added where it was missing (and `TextRange` saved
+as two offsets). In a restored run on an unchanged tree none of them executes
+(`a_restored_run_computes_none_of_the_per_file_collectors`).
+
+- **The joins are not persisted.** `panic_graph`, `architecture_catalog`, `signature_index` and
+  the like are cheap and re-run from the saved parts, which also keeps the rule below simple.
+- **Format.** MessagePack, not a compact non-self-describing one: the IR nodes carry
+  `serde_json::Value` attributes, which can only be read back from a format that says what a
+  value is. Salsa reads its map keys as borrowed strings, so it is read from a byte slice.
+- **A Salsa limit, worked around.** A tracked function is set up the first time it is called in a
+  process, and verifying a restored memo checks the memos it depends on, so a persisted query that
+  depends on another persisted query not yet called would panic ("cannot be accessed before
+  calling `init`"). Only `file_items` and the tracing inventory do (on `file_facts` and
+  `persisted_evidence`); `warm_persisted_dependencies` calls those two once after a restore. A
+  persisted query gaining such a dependency without being warmed fails the restored-run test.
+  The proper fix is in Salsa (initialise every function ingredient's view caster on
+  deserialize), and belongs in the upstream conversation.
+- **The tracing inventories** are computed after the contexts, which is after the save, so the
+  part that does not depend on a context is computed just before the save
+  (`warm_tracing_inventories`); the pass afterwards finds it done.
+
 ## Status of the work
 
 1. Vendor the patched crates; build and test cordial against them. **Done.**
 2. Make item identity stable across processes. **Done.**
 3. Save the database and restore it in the next run. **Done**, see below.
-4. Persist cordial's queries, with stable keys. **Started**: function evidence is done; the
-   per-file collectors and the joins are not.
+4. Persist cordial's queries, with stable keys. **Mostly done**: function
+   evidence and the per-file collectors; the joins, the call graph and the contexts are not.
 5. Measure on a multi-crate workspace.

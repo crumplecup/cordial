@@ -17,7 +17,7 @@ use crate::PanicProofGraph;
 use crate::ir::{FileScan, file_proofs, file_scan};
 
 /// A file's scan, under the functions the proofs reach.
-#[salsa::interned]
+#[salsa::interned(persist)]
 pub(super) struct ScanKey<'db> {
     #[returns(copy)]
     pub(super) file: FileKey<'db>,
@@ -26,7 +26,7 @@ pub(super) struct ScanKey<'db> {
 }
 
 /// What one file contributes to the crate's proof graph.
-#[salsa::tracked(returns(ref))]
+#[salsa::tracked(persist, returns(ref))]
 #[instrument(level = "debug", skip(db, key))]
 #[hotpath::measure]
 pub(super) fn panic_proofs_file<'db>(
@@ -68,7 +68,7 @@ pub(super) fn panic_reachable<'db>(
 }
 
 /// A file's panic sites.
-#[salsa::tracked(returns(ref))]
+#[salsa::tracked(persist, returns(ref))]
 #[instrument(level = "debug", skip(db, key))]
 #[hotpath::measure]
 pub(super) fn panic_scan_file<'db>(

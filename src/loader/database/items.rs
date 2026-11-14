@@ -32,7 +32,7 @@ use super::DatabaseSource;
 /// A source file as the item query reads it: the database's id for it, the path
 /// the IR names it by, and the crate's `src` directory, which names the module of
 /// a file outside the module tree.
-#[salsa::interned]
+#[salsa::interned(persist)]
 pub(super) struct ItemsKey<'db> {
     #[returns(copy)]
     file: ra_ap_vfs::FileId,
@@ -42,6 +42,7 @@ pub(super) struct ItemsKey<'db> {
     src: PathBuf,
 }
 
+#[derive(serde::Serialize, serde::Deserialize)]
 /// A function found in the tokens of an item-position macro invocation.
 #[derive(Debug, Clone, PartialEq, Eq, derive_getters::Getters)]
 pub(super) struct IslandRecord {
@@ -51,6 +52,7 @@ pub(super) struct IslandRecord {
     calls: Vec<SemanticItemId>,
 }
 
+#[derive(serde::Serialize, serde::Deserialize)]
 /// What the observability pass reads of a function's ordinary facts: the callees
 /// of its calls and whether it returns a `Result`. Typed here, so the pass does not
 /// decode the whole facts back out of the graph for every function.
@@ -61,6 +63,7 @@ pub(in crate::loader::database) struct ObservedCalls {
     fallible: bool,
 }
 
+#[derive(serde::Serialize, serde::Deserialize)]
 /// The calls of a top-level free function, resolved against the file's own items.
 /// A target is the place of its item in the file's list, because node ids do not
 /// exist until the projection inserts the items.
@@ -74,6 +77,7 @@ pub(super) struct RecordedFlow {
     calls: Vec<(crate::SourceByteRange, Resolved<usize>)>,
 }
 
+#[derive(serde::Serialize, serde::Deserialize)]
 /// One item of a file: its node weight and where it hangs.
 #[derive(Debug, Clone, PartialEq, Eq, derive_getters::Getters)]
 pub(super) struct ItemRecord {
@@ -83,6 +87,7 @@ pub(super) struct ItemRecord {
     weight: NodeWeight,
     /// For a function: the range of its item, which the cfg-context passes find
     /// its node by.
+    #[serde(with = "text_range")]
     function: Option<TextRange>,
     /// The function's identity and the functions it calls, when it resolved.
     definition: Option<SemanticItemId>,
@@ -96,6 +101,7 @@ pub(super) struct ItemRecord {
     observed: Option<ObservedCalls>,
 }
 
+#[derive(serde::Serialize, serde::Deserialize)]
 /// Everything a file adds to the graph: its module node, and its items in order.
 #[derive(Debug, Clone, PartialEq, Eq, derive_getters::Getters)]
 pub(super) struct FileItems {
@@ -110,7 +116,7 @@ pub(super) struct FileItems {
 
 /// The file's items, or `None` when it did not parse, which the projection has
 /// already refused (and, called without the query, reports).
-#[salsa::tracked(returns(ref))]
+#[salsa::tracked(persist, returns(ref))]
 #[instrument(level = "debug", skip(db, key))]
 #[hotpath::measure]
 pub(super) fn file_items<'db>(
@@ -520,4 +526,26 @@ fn collect_function(
             ),
         },
     }))
+}
+
+/// `TextRange` has no serde in this build; it is saved as its two offsets.
+mod text_range {
+    use ra_ap_syntax::{TextRange, TextSize};
+
+    pub(super) fn serialize<S: serde::Serializer>(
+        range: &Option<TextRange>,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error> {
+        serde::Serialize::serialize(
+            &range.map(|range| (u32::from(range.start()), u32::from(range.end()))),
+            serializer,
+        )
+    }
+
+    pub(super) fn deserialize<'de, D: serde::Deserializer<'de>>(
+        deserializer: D,
+    ) -> Result<Option<TextRange>, D::Error> {
+        let pair: Option<(u32, u32)> = serde::Deserialize::deserialize(deserializer)?;
+        Ok(pair.map(|(start, end)| TextRange::new(TextSize::from(start), TextSize::from(end))))
+    }
 }

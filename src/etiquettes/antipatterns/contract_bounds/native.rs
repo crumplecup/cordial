@@ -17,6 +17,7 @@ use std::path::{Path, PathBuf};
 mod kani;
 mod walk;
 
+#[derive(serde::Serialize, serde::Deserialize)]
 /// One file's contract clauses, or `None` for a file this policy does not read:
 /// outside `src`, or under a `gallery` directory. The snapshot is the file's.
 #[derive(Debug, Clone, PartialEq, Eq)]
