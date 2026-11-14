@@ -223,3 +223,37 @@ fn a_restored_run_computes_none_of_the_per_file_collectors() -> Result<()> {
     }
     Ok(())
 }
+
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn a_save_sweeps_away_what_a_dead_save_left_and_leaves_a_live_one() -> Result<()> {
+    cordial::init_tracing();
+    let root = specimen()?;
+    let state = tempfile::tempdir().into_diagnostic()?;
+    let saved = SavedState::at(state.path().join("analysis-state"));
+    let old = state.path().join("analysis-state.writing-1");
+    let recent = state.path().join("analysis-state.writing-2");
+    let unrelated = state.path().join("something-else.writing-3");
+    for directory in [&old, &recent, &unrelated] {
+        std::fs::create_dir_all(directory.join("half")).into_diagnostic()?;
+    }
+    // One of them was last touched long ago.
+    let long_ago = std::time::SystemTime::now() - std::time::Duration::from_secs(3600);
+    std::fs::File::open(&old)
+        .and_then(|file| file.set_modified(long_ago))
+        .and_then(|()| std::fs::File::open(&unrelated).and_then(|file| file.set_modified(long_ago)))
+        .into_diagnostic()?;
+
+    run(root.path(), &saved)?;
+    assert!(!old.exists(), "a save that died long ago is removed");
+    assert!(
+        recent.exists(),
+        "one that may still be being written is left"
+    );
+    assert!(
+        unrelated.exists(),
+        "and so is anything that is not a save of this state"
+    );
+    assert!(saved.directory().join("key").is_file());
+    Ok(())
+}

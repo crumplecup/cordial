@@ -156,6 +156,26 @@ as two offsets). In a restored run on an unchanged tree none of them executes
   part that does not depend on a context is computed just before the save
   (`warm_tracing_inventories`); the pass afterwards finds it done.
 
+## What is not persisted, and why
+
+- **The cfg contexts and the leaf pass** (about the last of the rust-analyzer-bound work in a
+  restored run). A context adds shadow crates and copies of the workspace's files to the
+  database, and the saved state is taken before them, because saving after would carry shadow
+  crates that the next run creates again. Persisting their evidence needs the shadows to be
+  reused, not recreated, and that runs into `AllCrates`: nearly every saved memo has an edge to
+  it, so any change to it between save and restore invalidates them all. A saved state that
+  includes shadows would have the next load set `AllCrates` back to the ordinary crates (a
+  change) unless the loader keeps the shadows in it. The shapes this could take: keep tool-owned
+  crates in `set_in_db` (a patch to rust-analyzer that marks them); a second saved database for
+  the contexts; or leave contexts uncached. Not started; it needs a decision.
+- **A workspace with several targets** saves at the first target's checkpoint, since a later
+  target's ordinary projection happens after an earlier target's contexts have added shadows.
+  Function evidence for every local package is primed once and is in that save; the later
+  targets' per-file collectors are not.
+- **Stale saves.** A save that died leaves `analysis-state.writing-<pid>`; the next save
+  removes those older than ten minutes. `cordial clean` removes the whole cache directory,
+  the state with it.
+
 ## Status of the work
 
 1. Vendor the patched crates; build and test cordial against them. **Done.**

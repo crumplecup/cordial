@@ -61,6 +61,7 @@ impl SavedState {
         let writing = self
             .dir
             .with_file_name(format!("{name}.writing-{}", std::process::id()));
+        self.sweep_abandoned(&name, &writing);
         let _ = std::fs::remove_dir_all(&writing);
         std::fs::create_dir_all(&writing)?;
         let paths: Vec<&VfsPath> = vfs.interned_paths().collect();
@@ -126,6 +127,33 @@ impl SavedState {
             Ok(Restored { database, paths })
         }))
         .unwrap_or_else(|_| Err("restoring it panicked".to_owned()))
+    }
+
+    /// Remove what a save that never finished left beside the slot: a directory written
+    /// to and not moved into place, by a process that died. Another process's directory is
+    /// only removed once it is old enough that its writer cannot still be at it.
+    #[instrument(level = "debug", skip(self, ours))]
+    #[hotpath::measure(impl_type = "SavedState")]
+    fn sweep_abandoned(&self, name: &str, ours: &Path) {
+        const ABANDONED_AFTER: std::time::Duration = std::time::Duration::from_secs(10 * 60);
+        let (Some(parent), prefix) = (self.dir.parent(), format!("{name}.writing-")) else {
+            return;
+        };
+        let Ok(entries) = std::fs::read_dir(parent) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let old = entry
+                .metadata()
+                .and_then(|metadata| metadata.modified())
+                .ok()
+                .and_then(|modified| modified.elapsed().ok())
+                .is_some_and(|age| age > ABANDONED_AFTER);
+            if path != ours && old && entry.file_name().to_string_lossy().starts_with(&prefix) {
+                let _ = std::fs::remove_dir_all(&path);
+            }
+        }
     }
 
     #[instrument(level = "trace", skip(self, error))]
