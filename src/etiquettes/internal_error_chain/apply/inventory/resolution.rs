@@ -16,7 +16,6 @@ use super::edges::ErrorEdgeTarget;
 use super::syntax_facts::FileSyntaxFacts;
 
 mod getter_consumers;
-mod ir;
 mod lookup;
 mod paths;
 
@@ -25,7 +24,8 @@ pub(in crate::etiquettes::internal_error_chain::apply) use paths::{
     absolute_path, module_identities,
 };
 
-pub(in crate::etiquettes::internal_error_chain::apply) struct CrateTypeIndex {
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct CrateTypeIndex {
     declarations: HashMap<Vec<String>, Vec<Option<ErrorEdgeTarget>>>,
     local: HashMap<(PathBuf, String), Vec<Option<ErrorEdgeTarget>>>,
     modules: HashMap<PathBuf, ModuleIdentity>,

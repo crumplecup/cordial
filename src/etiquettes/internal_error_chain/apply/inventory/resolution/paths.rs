@@ -9,7 +9,9 @@ use crate::FileSnapshot;
 
 /// A cfg can remove a module without changing its privacy boundary when present.
 /// Conditional identities do not establish an unconditional type-resolution path.
-#[derive(Clone, serde::Serialize, serde::Deserialize, derive_getters::Getters)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, derive_getters::Getters,
+)]
 pub(in crate::etiquettes::internal_error_chain::apply) struct ModuleIdentity {
     path: Vec<String>,
     #[getter(copy)]

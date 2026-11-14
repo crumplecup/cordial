@@ -16,7 +16,7 @@ use super::super::names::NameAudit;
 
 pub(super) type LocatedName = (String, usize, usize);
 
-#[derive(Debug, Clone, Serialize, Deserialize, derive_getters::Getters)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, derive_getters::Getters)]
 pub(super) struct FileSyntaxFacts {
     path: std::path::PathBuf,
     #[getter(copy)]

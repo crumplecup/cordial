@@ -43,11 +43,16 @@ for that instead of building a second invalidation scheme.
   `source-calls` read function facts through queries, so an edit that leaves
   a function's facts equal leaves every pass that read them untouched.
   `source-calls` is now part of the per-file items query. `error-ir-scan` is gone
-  as a hook: its evidence (type index, conversion units, graph plans) had one
-  reader, error-field apply, which computes it itself. The design is for that
-  evidence to be crate-wide queries over the per-file `error_apply_file` results
-  (type index, then units, then graphs), asked for by apply, so an edit re-runs
-  only the phases whose inputs changed; no analysis run computes it.
+  as a hook, and apply's evidence is queries (`loader/database/apply_queries.rs`)
+  over the per-file `error_apply_file` results: `apply_source` joins them,
+  `apply_index` builds the type index, `apply_units` the conversion units and
+  `apply_graphs` the graph plans for a field strategy. Apply asks for them
+  through `ParsedSourceSession::apply_evidence`; no analysis run computes them,
+  and nothing is written into the IR. `tests/apply_evidence_queries.rs` pins that
+  each phase runs once, a second ask runs nothing, and an edit re-runs only the
+  edited file's facts. Known limit: a file's facts carry its text digest, so any
+  edit changes `apply_source` and the phases above it re-run; they stop being
+  per-edit work only when those phases are split per file.
 - **Cfg contexts are query arguments.** The context pass today mutates the one
   database's cfg inputs for each context (`LocalCfgs::enter`), which invalidates
   what the previous context computed. A context key as a query argument lets

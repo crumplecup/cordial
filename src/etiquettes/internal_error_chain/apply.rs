@@ -6,14 +6,13 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
-use crate::config::ErrorFieldStrategy;
 use crate::config::load_cordial_config;
 use crate::error::CordialResult;
-use crate::ir::{IrMut, IrView};
 use crate::loader::{SourceEditView, SourceLoadView};
 use crate::session::RunAll;
 use crate::targets::discover_crate_targets;
 
+mod evidence;
 mod getter_uses;
 pub(super) mod getters;
 mod graph_apply;
@@ -24,14 +23,13 @@ mod names;
 mod patch;
 mod write;
 
+pub(crate) use self::evidence::{ApplyEvidence, graphs, type_index, units};
 pub(crate) use self::getter_uses::GetterConsumerFacts;
 pub(crate) use self::getters::GetterContractFacts;
+pub(crate) use self::graph_apply::ErrorGraphPlan;
 pub(crate) use self::graph_apply::{GraphDeclarationFacts, GraphExprFacts, GraphLifetimeFacts};
-use self::graph_apply::{conversion_graphs_from_ir, enrich_conversion_graphs};
 pub(crate) use self::initializers::InitializerFileFacts;
-pub(crate) use self::inventory::{
-    ConversionFileFacts, conversion_units_from_ir, enrich_conversion_units,
-};
+pub(crate) use self::inventory::{ConversionFileFacts, CrateTypeIndex};
 pub use self::inventory::{
     ErrorConversionSite, ErrorConversionSiteKind, ErrorConversionUnit, ErrorEdgeEvidence,
     ErrorEdgeField, ErrorEdgeStorage, ErrorEdgeTarget, ErrorEdgeTargetKind, ErrorFromEvidence,
@@ -144,25 +142,15 @@ pub struct ErrorFieldApplySummary {
 /// Compatibility name for the original file-only apply result.
 pub use ErrorFieldApplySummary as ErrorFileApplySummary;
 
-/// Add the strategy-independent conversion facts and the selected graph plan
-/// to the same crate IR used by the normal error scan and by apply.
-#[instrument(level = "debug", skip(ir, source, strategy), err(level = "warn"))]
+/// Load only the text for the exact files the evidence covers.
+#[instrument(level = "debug", skip(evidence, source), err(level = "warn"))]
 #[hotpath::measure]
-fn enrich_error_apply_evidence(
-    ir: &mut dyn IrMut,
+fn edit_files(
+    evidence: &ApplyEvidence,
     source: &SourceLoadView,
-    strategy: ErrorFieldStrategy,
-) -> CordialResult<()> {
-    let files = edit_files(ir, source)?;
-    enrich_conversion_units(ir)?;
-    enrich_conversion_graphs(ir, &files, strategy)
-}
-
-/// Load only the text for the exact files represented by required IR evidence.
-#[instrument(level = "debug", skip(ir, source), err(level = "warn"))]
-#[hotpath::measure]
-fn edit_files(ir: &dyn IrView, source: &SourceLoadView) -> CordialResult<Vec<SourceEditView>> {
-    ir.source_error_apply()?
+) -> CordialResult<Vec<SourceEditView>> {
+    evidence
+        .source()
         .files()
         .iter()
         .map(|file| source.edit_file(file.snapshot()))
@@ -213,15 +201,12 @@ pub fn run_error_field_apply(
             continue;
         }
         let source = SourceLoadView::for_target(&target)?;
-        let mut ir = parsed.project_target(&target)?;
-        enrich_error_apply_evidence(&mut ir, &source, policy.field_strategy())?;
-        let units = conversion_units_from_ir(&ir)?;
-        let graphs = conversion_graphs_from_ir(&ir)?;
-        let index = inventory::CrateTypeIndex::from_ir(&ir)?;
-        let edit_files = edit_files(&ir, &source)?;
+        let evidence = parsed.apply_evidence(&target, policy.field_strategy())?;
+        let (units, graphs, index) = (evidence.units(), evidence.graphs(), evidence.index());
+        let edit_files = edit_files(&evidence, &source)?;
         let mut results = Vec::new();
         for file in &edit_files {
-            let plan = patch_file(file, policy.field_strategy(), &units, &graphs, dry_run)?;
+            let plan = patch_file(file, policy.field_strategy(), units, graphs, dry_run)?;
             results.push((file, plan));
         }
         let disabled: BTreeSet<_> = edit_files
@@ -249,7 +234,7 @@ pub fn run_error_field_apply(
         let mut rejected = disabled.clone();
         loop {
             let before = rejected.len();
-            for graph in &graphs {
+            for graph in graphs {
                 if graph.component_paths().is_empty() {
                     continue;
                 }

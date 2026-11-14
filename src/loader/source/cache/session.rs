@@ -361,6 +361,20 @@ impl ParsedSourceSession {
         self.token.set_reporter(reporter);
     }
 
+    /// The evidence error-field apply plans from for `target`, read through the
+    /// run database's queries.
+    #[cfg(feature = "internal_error_chain")]
+    #[tracing::instrument(level = "debug", skip(self, target), err(level = "warn"))]
+    #[hotpath::measure]
+    pub(crate) fn apply_evidence(
+        &self,
+        target: &crate::loader::CrateTarget,
+        strategy: crate::config::ErrorFieldStrategy,
+    ) -> CordialResult<crate::etiquettes::internal_error_chain::ApplyEvidence> {
+        self.token
+            .with_loaded_database(|database| database.apply_evidence(target.crate_root(), strategy))
+    }
+
     /// Project one target's source and semantic evidence: from the cached
     /// results when they hold it, otherwise from the run database.
     #[tracing::instrument(level = "debug", skip(self, target), err(level = "warn"))]

@@ -1,5 +1,7 @@
 //! Canonical source inputs, tracked queries, and shared IR projection.
 use tracing::instrument;
+#[cfg(feature = "internal_error_chain")]
+mod apply_queries;
 mod context_crates;
 mod contexts;
 mod external;

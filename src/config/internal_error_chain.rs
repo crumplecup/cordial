@@ -40,7 +40,7 @@ impl Default for InternalErrorChainThresholds {
 }
 
 /// Preferred storage for non-`Copy` fields in an `Error` implementation.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ErrorFieldStrategy {
     /// Preserve the existing owned error architecture.

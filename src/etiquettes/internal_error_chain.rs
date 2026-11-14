@@ -40,8 +40,9 @@ mod type_graph;
 mod types;
 
 pub(crate) use apply::{
-    ConversionFileFacts, GetterConsumerFacts, GetterContractFacts, GraphDeclarationFacts,
-    GraphExprFacts, GraphLifetimeFacts, InitializerFileFacts, LifetimeFileFacts, NameAudit,
+    ApplyEvidence, ConversionFileFacts, CrateTypeIndex, ErrorGraphPlan, GetterConsumerFacts,
+    GetterContractFacts, GraphDeclarationFacts, GraphExprFacts, GraphLifetimeFacts,
+    InitializerFileFacts, LifetimeFileFacts, NameAudit, graphs, type_index, units,
 };
 pub use apply::{
     ErrorConversionSite, ErrorConversionSiteKind, ErrorConversionUnit, ErrorEdgeEvidence,

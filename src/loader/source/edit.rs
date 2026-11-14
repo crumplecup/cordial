@@ -44,6 +44,13 @@ impl SourceLoadView {
 }
 
 impl SourceEditView {
+    /// A view of text the caller already holds, for the snapshot taken of it.
+    #[cfg(feature = "internal_error_chain")]
+    #[instrument(level = "trace", skip(source))]
+    pub(crate) fn from_text(snapshot: FileSnapshot, source: String) -> Self {
+        Self { snapshot, source }
+    }
+
     #[instrument(level = "trace", skip(self))]
     pub(crate) fn path(&self) -> &Path {
         self.snapshot.path()

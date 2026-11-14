@@ -20,7 +20,7 @@ use uses::ApplyUses;
 pub const ATTR_SOURCE_ERROR_APPLY: &str = "source_error_apply";
 
 /// Error graph declarations and safety facts for every inspected snapshot.
-#[derive(Debug, Clone, Serialize, Deserialize, derive_getters::Getters)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_getters::Getters)]
 pub struct SourceErrorApply {
     crate_root: PathBuf,
     files: Vec<ErrorApplyFile>,
@@ -63,6 +63,16 @@ impl SourceErrorApply {
         file: &impl SourceSnapshot,
     ) -> CordialResult<&ConversionFileFacts> {
         Ok(&self.file_for(file)?.conversion_sites)
+    }
+
+    /// The crate's files, joined, in path order.
+    #[tracing::instrument(level = "debug", skip(files))]
+    pub(crate) fn from_files(root: &Path, mut files: Vec<ErrorApplyFile>) -> Self {
+        files.sort_by(|a, b| a.snapshot.path().cmp(b.snapshot.path()));
+        Self {
+            crate_root: root.to_path_buf(),
+            files,
+        }
     }
 
     #[tracing::instrument(level = "debug", skip(collect), err(level = "warn"))]

@@ -27,8 +27,8 @@ pub use edges::{
     ErrorEdgeEvidence, ErrorEdgeField, ErrorEdgeStorage, ErrorEdgeTarget, ErrorEdgeTargetKind,
 };
 pub use from::ErrorFromEvidence;
-pub(crate) use graph::{conversion_units_from_ir, enrich_conversion_units};
-pub(super) use resolution::CrateTypeIndex;
+pub(crate) use graph::conversion_units;
+pub(crate) use resolution::CrateTypeIndex;
 pub use source_method::ErrorSourceMethodEvidence;
 pub use try_conversion::{ErrorTryEvidence, ErrorTryScope};
 

@@ -12,8 +12,6 @@ use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
 use crate::config::ErrorFieldStrategy;
-use crate::error::{CordialError, CordialResult};
-use crate::ir::{IrMut, IrView};
 use crate::loader::SourceEditView;
 
 use super::Edit;
@@ -33,10 +31,8 @@ use expressions::GraphExprPlanner;
 pub(crate) use lifetimes::GraphLifetimeFacts;
 use plan::plan_file;
 
-const GRAPH_ATTR: &str = "error_apply_graph_plans";
-
-#[derive(Debug, Clone, Serialize, Deserialize, derive_getters::Getters)]
-pub(super) struct ErrorGraphPlan {
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, derive_getters::Getters)]
+pub(crate) struct ErrorGraphPlan {
     path: PathBuf,
     #[getter(copy)]
     source_digest: [u8; 32],
@@ -68,17 +64,18 @@ impl ErrorGraphPlan {
     }
 }
 
-#[instrument(level = "debug", skip(ir, files, strategy), err(level = "warn"))]
+/// The whole-file plan of every private error graph in the crate: a function of
+/// the files' text, the field strategy and the type index.
+#[instrument(level = "debug", skip(files, strategy, index))]
 #[hotpath::measure]
-pub(super) fn enrich_conversion_graphs(
-    ir: &mut dyn IrMut,
+pub(crate) fn plan_conversion_graphs(
     files: &[SourceEditView],
     strategy: ErrorFieldStrategy,
-) -> CordialResult<()> {
-    let index = CrateTypeIndex::from_ir(ir)?;
+    index: &CrateTypeIndex,
+) -> Vec<ErrorGraphPlan> {
     let mut candidates: Vec<_> = files
         .iter()
-        .filter_map(|file| plan_file(file, strategy, &index))
+        .filter_map(|file| plan_file(file, strategy, index))
         .collect();
     let mut plans = Vec::new();
     let mut distributed_paths = BTreeSet::new();
@@ -86,7 +83,7 @@ pub(super) fn enrich_conversion_graphs(
         if distributed_paths.contains(file.path()) {
             continue;
         }
-        if let Some(group) = distributed::plan(file, files, strategy, &index) {
+        if let Some(group) = distributed::plan(file, files, strategy, index) {
             distributed_paths.extend(group.iter().map(|plan| plan.path.clone()));
             plans.extend(group);
         }
@@ -196,24 +193,7 @@ pub(super) fn enrich_conversion_graphs(
             by_path.insert(plan.path.clone(), plan);
         }
     }
-    let root = ir.root()?;
-    ir.set_attr(
-        root,
-        GRAPH_ATTR,
-        serde_json::to_value(by_path.into_values().collect::<Vec<_>>())?,
-    )?;
-    Ok(())
-}
-
-#[instrument(level = "debug", skip(ir), err(level = "warn"))]
-#[hotpath::measure]
-pub(super) fn conversion_graphs_from_ir(ir: &dyn IrView) -> CordialResult<Vec<ErrorGraphPlan>> {
-    let root = ir.root()?;
-    let value = ir
-        .node(root)
-        .and_then(|node| node.attr(GRAPH_ATTR))
-        .ok_or_else(|| CordialError::unreachable(GRAPH_ATTR))?;
-    Ok(serde::Deserialize::deserialize(value)?)
+    by_path.into_values().collect()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
