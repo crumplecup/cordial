@@ -1,0 +1,668 @@
+--- a/ra_ap_base_db-0.0.358/Cargo.toml	2006-07-23 18:21:28.000000000 -0700
++++ b/ra_ap_base_db/Cargo.toml	2026-11-14 09:38:27.000000000 -0800
+@@ -65,6 +65,10 @@
+ [dependencies.rustc-hash]
+ version = "2.1.1"
+ 
++[dependencies.serde]
++version = "1"
++features = ["derive", "rc"]
++
+ [dependencies.salsa]
+ version = "0.28.5"
+ features = [
+@@ -78,6 +82,7 @@
+ 
+ [dependencies.semver]
+ version = "1.0.26"
++features = ["serde"]
+ 
+ [dependencies.span]
+ version = "=0.0.358"
+@@ -94,7 +99,7 @@
+ 
+ [dependencies.triomphe]
+ version = "0.1.14"
+-features = ["std"]
++features = ["std", "serde"]
+ default-features = false
+ 
+ [dependencies.vfs]
+--- a/ra_ap_base_db-0.0.358/src/input.rs	2006-07-23 18:21:28.000000000 -0700
++++ b/ra_ap_base_db/src/input.rs	2026-11-14 09:38:27.000000000 -0800
+@@ -80,6 +80,7 @@
+ }
+ 
+ #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
++#[derive(serde::Serialize, serde::Deserialize)]
+ pub struct SourceRootId(pub u32);
+ 
+ /// Files are grouped into source roots. A source root is a directory on the
+@@ -90,6 +91,7 @@
+ /// all. So, a file from one source root can't refer to a file in another source
+ /// root by path.
+ #[derive(Clone, Debug, PartialEq, Eq)]
++#[derive(serde::Serialize, serde::Deserialize)]
+ pub struct SourceRoot {
+     /// Sysroot or crates.io library.
+     ///
+@@ -158,6 +160,7 @@
+ }
+ 
+ #[derive(Debug, Clone, PartialEq, Eq, Hash)]
++#[derive(serde::Serialize, serde::Deserialize)]
+ pub struct CrateName(Symbol);
+ 
+ impl CrateName {
+@@ -193,6 +196,7 @@
+ 
+ /// Origin of the crates.
+ #[derive(Debug, Clone, PartialEq, Eq, Hash)]
++#[derive(serde::Serialize, serde::Deserialize)]
+ pub enum CrateOrigin {
+     /// Crates that are from the rustc workspace.
+     Rustc { name: Symbol },
+@@ -219,6 +223,7 @@
+ }
+ 
+ #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
++#[derive(serde::Serialize, serde::Deserialize)]
+ pub enum LangCrateOrigin {
+     Alloc,
+     Core,
+@@ -257,6 +262,7 @@
+ }
+ 
+ #[derive(Debug, Clone, PartialEq, Eq, Hash)]
++#[derive(serde::Serialize, serde::Deserialize)]
+ pub struct CrateDisplayName {
+     /// The name we use to display various paths (with `_`).
+     crate_name: CrateName,
+@@ -344,12 +350,14 @@
+ /// another crate, in which case we store all data for one of them (if one is a dependency of
+ /// the other, we store for it, because it has more dependencies to be invalidated).
+ #[derive(Debug, Clone, PartialEq, Eq, Hash)]
++#[derive(serde::Serialize, serde::Deserialize)]
+ pub struct UniqueCrateData {
+     root_file_id: FileId,
+     disambiguator: Option<Box<(BuiltCrateData, HashableCfgOptions)>>,
+ }
+ 
+ #[derive(Debug, Clone, PartialEq, Eq, Hash)]
++#[derive(serde::Serialize, serde::Deserialize)]
+ pub struct CrateData<Id> {
+     pub root_file_id: FileId,
+     pub edition: Edition,
+@@ -375,6 +383,7 @@
+ 
+ /// Crate data unrelated to analysis.
+ #[derive(Debug, Clone, PartialEq, Eq)]
++#[derive(serde::Serialize, serde::Deserialize)]
+ pub struct ExtraCrateData {
+     pub version: Option<String>,
+     /// A name used in the package's project declaration: for Cargo projects,
+@@ -389,6 +398,7 @@
+ }
+ 
+ #[derive(Default, Clone, PartialEq, Eq)]
++#[derive(serde::Serialize, serde::Deserialize)]
+ pub struct Env {
+     entries: FxHashMap<String, String>,
+ }
+@@ -413,6 +423,7 @@
+ }
+ 
+ #[derive(Debug, Clone, PartialEq, Eq, Hash)]
++#[derive(serde::Serialize, serde::Deserialize)]
+ pub struct Dependency<Id> {
+     pub crate_id: Id,
+     pub name: CrateName,
+@@ -452,7 +463,7 @@
+ 
+ pub type CratesIdMap = FxHashMap<CrateBuilderId, Crate>;
+ 
+-#[salsa::input]
++#[salsa::input(persist)]
+ #[derive(Debug, PartialOrd, Ord)]
+ pub struct Crate {
+     #[returns(ref)]
+@@ -530,6 +541,22 @@
+ #[derive(Debug, Default)]
+ pub struct CratesMap(DashMap<UniqueCrateData, Crate, BuildHasherDefault<FxHasher>>);
+ 
++impl CratesMap {
++    /// The crates by their unique data, as input ids.
++    pub fn dump(&self) -> Vec<(UniqueCrateData, u64)> {
++        use salsa::plumbing::AsId;
++        self.0.iter().map(|e| (e.key().clone(), e.value().as_id().as_bits())).collect()
++    }
++
++    /// Take back the crates a restored database already holds.
++    pub fn restore(&self, entries: Vec<(UniqueCrateData, u64)>) {
++        use salsa::plumbing::FromId;
++        for (key, bits) in entries {
++            self.0.insert(key, Crate::from_id(salsa::Id::from_bits(bits)));
++        }
++    }
++}
++
+ impl CrateGraphBuilder {
+     pub fn add_crate_root(
+         &mut self,
+--- a/ra_ap_base_db-0.0.358/src/lib.rs	2006-07-23 18:21:28.000000000 -0700
++++ b/ra_ap_base_db/src/lib.rs	2026-11-14 09:38:27.000000000 -0800
+@@ -76,7 +76,49 @@
+     file_source_roots: Arc<DashMap<vfs::FileId, FileSourceRootInput, BuildHasherDefault<FxHasher>>>,
+ }
+ 
++/// The handles `Files` keeps outside Salsa, as the ids of the inputs they name. Saved
++/// beside the database so that a restored database can find its inputs again.
++#[derive(Debug, Default, serde::Serialize, serde::Deserialize)]
++pub struct FilesDump {
++    files: Vec<(vfs::FileId, u64)>,
++    source_roots: Vec<(SourceRootId, u64)>,
++    file_source_roots: Vec<(vfs::FileId, u64)>,
++}
++
+ impl Files {
++    /// The handles, as input ids.
++    pub fn dump(&self) -> FilesDump {
++        use salsa::plumbing::AsId;
++        FilesDump {
++            files: self.files.iter().map(|e| (*e.key(), e.value().as_id().as_bits())).collect(),
++            source_roots: self
++                .source_roots
++                .iter()
++                .map(|e| (*e.key(), e.value().as_id().as_bits()))
++                .collect(),
++            file_source_roots: self
++                .file_source_roots
++                .iter()
++                .map(|e| (*e.key(), e.value().as_id().as_bits()))
++                .collect(),
++        }
++    }
++
++    /// Take back the handles of inputs a restored database already holds.
++    pub fn restore(&self, dump: FilesDump) {
++        use salsa::plumbing::FromId;
++        for (key, bits) in dump.files {
++            self.files.insert(key, FileText::from_id(salsa::Id::from_bits(bits)));
++        }
++        for (key, bits) in dump.source_roots {
++            self.source_roots.insert(key, SourceRootInput::from_id(salsa::Id::from_bits(bits)));
++        }
++        for (key, bits) in dump.file_source_roots {
++            self.file_source_roots
++                .insert(key, FileSourceRootInput::from_id(salsa::Id::from_bits(bits)));
++        }
++    }
++
+     pub fn file_text(&self, file_id: vfs::FileId) -> FileText {
+         match self.files.get(&file_id) {
+             Some(text) => *text,
+@@ -89,7 +131,11 @@
+     pub fn set_file_text(&self, db: &mut dyn SourceDatabase, file_id: vfs::FileId, text: &str) {
+         match self.files.entry(file_id) {
+             Entry::Occupied(mut occupied) => {
+-                occupied.get_mut().set_text(db).to(Arc::from(text));
++                // Salsa does not compare a new input with the old one; an unchanged
++                // text must not invalidate what read it.
++                if **occupied.get().text(db) != *text {
++                    occupied.get_mut().set_text(db).to(Arc::from(text));
++                }
+             }
+             Entry::Vacant(vacant) => {
+                 let text = FileText::new(db, Arc::from(text), file_id);
+@@ -107,7 +153,9 @@
+     ) {
+         match self.files.entry(file_id) {
+             Entry::Occupied(mut occupied) => {
+-                occupied.get_mut().set_text(db).with_durability(durability).to(Arc::from(text));
++                if **occupied.get().text(db) != *text {
++                    occupied.get_mut().set_text(db).with_durability(durability).to(Arc::from(text));
++                }
+             }
+             Entry::Vacant(vacant) => {
+                 let text =
+@@ -138,7 +186,13 @@
+     ) {
+         match self.source_roots.entry(source_root_id) {
+             Entry::Occupied(mut occupied) => {
+-                occupied.get_mut().set_source_root(db).with_durability(durability).to(source_root);
++                if *occupied.get().source_root(db) != *source_root {
++                    occupied
++                        .get_mut()
++                        .set_source_root(db)
++                        .with_durability(durability)
++                        .to(source_root);
++                }
+             }
+             Entry::Vacant(vacant) => {
+                 let source_root =
+@@ -183,11 +237,13 @@
+     ) {
+         match self.file_source_roots.entry(id) {
+             Entry::Occupied(mut occupied) => {
+-                occupied
+-                    .get_mut()
+-                    .set_source_root_id(db)
+-                    .with_durability(durability)
+-                    .to(source_root_id);
++                if occupied.get().source_root_id(db) != source_root_id {
++                    occupied
++                        .get_mut()
++                        .set_source_root_id(db)
++                        .with_durability(durability)
++                        .to(source_root_id);
++                }
+             }
+             Entry::Vacant(vacant) => {
+                 let file_source_root =
+@@ -200,7 +256,7 @@
+ 
+ /// The set of roots for crates.io libraries.
+ /// Files in libraries are assumed to never change.
+-#[salsa::input(singleton, debug)]
++#[salsa::input(singleton, debug, persist)]
+ pub struct LibraryRoots {
+     #[returns(ref)]
+     pub roots: FxHashSet<SourceRootId>,
+@@ -208,26 +264,44 @@
+ 
+ /// The set of "local" (that is, from the current workspace) roots.
+ /// Files in local roots are assumed to change frequently.
+-#[salsa::input(singleton, debug)]
++#[salsa::input(singleton, debug, persist)]
+ pub struct LocalRoots {
+     #[returns(ref)]
+     pub roots: FxHashSet<SourceRootId>,
+ }
+ 
+-#[salsa::input(debug)]
++/// Persist a file's text as a plain string: `Arc<str>` has no `Deserialize`.
++fn serialize_file_text<S: serde::Serializer>(
++    value: &(Arc<str>, vfs::FileId),
++    serializer: S,
++) -> Result<S::Ok, S::Error> {
++    serde::Serialize::serialize(&(&*value.0, value.1), serializer)
++}
++
++fn deserialize_file_text<'de, D: serde::Deserializer<'de>>(
++    deserializer: D,
++) -> Result<(Arc<str>, vfs::FileId), D::Error> {
++    let (text, file_id): (String, vfs::FileId) = serde::Deserialize::deserialize(deserializer)?;
++    Ok((Arc::from(text.as_str()), file_id))
++}
++
++#[salsa::input(
++    debug,
++    persist(serialize = serialize_file_text, deserialize = deserialize_file_text)
++)]
+ pub struct FileText {
+     #[returns(ref)]
+     pub text: Arc<str>,
+     pub file_id: vfs::FileId,
+ }
+ 
+-#[salsa::input(debug)]
++#[salsa::input(debug, persist)]
+ pub struct FileSourceRootInput {
+     #[returns(copy)]
+     pub source_root_id: SourceRootId,
+ }
+ 
+-#[salsa::input(debug)]
++#[salsa::input(debug, persist)]
+ pub struct SourceRootInput {
+     #[returns(clone)]
+     pub source_root: Arc<SourceRoot>,
+@@ -308,6 +382,7 @@
+ 
+ /// Crate related data shared by the whole workspace.
+ #[derive(Debug, PartialEq, Eq, Hash, Clone)]
++#[derive(serde::Serialize, serde::Deserialize)]
+ pub struct CrateWorkspaceData {
+     pub target: Result<target::TargetData, target::TargetLoadError>,
+     /// Toolchain version used to compile the crate.
+@@ -331,7 +406,7 @@
+     krate.workspace_data(db).toolchain.as_ref().and_then(|v| ReleaseChannel::from_str(&v.pre).ok())
+ }
+ 
+-#[salsa::input(singleton, debug)]
++#[salsa::input(singleton, debug, persist)]
+ struct AllCrates {
+     #[returns(clone)]
+     crates: std::sync::Arc<[Crate]>,
+--- a/ra_ap_base_db-0.0.358/src/target.rs	2006-07-23 18:21:28.000000000 -0700
++++ b/ra_ap_base_db/src/target.rs	2026-11-14 09:38:27.000000000 -0800
+@@ -5,6 +5,7 @@
+ use triomphe::Arc;
+ 
+ #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
++#[derive(serde::Serialize, serde::Deserialize)]
+ pub enum Arch {
+     // Only what we need is present here.
+     Wasm32,
+@@ -13,14 +14,23 @@
+ }
+ 
+ #[derive(Debug, PartialEq, Eq, Hash, Clone)]
++#[derive(serde::Serialize, serde::Deserialize)]
+ pub struct TargetData {
+     pub data_layout: Box<str>,
+     pub arch: Arch,
+ }
+ 
+ #[derive(Clone, PartialEq, Eq, Hash)]
++#[derive(serde::Serialize, serde::Deserialize)]
++#[serde(from = "String", into = "String")]
+ pub struct TargetLoadError(Arc<str>);
+ 
++impl From<TargetLoadError> for String {
++    fn from(error: TargetLoadError) -> Self {
++        error.0.to_string()
++    }
++}
++
+ impl fmt::Debug for TargetLoadError {
+     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+         fmt::Debug::fmt(&self.0, f)
+--- a/ra_ap_hir_def-0.0.358/Cargo.toml	2006-07-23 18:21:28.000000000 -0700
++++ b/ra_ap_hir_def/Cargo.toml	2026-11-14 09:38:27.000000000 -0800
+@@ -101,6 +101,10 @@
+ [dependencies.rustc_apfloat]
+ version = "0.2.3"
+ 
++[dependencies.serde]
++version = "1"
++features = ["derive", "rc"]
++
+ [dependencies.salsa]
+ version = "0.28.5"
+ features = [
+--- a/ra_ap_hir_def-0.0.358/src/lib.rs	2006-07-23 18:21:28.000000000 -0700
++++ b/ra_ap_hir_def/src/lib.rs	2026-11-14 09:38:27.000000000 -0800
+@@ -103,7 +103,7 @@
+ ///
+ /// Note: this struct shouldn't be exposed to ide crates -- consider using
+ /// [`set_expand_proc_attr_macros`] instead, if possible.
+-#[salsa::input(singleton, debug)]
++#[salsa::input(singleton, debug, persist)]
+ pub(crate) struct ExpandProcAttrMacros {
+     #[returns(copy)]
+     pub(crate) enabled: bool,
+--- a/ra_ap_hir_expand-0.0.358/Cargo.toml	2006-07-23 18:21:28.000000000 -0700
++++ b/ra_ap_hir_expand/Cargo.toml	2026-11-14 09:38:27.000000000 -0800
+@@ -71,6 +71,10 @@
+ [dependencies.rustc-hash]
+ version = "2.1.1"
+ 
++[dependencies.serde]
++version = "1"
++features = ["derive", "rc"]
++
+ [dependencies.salsa]
+ version = "0.28.5"
+ features = [
+--- a/ra_ap_hir_expand-0.0.358/src/proc_macro.rs	2006-07-23 18:21:28.000000000 -0700
++++ b/ra_ap_hir_expand/src/proc_macro.rs	2026-11-14 09:38:27.000000000 -0800
+@@ -114,7 +114,29 @@
+ pub struct CrateProcMacros(StoredProcMacroLoadResult);
+ 
+ /// The proc macros. Do not use [`Self::get`]! Use [`Self::get_for_crate`] instead.
+-#[salsa::input(singleton, debug)]
++type ProcMacrosFields = (FxHashMap<Crate, Arc<CrateProcMacros>>,);
++
++/// Loaded proc-macro expanders are handles to a running server and cannot be saved;
++/// they are saved as empty and set again when the workspace is loaded.
++fn serialize_proc_macros<S: serde::Serializer>(
++    _: &ProcMacrosFields,
++    serializer: S,
++) -> Result<S::Ok, S::Error> {
++    serde::Serialize::serialize(&(), serializer)
++}
++
++fn deserialize_proc_macros<'de, D: serde::Deserializer<'de>>(
++    deserializer: D,
++) -> Result<ProcMacrosFields, D::Error> {
++    <() as serde::Deserialize>::deserialize(deserializer)?;
++    Ok((FxHashMap::default(),))
++}
++
++#[salsa::input(
++    singleton,
++    debug,
++    persist(serialize = serialize_proc_macros, deserialize = deserialize_proc_macros)
++)]
+ pub struct ProcMacros {
+     #[returns(ref)]
+     pub by_crate: FxHashMap<Crate, Arc<CrateProcMacros>>,
+--- a/ra_ap_cfg-0.0.358/Cargo.toml	2006-07-23 18:21:28.000000000 -0700
++++ b/ra_ap_cfg/Cargo.toml	2026-11-14 09:38:27.000000000 -0800
+@@ -33,6 +33,10 @@
+ syntax = ["dep:syntax"]
+ tt = ["dep:tt"]
+ 
++[dependencies.serde]
++version = "1"
++features = ["derive", "rc"]
++
+ [lib]
+ name = "ra_ap_cfg"
+ path = "src/lib.rs"
+--- a/ra_ap_cfg-0.0.358/src/cfg_expr.rs	2006-07-23 18:21:28.000000000 -0700
++++ b/ra_ap_cfg/src/cfg_expr.rs	2026-11-14 09:38:27.000000000 -0800
+@@ -8,6 +8,7 @@
+ 
+ /// A simple configuration value passed in from the outside.
+ #[derive(Debug, Clone, PartialEq, Eq, Hash)]
++#[derive(serde::Serialize, serde::Deserialize)]
+ pub enum CfgAtom {
+     /// eg. `#[cfg(test)]`
+     Flag(Symbol),
+--- a/ra_ap_cfg-0.0.358/src/lib.rs	2006-07-23 18:21:28.000000000 -0700
++++ b/ra_ap_cfg/src/lib.rs	2026-11-14 09:38:27.000000000 -0800
+@@ -30,6 +30,7 @@
+ ///
+ /// See: <https://doc.rust-lang.org/reference/conditional-compilation.html#set-configuration-options>
+ #[derive(Clone, PartialEq, Eq)]
++#[derive(serde::Serialize, serde::Deserialize)]
+ pub struct CfgOptions {
+     enabled: FxHashSet<CfgAtom>,
+ }
+@@ -282,6 +283,7 @@
+ 
+ /// A `CfgOptions` that implements `Hash`, for the sake of hashing only.
+ #[derive(Debug, Clone, PartialEq, Eq, Hash)]
++#[derive(serde::Serialize, serde::Deserialize)]
+ pub struct HashableCfgOptions {
+     _enabled: Box<[CfgAtom]>,
+ }
+--- a/ra_ap_vfs-0.0.358/Cargo.toml	2006-07-23 18:21:28.000000000 -0700
++++ b/ra_ap_vfs/Cargo.toml	2026-11-14 09:38:27.000000000 -0800
+@@ -27,6 +27,10 @@
+ repository = "https://github.com/rust-lang/rust-analyzer"
+ resolver = "2"
+ 
++[dependencies.serde]
++version = "1"
++features = ["derive", "rc"]
++
+ [lib]
+ name = "ra_ap_vfs"
+ path = "src/lib.rs"
+--- a/ra_ap_vfs-0.0.358/src/file_set.rs	2006-07-23 18:21:28.000000000 -0700
++++ b/ra_ap_vfs/src/file_set.rs	2026-11-14 09:38:27.000000000 -0800
+@@ -12,6 +12,7 @@
+ 
+ /// A set of [`VfsPath`]s identified by [`FileId`]s.
+ #[derive(Default, Clone, Eq, PartialEq)]
++#[derive(serde::Serialize, serde::Deserialize)]
+ pub struct FileSet {
+     files: FxHashMap<VfsPath, FileId>,
+     paths: IndexMap<FileId, VfsPath, FxBuildHasher>,
+--- a/ra_ap_vfs-0.0.358/src/lib.rs	2006-07-23 18:21:28.000000000 -0700
++++ b/ra_ap_vfs/src/lib.rs	2026-11-14 09:38:27.000000000 -0800
+@@ -63,6 +63,7 @@
+ ///
+ /// Most functions in rust-analyzer use this when they need to refer to a file.
+ #[derive(Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq, Hash)]
++#[derive(serde::Serialize, serde::Deserialize)]
+ pub struct FileId(u32);
+ // pub struct FileId(NonMaxU32);
+ 
+--- a/ra_ap_vfs-0.0.358/src/vfs_path.rs	2006-07-23 18:21:28.000000000 -0700
++++ b/ra_ap_vfs/src/vfs_path.rs	2026-11-14 09:38:27.000000000 -0800
+@@ -10,6 +10,7 @@
+ ///
+ /// [`Vfs`]: crate::Vfs
+ #[derive(Clone, Ord, PartialOrd, Eq, PartialEq, Hash)]
++#[derive(serde::Serialize, serde::Deserialize)]
+ pub struct VfsPath(VfsPathRepr);
+ 
+ impl VfsPath {
+@@ -262,6 +263,7 @@
+ 
+ /// Internal, private representation of [`VfsPath`].
+ #[derive(Clone, Ord, PartialOrd, Eq, PartialEq, Hash)]
++#[derive(serde::Serialize, serde::Deserialize)]
+ enum VfsPathRepr {
+     PathBuf(AbsPathBuf),
+     VirtualPath(VirtualPath),
+@@ -314,6 +316,7 @@
+ /// `/`-separated virtual path.
+ ///
+ /// This is used to describe files that do not reside on the file system.
++#[derive(serde::Serialize, serde::Deserialize)]
+ #[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq, Hash)]
+ struct VirtualPath(String);
+ 
+--- a/ra_ap_paths-0.0.358/Cargo.toml	2006-07-23 18:21:28.000000000 -0700
++++ b/ra_ap_paths/Cargo.toml	2026-11-14 09:38:27.000000000 -0800
+@@ -30,6 +30,10 @@
+ [features]
+ serde1 = ["camino/serde1"]
+ 
++[dependencies.serde]
++version = "1"
++features = ["derive", "rc"]
++
+ [lib]
+ name = "ra_ap_paths"
+ path = "src/lib.rs"
+@@ -37,6 +41,7 @@
+ 
+ [dependencies.camino]
+ version = "1.2.2"
++features = ["serde1"]
+ 
+ [lints.clippy]
+ assigning_clones = "allow"
+--- a/ra_ap_paths-0.0.358/src/lib.rs	2006-07-23 18:21:28.000000000 -0700
++++ b/ra_ap_paths/src/lib.rs	2026-11-14 09:38:27.000000000 -0800
+@@ -12,6 +12,7 @@
+ 
+ /// A [`Utf8PathBuf`] that is guaranteed to be absolute.
+ #[derive(Debug, Clone, Ord, PartialOrd, Eq, Hash)]
++#[derive(serde::Serialize, serde::Deserialize)]
+ pub struct AbsPathBuf(Utf8PathBuf);
+ 
+ impl From<AbsPathBuf> for Utf8PathBuf {
+--- a/ra_ap_intern-0.0.358/Cargo.toml	2006-07-23 18:21:28.000000000 -0700
++++ b/ra_ap_intern/Cargo.toml	2026-11-14 09:38:27.000000000 -0800
+@@ -30,6 +30,10 @@
+ [features]
+ prevent-gc = []
+ 
++[dependencies.serde]
++version = "1"
++features = ["derive", "rc"]
++
+ [lib]
+ name = "ra_ap_intern"
+ path = "src/lib.rs"
+--- a/ra_ap_intern-0.0.358/src/symbol.rs	2006-07-23 18:21:28.000000000 -0700
++++ b/ra_ap_intern/src/symbol.rs	2026-11-14 09:38:27.000000000 -0800
+@@ -121,6 +121,19 @@
+     repr: TaggedArcPtr,
+ }
+ 
++impl serde::Serialize for Symbol {
++    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
++        serializer.serialize_str(self.as_str())
++    }
++}
++
++impl<'de> serde::Deserialize<'de> for Symbol {
++    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
++        let text = <std::borrow::Cow<'de, str> as serde::Deserialize>::deserialize(deserializer)?;
++        Ok(Symbol::intern(&text))
++    }
++}
++
+ impl fmt::Debug for Symbol {
+     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+         self.as_str().fmt(f)
+--- a/ra_ap_span-0.0.358/Cargo.toml	2006-07-23 18:21:28.000000000 -0700
++++ b/ra_ap_span/Cargo.toml	2026-11-14 09:38:27.000000000 -0800
+@@ -31,6 +31,10 @@
+ default = ["salsa"]
+ in-rust-tree = []
+ 
++[dependencies.serde]
++version = "1"
++features = ["derive", "rc"]
++
+ [lib]
+ name = "ra_ap_span"
+ path = "src/lib.rs"
+--- a/ra_ap_edition-0.0.358/Cargo.toml	2006-07-23 18:21:28.000000000 -0700
++++ b/ra_ap_edition/Cargo.toml	2026-11-14 09:38:27.000000000 -0800
+@@ -27,6 +27,10 @@
+ repository = "https://github.com/rust-lang/rust-analyzer"
+ resolver = "2"
+ 
++[dependencies.serde]
++version = "1"
++features = ["derive"]
++
+ [lib]
+ name = "ra_ap_edition"
+ path = "src/lib.rs"
+--- a/ra_ap_edition-0.0.358/src/lib.rs	2006-07-23 18:21:28.000000000 -0700
++++ b/ra_ap_edition/src/lib.rs	2026-11-14 09:38:27.000000000 -0800
+@@ -2,6 +2,7 @@
+ // This should live in a separate crate because we use it in both actual code and codegen.
+ use std::fmt;
+ 
++#[derive(serde::Serialize, serde::Deserialize)]
+ #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+ #[repr(u8)]
+ pub enum Edition {
+--- a/ra_ap_ide_db-0.0.358/src/lib.rs	2006-07-23 18:21:28.000000000 -0700
++++ b/ra_ap_ide_db/src/lib.rs	2026-11-14 09:38:27.000000000 -0800
+@@ -190,6 +190,23 @@
+ }
+ 
+ impl RootDatabase {
++    /// A database holding no inputs at all, to be filled by Salsa's `deserialize` and
++    /// the tables saved with it. [`Self::new`] allocates singleton inputs, which a
++    /// restore must not find already there.
++    pub fn empty() -> RootDatabase {
++        RootDatabase {
++            storage: ManuallyDrop::new(salsa::Storage::default()),
++            files: Default::default(),
++            crates_map: Default::default(),
++            nonce: Nonce::new(),
++        }
++    }
++
++    /// The handles to file inputs, which live outside Salsa.
++    pub fn files(&self) -> &Arc<Files> {
++        &self.files
++    }
++
+     pub fn new(lru_capacity: Option<u16>) -> RootDatabase {
+         let mut db = RootDatabase {
+             storage: ManuallyDrop::new(salsa::Storage::default()),

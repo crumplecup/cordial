@@ -730,6 +730,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "00d174d5400e5e8fd687ad1049e2f578285fa914201b1af7e8b112a4546bd826"
 
 [[package]]
+name = "erased-serde"
+version = "0.4.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d2add8a07dd6a8d93ff627029c51de145e12686fbc36ecb298ac22e74cf02dec"
+dependencies = [
+ "serde",
+ "serde_core",
+ "typeid",
+]
+
+[[package]]
 name = "errno"
 version = "0.3.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1698,8 +1709,6 @@ dependencies = [
 [[package]]
 name = "ra_ap_base_db"
 version = "0.0.358"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8a5bf74ba5606b902ada6b8964ac4f22080ac6d73c297f8d4981885843b25fa4"
 dependencies = [
  "dashmap",
  "indexmap",
@@ -1712,6 +1721,7 @@ dependencies = [
  "rustc-hash 2.1.3",
  "salsa",
  "semver",
+ "serde",
  "tracing",
  "triomphe",
 ]
@@ -1719,21 +1729,21 @@ dependencies = [
 [[package]]
 name = "ra_ap_cfg"
 version = "0.0.358"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1dc63ce4a2acd1591cac5d5ad1d4f0549bd9069f4aad59acbf600a4d4881a8c9"
 dependencies = [
  "ra_ap_intern",
  "ra_ap_syntax",
  "ra_ap_tt",
  "rustc-hash 2.1.3",
+ "serde",
  "tracing",
 ]
 
 [[package]]
 name = "ra_ap_edition"
 version = "0.0.358"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1e95437d4702879e3851c80580524f36025589b3eeaec3f7798cdf88671c130b"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "ra_ap_hir"
@@ -1767,8 +1777,6 @@ dependencies = [
 [[package]]
 name = "ra_ap_hir_def"
 version = "0.0.358"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7ef811f35ed1c394d27a7e0d79869aa4891108496736597b87bbc632a4eee1ec"
 dependencies = [
  "arrayvec",
  "bitflags",
@@ -1793,6 +1801,7 @@ dependencies = [
  "rustc-hash 2.1.3",
  "rustc_apfloat",
  "salsa",
+ "serde",
  "smallvec",
  "thin-vec",
  "tracing",
@@ -1803,8 +1812,6 @@ dependencies = [
 [[package]]
 name = "ra_ap_hir_expand"
 version = "0.0.358"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f8ffb0602b9cc8b4647b902db5c4fca4a8a37ba7a20f28424aed64c7dd2866d6"
 dependencies = [
  "cov-mark",
  "either",
@@ -1821,6 +1828,7 @@ dependencies = [
  "ra_ap_tt",
  "rustc-hash 2.1.3",
  "salsa",
+ "serde",
  "smallvec",
  "thin-vec",
  "tracing",
@@ -1874,8 +1882,6 @@ dependencies = [
 [[package]]
 name = "ra_ap_ide_db"
 version = "0.0.358"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f08b0f04a8fecbe4a1b04cd0b03d5b0c8495a2a5de50638c6d66b5c3aba133ac"
 dependencies = [
  "arrayvec",
  "bitflags",
@@ -1909,14 +1915,13 @@ dependencies = [
 [[package]]
 name = "ra_ap_intern"
 version = "0.0.358"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "51fddd20c482af576865ab697077cbf1b61b7d30214ab250ce3aa83f0af41eb2"
 dependencies = [
  "arrayvec",
  "dashmap",
  "hashbrown 0.14.5",
  "rayon",
  "rustc-hash 2.1.3",
+ "serde",
  "triomphe",
 ]
 
@@ -1991,10 +1996,9 @@ dependencies = [
 [[package]]
 name = "ra_ap_paths"
 version = "0.0.358"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "781f81610b0333e60fabdcf4f9ea8a76a7eeff2cda2be6d8f8ad7b9b53985488"
 dependencies = [
  "camino",
+ "serde",
 ]
 
 [[package]]
@@ -2060,8 +2064,6 @@ dependencies = [
 [[package]]
 name = "ra_ap_span"
 version = "0.0.358"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "98543730b25d99687b95ca1bd4a0f326366eb7a55caf6e847b70ee3c2ac89206"
 dependencies = [
  "hashbrown 0.17.1",
  "la-arena",
@@ -2070,6 +2072,7 @@ dependencies = [
  "ra_ap_vfs",
  "rustc-hash 2.1.3",
  "salsa",
+ "serde",
  "text-size",
 ]
 
@@ -2184,8 +2187,6 @@ dependencies = [
 [[package]]
 name = "ra_ap_vfs"
 version = "0.0.358"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "613e9b9ce9dfb085c980497b712624eca7ec7312c41bc2855ef8cdc245c33dab"
 dependencies = [
  "crossbeam-channel",
  "fst",
@@ -2194,6 +2195,7 @@ dependencies = [
  "ra_ap_paths",
  "ra_ap_stdx",
  "rustc-hash 2.1.3",
+ "serde",
  "tracing",
 ]
 
@@ -2375,6 +2377,7 @@ dependencies = [
  "boxcar",
  "crossbeam-queue",
  "crossbeam-utils",
+ "erased-serde",
  "hashbrown 0.17.1",
  "hashlink",
  "indexmap",
@@ -2386,6 +2389,7 @@ dependencies = [
  "rustc-hash 2.1.3",
  "salsa-macro-rules",
  "salsa-macros",
+ "serde",
  "smallvec",
  "thin-vec",
  "tracing",
@@ -2656,6 +2660,9 @@ name = "thin-vec"
 version = "0.2.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d6a4b9ba8738cb4a4f399d37e266becfd475e75eb73425b87a05a2f2039ba63e"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "thiserror"
