@@ -261,7 +261,9 @@ impl SourceDatabase {
             // An item of this context's copy is named as the ordinary build names it
             // when the ordinary build has it, so facts and lookups agree.
             let canonical_id = |id: SemanticItemId| -> SemanticItemId {
-                match files.context.counterpart(types::definition(&self.db, id)) {
+                match types::definition(&self.db, id)
+                    .and_then(|definition| files.context.counterpart(definition))
+                {
                     Some(ordinary) => types::identity(&self.db, ordinary),
                     None => id,
                 }

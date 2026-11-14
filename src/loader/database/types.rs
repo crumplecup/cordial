@@ -1,27 +1,12 @@
 //! Convert typed HIR contracts to bounded shared-IR facts, never hover strings.
 
-use ra_ap_hir::{Adt, Crate, ModuleDef, Semantics, Type};
+use ra_ap_hir::{Adt, Crate, Semantics, Type};
 use ra_ap_ide_db::{RootDatabase, famous_defs::FamousDefs};
-use salsa::plumbing::{AsId, FromId};
 use tracing::instrument;
 
-use crate::{SemanticItemId, SemanticReturnContract, SemanticType};
+use crate::{SemanticReturnContract, SemanticType};
 
-#[salsa::interned]
-struct ItemKey<'db> {
-    definition: ModuleDef,
-}
-
-#[instrument(level = "trace", skip(db, definition))]
-pub(super) fn identity(db: &RootDatabase, definition: ModuleDef) -> SemanticItemId {
-    SemanticItemId::new(ItemKey::new(db, definition).as_id().as_bits())
-}
-
-/// The definition an identity of this session names.
-#[instrument(level = "trace", skip(db, id))]
-pub(super) fn definition(db: &RootDatabase, id: SemanticItemId) -> ModuleDef {
-    *ItemKey::from_id(salsa::Id::from_bits(id.bits())).definition(db)
-}
+pub(super) use super::item_key::{definition, description, identity};
 
 #[instrument(level = "trace", skip(db, ty))]
 fn type_fact(db: &RootDatabase, ty: &Type<'_>) -> SemanticType {

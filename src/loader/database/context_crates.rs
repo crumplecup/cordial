@@ -11,13 +11,12 @@
 use std::collections::{BTreeSet, HashMap};
 use triomphe::Arc;
 
-use ra_ap_hir::{Adt, AssocItem, Crate, Function, HasSource, InFile, ModuleDef, attach_db};
+use ra_ap_hir::{AssocItem, Crate, Function, HasSource, ModuleDef, attach_db};
 use ra_ap_ide_db::RootDatabase;
 use ra_ap_ide_db::base_db::{
     Crate as InputCrate, SourceDatabase as RaSourceDatabase, SourceRoot, SourceRootId, all_crates,
     set_all_crates_with_durability,
 };
-use ra_ap_syntax::{AstNode, TextRange, ast::HasName};
 use ra_ap_vfs::{FileId, VfsPath, file_set::FileSet};
 use salsa::Durability;
 use tracing::instrument;
@@ -396,7 +395,7 @@ fn functions_of(db: &RootDatabase, krate: Crate) -> Vec<Function> {
 
 /// The kind of item and the original place its name is written: the key two
 /// declarations share when one is the copy of the other.
-type Place = (u8, FileId, TextRange);
+type Place = super::item_key::DefSite;
 
 /// Every declaration a crate makes that facts can name: its functions, types,
 /// traits and constants, including the associated items of impls and traits.
@@ -439,28 +438,7 @@ fn place_of(
     definition: ModuleDef,
     originals: &HashMap<FileId, FileId>,
 ) -> Option<Place> {
-    let (kind, range) = match definition {
-        ModuleDef::Function(it) => (1, name_range(db, it.source(db)?)?),
-        ModuleDef::Adt(Adt::Struct(it)) => (2, name_range(db, it.source(db)?)?),
-        ModuleDef::Adt(Adt::Enum(it)) => (3, name_range(db, it.source(db)?)?),
-        ModuleDef::Adt(Adt::Union(it)) => (4, name_range(db, it.source(db)?)?),
-        ModuleDef::Trait(it) => (5, name_range(db, it.source(db)?)?),
-        ModuleDef::TypeAlias(it) => (6, name_range(db, it.source(db)?)?),
-        ModuleDef::Const(it) => (7, name_range(db, it.source(db)?)?),
-        ModuleDef::Static(it) => (8, name_range(db, it.source(db)?)?),
-        _ => return None,
-    };
-    let (file, range) = range;
-    Some((kind, originals.get(&file).copied().unwrap_or(file), range))
-}
-
-/// The file and range of an item's name as written in the source, even when a
-/// macro generated the item.
-fn name_range<N: AstNode + HasName>(
-    db: &RootDatabase,
-    source: InFile<N>,
-) -> Option<(FileId, TextRange)> {
-    let name = source.value.name()?;
-    let (range, _) = InFile::new(source.file_id, name.syntax()).original_file_range_opt(db)?;
-    Some((range.file_id.file_id(db), range.range))
+    let mut site = super::item_key::site_of(db, definition)?;
+    site.file = originals.get(&site.file).copied().unwrap_or(site.file);
+    Some(site)
 }

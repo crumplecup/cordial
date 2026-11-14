@@ -104,6 +104,11 @@ impl Files {
         }
     }
 
+    /// Every source root the database holds, for finding the file at a path.
+    pub fn source_root_inputs(&self) -> Vec<SourceRootInput> {
+        self.source_roots.iter().map(|entry| *entry.value()).collect()
+    }
+
     /// Take back the handles of inputs a restored database already holds.
     pub fn restore(&self, dump: FilesDump) {
         use salsa::plumbing::FromId;

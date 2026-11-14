@@ -31,7 +31,7 @@ impl Locator<'_> {
     /// (its ranges are expansion coordinates, not source).
     #[tracing::instrument(level = "trace", skip(self, id))]
     pub(super) fn locate(&self, id: SemanticItemId) -> Option<FunctionLocation> {
-        let ModuleDef::Function(function) = types::definition(self.db, id) else {
+        let Some(ModuleDef::Function(function)) = types::definition(self.db, id) else {
             return None;
         };
         self.location_of(function)
@@ -82,7 +82,7 @@ impl Locator<'_> {
         id: SemanticItemId,
         node: NodeId,
     ) -> CordialResult<()> {
-        let ModuleDef::Function(function) = types::definition(self.db, id) else {
+        let Some(ModuleDef::Function(function)) = types::definition(self.db, id) else {
             return Ok(());
         };
         let declaration = ra_ap_hir::attach_db(self.db, || {

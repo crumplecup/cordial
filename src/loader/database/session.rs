@@ -109,6 +109,22 @@ impl SourceDatabase {
         }
     }
 
+    /// What `id` stands for, as text that is the same in every process: where the
+    /// definition's name is written, or a marker that it has no site of its own.
+    #[instrument(level = "debug", skip(self, id))]
+    #[hotpath::measure]
+    pub fn describe_item(&self, id: crate::SemanticItemId) -> String {
+        super::types::description(&self.db, id)
+    }
+
+    /// Whether `id` names a definition this database can find again from its
+    /// description.
+    #[instrument(level = "debug", skip(self, id))]
+    #[hotpath::measure]
+    pub fn knows_item(&self, id: crate::SemanticItemId) -> bool {
+        super::types::definition(&self.db, id).is_some()
+    }
+
     /// Change one already-loaded source input without reloading Cargo or writing
     /// the file. Unsupported/new paths fail before changing database state.
     #[instrument(level = "debug", skip(self, path, text), err(level = "warn"))]

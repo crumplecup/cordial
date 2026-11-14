@@ -19,6 +19,7 @@ mod external;
 mod identity;
 #[cfg(feature = "tracing")]
 mod islands;
+mod item_key;
 mod items;
 mod options;
 #[cfg(feature = "panics")]

@@ -150,8 +150,8 @@
      pub fn add_crate_root(
          &mut self,
 --- a/ra_ap_base_db-0.0.358/src/lib.rs	2006-07-23 18:21:28.000000000 -0700
-+++ b/ra_ap_base_db/src/lib.rs	2026-11-14 09:38:27.000000000 -0800
-@@ -76,7 +76,49 @@
++++ b/ra_ap_base_db/src/lib.rs	2026-11-14 10:11:12.355887760 -0800
+@@ -76,7 +76,54 @@
      file_source_roots: Arc<DashMap<vfs::FileId, FileSourceRootInput, BuildHasherDefault<FxHasher>>>,
  }
  
@@ -183,6 +183,11 @@
 +        }
 +    }
 +
++    /// Every source root the database holds, for finding the file at a path.
++    pub fn source_root_inputs(&self) -> Vec<SourceRootInput> {
++        self.source_roots.iter().map(|entry| *entry.value()).collect()
++    }
++
 +    /// Take back the handles of inputs a restored database already holds.
 +    pub fn restore(&self, dump: FilesDump) {
 +        use salsa::plumbing::FromId;
@@ -201,7 +206,7 @@
      pub fn file_text(&self, file_id: vfs::FileId) -> FileText {
          match self.files.get(&file_id) {
              Some(text) => *text,
-@@ -89,7 +131,11 @@
+@@ -89,7 +136,11 @@
      pub fn set_file_text(&self, db: &mut dyn SourceDatabase, file_id: vfs::FileId, text: &str) {
          match self.files.entry(file_id) {
              Entry::Occupied(mut occupied) => {
@@ -214,7 +219,7 @@
              }
              Entry::Vacant(vacant) => {
                  let text = FileText::new(db, Arc::from(text), file_id);
-@@ -107,7 +153,9 @@
+@@ -107,7 +158,9 @@
      ) {
          match self.files.entry(file_id) {
              Entry::Occupied(mut occupied) => {
@@ -225,7 +230,7 @@
              }
              Entry::Vacant(vacant) => {
                  let text =
-@@ -138,7 +186,13 @@
+@@ -138,7 +191,13 @@
      ) {
          match self.source_roots.entry(source_root_id) {
              Entry::Occupied(mut occupied) => {
@@ -240,7 +245,7 @@
              }
              Entry::Vacant(vacant) => {
                  let source_root =
-@@ -183,11 +237,13 @@
+@@ -183,11 +242,13 @@
      ) {
          match self.file_source_roots.entry(id) {
              Entry::Occupied(mut occupied) => {
@@ -259,7 +264,7 @@
              }
              Entry::Vacant(vacant) => {
                  let file_source_root =
-@@ -200,7 +256,7 @@
+@@ -200,7 +261,7 @@
  
  /// The set of roots for crates.io libraries.
  /// Files in libraries are assumed to never change.
@@ -268,7 +273,7 @@
  pub struct LibraryRoots {
      #[returns(ref)]
      pub roots: FxHashSet<SourceRootId>,
-@@ -208,26 +264,44 @@
+@@ -208,26 +269,44 @@
  
  /// The set of "local" (that is, from the current workspace) roots.
  /// Files in local roots are assumed to change frequently.
@@ -317,7 +322,7 @@
  pub struct SourceRootInput {
      #[returns(clone)]
      pub source_root: Arc<SourceRoot>,
-@@ -308,6 +382,7 @@
+@@ -308,6 +387,7 @@
  
  /// Crate related data shared by the whole workspace.
  #[derive(Debug, PartialEq, Eq, Hash, Clone)]
@@ -325,7 +330,7 @@
  pub struct CrateWorkspaceData {
      pub target: Result<target::TargetData, target::TargetLoadError>,
      /// Toolchain version used to compile the crate.
-@@ -331,7 +406,7 @@
+@@ -331,7 +411,7 @@
      krate.workspace_data(db).toolchain.as_ref().and_then(|v| ReleaseChannel::from_str(&v.pre).ok())
  }
  
