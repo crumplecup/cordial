@@ -101,7 +101,7 @@ impl SourceDatabase {
             context_crates: kept.unwrap_or_default(),
             reporter: reporter.clone(),
             saved,
-            saved_once: false,
+            saved_stage: crate::loader::database::saved::SaveStage::default(),
             #[cfg(feature = "cfg_hygiene")]
             workspace_root: Some(root),
         };

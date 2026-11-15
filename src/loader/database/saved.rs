@@ -28,6 +28,18 @@ const CRATES: &str = "crates";
 const PATHS: &str = "paths";
 const CONTEXTS: &str = "contexts";
 
+/// How far into the first projection a state was saved.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub(super) enum SaveStage {
+    /// Nothing saved yet.
+    #[default]
+    None,
+    /// After the ordinary pass, before the cfg contexts.
+    Ordinary,
+    /// After the contexts and the leaf pass.
+    Complete,
+}
+
 /// What a saved state restores to: the database, and the paths of the VFS it was saved with,
 /// in id order. Salsa's inputs are keyed by file id, so the next load must hand out the same
 /// ids to the same paths: it seeds its VFS with these.
@@ -72,6 +84,7 @@ impl SavedState {
         self.sweep_abandoned(&name, &writing);
         let _ = std::fs::remove_dir_all(&writing);
         std::fs::create_dir_all(&writing)?;
+        crate::host::event("analysis state: writing".to_owned());
         let paths: Vec<&VfsPath> = vfs.interned_paths().collect();
         let paths = rmp_serde::to_vec(&paths).map_err(|error| self.encoding(&error))?;
         let files =
@@ -85,8 +98,15 @@ impl SavedState {
             .collect();
         let contexts = rmp_serde::to_vec(&contexts).map_err(|error| self.encoding(&error))?;
         let database: &mut dyn salsa::Database = database;
+        crate::host::event("analysis state: encoding the memos".to_owned());
+        let encoding = std::time::Instant::now();
         let salsa =
             rmp_serde::to_vec(&database.as_serialize()).map_err(|error| self.encoding(&error))?;
+        crate::host::event(format!(
+            "analysis state: memos encoded, {} bytes in {:?}",
+            salsa.len(),
+            encoding.elapsed()
+        ));
         std::fs::write(writing.join(SALSA), &salsa)?;
         std::fs::write(writing.join(FILES), &files)?;
         std::fs::write(writing.join(CRATES), &crates)?;
@@ -204,23 +224,27 @@ impl SavedState {
 }
 
 impl super::SourceDatabase {
-    /// Save this session's database as the next run's starting point. Once per session, at
-    /// the end of the first projection, with the contexts' crates and file copies: the next
-    /// run takes them up again, so what was computed for them is not computed again.
-    /// Failing to save is said and never fails the run.
+    /// Save this session's database as the next run's starting point, at `stage` of the
+    /// first projection: after the ordinary pass (so a run that ends in the contexts still
+    /// leaves what the ordinary pass computed), and at the end, with the contexts' crates
+    /// and file copies, which the next run takes up again. A later stage replaces an
+    /// earlier one; a stage already saved is not saved again. Failing to save is said and
+    /// never fails the run.
     #[instrument(level = "debug", skip(self))]
     #[hotpath::measure(impl_type = "SourceDatabase")]
-    pub(super) fn save_state(&mut self) {
+    pub(super) fn save_state(&mut self, stage: SaveStage) {
         let Some(saved) = self.saved.clone() else {
             return;
         };
-        if std::mem::replace(&mut self.saved_once, true) {
+        if self.saved_stage >= stage {
             return;
         }
+        self.saved_stage = stage;
+        self.reporter.say("Saving the analysis state");
         let started = std::time::Instant::now();
         match saved.save(&mut self.db, &self.vfs, &self.context_crates) {
             Ok(bytes) => crate::host::event(format!(
-                "analysis state: saved for the next run, {bytes} bytes in {:?}",
+                "analysis state: saved for the next run ({stage:?}), {bytes} bytes in {:?}",
                 started.elapsed()
             )),
             Err(error) => {

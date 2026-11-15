@@ -38,7 +38,7 @@ impl SourceDatabase {
             context_crates: Vec::new(),
             reporter: Reporter::default(),
             saved: None,
-            saved_once: false,
+            saved_stage: super::saved::SaveStage::default(),
             restored: false,
             #[cfg(feature = "cfg_hygiene")]
             workspace_root: None,

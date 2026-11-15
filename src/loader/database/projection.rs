@@ -100,6 +100,7 @@ impl SourceDatabase {
         })?;
         drop(ordinary_watch);
         crate::process_memory::log("ordinary projection done");
+        self.save_state(super::saved::SaveStage::Ordinary);
         // Gated code is analysed by changing the database's cfg input, which
         // needs the exclusive borrow the ordinary pass does not have.
         self.project_contexts(paths, outline.functions(), &mut graph)?;
@@ -109,7 +110,7 @@ impl SourceDatabase {
             self.project_leaves(&mut graph)?;
             self.project_observability_calls(&outline, &mut graph)?;
         }
-        self.save_state();
+        self.save_state(super::saved::SaveStage::Complete);
         // What the database now holds, for a profile; it needs the database
         // exclusively, which it has here.
         #[cfg(feature = "hotpath")]

@@ -32,6 +32,7 @@ mod projection;
 mod queries;
 mod recording;
 mod saved;
+use saved::SaveStage;
 mod scan_queries;
 mod session;
 #[cfg(feature = "internal_error_chain")]
@@ -107,7 +108,7 @@ pub struct SourceDatabase {
     reporter: Reporter,
     // Where this session's database is saved for the next run, and whether it has been.
     saved: Option<SavedState>,
-    saved_once: bool,
+    saved_stage: SaveStage,
     // Whether the database was restored from a saved state.
     restored: bool,
     #[cfg(feature = "cfg_hygiene")]
