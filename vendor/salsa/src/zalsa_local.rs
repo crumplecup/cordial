@@ -2107,6 +2107,10 @@ pub(crate) mod persistence {
                 PersistentQueryOrigin::DerivedUntracked(edges) => {
                     Self::derived_untracked(edges.iter().copied(), extra)
                 }
+                PersistentQueryOrigin::SharedDerived(..)
+                | PersistentQueryOrigin::SharedDerivedUntracked(..) => {
+                    unreachable!("a memo's shared sets are written out when it is deserialized")
+                }
             }
         }
     }
@@ -2158,27 +2162,36 @@ pub(crate) mod persistence {
         Assigned(DatabaseKeyIndex),
         Derived(Box<[QueryEdge]>),
         DerivedUntracked(Box<[QueryEdge]>),
+        /// The edges of the saved sets with these numbers, and these edges besides: a set that
+        /// many memos depend on is saved once, in the ingredient's list of sets.
+        SharedDerived(Box<[u32]>, Box<[QueryEdge]>),
+        SharedDerivedUntracked(Box<[u32]>, Box<[QueryEdge]>),
     }
 
     impl PersistentQueryOrigin {
-        pub(crate) fn derived<I>(input_outputs: I) -> Self
-        where
-            I: IntoIterator<Item = QueryEdge>,
-            I::IntoIter: ExactSizeIterator,
-        {
-            Self::Derived(input_outputs.into_iter().collect())
-        }
-
-        pub(crate) fn derived_untracked<I>(input_outputs: I) -> Self
-        where
-            I: IntoIterator<Item = QueryEdge>,
-            I::IntoIter: ExactSizeIterator,
-        {
-            Self::DerivedUntracked(input_outputs.into_iter().collect())
-        }
-
         pub(crate) const fn assigned(key: DatabaseKeyIndex) -> Self {
             Self::Assigned(key)
+        }
+
+        pub(crate) fn shared_derived(sets: Vec<u32>, edges: Box<[QueryEdge]>) -> Self {
+            Self::SharedDerived(sets.into_boxed_slice(), edges)
+        }
+
+        pub(crate) fn shared_derived_untracked(sets: Vec<u32>, edges: Box<[QueryEdge]>) -> Self {
+            Self::SharedDerivedUntracked(sets.into_boxed_slice(), edges)
+        }
+
+        /// This origin with the sets it refers to written out, as the memo keeps them.
+        fn expanded(self) -> Self {
+            match self {
+                Self::SharedDerived(sets, edges) => {
+                    Self::Derived(crate::flatten::expand_saved(&sets, &edges))
+                }
+                Self::SharedDerivedUntracked(sets, edges) => {
+                    Self::DerivedUntracked(crate::flatten::expand_saved(&sets, &edges))
+                }
+                other => other,
+            }
         }
 
         #[cfg(test)]
@@ -2250,7 +2263,7 @@ pub(crate) mod persistence {
             Ok(QueryRevisions {
                 changed_at: revisions.changed_at,
                 durability: revisions.durability,
-                origin_and_extra: OriginAndExtra::new(revisions.origin, revisions.extra),
+                origin_and_extra: OriginAndExtra::new(revisions.origin.expanded(), revisions.extra),
                 #[cfg(feature = "accumulator")]
                 accumulated_inputs: Default::default(), // TODO: Support serializing accumulators
                 verified_final: revisions.verified_final,

@@ -203,6 +203,21 @@ restored a state (it would make every restored memo stale). The loader compares 
 (source roots, file texts, the crate graph, proc macros), and the crates and file copies a cfg context adds
 are LOW durability for this reason.
 
+## What a save costs, and when it happens
+
+The flattening of dependencies (see the Salsa section) is now shared twice over. Each non-persisted
+query's persisted edges are a bitset over the edges seen, and equal sets are the same set, so unioning
+the callees of a query is a few word operations. A persisted memo does not list its edges: it refers to
+the sets its non-persisted callees reach and lists its own few. The file holds each distinct set once,
+in a `sets` entry at the head of the ingredient, and the memos refer to them by number; a memo restored
+has them written out again (it keeps its own copy in memory).
+
+A session saves once, at the end of its first projection, after the contexts and the leaf pass; a run
+that fails in them still saves what it computed. A session restored from a state saves nothing if no
+persisted query has executed in the process since it began (`salsa::persisted_executions`, counted where
+a function memo with `persist` executes): what it would write is what is there. It says so
+(`analysis state: nothing new to save`).
+
 ## Persisted cfg contexts (done)
 
 A context is shadow crates and copies of the workspace's files (virtual paths, source roots from

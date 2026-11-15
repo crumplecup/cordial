@@ -101,7 +101,8 @@ impl SourceDatabase {
             context_crates: kept.unwrap_or_default(),
             reporter: reporter.clone(),
             saved,
-            saved_stage: crate::loader::database::saved::SaveStage::default(),
+            saved_once: false,
+            persisted_at_load: salsa::persisted_executions(),
             #[cfg(feature = "cfg_hygiene")]
             workspace_root: Some(root),
         })

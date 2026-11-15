@@ -38,7 +38,8 @@ impl SourceDatabase {
             context_crates: Vec::new(),
             reporter: Reporter::default(),
             saved: None,
-            saved_stage: super::saved::SaveStage::default(),
+            saved_once: false,
+            persisted_at_load: salsa::persisted_executions(),
             restored: false,
             #[cfg(feature = "cfg_hygiene")]
             workspace_root: None,

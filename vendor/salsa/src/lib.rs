@@ -263,6 +263,7 @@ mod database_impl;
 mod durability;
 mod event;
 mod flatten;
+pub use flatten::persisted_executions;
 mod function;
 mod hash;
 mod id;

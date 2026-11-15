@@ -96,7 +96,7 @@ const PERSISTED: usize = 40;
 struct Reports(Arc<Mutex<Vec<Report>>>);
 
 /// One ingredient's report: its name, memos, queries walked and queries reused.
-type Report = (String, u64, u64, u64);
+type Report = (String, u64, u64, u64, u64);
 
 impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for Reports {
     fn on_event(&self, event: &tracing::Event<'_>, _: tracing_subscriber::layer::Context<'_, S>) {
@@ -109,6 +109,7 @@ impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for Reports {
             memos: u64,
             walked: u64,
             reused: u64,
+            sets: u64,
         }
         impl tracing::field::Visit for Fields {
             fn record_u64(&mut self, field: &tracing::field::Field, value: u64) {
@@ -116,6 +117,7 @@ impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for Reports {
                     "memos" => self.memos = value,
                     "walked" => self.walked = value,
                     "reused" => self.reused = value,
+                    "sets" => self.sets = value,
                     _ => {}
                 }
             }
@@ -134,6 +136,7 @@ impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for Reports {
                 fields.memos,
                 fields.walked,
                 fields.reused,
+                fields.sets,
             ));
         }
     }
@@ -157,15 +160,17 @@ fn a_shared_graph_is_walked_once_and_what_is_saved_still_covers_it() {
 
     // Every persisted memo reads the same chain and cycle; they are walked once between
     // them, not once each (that would be PERSISTED times as many).
-    let (memos, walked, reused) = reports
+    let (memos, walked, reused, sets) = reports
         .0
         .lock()
         .map(|reports| {
             reports
                 .iter()
                 .filter(|(name, ..)| name.contains("persisted"))
-                .map(|(_, memos, walked, reused)| (*memos, *walked, *reused))
-                .fold((0, 0, 0), |(a, b, c), (d, e, f)| (a + d, b + e, c + f))
+                .map(|(_, memos, walked, reused, sets)| (*memos, *walked, *reused, *sets))
+                .fold((0, 0, 0, 0), |(a, b, c, d), (e, f, g, h)| {
+                    (a + e, b + f, c + g, d + h)
+                })
         })
         .unwrap_or_default();
     assert_eq!(memos, PERSISTED as u64);
@@ -175,6 +180,11 @@ fn a_shared_graph_is_walked_once_and_what_is_saved_still_covers_it() {
         "walked {walked} queries for {memos} memos over a graph of {nodes}"
     );
 
+    // They all depend on the same graph, so the file holds its edges once, not once each.
+    assert!(
+        sets <= 6,
+        "the {memos} memos refer to {sets} distinct sets of edges, not one each"
+    );
     assert!(
         reused >= PERSISTED as u64 - 1,
         "the memos after the first were answered from what the first found: {reused}"

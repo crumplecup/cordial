@@ -103,22 +103,39 @@ impl SourceDatabase {
         })?;
         drop(ordinary_watch);
         crate::process_memory::log("ordinary projection done");
-        self.save_state(super::saved::SaveStage::Ordinary);
         // Gated code is analysed by changing the database's cfg input, which
         // needs the exclusive borrow the ordinary pass does not have.
-        self.project_contexts(paths, outline.functions(), &mut graph)?;
-        #[cfg(feature = "tracing")]
-        {
-            self.project_tracing_inventories(&outline, &mut graph)?;
-            self.project_leaves(&mut graph)?;
-            self.project_observability_calls(&outline, &mut graph)?;
-        }
-        self.save_state(super::saved::SaveStage::Complete);
+        let rest = self.project_after_ordinary(paths, &outline, &mut graph);
+        // A run that fails in the contexts still leaves what it computed.
+        self.save_state();
+        rest?;
         // What the database now holds, for a profile; it needs the database
         // exclusively, which it has here.
         #[cfg(feature = "hotpath")]
         crate::storage::record_database(&mut self.db);
         Ok(graph)
+    }
+
+    /// What follows the ordinary pass: the cfg contexts, then (with tracing) the inventories,
+    /// the leaf functions and the observability calls, which read what the contexts found.
+    #[instrument(level = "debug", skip_all, err(level = "warn"))]
+    #[hotpath::measure(impl_type = "SourceDatabase")]
+    fn project_after_ordinary(
+        &mut self,
+        paths: &[PathBuf],
+        outline: &declarations::Outline,
+        graph: &mut CrateIr,
+    ) -> CordialResult<()> {
+        // Gated code is analysed by changing the database's cfg input, which
+        // needs the exclusive borrow the ordinary pass does not have.
+        self.project_contexts(paths, outline.functions(), graph)?;
+        #[cfg(feature = "tracing")]
+        {
+            self.project_tracing_inventories(outline, graph)?;
+            self.project_leaves(graph)?;
+            self.project_observability_calls(outline, graph)?;
+        }
+        Ok(())
     }
 
     #[instrument(level = "debug", skip_all, err(level = "warn"))]

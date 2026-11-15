@@ -28,18 +28,6 @@ const CRATES: &str = "crates";
 const PATHS: &str = "paths";
 const CONTEXTS: &str = "contexts";
 
-/// How far into the first projection a state was saved.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub(super) enum SaveStage {
-    /// Nothing saved yet.
-    #[default]
-    None,
-    /// After the ordinary pass, before the cfg contexts.
-    Ordinary,
-    /// After the contexts and the leaf pass.
-    Complete,
-}
-
 /// What a saved state restores to: the database, and the paths of the VFS it was saved with,
 /// in id order. Salsa's inputs are keyed by file id, so the next load must hand out the same
 /// ids to the same paths: it seeds its VFS with these.
@@ -224,27 +212,29 @@ impl SavedState {
 }
 
 impl super::SourceDatabase {
-    /// Save this session's database as the next run's starting point, at `stage` of the
-    /// first projection: after the ordinary pass (so a run that ends in the contexts still
-    /// leaves what the ordinary pass computed), and at the end, with the contexts' crates
-    /// and file copies, which the next run takes up again. A later stage replaces an
-    /// earlier one; a stage already saved is not saved again. Failing to save is said and
+    /// Save this session's database as the next run's starting point: once per session, at the
+    /// end of the first projection, with the contexts' crates and file copies, which the next
+    /// run takes up again. A session restored from a state that has computed no persisted query
+    /// since saves nothing: what it would write is what is there. Failing to save is said and
     /// never fails the run.
     #[instrument(level = "debug", skip(self))]
     #[hotpath::measure(impl_type = "SourceDatabase")]
-    pub(super) fn save_state(&mut self, stage: SaveStage) {
+    pub(super) fn save_state(&mut self) {
         let Some(saved) = self.saved.clone() else {
             return;
         };
-        if self.saved_stage >= stage {
+        if std::mem::replace(&mut self.saved_once, true) {
             return;
         }
-        self.saved_stage = stage;
+        if self.restored && salsa::persisted_executions() == self.persisted_at_load {
+            crate::host::event("analysis state: nothing new to save".to_owned());
+            return;
+        }
         self.reporter.say("Saving the analysis state");
         let started = std::time::Instant::now();
         match saved.save(&mut self.db, &self.vfs, &self.context_crates) {
             Ok(bytes) => crate::host::event(format!(
-                "analysis state: saved for the next run ({stage:?}), {bytes} bytes in {:?}",
+                "analysis state: saved for the next run, {bytes} bytes in {:?}",
                 started.elapsed()
             )),
             Err(error) => {
@@ -272,12 +262,18 @@ impl super::SourceDatabase {
     /// is not listed.
     #[instrument(level = "debug", skip(self))]
     #[hotpath::measure(impl_type = "SourceDatabase")]
-    pub(super) fn warm_persisted_dependencies(&self, paths: &[PathBuf]) {
+    pub(super) fn warm_persisted_dependencies(&mut self, paths: &[PathBuf]) {
+        let before = salsa::persisted_executions();
         ra_ap_hir::attach_db(&self.db, || {
             let nothing = super::item_key::ItemKey::new(&self.db, String::new());
             let _ = super::queries::persisted_evidence(&self.db, nothing);
-            // A file the projection is about to ask about anyway, so that what this asks is
-            // answered by the memo the last run saved and nothing is computed for it.
+        });
+        // What asking about nothing computed is not new to what was saved: it is the
+        // question's own answer, and the same in every run.
+        self.persisted_at_load += salsa::persisted_executions() - before;
+        // A file the projection is about to ask about anyway, so that what this asks is
+        // answered by the memo the last run saved and nothing is computed for it.
+        ra_ap_hir::attach_db(&self.db, || {
             if let Some(path) = paths.first()
                 && let Ok(file) = self.file_id(path)
             {

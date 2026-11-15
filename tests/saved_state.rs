@@ -257,3 +257,76 @@ fn a_save_sweeps_away_what_a_dead_save_left_and_leaves_a_live_one() -> Result<()
     assert!(saved.directory().join("key").is_file());
     Ok(())
 }
+
+/// What the run said it did, since the last call.
+fn said() -> Vec<String> {
+    cordial::host::take_notes().events().to_vec()
+}
+
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn a_restored_run_that_computed_nothing_saves_nothing_and_one_that_did_saves() -> Result<()> {
+    cordial::init_tracing();
+    let root = specimen()?;
+    let state = tempfile::tempdir().into_diagnostic()?;
+    let saved = SavedState::at(state.path().join("analysis-state"));
+    let key = saved.directory().join("key");
+    let _ = said();
+
+    run(root.path(), &saved)?;
+    let first = said();
+    assert!(
+        first
+            .iter()
+            .any(|event| event.starts_with("analysis state: saved for the next run")),
+        "a cold run saves: {first:?}"
+    );
+    assert_eq!(
+        first
+            .iter()
+            .filter(|event| event.starts_with("analysis state: saved"))
+            .count(),
+        1,
+        "and saves once: {first:?}"
+    );
+    let saved_at = std::fs::metadata(&key)
+        .and_then(|metadata| metadata.modified())
+        .into_diagnostic()?;
+
+    // Nothing changed: every persisted query is answered by the restored state.
+    let (restored, _, _) = run(root.path(), &saved)?;
+    assert!(restored);
+    let second = said();
+    assert!(
+        second
+            .iter()
+            .any(|event| event == "analysis state: nothing new to save"),
+        "a run that computed nothing says so: {second:?}"
+    );
+    assert!(
+        !second
+            .iter()
+            .any(|event| event.starts_with("analysis state: saved")),
+        "and does not save: {second:?}"
+    );
+    let still = std::fs::metadata(&key)
+        .and_then(|metadata| metadata.modified())
+        .into_diagnostic()?;
+    assert_eq!(still, saved_at, "the saved state was not rewritten");
+
+    // An edit: what reads the file is computed, and the next run starts from that.
+    std::fs::write(
+        root.path().join("src/first.rs"),
+        "pub fn alpha() {}\n// an edit\n",
+    )
+    .into_diagnostic()?;
+    run(root.path(), &saved)?;
+    let third = said();
+    assert!(
+        third
+            .iter()
+            .any(|event| event.starts_with("analysis state: saved for the next run")),
+        "a run that computed something saves: {third:?}"
+    );
+    Ok(())
+}

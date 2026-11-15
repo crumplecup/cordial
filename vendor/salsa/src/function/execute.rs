@@ -46,6 +46,9 @@ where
         let memo_ingredient_index = self.memo_ingredient_index(zalsa, id);
 
         crate::tracing::info!("{:?}: executing query", database_key_index);
+        if C::PERSIST {
+            crate::flatten::note_persisted_execution();
+        }
 
         zalsa.event(&|| {
             Event::new(EventKind::WillExecute {
