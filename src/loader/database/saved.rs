@@ -272,29 +272,16 @@ impl super::SourceDatabase {
     /// is not listed.
     #[instrument(level = "debug", skip(self))]
     #[hotpath::measure(impl_type = "SourceDatabase")]
-    pub(super) fn warm_persisted_dependencies(&self) {
+    pub(super) fn warm_persisted_dependencies(&self, paths: &[PathBuf]) {
         ra_ap_hir::attach_db(&self.db, || {
             let nothing = super::item_key::ItemKey::new(&self.db, String::new());
             let _ = super::queries::persisted_evidence(&self.db, nothing);
-            // A file of the workspace itself, which the projection asks about anyway.
-            let roots: Vec<PathBuf> = self
-                .projection_context()
-                .map(|context| {
-                    context
-                        .packages()
-                        .iter()
-                        .map(|package| package.root().clone())
-                        .collect()
-                })
-                .unwrap_or_default();
-            let real = self.vfs.iter().find_map(|(file, path)| {
-                let path: &Path = path.as_path()?.as_ref();
-                (path.extension().is_some_and(|ext| ext == "rs")
-                    && roots.iter().any(|root| path.starts_with(root)))
-                .then(|| (file, path.to_path_buf()))
-            });
-            if let Some((file, path)) = real {
-                let key = super::queries::FileKey::new(&self.db, file, path);
+            // A file the projection is about to ask about anyway, so that what this asks is
+            // answered by the memo the last run saved and nothing is computed for it.
+            if let Some(path) = paths.first()
+                && let Ok(file) = self.file_id(path)
+            {
+                let key = super::queries::FileKey::new(&self.db, file, path.clone());
                 let _ = super::queries::file_facts(&self.db, key);
             }
         });

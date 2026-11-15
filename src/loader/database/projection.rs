@@ -75,6 +75,9 @@ impl SourceDatabase {
     ) -> CordialResult<CrateIr> {
         let context = self.projection_context()?;
         selection::validate_target(target, &context)?;
+        if self.restored {
+            self.warm_persisted_dependencies(paths);
+        }
         #[cfg(feature = "cfg_hygiene")]
         let declarations = {
             let workspace_root = self

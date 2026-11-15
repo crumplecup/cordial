@@ -89,7 +89,7 @@ impl SourceDatabase {
         } = load_database(workspace, &config, saved.as_ref())?;
         let context = context.finish(&db, &vfs, server.as_ref())?;
         crate::process_memory::log("workspace loaded");
-        let loaded = Self {
+        Ok(Self {
             db,
             vfs,
             revision: 1,
@@ -104,11 +104,7 @@ impl SourceDatabase {
             saved_stage: crate::loader::database::saved::SaveStage::default(),
             #[cfg(feature = "cfg_hygiene")]
             workspace_root: Some(root),
-        };
-        if loaded.restored {
-            loaded.warm_persisted_dependencies();
-        }
-        Ok(loaded)
+        })
     }
 
     /// Rebuild Cargo context after manifest, configuration, environment,

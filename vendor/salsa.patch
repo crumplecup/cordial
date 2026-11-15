@@ -1,5 +1,5 @@
---- salsa-0.28.5/Cargo.toml	2026-11-14 19:15:09.907877757 -0800
-+++ salsa/Cargo.toml	2026-11-14 19:15:10.497530303 -0800
+--- salsa-0.28.5/Cargo.toml	2026-11-15 09:18:52.013786468 -0800
++++ salsa/Cargo.toml	2026-11-15 09:18:52.990711921 -0800
 @@ -60,549 +60,6 @@
  name = "salsa"
  path = "src/lib.rs"
@@ -550,8 +550,8 @@
  [dependencies.boxcar]
  version = "0.2.14"
  
---- salsa-0.28.5/src/accumulator.rs	2026-11-14 19:15:10.020194108 -0800
-+++ salsa/src/accumulator.rs	2026-11-14 19:15:10.494548410 -0800
+--- salsa-0.28.5/src/accumulator.rs	2026-11-15 09:18:52.215789689 -0800
++++ salsa/src/accumulator.rs	2026-11-15 09:18:52.987588220 -0800
 @@ -116,7 +116,7 @@
          _zalsa: &Zalsa,
          _edge: QueryEdge,
@@ -562,7 +562,7 @@
          panic!("nothing should ever depend on an accumulator directly")
      }
 --- salsa-0.28.5/src/flatten.rs	1969-12-31 16:00:00.000000000 -0800
-+++ salsa/src/flatten.rs	2026-11-14 19:15:10.497421790 -0800
++++ salsa/src/flatten.rs	2026-11-15 09:18:52.990593783 -0800
 @@ -0,0 +1,162 @@
 +//! Flattening a query's dependencies down to what is persisted, once per query.
 +//!
@@ -726,8 +726,8 @@
 +    order: usize,
 +    outer: usize,
 +}
---- salsa-0.28.5/src/function.rs	2026-11-14 19:15:10.154385603 -0800
-+++ salsa/src/function.rs	2026-11-14 19:15:10.497475640 -0800
+--- salsa-0.28.5/src/function.rs	2026-11-15 09:18:52.325791443 -0800
++++ salsa/src/function.rs	2026-11-15 09:18:52.990654072 -0800
 @@ -10,6 +10,7 @@
  
  use crate::cycle::{CycleRecoveryStrategy, IterationStamp, ProvisionalStatus};
@@ -858,7 +858,7 @@
      use crate::plumbing::{MemoIngredientMap, SalsaStructInDb};
      use crate::zalsa::Zalsa;
      use crate::zalsa_local::persistence::PersistentQueryOrigin;
-@@ -792,8 +801,9 @@
+@@ -792,8 +801,10 @@
  
              let mut map = serializer.serialize_map(Some(count))?;
  
@@ -866,10 +866,11 @@
 +            let mut flattener = EdgeFlattener::default();
              let mut flattened_edges = FxIndexSet::default();
 +            let mut emitted: u64 = 0;
++            let mut by_kind: std::collections::BTreeMap<&'static str, u64> = Default::default();
  
              for entry in <C::SalsaStruct<'_> as SalsaStructInDb>::entries(zalsa) {
                  let memo_ingredient_index = ingredient
-@@ -815,11 +825,12 @@
+@@ -815,11 +826,18 @@
                                  collect_minimum_serialized_edges(
                                      zalsa,
                                      edges,
@@ -880,10 +881,16 @@
                              }
  
 +                            emitted += flattened_edges.len() as u64;
++                            for edge in &flattened_edges {
++                                let name = zalsa
++                                    .lookup_ingredient(edge.key().ingredient_index())
++                                    .debug_name();
++                                *by_kind.entry(name).or_default() += 1;
++                            }
                              PersistentQueryOrigin::derived(flattened_edges.drain(..))
                          }
                          QueryOriginRef::DerivedUntracked(edges) => {
-@@ -828,11 +839,12 @@
+@@ -828,11 +846,12 @@
                                  collect_minimum_serialized_edges(
                                      zalsa,
                                      edges,
@@ -897,7 +904,7 @@
                              PersistentQueryOrigin::derived_untracked(flattened_edges.drain(..))
                          }
                          QueryOriginRef::Assigned(key) => {
-@@ -857,11 +869,26 @@
+@@ -857,11 +876,27 @@
                      );
  
                      map.serialize_entry(&key, &memo)?;
@@ -918,6 +925,7 @@
 +                    shared = stats.shared,
 +                    incomplete = stats.incomplete,
 +                    handed_out = stats.handed_out,
++                    kinds = ?by_kind,
 +                    elapsed = ?elapsed,
 +                    "flattened the dependencies of the persisted memos"
 +                );
@@ -926,7 +934,7 @@
              map.end()
          }
      }
-@@ -875,7 +902,7 @@
+@@ -875,7 +910,7 @@
      unsafe fn collect_minimum_serialized_edges(
          zalsa: &Zalsa,
          edges: crate::zalsa_local::QueryEdges<'_>,
@@ -935,7 +943,7 @@
          flattened_edges: &mut FxIndexSet<QueryEdge>,
      ) {
          for edge in edges {
-@@ -892,7 +919,7 @@
+@@ -892,7 +927,7 @@
                          zalsa,
                          edge,
                          flattened_edges,
@@ -944,8 +952,8 @@
                      );
                  }
              }
---- salsa-0.28.5/src/hash.rs	2026-11-14 19:15:10.154539437 -0800
-+++ salsa/src/hash.rs	2026-11-14 19:15:10.495767200 -0800
+--- salsa-0.28.5/src/hash.rs	2026-11-15 09:18:52.327214393 -0800
++++ salsa/src/hash.rs	2026-11-15 09:18:52.988888824 -0800
 @@ -4,6 +4,7 @@
  pub(crate) type FxIndexSet<K> = indexmap::IndexSet<K, FxHasher>;
  pub(crate) type FxLinkedHashSet<K> = hashlink::LinkedHashSet<K, FxHasher>;
@@ -954,8 +962,8 @@
  
  pub(crate) fn hash<T: Hash>(t: &T) -> u64 {
      FxHasher::default().hash_one(t)
---- salsa-0.28.5/src/ingredient.rs	2026-11-14 19:15:10.160089623 -0800
-+++ salsa/src/ingredient.rs	2026-11-14 19:15:10.495854432 -0800
+--- salsa-0.28.5/src/ingredient.rs	2026-11-15 09:18:52.343791730 -0800
++++ salsa/src/ingredient.rs	2026-11-15 09:18:52.988974324 -0800
 @@ -68,7 +68,7 @@
          zalsa: &Zalsa,
          edge: QueryEdge,
@@ -965,8 +973,8 @@
      );
  
      /// Returns the function-specific interface for this ingredient, if any.
---- salsa-0.28.5/src/input/input_field.rs	2026-11-14 19:15:10.160874615 -0800
-+++ salsa/src/input/input_field.rs	2026-11-14 19:15:10.495957348 -0800
+--- salsa-0.28.5/src/input/input_field.rs	2026-11-15 09:18:52.367792113 -0800
++++ salsa/src/input/input_field.rs	2026-11-15 09:18:52.989079194 -0800
 @@ -71,7 +71,7 @@
          _zalsa: &Zalsa,
          edge: QueryEdge,
@@ -976,8 +984,8 @@
      ) {
          assert!(
              C::PERSIST,
---- salsa-0.28.5/src/input.rs	2026-11-14 19:15:10.161293027 -0800
-+++ salsa/src/input.rs	2026-11-14 19:15:10.496112640 -0800
+--- salsa-0.28.5/src/input.rs	2026-11-15 09:18:52.398792607 -0800
++++ salsa/src/input.rs	2026-11-15 09:18:52.989231162 -0800
 @@ -323,7 +323,7 @@
          _zalsa: &Zalsa,
          _edge: QueryEdge,
@@ -987,8 +995,8 @@
      ) {
          panic!("nothing should ever depend on an input struct directly")
      }
---- salsa-0.28.5/src/interned.rs	2026-11-14 19:15:10.161443097 -0800
-+++ salsa/src/interned.rs	2026-11-14 19:15:10.496197216 -0800
+--- salsa-0.28.5/src/interned.rs	2026-11-15 09:18:52.411792815 -0800
++++ salsa/src/interned.rs	2026-11-15 09:18:52.989317376 -0800
 @@ -1139,7 +1139,7 @@
          _zalsa: &Zalsa,
          edge: QueryEdge,
@@ -998,8 +1006,8 @@
      ) {
          if C::PERSIST && C::REVISIONS != IMMORTAL {
              // If the interned struct is being persisted, it may be reachable through transitive queries.
---- salsa-0.28.5/src/lib.rs	2026-11-14 19:15:10.161699433 -0800
-+++ salsa/src/lib.rs	2026-11-14 19:15:10.496314800 -0800
+--- salsa-0.28.5/src/lib.rs	2026-11-15 09:18:52.458793564 -0800
++++ salsa/src/lib.rs	2026-11-15 09:18:52.989432976 -0800
 @@ -262,6 +262,7 @@
  mod database_impl;
  mod durability;
@@ -1008,8 +1016,8 @@
  mod function;
  mod hash;
  mod id;
---- salsa-0.28.5/src/tracked_struct/tracked_field.rs	2026-11-14 19:15:10.208780212 -0800
-+++ salsa/src/tracked_struct/tracked_field.rs	2026-11-14 19:15:10.497059241 -0800
+--- salsa-0.28.5/src/tracked_struct/tracked_field.rs	2026-11-15 09:18:52.517794505 -0800
++++ salsa/src/tracked_struct/tracked_field.rs	2026-11-15 09:18:52.990200984 -0800
 @@ -77,7 +77,7 @@
          _zalsa: &Zalsa,
          _edge: QueryEdge,
@@ -1019,8 +1027,8 @@
      ) {
          // Tracked fields do not have transitive dependencies, and their dependencies are covered by
          // the base inputs.
---- salsa-0.28.5/src/tracked_struct.rs	2026-11-14 19:15:10.208855843 -0800
-+++ salsa/src/tracked_struct.rs	2026-11-14 19:15:10.497137256 -0800
+--- salsa-0.28.5/src/tracked_struct.rs	2026-11-15 09:18:52.528794680 -0800
++++ salsa/src/tracked_struct.rs	2026-11-15 09:18:52.990280587 -0800
 @@ -1000,7 +1000,7 @@
          _zalsa: &Zalsa,
          _edge: QueryEdge,

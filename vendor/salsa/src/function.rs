@@ -804,6 +804,7 @@ mod persistence {
             let mut flattener = EdgeFlattener::default();
             let mut flattened_edges = FxIndexSet::default();
             let mut emitted: u64 = 0;
+            let mut by_kind: std::collections::BTreeMap<&'static str, u64> = Default::default();
 
             for entry in <C::SalsaStruct<'_> as SalsaStructInDb>::entries(zalsa) {
                 let memo_ingredient_index = ingredient
@@ -831,6 +832,12 @@ mod persistence {
                             }
 
                             emitted += flattened_edges.len() as u64;
+                            for edge in &flattened_edges {
+                                let name = zalsa
+                                    .lookup_ingredient(edge.key().ingredient_index())
+                                    .debug_name();
+                                *by_kind.entry(name).or_default() += 1;
+                            }
                             PersistentQueryOrigin::derived(flattened_edges.drain(..))
                         }
                         QueryOriginRef::DerivedUntracked(edges) => {
@@ -884,6 +891,7 @@ mod persistence {
                     shared = stats.shared,
                     incomplete = stats.incomplete,
                     handed_out = stats.handed_out,
+                    kinds = ?by_kind,
                     elapsed = ?elapsed,
                     "flattened the dependencies of the persisted memos"
                 );

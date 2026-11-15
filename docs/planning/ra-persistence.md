@@ -159,6 +159,31 @@ lines in `function.rs` and a new `flatten.rs`; the rest is the manifest losing i
 persisted walk the graph once between them, a restored database reuses every memo, and changing the input
 recomputes every memo, so the flattened edges still cover what the queries between them read.
 
+## Procedural macros: the same macro in the next process
+
+A persisted memo's flattened dependencies include `ProcMacros.by_crate` whenever its crate expands a
+derive or attribute macro (a definition map reads it through `get_for_crate`, and the wrapper query
+that shields in-process callers is not part of the saved edges). The loader wrote that input on every
+load, with expanders that are handles to a server started in that process, so a restored memo that
+reached it was stale before it was asked for. On cordial every one of the first ingredient's 1,258
+memos reached it. The specimens had no proc macros, so none of the tests showed it;
+`tests/saved_proc_macros.rs` does (a workspace with a derive crate and a user of it, run cold and then
+restored).
+
+The fix is an identity for each expander, and a comparison before the write:
+
+- `ProcMacroExpander` gains `identity()` (the dylib's path, its modification time and size, the macro's
+  kind and name; the same in every process that loads the same dylib) and `attach()`.
+- The saved `ProcMacros` is no longer empty: per crate, each macro's name, kind, disabled flag and
+  identity, or the loading error. A restored macro is a `RestoredExpander` that knows its identity and
+  forwards to a live expander once one is attached.
+- `ProcMacrosBuilder::build_in` compares what it built with what the database holds. When every crate's
+  macros are equal (by identity), it attaches the live expanders to the saved ones and writes nothing.
+  When one differs (a rebuilt dylib), it writes, and Salsa invalidates what expanded a macro.
+
+What this does not do yet: the server is still started and the dylibs loaded on every run. With the
+identity known from a stat of the dylib's path, both can wait until something expands a macro.
+
 ## Persisted cfg contexts (done)
 
 A context is shadow crates and copies of the workspace's files (virtual paths, source roots from

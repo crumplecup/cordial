@@ -8,7 +8,7 @@
 #[cfg(feature = "in-rust-tree")]
 extern crate rustc_driver as _;
 
-use std::{any::Any, collections::hash_map::Entry, mem, path::Path, sync};
+use std::{collections::hash_map::Entry, mem, path::Path, sync};
 
 use crossbeam_channel::{Receiver, unbounded};
 use hir_expand::proc_macro::{
@@ -507,7 +507,7 @@ pub fn load_proc_macro(
         }
         Ok(vec
             .into_iter()
-            .map(|expander| expander_to_proc_macro(expander, ignored_macros))
+            .map(|expander| expander_to_proc_macro(expander, ignored_macros, path))
             .collect())
     })();
     match res {
@@ -574,6 +574,7 @@ fn load_crate_graph_into_db(
 fn expander_to_proc_macro(
     expander: proc_macro_api::ProcMacro,
     ignored_macros: &[Box<str>],
+    dylib: &AbsPath,
 ) -> ProcMacro {
     let name = expander.name();
     let kind = match expander.kind() {
@@ -585,13 +586,21 @@ fn expander_to_proc_macro(
     ProcMacro {
         name: intern::Symbol::intern(name),
         kind,
-        expander: sync::Arc::new(Expander(expander)),
+        expander: sync::Arc::new(Expander {
+            identity: format!("{dylib}|{}|{kind:?}|{name}", dylib_stamp(dylib)),
+            inner: expander,
+        }),
         disabled,
     }
 }
 
 #[derive(Debug, PartialEq, Eq)]
-struct Expander(proc_macro_api::ProcMacro);
+struct Expander {
+    inner: proc_macro_api::ProcMacro,
+    /// The dylib, when it was last modified and how big it is, and which macro this is: what
+    /// expansion by it depends on, and the same in every process that loads the same dylib.
+    identity: String,
+}
 
 impl ProcMacroExpander for Expander {
     fn expand(
@@ -754,7 +763,7 @@ impl ProcMacroExpander for Expander {
             // FIXME: implement this
             SubRequest::SpanJoin { .. } => Ok(SubResponse::SpanJoinResult { span: None }),
         };
-        match self.0.expand(
+        match self.inner.expand(
             subtree.view(),
             attrs.map(|attrs| attrs.view()),
             env.clone().into(),
@@ -771,7 +780,11 @@ impl ProcMacroExpander for Expander {
     }
 
     fn eq_dyn(&self, other: &dyn ProcMacroExpander) -> bool {
-        (other as &dyn Any).downcast_ref::<Self>() == Some(self)
+        other.identity() == Some(self.identity.as_str())
+    }
+
+    fn identity(&self) -> Option<&str> {
+        Some(&self.identity)
     }
 }
 
@@ -976,5 +989,21 @@ mod tests {
         vc.sort_by_key(|x| x.0.0);
 
         assert_eq!(vc, vec![(SourceRootId(1), SourceRootId(0)),])
+    }
+}
+
+/// When the dylib was last modified and how many bytes it is: what tells a rebuilt dylib from
+/// the one a saved database was made with.
+fn dylib_stamp(dylib: &AbsPath) -> String {
+    match std::fs::metadata(dylib.as_ref() as &Path) {
+        Ok(metadata) => {
+            let modified = metadata
+                .modified()
+                .ok()
+                .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+                .map_or(0, |since| since.as_nanos());
+            format!("{modified}|{}", metadata.len())
+        }
+        Err(_) => "unreadable".to_owned(),
     }
 }

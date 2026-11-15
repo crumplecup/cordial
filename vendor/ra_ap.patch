@@ -1,5 +1,5 @@
---- a/ra_ap_base_db-0.0.358/Cargo.toml	2026-11-14 13:39:08.493969578 -0800
-+++ b/ra_ap_base_db/Cargo.toml	2026-11-14 13:39:08.772025490 -0800
+--- a/ra_ap_base_db-0.0.358/Cargo.toml	2026-11-15 09:18:49.051858650 -0800
++++ b/ra_ap_base_db/Cargo.toml	2026-11-15 09:18:49.145723411 -0800
 @@ -65,6 +65,10 @@
  [dependencies.rustc-hash]
  version = "2.1.1"
@@ -28,8 +28,8 @@
  default-features = false
  
  [dependencies.vfs]
---- a/ra_ap_base_db-0.0.358/src/change.rs	2026-11-14 13:39:08.494204499 -0800
-+++ b/ra_ap_base_db/src/change.rs	2026-11-14 13:39:08.772168347 -0800
+--- a/ra_ap_base_db-0.0.358/src/change.rs	2026-11-15 09:18:49.052133648 -0800
++++ b/ra_ap_base_db/src/change.rs	2026-11-15 09:18:49.145796330 -0800
 @@ -69,8 +69,15 @@
  
                  db.set_source_root_with_durability(root_id, Arc::new(root), durability);
@@ -48,8 +48,8 @@
          }
  
          for (file_id, text) in self.files_changed {
---- a/ra_ap_base_db-0.0.358/src/input.rs	2026-11-14 13:39:08.631390225 -0800
-+++ b/ra_ap_base_db/src/input.rs	2026-11-14 13:39:08.772547099 -0800
+--- a/ra_ap_base_db-0.0.358/src/input.rs	2026-11-15 09:18:49.096739954 -0800
++++ b/ra_ap_base_db/src/input.rs	2026-11-15 09:18:49.145996167 -0800
 @@ -23,7 +23,7 @@
  use vfs::{AbsPathBuf, AnchoredPath, FileId, VfsPath, file_set::FileSet};
  
@@ -59,7 +59,15 @@
      set_all_crates_with_durability,
  };
  
-@@ -80,8 +80,15 @@
+@@ -31,6 +31,7 @@
+     FxHashMap<CrateBuilderId, Result<(String, AbsPathBuf), ProcMacroLoadingError>>;
+ 
+ #[derive(Debug, Clone, PartialEq, Eq, Hash)]
++#[derive(serde::Serialize, serde::Deserialize)]
+ pub enum ProcMacroLoadingError {
+     Disabled,
+     FailedToBuild,
+@@ -80,8 +81,15 @@
  }
  
  #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -75,7 +83,7 @@
  /// Files are grouped into source roots. A source root is a directory on the
  /// file systems which is watched for changes. Typically it corresponds to a
  /// Rust crate. Source roots *might* be nested: in this case, a file belongs to
-@@ -90,6 +97,7 @@
+@@ -90,6 +98,7 @@
  /// all. So, a file from one source root can't refer to a file in another source
  /// root by path.
  #[derive(Clone, Debug, PartialEq, Eq)]
@@ -83,7 +91,7 @@
  pub struct SourceRoot {
      /// Sysroot or crates.io library.
      ///
-@@ -158,6 +166,7 @@
+@@ -158,6 +167,7 @@
  }
  
  #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -91,7 +99,7 @@
  pub struct CrateName(Symbol);
  
  impl CrateName {
-@@ -193,6 +202,7 @@
+@@ -193,6 +203,7 @@
  
  /// Origin of the crates.
  #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -99,7 +107,7 @@
  pub enum CrateOrigin {
      /// Crates that are from the rustc workspace.
      Rustc { name: Symbol },
-@@ -219,6 +229,7 @@
+@@ -219,6 +230,7 @@
  }
  
  #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -107,7 +115,7 @@
  pub enum LangCrateOrigin {
      Alloc,
      Core,
-@@ -257,6 +268,7 @@
+@@ -257,6 +269,7 @@
  }
  
  #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -115,7 +123,7 @@
  pub struct CrateDisplayName {
      /// The name we use to display various paths (with `_`).
      crate_name: CrateName,
-@@ -344,12 +356,14 @@
+@@ -344,12 +357,14 @@
  /// another crate, in which case we store all data for one of them (if one is a dependency of
  /// the other, we store for it, because it has more dependencies to be invalidated).
  #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -130,7 +138,7 @@
  pub struct CrateData<Id> {
      pub root_file_id: FileId,
      pub edition: Edition,
-@@ -375,6 +389,7 @@
+@@ -375,6 +390,7 @@
  
  /// Crate data unrelated to analysis.
  #[derive(Debug, Clone, PartialEq, Eq)]
@@ -138,7 +146,7 @@
  pub struct ExtraCrateData {
      pub version: Option<String>,
      /// A name used in the package's project declaration: for Cargo projects,
-@@ -389,6 +404,7 @@
+@@ -389,6 +405,7 @@
  }
  
  #[derive(Default, Clone, PartialEq, Eq)]
@@ -146,7 +154,7 @@
  pub struct Env {
      entries: FxHashMap<String, String>,
  }
-@@ -413,6 +429,7 @@
+@@ -413,6 +430,7 @@
  }
  
  #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -154,7 +162,7 @@
  pub struct Dependency<Id> {
      pub crate_id: Id,
      pub name: CrateName,
-@@ -452,7 +469,7 @@
+@@ -452,7 +470,7 @@
  
  pub type CratesIdMap = FxHashMap<CrateBuilderId, Crate>;
  
@@ -163,7 +171,7 @@
  #[derive(Debug, PartialOrd, Ord)]
  pub struct Crate {
      #[returns(ref)]
-@@ -530,6 +547,22 @@
+@@ -530,6 +548,22 @@
  #[derive(Debug, Default)]
  pub struct CratesMap(DashMap<UniqueCrateData, Crate, BuildHasherDefault<FxHasher>>);
  
@@ -186,7 +194,7 @@
  impl CrateGraphBuilder {
      pub fn add_crate_root(
          &mut self,
-@@ -595,7 +628,7 @@
+@@ -595,7 +629,7 @@
      }
  
      pub fn set_in_db(self, db: &mut dyn SourceDatabase) -> CratesIdMap {
@@ -195,8 +203,8 @@
  
          // For some reason in some repositories we have duplicate crates, so we use a set and not `Vec`.
          // We use an `IndexSet` because the list needs to be topologically sorted.
---- a/ra_ap_base_db-0.0.358/src/lib.rs	2026-11-14 13:39:08.768392549 -0800
-+++ b/ra_ap_base_db/src/lib.rs	2026-11-14 13:39:08.772355078 -0800
+--- a/ra_ap_base_db-0.0.358/src/lib.rs	2026-11-15 09:18:49.142740687 -0800
++++ b/ra_ap_base_db/src/lib.rs	2026-11-15 09:18:49.145886327 -0800
 @@ -30,7 +30,8 @@
          BuiltCrateData, BuiltDependency, Crate, CrateBuilder, CrateBuilderId, CrateDataBuilder,
          CrateDisplayName, CrateGraphBuilder, CrateName, CrateOrigin, CratesIdMap, CratesMap,
@@ -461,8 +469,8 @@
          crates
              .iter()
              .copied()
---- a/ra_ap_base_db-0.0.358/src/target.rs	2026-11-14 13:39:08.769303356 -0800
-+++ b/ra_ap_base_db/src/target.rs	2026-11-14 13:39:08.772437318 -0800
+--- a/ra_ap_base_db-0.0.358/src/target.rs	2026-11-15 09:18:49.143808262 -0800
++++ b/ra_ap_base_db/src/target.rs	2026-11-15 09:18:49.145925890 -0800
 @@ -5,6 +5,7 @@
  use triomphe::Arc;
  
@@ -495,8 +503,8 @@
  impl fmt::Debug for TargetLoadError {
      fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
          fmt::Debug::fmt(&self.0, f)
---- a/ra_ap_cfg-0.0.358/Cargo.toml	2026-11-14 13:39:09.503715775 -0800
-+++ b/ra_ap_cfg/Cargo.toml	2026-11-14 13:39:09.669488613 -0800
+--- a/ra_ap_cfg-0.0.358/Cargo.toml	2026-11-15 09:18:49.186301025 -0800
++++ b/ra_ap_cfg/Cargo.toml	2026-11-15 09:18:49.252966681 -0800
 @@ -33,6 +33,10 @@
  syntax = ["dep:syntax"]
  tt = ["dep:tt"]
@@ -508,8 +516,8 @@
  [lib]
  name = "ra_ap_cfg"
  path = "src/lib.rs"
---- a/ra_ap_cfg-0.0.358/src/cfg_expr.rs	2026-11-14 13:39:09.532405512 -0800
-+++ b/ra_ap_cfg/src/cfg_expr.rs	2026-11-14 13:39:09.669616397 -0800
+--- a/ra_ap_cfg-0.0.358/src/cfg_expr.rs	2026-11-15 09:18:49.231742106 -0800
++++ b/ra_ap_cfg/src/cfg_expr.rs	2026-11-15 09:18:49.253053088 -0800
 @@ -8,6 +8,7 @@
  
  /// A simple configuration value passed in from the outside.
@@ -518,8 +526,8 @@
  pub enum CfgAtom {
      /// eg. `#[cfg(test)]`
      Flag(Symbol),
---- a/ra_ap_cfg-0.0.358/src/lib.rs	2026-11-14 13:39:09.575406242 -0800
-+++ b/ra_ap_cfg/src/lib.rs	2026-11-14 13:39:09.669787756 -0800
+--- a/ra_ap_cfg-0.0.358/src/lib.rs	2026-11-15 09:18:49.239742234 -0800
++++ b/ra_ap_cfg/src/lib.rs	2026-11-15 09:18:49.253177614 -0800
 @@ -30,6 +30,7 @@
  ///
  /// See: <https://doc.rust-lang.org/reference/conditional-compilation.html#set-configuration-options>
@@ -536,8 +544,8 @@
  pub struct HashableCfgOptions {
      _enabled: Box<[CfgAtom]>,
  }
---- a/ra_ap_edition-0.0.358/Cargo.toml	2026-11-14 13:39:09.725006262 -0800
-+++ b/ra_ap_edition/Cargo.toml	2026-11-14 13:39:09.726839956 -0800
+--- a/ra_ap_edition-0.0.358/Cargo.toml	2026-11-15 09:18:49.256347013 -0800
++++ b/ra_ap_edition/Cargo.toml	2026-11-15 09:18:49.258336802 -0800
 @@ -27,6 +27,10 @@
  repository = "https://github.com/rust-lang/rust-analyzer"
  resolver = "2"
@@ -549,8 +557,8 @@
  [lib]
  name = "ra_ap_edition"
  path = "src/lib.rs"
---- a/ra_ap_edition-0.0.358/src/lib.rs	2026-11-14 13:39:09.725162053 -0800
-+++ b/ra_ap_edition/src/lib.rs	2026-11-14 13:39:09.726935131 -0800
+--- a/ra_ap_edition-0.0.358/src/lib.rs	2026-11-15 09:18:49.256493656 -0800
++++ b/ra_ap_edition/src/lib.rs	2026-11-15 09:18:49.258425526 -0800
 @@ -2,6 +2,7 @@
  // This should live in a separate crate because we use it in both actual code and codegen.
  use std::fmt;
@@ -559,8 +567,8 @@
  #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
  #[repr(u8)]
  pub enum Edition {
---- a/ra_ap_hir_def-0.0.358/Cargo.toml	2026-11-14 13:39:09.879411400 -0800
-+++ b/ra_ap_hir_def/Cargo.toml	2026-11-14 13:39:14.793865439 -0800
+--- a/ra_ap_hir_def-0.0.358/Cargo.toml	2026-11-15 09:18:49.320743525 -0800
++++ b/ra_ap_hir_def/Cargo.toml	2026-11-15 09:18:49.965890434 -0800
 @@ -101,6 +101,10 @@
  [dependencies.rustc_apfloat]
  version = "0.2.3"
@@ -572,8 +580,8 @@
  [dependencies.salsa]
  version = "0.28.5"
  features = [
---- a/ra_ap_hir_def-0.0.358/src/lib.rs	2026-11-14 13:39:13.872479159 -0800
-+++ b/ra_ap_hir_def/src/lib.rs	2026-11-14 13:39:14.796559076 -0800
+--- a/ra_ap_hir_def-0.0.358/src/lib.rs	2026-11-15 09:18:49.758750510 -0800
++++ b/ra_ap_hir_def/src/lib.rs	2026-11-15 09:18:49.968833706 -0800
 @@ -103,7 +103,7 @@
  ///
  /// Note: this struct shouldn't be exposed to ide crates -- consider using
@@ -583,8 +591,8 @@
  pub(crate) struct ExpandProcAttrMacros {
      #[returns(copy)]
      pub(crate) enabled: bool,
---- a/ra_ap_hir_expand-0.0.358/Cargo.toml	2026-11-14 13:39:14.852738158 -0800
-+++ b/ra_ap_hir_expand/Cargo.toml	2026-11-14 13:39:15.234798884 -0800
+--- a/ra_ap_hir_expand-0.0.358/Cargo.toml	2026-11-15 09:18:50.024396690 -0800
++++ b/ra_ap_hir_expand/Cargo.toml	2026-11-15 09:18:50.605744416 -0800
 @@ -71,6 +71,10 @@
  [dependencies.rustc-hash]
  version = "2.1.1"
@@ -596,29 +604,217 @@
  [dependencies.salsa]
  version = "0.28.5"
  features = [
---- a/ra_ap_hir_expand-0.0.358/src/proc_macro.rs	2026-11-14 13:39:15.223502088 -0800
-+++ b/ra_ap_hir_expand/src/proc_macro.rs	2026-11-14 13:39:15.236104188 -0800
-@@ -114,7 +114,29 @@
+--- a/ra_ap_hir_expand-0.0.358/src/proc_macro.rs	2026-11-15 09:18:50.594763840 -0800
++++ b/ra_ap_hir_expand/src/proc_macro.rs	2026-11-15 09:18:50.606892361 -0800
+@@ -14,6 +14,7 @@
+ use crate::{ExpandError, ExpandErrorKind, ExpandResult, tt};
+ 
+ #[derive(Copy, Clone, Eq, PartialEq, PartialOrd, Ord, Debug, Hash)]
++#[derive(serde::Serialize, serde::Deserialize)]
+ pub enum ProcMacroKind {
+     CustomDerive,
+     Bang,
+@@ -37,6 +38,75 @@
+     ) -> Result<tt::TopSubtree, ProcMacroExpansionError>;
+ 
+     fn eq_dyn(&self, other: &dyn ProcMacroExpander) -> bool;
++
++    /// What makes this expander the same as one made in another process: the dylib it runs and
++    /// which macro in it, so that a saved database can tell that what it expanded with is what
++    /// would expand now. An expander without one is never saved.
++    fn identity(&self) -> Option<&str> {
++        None
++    }
++
++    /// Give an expander that was restored from a saved database, and so has no server, the
++    /// live expander made for it in this process. Returns whether this took it.
++    fn attach(&self, _live: &sync::Arc<dyn ProcMacroExpander>) -> bool {
++        false
++    }
++}
++
++/// An expander restored from a saved database: it is known by its identity, and expands once
++/// the expander made for it in this process has been attached.
++#[derive(Debug)]
++pub struct RestoredExpander {
++    identity: String,
++    live: std::sync::RwLock<Option<sync::Arc<dyn ProcMacroExpander>>>,
++}
++
++impl RestoredExpander {
++    pub fn new(identity: String) -> Self {
++        Self { identity, live: std::sync::RwLock::new(None) }
++    }
++}
++
++impl ProcMacroExpander for RestoredExpander {
++    fn expand(
++        &self,
++        db: &dyn SourceDatabase,
++        subtree: &tt::TopSubtree,
++        attrs: Option<&tt::TopSubtree>,
++        env: &Env,
++        def_site: Span,
++        call_site: Span,
++        mixed_site: Span,
++        current_dir: String,
++    ) -> Result<tt::TopSubtree, ProcMacroExpansionError> {
++        let live = self.live.read().ok().and_then(|live| live.clone());
++        match live {
++            Some(live) => {
++                live.expand(db, subtree, attrs, env, def_site, call_site, mixed_site, current_dir)
++            }
++            None => Err(ProcMacroExpansionError::System(
++                "the proc-macro server was not started for a restored expander".to_owned(),
++            )),
++        }
++    }
++
++    fn eq_dyn(&self, other: &dyn ProcMacroExpander) -> bool {
++        other.identity() == Some(self.identity.as_str())
++    }
++
++    fn identity(&self) -> Option<&str> {
++        Some(&self.identity)
++    }
++
++    fn attach(&self, live: &sync::Arc<dyn ProcMacroExpander>) -> bool {
++        match self.live.write() {
++            Ok(mut slot) => {
++                *slot = Some(sync::Arc::clone(live));
++                true
++            }
++            Err(_) => false,
++        }
++    }
+ }
+ 
+ impl PartialEq for dyn ProcMacroExpander {
+@@ -92,12 +162,44 @@
+             .map(|(krate, proc_macro)| (crates_id_map[&krate], proc_macro))
+             .collect::<FxHashMap<_, _>>();
+         map.shrink_to_fit();
+-        ProcMacros::try_get(db)
++        let proc_macros = ProcMacros::try_get(db);
++
++        // The expanders made now are handles to a server started now, so they are never equal
++        // to what an earlier process made, but a database restored from one holds the same
++        // macros known by their identities (the dylib, its modification time, which macro).
++        // When every crate's macros are the same, the new expanders are attached to the saved
++        // ones and nothing is written: writing would make everything that expanded a macro
++        // stale, whether or not the macro changed.
++        if let Some(proc_macros) = proc_macros {
++            let saved = proc_macros.by_crate(db);
++            if saved.len() == map.len()
++                && map.iter().all(|(krate, new)| {
++                    saved.get(krate).is_some_and(|old| {
++                        **old == **new && Self::attach_all(old, new)
++                    })
++                })
++            {
++                return;
++            }
++        }
++
++        proc_macros
+             .unwrap_or_else(|| ProcMacros::new(db, Default::default()))
+             .set_by_crate(db)
+             .with_durability(Durability::HIGH)
+             .to(map);
+     }
++
++    /// Hand each of `new`'s expanders to the saved expander it is equal to.
++    fn attach_all(saved: &CrateProcMacros, new: &CrateProcMacros) -> bool {
++        match (&saved.0, &new.0) {
++            (Ok(saved), Ok(new)) => {
++                saved.iter().zip(new.iter()).all(|(old, new)| old.expander.attach(&new.expander))
++            }
++            // Errors have nothing to attach.
++            _ => true,
++        }
++    }
+ }
+ 
+ impl FromIterator<(CrateBuilderId, ProcMacroLoadResult)> for ProcMacrosBuilder {
+@@ -114,7 +216,87 @@
  pub struct CrateProcMacros(StoredProcMacroLoadResult);
  
  /// The proc macros. Do not use [`Self::get`]! Use [`Self::get_for_crate`] instead.
 -#[salsa::input(singleton, debug)]
 +type ProcMacrosFields = (FxHashMap<Crate, Arc<CrateProcMacros>>,);
 +
-+/// Loaded proc-macro expanders are handles to a running server and cannot be saved;
-+/// they are saved as empty and set again when the workspace is loaded.
++/// What of a crate's proc macros is saved: which macros, and what each is expanded by. The
++/// expanders are handles to a running server and cannot be saved; their identities can, and
++/// when the workspace is loaded again an expander with the same identity is attached to the
++/// saved one instead of the input being written (see [`ProcMacrosBuilder::build_in`]).
++#[derive(serde::Serialize, serde::Deserialize)]
++enum SavedCrate {
++    Macros(Vec<SavedMacro>),
++    Error(ProcMacroLoadingError),
++}
++
++#[derive(serde::Serialize, serde::Deserialize)]
++struct SavedMacro {
++    name: String,
++    kind: ProcMacroKind,
++    disabled: bool,
++    identity: String,
++}
++
 +fn serialize_proc_macros<S: serde::Serializer>(
-+    _: &ProcMacrosFields,
++    fields: &ProcMacrosFields,
 +    serializer: S,
 +) -> Result<S::Ok, S::Error> {
-+    serde::Serialize::serialize(&(), serializer)
++    let mut saved: Vec<(Crate, SavedCrate)> = fields
++        .0
++        .iter()
++        .filter_map(|(krate, proc_macros)| {
++            let saved = match &proc_macros.0 {
++                Ok(macros) => SavedCrate::Macros(
++                    macros
++                        .iter()
++                        .map(|it| {
++                            Some(SavedMacro {
++                                name: it.name.as_str().to_owned(),
++                                kind: it.kind,
++                                disabled: it.disabled,
++                                identity: it.expander.identity()?.to_owned(),
++                            })
++                        })
++                        .collect::<Option<Vec<_>>>()?,
++                ),
++                Err(error) => SavedCrate::Error(error.clone()),
++            };
++            Some((*krate, saved))
++        })
++        .collect();
++    saved.sort_by_key(|(krate, _)| *krate);
++    serde::Serialize::serialize(&saved, serializer)
 +}
 +
 +fn deserialize_proc_macros<'de, D: serde::Deserializer<'de>>(
 +    deserializer: D,
 +) -> Result<ProcMacrosFields, D::Error> {
-+    <() as serde::Deserialize>::deserialize(deserializer)?;
-+    Ok((FxHashMap::default(),))
++    let saved: Vec<(Crate, SavedCrate)> = serde::Deserialize::deserialize(deserializer)?;
++    let map = saved
++        .into_iter()
++        .map(|(krate, saved)| {
++            let stored = match saved {
++                SavedCrate::Macros(macros) => Ok(macros
++                    .into_iter()
++                    .map(|saved| ProcMacro {
++                        name: Symbol::intern(&saved.name),
++                        kind: saved.kind,
++                        expander: sync::Arc::new(RestoredExpander::new(saved.identity)),
++                        disabled: saved.disabled,
++                    })
++                    .collect()),
++                SavedCrate::Error(error) => Err(error),
++            };
++            (krate, Arc::new(CrateProcMacros(stored)))
++        })
++        .collect();
++    Ok((map,))
 +}
 +
 +#[salsa::input(
@@ -629,8 +825,8 @@
  pub struct ProcMacros {
      #[returns(ref)]
      pub by_crate: FxHashMap<Crate, Arc<CrateProcMacros>>,
---- a/ra_ap_ide_db-0.0.358/src/lib.rs	2026-11-14 13:39:15.595508402 -0800
-+++ b/ra_ap_ide_db/src/lib.rs	2026-11-14 13:39:15.921789534 -0800
+--- a/ra_ap_ide_db-0.0.358/src/lib.rs	2026-11-15 09:18:50.948769485 -0800
++++ b/ra_ap_ide_db/src/lib.rs	2026-11-15 09:18:51.342800213 -0800
 @@ -190,6 +190,23 @@
  }
  
@@ -655,8 +851,8 @@
      pub fn new(lru_capacity: Option<u16>) -> RootDatabase {
          let mut db = RootDatabase {
              storage: ManuallyDrop::new(salsa::Storage::default()),
---- a/ra_ap_intern-0.0.358/Cargo.toml	2026-11-14 13:39:15.974027047 -0800
-+++ b/ra_ap_intern/Cargo.toml	2026-11-14 13:39:16.024686859 -0800
+--- a/ra_ap_intern-0.0.358/Cargo.toml	2026-11-15 09:18:51.420314066 -0800
++++ b/ra_ap_intern/Cargo.toml	2026-11-15 09:18:51.496121782 -0800
 @@ -30,6 +30,10 @@
  [features]
  prevent-gc = []
@@ -668,8 +864,8 @@
  [lib]
  name = "ra_ap_intern"
  path = "src/lib.rs"
---- a/ra_ap_intern-0.0.358/src/symbol.rs	2026-11-14 13:39:16.021515632 -0800
-+++ b/ra_ap_intern/src/symbol.rs	2026-11-14 13:39:16.025098942 -0800
+--- a/ra_ap_intern-0.0.358/src/symbol.rs	2026-11-15 09:18:51.492778160 -0800
++++ b/ra_ap_intern/src/symbol.rs	2026-11-15 09:18:51.496471973 -0800
 @@ -121,6 +121,19 @@
      repr: TaggedArcPtr,
  }
@@ -690,8 +886,17 @@
  impl fmt::Debug for Symbol {
      fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
          self.as_str().fmt(f)
---- a/ra_ap_load-cargo-0.0.358/src/lib.rs	2026-11-14 13:39:16.051516142 -0800
-+++ b/ra_ap_load-cargo/src/lib.rs	2026-11-14 13:39:16.054549519 -0800
+--- a/ra_ap_load-cargo-0.0.358/src/lib.rs	2026-11-15 09:18:51.563779292 -0800
++++ b/ra_ap_load-cargo/src/lib.rs	2026-11-15 09:18:51.567255379 -0800
+@@ -8,7 +8,7 @@
+ #[cfg(feature = "in-rust-tree")]
+ extern crate rustc_driver as _;
+ 
+-use std::{any::Any, collections::hash_map::Entry, mem, path::Path, sync};
++use std::{collections::hash_map::Entry, mem, path::Path, sync};
+ 
+ use crossbeam_channel::{Receiver, unbounded};
+ use hir_expand::proc_macro::{
 @@ -100,8 +100,22 @@
      load_config: &LoadCargoConfig,
      db: &mut RootDatabase,
@@ -716,8 +921,91 @@
      let mut loader = {
          let loader = vfs_notify::NotifyHandle::spawn(sender);
          Box::new(loader)
---- a/ra_ap_paths-0.0.358/Cargo.toml	2026-11-14 13:39:16.058483848 -0800
-+++ b/ra_ap_paths/Cargo.toml	2026-11-14 13:39:16.071221305 -0800
+@@ -493,7 +507,7 @@
+         }
+         Ok(vec
+             .into_iter()
+-            .map(|expander| expander_to_proc_macro(expander, ignored_macros))
++            .map(|expander| expander_to_proc_macro(expander, ignored_macros, path))
+             .collect())
+     })();
+     match res {
+@@ -560,6 +574,7 @@
+ fn expander_to_proc_macro(
+     expander: proc_macro_api::ProcMacro,
+     ignored_macros: &[Box<str>],
++    dylib: &AbsPath,
+ ) -> ProcMacro {
+     let name = expander.name();
+     let kind = match expander.kind() {
+@@ -571,13 +586,21 @@
+     ProcMacro {
+         name: intern::Symbol::intern(name),
+         kind,
+-        expander: sync::Arc::new(Expander(expander)),
++        expander: sync::Arc::new(Expander {
++            identity: format!("{dylib}|{}|{kind:?}|{name}", dylib_stamp(dylib)),
++            inner: expander,
++        }),
+         disabled,
+     }
+ }
+ 
+ #[derive(Debug, PartialEq, Eq)]
+-struct Expander(proc_macro_api::ProcMacro);
++struct Expander {
++    inner: proc_macro_api::ProcMacro,
++    /// The dylib, when it was last modified and how big it is, and which macro this is: what
++    /// expansion by it depends on, and the same in every process that loads the same dylib.
++    identity: String,
++}
+ 
+ impl ProcMacroExpander for Expander {
+     fn expand(
+@@ -740,7 +763,7 @@
+             // FIXME: implement this
+             SubRequest::SpanJoin { .. } => Ok(SubResponse::SpanJoinResult { span: None }),
+         };
+-        match self.0.expand(
++        match self.inner.expand(
+             subtree.view(),
+             attrs.map(|attrs| attrs.view()),
+             env.clone().into(),
+@@ -757,7 +780,11 @@
+     }
+ 
+     fn eq_dyn(&self, other: &dyn ProcMacroExpander) -> bool {
+-        (other as &dyn Any).downcast_ref::<Self>() == Some(self)
++        other.identity() == Some(self.identity.as_str())
++    }
++
++    fn identity(&self) -> Option<&str> {
++        Some(&self.identity)
+     }
+ }
+ 
+@@ -964,3 +991,19 @@
+         assert_eq!(vc, vec![(SourceRootId(1), SourceRootId(0)),])
+     }
+ }
++
++/// When the dylib was last modified and how many bytes it is: what tells a rebuilt dylib from
++/// the one a saved database was made with.
++fn dylib_stamp(dylib: &AbsPath) -> String {
++    match std::fs::metadata(dylib.as_ref() as &Path) {
++        Ok(metadata) => {
++            let modified = metadata
++                .modified()
++                .ok()
++                .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
++                .map_or(0, |since| since.as_nanos());
++            format!("{modified}|{}", metadata.len())
++        }
++        Err(_) => "unreadable".to_owned(),
++    }
++}
+--- a/ra_ap_paths-0.0.358/Cargo.toml	2026-11-15 09:18:51.570837449 -0800
++++ b/ra_ap_paths/Cargo.toml	2026-11-15 09:18:51.609762601 -0800
 @@ -30,6 +30,10 @@
  [features]
  serde1 = ["camino/serde1"]
@@ -737,8 +1025,8 @@
  
  [lints.clippy]
  assigning_clones = "allow"
---- a/ra_ap_paths-0.0.358/src/lib.rs	2026-11-14 13:39:16.069516447 -0800
-+++ b/ra_ap_paths/src/lib.rs	2026-11-14 13:39:16.071283763 -0800
+--- a/ra_ap_paths-0.0.358/src/lib.rs	2026-11-15 09:18:51.606779978 -0800
++++ b/ra_ap_paths/src/lib.rs	2026-11-15 09:18:51.609853829 -0800
 @@ -12,6 +12,7 @@
  
  /// A [`Utf8PathBuf`] that is guaranteed to be absolute.
@@ -747,8 +1035,8 @@
  pub struct AbsPathBuf(Utf8PathBuf);
  
  impl From<AbsPathBuf> for Utf8PathBuf {
---- a/ra_ap_span-0.0.358/Cargo.toml	2026-11-14 13:39:16.099198837 -0800
-+++ b/ra_ap_span/Cargo.toml	2026-11-14 13:39:16.136194134 -0800
+--- a/ra_ap_span-0.0.358/Cargo.toml	2026-11-15 09:18:51.637150080 -0800
++++ b/ra_ap_span/Cargo.toml	2026-11-15 09:18:51.689690451 -0800
 @@ -31,6 +31,10 @@
  default = ["salsa"]
  in-rust-tree = []
@@ -760,8 +1048,8 @@
  [lib]
  name = "ra_ap_span"
  path = "src/lib.rs"
---- a/ra_ap_vfs-0.0.358/Cargo.toml	2026-11-14 13:39:16.169424031 -0800
-+++ b/ra_ap_vfs/Cargo.toml	2026-11-14 13:39:16.227862471 -0800
+--- a/ra_ap_vfs-0.0.358/Cargo.toml	2026-11-15 09:18:51.740846566 -0800
++++ b/ra_ap_vfs/Cargo.toml	2026-11-15 09:18:51.782380481 -0800
 @@ -27,6 +27,10 @@
  repository = "https://github.com/rust-lang/rust-analyzer"
  resolver = "2"
@@ -773,8 +1061,8 @@
  [lib]
  name = "ra_ap_vfs"
  path = "src/lib.rs"
---- a/ra_ap_vfs-0.0.358/src/file_set.rs	2026-11-14 13:39:16.173518212 -0800
-+++ b/ra_ap_vfs/src/file_set.rs	2026-11-14 13:39:16.228035478 -0800
+--- a/ra_ap_vfs-0.0.358/src/file_set.rs	2026-11-15 09:18:51.743782162 -0800
++++ b/ra_ap_vfs/src/file_set.rs	2026-11-15 09:18:51.782494219 -0800
 @@ -12,6 +12,7 @@
  
  /// A set of [`VfsPath`]s identified by [`FileId`]s.
@@ -783,8 +1071,8 @@
  pub struct FileSet {
      files: FxHashMap<VfsPath, FileId>,
      paths: IndexMap<FileId, VfsPath, FxBuildHasher>,
---- a/ra_ap_vfs-0.0.358/src/lib.rs	2026-11-14 13:39:16.202518705 -0800
-+++ b/ra_ap_vfs/src/lib.rs	2026-11-14 13:39:16.228162159 -0800
+--- a/ra_ap_vfs-0.0.358/src/lib.rs	2026-11-15 09:18:51.755782354 -0800
++++ b/ra_ap_vfs/src/lib.rs	2026-11-15 09:18:51.782612142 -0800
 @@ -63,6 +63,7 @@
  ///
  /// Most functions in rust-analyzer use this when they need to refer to a file.
@@ -806,8 +1094,8 @@
      /// Returns an iterator over the stored ids and their corresponding paths.
      ///
      /// This will skip deleted files.
---- a/ra_ap_vfs-0.0.358/src/vfs_path.rs	2026-11-14 13:39:16.225519095 -0800
-+++ b/ra_ap_vfs/src/vfs_path.rs	2026-11-14 13:39:16.228319120 -0800
+--- a/ra_ap_vfs-0.0.358/src/vfs_path.rs	2026-11-15 09:18:51.778782720 -0800
++++ b/ra_ap_vfs/src/vfs_path.rs	2026-11-15 09:18:51.782718413 -0800
 @@ -10,6 +10,7 @@
  ///
  /// [`Vfs`]: crate::Vfs
