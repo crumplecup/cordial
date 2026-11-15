@@ -218,6 +218,24 @@ persisted query has executed in the process since it began (`salsa::persisted_ex
 a function memo with `persist` executes): what it would write is what is there. It says so
 (`analysis state: nothing new to save`).
 
+## A context depends on its own crates and nothing of another context's
+
+Adding a context used to write one input that listed every context's crates, and every memo about
+any context's files read it (`source_root_crates` for a tool source root). So each new context made
+the memos of all the earlier ones stale. They were saved stale, because nothing asked for them again
+before the save, and a restored run computed them again: a specimen with two contexts over two
+dependent local crates showed it, and on cordial (five contexts) every context but the last was
+recomputed.
+
+A context's crates are now a field of that context's own source root input (`SourceRootInput::crates`,
+empty for the roots the loader makes), and a lookup of a tool root's crates reads that root. A small
+registry (`ToolRoots`, read only by `all_crates`) lists the tool roots. The path-to-file lookup
+(`file_at`) looks in the one source root a path can be in, in the order of the ids, instead of in every
+root in hash order: it used to read the file set of every context's copy root to find an ordinary file.
+
+The restored run reports what made memos stale, by input (with examples named) and by query, after the
+ordinary pass and again at the end: `analysis state: restored memos found out of date ...`.
+
 ## Persisted cfg contexts (done)
 
 A context is shadow crates and copies of the workspace's files (virtual paths, source roots from

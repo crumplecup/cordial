@@ -244,6 +244,62 @@ impl super::SourceDatabase {
         }
     }
 
+    /// Which inputs made restored memos out of date, with a few examples named: the files by path
+    /// and the crates by name (a crate a context added is marked).
+    #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure(impl_type = "SourceDatabase")]
+    pub(super) fn describe_stale(&self) -> String {
+        use salsa::plumbing::AsId;
+        let report = salsa::stale_report();
+        let files: std::collections::HashMap<u64, ra_ap_vfs::FileId> = self
+            .db
+            .files()
+            .dump()
+            .texts()
+            .map(|(file, bits)| (bits, file))
+            .collect();
+        let shadows = self.shadow_crates();
+        let crates: std::collections::HashMap<u64, ra_ap_ide_db::base_db::Crate> =
+            ra_ap_ide_db::base_db::all_crates(&self.db)
+                .iter()
+                .map(|krate| (krate.as_id().as_bits(), *krate))
+                .collect();
+        let by_query = salsa::stale_queries()
+            .into_iter()
+            .map(|(name, count)| format!("{name}: {count}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let inputs = report
+            .into_iter()
+            .map(|(name, count, examples)| {
+                let named: Vec<String> = examples
+                    .iter()
+                    .map(|bits| match name.as_str() {
+                        "text" | "source_root_id" => files.get(bits).map_or_else(
+                            || format!("#{bits}"),
+                            |file| self.vfs.file_path(*file).to_string(),
+                        ),
+                        _ => crates.get(bits).map_or_else(
+                            || format!("#{bits}"),
+                            |krate| {
+                                let root = krate.data(&self.db).root_file_id;
+                                let shadow = if shadows.contains(krate) {
+                                    " (context copy)"
+                                } else {
+                                    ""
+                                };
+                                format!("{}{shadow}", self.vfs.file_path(root))
+                            },
+                        ),
+                    })
+                    .collect();
+                format!("{name}: {count} (e.g. {})", named.join(", "))
+            })
+            .collect::<Vec<_>>()
+            .join("; ");
+        format!("{inputs}. The memos were of: {by_query}")
+    }
+
     /// Whether this session's database was restored from a saved state.
     #[instrument(level = "trace", skip(self))]
     pub fn restored(&self) -> bool {

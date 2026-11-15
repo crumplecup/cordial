@@ -86,6 +86,13 @@ pub struct FilesDump {
     file_source_roots: Vec<(vfs::FileId, u64)>,
 }
 
+impl FilesDump {
+    /// Each file with the number of its text input.
+    pub fn texts(&self) -> impl Iterator<Item = (vfs::FileId, u64)> + '_ {
+        self.files.iter().copied()
+    }
+}
+
 impl Files {
     /// The handles, as input ids.
     pub fn dump(&self) -> FilesDump {
@@ -105,9 +112,13 @@ impl Files {
         }
     }
 
-    /// Every source root the database holds, for finding the file at a path.
-    pub fn source_root_inputs(&self) -> Vec<SourceRootInput> {
-        self.source_roots.iter().map(|entry| *entry.value()).collect()
+    /// Every source root the database holds, with its id and in the order of the ids, for
+    /// finding the file at a path.
+    pub fn source_root_inputs(&self) -> Vec<(SourceRootId, SourceRootInput)> {
+        let mut roots: Vec<_> =
+            self.source_roots.iter().map(|entry| (*entry.key(), *entry.value())).collect();
+        roots.sort_by_key(|(id, _)| *id);
+        roots
     }
 
     /// Take back the handles of inputs a restored database already holds.
@@ -311,6 +322,12 @@ pub struct FileSourceRootInput {
 pub struct SourceRootInput {
     #[returns(clone)]
     pub source_root: Arc<SourceRoot>,
+    /// The crates a tool added whose root files are in this source root (see
+    /// `TOOL_SOURCE_ROOTS`); always empty for the roots the loader made. Kept here, with the
+    /// root, so that what is asked about one tool root depends on that root and on no other.
+    #[returns(clone)]
+    #[default]
+    pub crates: std::sync::Arc<[Crate]>,
 }
 
 #[salsa::db]
@@ -430,33 +447,49 @@ pub fn set_all_crates_with_durability(
         .to(crates.into_iter().collect());
 }
 
-/// The crates a tool added beside the graph the loader built (see `TOOL_SOURCE_ROOTS`).
-///
-/// They are registered in an input of their own because adding one is a change of what is
-/// registered, and a result that depends on `AllCrates` is stale after it. A tool that adds
-/// crates after results exist, and saves those results, would find every one of them stale
-/// when it next starts. Only a lookup of the tool's source roots reads this input.
+/// The source roots a tool added crates in, in the order it added them. Only [`all_crates`] reads
+/// this: a lookup of one root's crates reads that root, so adding a root writes nothing that
+/// the results already computed for another root depend on.
 #[salsa::input(singleton, debug, persist)]
-struct ToolCrates {
+struct ToolRoots {
     #[returns(clone)]
-    crates: std::sync::Arc<[Crate]>,
+    roots: std::sync::Arc<[SourceRootInput]>,
 }
 
-pub fn set_tool_crates_with_durability(
-    db: &mut dyn salsa::Database,
-    crates: impl IntoIterator<Item = Crate>,
+/// Register `crates` as the crates the tool added in source root `id` (one of the roots from
+/// `TOOL_SOURCE_ROOTS` up, which must hold the crates' root files).
+pub fn set_tool_root_crates(
+    db: &mut dyn SourceDatabase,
+    id: SourceRootId,
+    crates: std::sync::Arc<[Crate]>,
     durability: Durability,
 ) {
-    ToolCrates::try_get(db)
-        .unwrap_or_else(|| ToolCrates::new(db, std::sync::Arc::default()))
-        .set_crates(db)
-        .with_durability(durability)
-        .to(crates.into_iter().collect());
+    let root = db.source_root(id);
+    if root.crates(db) != crates {
+        root.set_crates(db).with_durability(durability).to(crates);
+    }
+    let known = ToolRoots::try_get(db).map(|roots| roots.roots(db));
+    if known.as_ref().is_some_and(|roots| roots.contains(&root)) {
+        return;
+    }
+    let mut roots: Vec<SourceRootInput> = known.map(|roots| roots.to_vec()).unwrap_or_default();
+    roots.push(root);
+    let roots: std::sync::Arc<[SourceRootInput]> = roots.into();
+    match ToolRoots::try_get(db) {
+        Some(existing) => {
+            existing.set_roots(db).with_durability(durability).to(roots);
+        }
+        None => {
+            let _ = ToolRoots::builder(roots).durability(durability).new(db);
+        }
+    }
 }
 
-/// The crates the tool added, in the order it registered them.
+/// The crates the tool added, in the order of the source roots it added them in.
 pub fn tool_crates(db: &dyn salsa::Database) -> std::sync::Arc<[Crate]> {
-    ToolCrates::try_get(db).map_or(std::sync::Arc::default(), |crates| crates.crates(db))
+    ToolRoots::try_get(db).map_or_else(std::sync::Arc::default, |roots| {
+        roots.roots(db).iter().flat_map(|root| root.crates(db).to_vec()).collect()
+    })
 }
 
 /// The crates of the graph the loader built, in topological order.
@@ -489,10 +522,11 @@ pub fn source_root_crates(db: &dyn SourceDatabase, id: SourceRootId) -> &[Crate]
         id: InternedSourceRootId<'db>,
     ) -> Box<[Crate]> {
         let id = id.id(db);
-        // A tool's source roots are looked up among the tool's crates only, so what is asked
-        // about the graph's own roots does not depend on the tool's.
+        // A tool's source root holds its crates itself, so what is asked about the graph's own
+        // roots depends on none of the tool's, and what is asked about one tool root depends on
+        // no other.
         let crates = if id.0 >= crate::input::TOOL_SOURCE_ROOTS {
-            ToolCrates::try_get(db).map_or(std::sync::Arc::default(), |crates| crates.crates(db))
+            db.source_root(id).crates(db)
         } else {
             AllCrates::get(db).crates(db)
         };

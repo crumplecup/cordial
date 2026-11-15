@@ -47,11 +47,39 @@ pub fn persisted_executions() -> u64 {
     PERSISTED_EXECUTIONS.load(std::sync::atomic::Ordering::Relaxed)
 }
 
-static STALE: std::sync::Mutex<std::collections::BTreeMap<String, u64>> =
+/// How many memos each kind of input made out of date, with the numbers of a few of the inputs.
+type Stale = std::collections::BTreeMap<String, (u64, Vec<u64>)>;
+
+static STALE: std::sync::Mutex<Stale> = std::sync::Mutex::new(std::collections::BTreeMap::new());
+
+/// How many memos of each query were found out of date.
+static STALE_QUERIES: std::sync::Mutex<std::collections::BTreeMap<String, u64>> =
     std::sync::Mutex::new(std::collections::BTreeMap::new());
 
+/// Which queries had memos found out of date when they were verified, with how many each.
+pub fn stale_queries() -> Vec<(String, u64)> {
+    STALE_QUERIES
+        .lock()
+        .map(|stale| stale.iter().map(|(name, count)| (name.clone(), *count)).collect())
+        .unwrap_or_default()
+}
+
+/// How many inputs of each kind are kept as examples.
+const STALE_EXAMPLES: usize = 6;
+
 /// Record that a memo was found out of date because of the dependency `edge`.
-pub(crate) fn note_stale(zalsa: &Zalsa, edge: QueryEdge) {
+pub(crate) fn note_stale(
+    zalsa: &Zalsa,
+    edge: QueryEdge,
+    memo: crate::key::DatabaseKeyIndex,
+) {
+    if let Ok(mut by_query) = STALE_QUERIES.lock() {
+        let query = zalsa
+            .lookup_ingredient(memo.ingredient_index())
+            .debug_name()
+            .to_owned();
+        *by_query.entry(query).or_default() += 1;
+    }
     let name = if edge.is_watermark() {
         "<watermark>".to_owned()
     } else {
@@ -61,16 +89,27 @@ pub(crate) fn note_stale(zalsa: &Zalsa, edge: QueryEdge) {
             .to_owned()
     };
     if let Ok(mut stale) = STALE.lock() {
-        *stale.entry(name).or_default() += 1;
+        let (count, examples) = stale.entry(name).or_default();
+        *count += 1;
+        let input = edge.key().key_index().as_bits();
+        if examples.len() < STALE_EXAMPLES && !examples.contains(&input) {
+            examples.push(input);
+        }
     }
 }
 
 /// Which dependencies made memos out of date when they were verified, with how many memos each
-/// did. The first dependency found to have changed is the one counted.
-pub fn stale_report() -> Vec<(String, u64)> {
+/// did and the numbers of a few of the inputs (an input's number is the id of its struct). The
+/// first dependency found to have changed is the one counted.
+pub fn stale_report() -> Vec<(String, u64, Vec<u64>)> {
     STALE
         .lock()
-        .map(|stale| stale.iter().map(|(name, count)| (name.clone(), *count)).collect())
+        .map(|stale| {
+            stale
+                .iter()
+                .map(|(name, (count, examples))| (name.clone(), *count, examples.clone()))
+                .collect()
+        })
         .unwrap_or_default()
 }
 

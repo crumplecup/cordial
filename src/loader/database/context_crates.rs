@@ -15,7 +15,7 @@ use ra_ap_hir::{AssocItem, Crate, Function, HasSource, ModuleDef, attach_db};
 use ra_ap_ide_db::RootDatabase;
 use ra_ap_ide_db::base_db::{
     Crate as InputCrate, SourceDatabase as RaSourceDatabase, SourceRoot, SourceRootId,
-    set_tool_crates_with_durability, tool_crates,
+    set_tool_root_crates,
 };
 use ra_ap_vfs::{FileId, VfsPath, file_set::FileSet};
 use salsa::Durability;
@@ -38,6 +38,16 @@ pub(super) fn original_path(path: &VfsPath) -> Option<std::path::PathBuf> {
     let rest = text.strip_prefix(COPY_PATH_PREFIX)?;
     let (_, real) = rest.split_once('/')?;
     Some(std::path::PathBuf::from(format!("/{real}")))
+}
+
+/// The source root of the context whose copy a path is, or `None` for a path that is not a
+/// copy: a context's files are all in one source root of their own.
+#[instrument(level = "trace", skip(path))]
+pub(super) fn copy_root_of(path: &VfsPath) -> Option<SourceRootId> {
+    let text = path.to_string();
+    let rest = text.strip_prefix(COPY_PATH_PREFIX)?;
+    let (index, _) = rest.split_once('/')?;
+    Some(SourceRootId(FIRST_COPY_ROOT + index.parse::<u32>().ok()?))
 }
 
 /// The first id given to the source roots that hold a context's file copies, far
@@ -258,7 +268,7 @@ impl SourceDatabase {
             };
             shadows.push((*krate, copy));
         }
-        self.register_shadows(&shadows, previous);
+        self.register_shadows(index, &shadows);
         let counterparts = self.counterparts_of(&shadows, &files);
         let bytes: usize = files
             .values()
@@ -279,31 +289,16 @@ impl SourceDatabase {
         })
     }
 
-    /// Register `shadows` among the database's crates, and drop from them the crates of
-    /// `previous` that this run has no original for. Nothing is written when the list is
-    /// the one already there.
-    #[instrument(level = "debug", skip(self, shadows, previous))]
+    /// Register `shadows` as the crates of context number `index`, in the source root its
+    /// copies are in. Nothing is written when they are the ones already there, and no other
+    /// context's registration is touched: what was computed for another context does not
+    /// depend on this one.
+    #[instrument(level = "debug", skip(self, shadows))]
     #[hotpath::measure(impl_type = "SourceDatabase")]
-    fn register_shadows(
-        &mut self,
-        shadows: &[(InputCrate, InputCrate)],
-        previous: Option<&ContextCrates>,
-    ) {
-        let current = tool_crates(&self.db);
-        let mut registered: Vec<InputCrate> = current.iter().copied().collect();
-        let used: BTreeSet<InputCrate> = shadows.iter().map(|(_, copy)| *copy).collect();
-        if let Some(kept) = previous {
-            let gone: BTreeSet<InputCrate> = kept.shadows().filter(|s| !used.contains(s)).collect();
-            registered.retain(|krate| !gone.contains(krate));
-        }
-        for (_, copy) in shadows {
-            if !registered.contains(copy) {
-                registered.push(*copy);
-            }
-        }
-        if registered.as_slice() != &*current {
-            set_tool_crates_with_durability(&mut self.db, registered, Durability::LOW);
-        }
+    fn register_shadows(&mut self, index: usize, shadows: &[(InputCrate, InputCrate)]) {
+        let root = SourceRootId(FIRST_COPY_ROOT + u32::try_from(index).unwrap_or(u32::MAX >> 2));
+        let crates: std::sync::Arc<[InputCrate]> = shadows.iter().map(|(_, copy)| *copy).collect();
+        set_tool_root_crates(&mut self.db, root, crates, Durability::LOW);
     }
 
     /// Copy every file of the workspace's own source roots to virtual paths under

@@ -1,5 +1,5 @@
---- salsa-0.28.5/Cargo.toml	2026-11-15 12:11:38.851656492 -0800
-+++ salsa/Cargo.toml	2026-11-15 12:11:39.525312467 -0800
+--- salsa-0.28.5/Cargo.toml	2026-11-15 13:43:23.227314289 -0800
++++ salsa/Cargo.toml	2026-11-15 13:43:23.933533042 -0800
 @@ -60,549 +60,6 @@
  name = "salsa"
  path = "src/lib.rs"
@@ -550,8 +550,8 @@
  [dependencies.boxcar]
  version = "0.2.14"
  
---- salsa-0.28.5/src/accumulator.rs	2026-11-15 12:11:38.951452506 -0800
-+++ salsa/src/accumulator.rs	2026-11-15 12:11:39.521433806 -0800
+--- salsa-0.28.5/src/accumulator.rs	2026-11-15 13:43:23.327356200 -0800
++++ salsa/src/accumulator.rs	2026-11-15 13:43:23.929064378 -0800
 @@ -116,7 +116,7 @@
          _zalsa: &Zalsa,
          _edge: QueryEdge,
@@ -562,8 +562,8 @@
          panic!("nothing should ever depend on an accumulator directly")
      }
 --- salsa-0.28.5/src/flatten.rs	1969-12-31 16:00:00.000000000 -0800
-+++ salsa/src/flatten.rs	2026-11-15 12:11:39.525083676 -0800
-@@ -0,0 +1,349 @@
++++ salsa/src/flatten.rs	2026-11-15 13:43:23.933355738 -0800
+@@ -0,0 +1,388 @@
 +//! Flattening a query's dependencies down to what is persisted, once per query.
 +//!
 +//! A persisted memo's dependencies are rewritten before it is saved: the queries that
@@ -613,11 +613,39 @@
 +    PERSISTED_EXECUTIONS.load(std::sync::atomic::Ordering::Relaxed)
 +}
 +
-+static STALE: std::sync::Mutex<std::collections::BTreeMap<String, u64>> =
++/// How many memos each kind of input made out of date, with the numbers of a few of the inputs.
++type Stale = std::collections::BTreeMap<String, (u64, Vec<u64>)>;
++
++static STALE: std::sync::Mutex<Stale> = std::sync::Mutex::new(std::collections::BTreeMap::new());
++
++/// How many memos of each query were found out of date.
++static STALE_QUERIES: std::sync::Mutex<std::collections::BTreeMap<String, u64>> =
 +    std::sync::Mutex::new(std::collections::BTreeMap::new());
 +
++/// Which queries had memos found out of date when they were verified, with how many each.
++pub fn stale_queries() -> Vec<(String, u64)> {
++    STALE_QUERIES
++        .lock()
++        .map(|stale| stale.iter().map(|(name, count)| (name.clone(), *count)).collect())
++        .unwrap_or_default()
++}
++
++/// How many inputs of each kind are kept as examples.
++const STALE_EXAMPLES: usize = 6;
++
 +/// Record that a memo was found out of date because of the dependency `edge`.
-+pub(crate) fn note_stale(zalsa: &Zalsa, edge: QueryEdge) {
++pub(crate) fn note_stale(
++    zalsa: &Zalsa,
++    edge: QueryEdge,
++    memo: crate::key::DatabaseKeyIndex,
++) {
++    if let Ok(mut by_query) = STALE_QUERIES.lock() {
++        let query = zalsa
++            .lookup_ingredient(memo.ingredient_index())
++            .debug_name()
++            .to_owned();
++        *by_query.entry(query).or_default() += 1;
++    }
 +    let name = if edge.is_watermark() {
 +        "<watermark>".to_owned()
 +    } else {
@@ -627,16 +655,27 @@
 +            .to_owned()
 +    };
 +    if let Ok(mut stale) = STALE.lock() {
-+        *stale.entry(name).or_default() += 1;
++        let (count, examples) = stale.entry(name).or_default();
++        *count += 1;
++        let input = edge.key().key_index().as_bits();
++        if examples.len() < STALE_EXAMPLES && !examples.contains(&input) {
++            examples.push(input);
++        }
 +    }
 +}
 +
 +/// Which dependencies made memos out of date when they were verified, with how many memos each
-+/// did. The first dependency found to have changed is the one counted.
-+pub fn stale_report() -> Vec<(String, u64)> {
++/// did and the numbers of a few of the inputs (an input's number is the id of its struct). The
++/// first dependency found to have changed is the one counted.
++pub fn stale_report() -> Vec<(String, u64, Vec<u64>)> {
 +    STALE
 +        .lock()
-+        .map(|stale| stale.iter().map(|(name, count)| (name.clone(), *count)).collect())
++        .map(|stale| {
++            stale
++                .iter()
++                .map(|(name, (count, examples))| (name.clone(), *count, examples.clone()))
++                .collect()
++        })
 +        .unwrap_or_default()
 +}
 +
@@ -913,8 +952,8 @@
 +        all.into_iter().collect()
 +    })
 +}
---- salsa-0.28.5/src/function/execute.rs	2026-11-15 12:11:39.010440806 -0800
-+++ salsa/src/function/execute.rs	2026-11-15 12:11:39.522171280 -0800
+--- salsa-0.28.5/src/function/execute.rs	2026-11-15 13:43:23.384316857 -0800
++++ salsa/src/function/execute.rs	2026-11-15 13:43:23.929998111 -0800
 @@ -46,6 +46,9 @@
          let memo_ingredient_index = self.memo_ingredient_index(zalsa, id);
  
@@ -925,8 +964,8 @@
  
          zalsa.event(&|| {
              Event::new(EventKind::WillExecute {
---- salsa-0.28.5/src/function/maybe_changed_after.rs	2026-11-15 12:11:39.022659376 -0800
-+++ salsa/src/function/maybe_changed_after.rs	2026-11-15 12:11:39.522267487 -0800
+--- salsa-0.28.5/src/function/maybe_changed_after.rs	2026-11-15 13:43:23.397317070 -0800
++++ salsa/src/function/maybe_changed_after.rs	2026-11-15 13:43:23.930134511 -0800
 @@ -595,6 +595,17 @@
      // valid, then some later input I1 might never have executed at all, so verifying
      // it is still up to date is meaningless.
@@ -936,7 +975,7 @@
 +        if edge.is_watermark() {
 +            if zalsa.last_changed_revision(crate::flatten::WATERMARK_DURABILITY) > old_verified_at
 +            {
-+                crate::flatten::note_stale(zalsa, edge);
++                crate::flatten::note_stale(zalsa, edge, database_key_index);
 +                return VerifyResult::changed();
 +            }
 +            continue;
@@ -949,12 +988,12 @@
  
                  match input_result {
                      VerifyResult::Changed => {
-+                        crate::flatten::note_stale(zalsa, edge);
++                        crate::flatten::note_stale(zalsa, edge, database_key_index);
                          return VerifyResult::changed();
                      }
                      #[cfg(feature = "accumulator")]
---- salsa-0.28.5/src/function/memo.rs	2026-11-15 12:11:39.026659443 -0800
-+++ salsa/src/function/memo.rs	2026-11-15 12:11:39.522428818 -0800
+--- salsa-0.28.5/src/function/memo.rs	2026-11-15 13:43:23.402317152 -0800
++++ salsa/src/function/memo.rs	2026-11-15 13:43:23.930336570 -0800
 @@ -61,28 +61,6 @@
          }
      }
@@ -1011,8 +1050,8 @@
          self.revisions.origin()
      }
  
---- salsa-0.28.5/src/function.rs	2026-11-15 12:11:39.038659645 -0800
-+++ salsa/src/function.rs	2026-11-15 12:11:39.525209940 -0800
+--- salsa-0.28.5/src/function.rs	2026-11-15 13:43:23.413317332 -0800
++++ salsa/src/function.rs	2026-11-15 13:43:23.933457488 -0800
 @@ -10,6 +10,7 @@
  
  use crate::cycle::{CycleRecoveryStrategy, IterationStamp, ProvisionalStatus};
@@ -1448,8 +1487,8 @@
                  let (ingredient_index, id) = key
                      .split_once(':')
                      .ok_or_else(|| de::Error::custom("invalid database key"))?;
---- salsa-0.28.5/src/hash.rs	2026-11-15 12:11:39.040365357 -0800
-+++ salsa/src/hash.rs	2026-11-15 12:11:39.522467093 -0800
+--- salsa-0.28.5/src/hash.rs	2026-11-15 13:43:23.414728469 -0800
++++ salsa/src/hash.rs	2026-11-15 13:43:23.930405387 -0800
 @@ -4,6 +4,7 @@
  pub(crate) type FxIndexSet<K> = indexmap::IndexSet<K, FxHasher>;
  pub(crate) type FxLinkedHashSet<K> = hashlink::LinkedHashSet<K, FxHasher>;
@@ -1458,8 +1497,8 @@
  
  pub(crate) fn hash<T: Hash>(t: &T) -> u64 {
      FxHasher::default().hash_one(t)
---- salsa-0.28.5/src/ingredient.rs	2026-11-15 12:11:39.048659815 -0800
-+++ salsa/src/ingredient.rs	2026-11-15 12:11:39.522541938 -0800
+--- salsa-0.28.5/src/ingredient.rs	2026-11-15 13:43:23.423317496 -0800
++++ salsa/src/ingredient.rs	2026-11-15 13:43:23.930582823 -0800
 @@ -68,7 +68,7 @@
          zalsa: &Zalsa,
          edge: QueryEdge,
@@ -1483,8 +1522,8 @@
      /// Whether there is data to serialize for this ingredient.
      ///
      /// If this returns `false`, the ingredient will not be serialized, even if `is_persistable`
---- salsa-0.28.5/src/input/input_field.rs	2026-11-15 12:11:39.054659915 -0800
-+++ salsa/src/input/input_field.rs	2026-11-15 12:11:39.522658084 -0800
+--- salsa-0.28.5/src/input/input_field.rs	2026-11-15 13:43:23.430317610 -0800
++++ salsa/src/input/input_field.rs	2026-11-15 13:43:23.930760918 -0800
 @@ -68,10 +68,10 @@
  
      unsafe fn collect_minimum_serialized_edges(
@@ -1526,8 +1565,8 @@
      fn debug_name(&self) -> &'static str {
          C::FIELD_DEBUG_NAMES[self.field_index]
      }
---- salsa-0.28.5/src/input.rs	2026-11-15 12:11:39.061660034 -0800
-+++ salsa/src/input.rs	2026-11-15 12:11:39.522926914 -0800
+--- salsa-0.28.5/src/input.rs	2026-11-15 13:43:23.478318395 -0800
++++ salsa/src/input.rs	2026-11-15 13:43:23.931037129 -0800
 @@ -323,7 +323,7 @@
          _zalsa: &Zalsa,
          _edge: QueryEdge,
@@ -1537,8 +1576,8 @@
      ) {
          panic!("nothing should ever depend on an input struct directly")
      }
---- salsa-0.28.5/src/interned.rs	2026-11-15 12:11:39.074660253 -0800
-+++ salsa/src/interned.rs	2026-11-15 12:11:39.523043539 -0800
+--- salsa-0.28.5/src/interned.rs	2026-11-15 13:43:23.491318608 -0800
++++ salsa/src/interned.rs	2026-11-15 13:43:23.931179888 -0800
 @@ -1139,7 +1139,7 @@
          _zalsa: &Zalsa,
          edge: QueryEdge,
@@ -1548,19 +1587,19 @@
      ) {
          if C::PERSIST && C::REVISIONS != IMMORTAL {
              // If the interned struct is being persisted, it may be reachable through transitive queries.
---- salsa-0.28.5/src/lib.rs	2026-11-15 12:11:39.088660490 -0800
-+++ salsa/src/lib.rs	2026-11-15 12:11:39.523202002 -0800
+--- salsa-0.28.5/src/lib.rs	2026-11-15 13:43:23.505318837 -0800
++++ salsa/src/lib.rs	2026-11-15 13:43:23.931386431 -0800
 @@ -262,6 +262,8 @@
  mod database_impl;
  mod durability;
  mod event;
 +mod flatten;
-+pub use flatten::{persisted_executions, stale_report};
++pub use flatten::{persisted_executions, stale_queries, stale_report};
  mod function;
  mod hash;
  mod id;
---- salsa-0.28.5/src/tracked_struct/tracked_field.rs	2026-11-15 12:11:39.128678021 -0800
-+++ salsa/src/tracked_struct/tracked_field.rs	2026-11-15 12:11:39.524402924 -0800
+--- salsa-0.28.5/src/tracked_struct/tracked_field.rs	2026-11-15 13:43:23.544777913 -0800
++++ salsa/src/tracked_struct/tracked_field.rs	2026-11-15 13:43:23.932703811 -0800
 @@ -77,7 +77,7 @@
          _zalsa: &Zalsa,
          _edge: QueryEdge,
@@ -1570,8 +1609,8 @@
      ) {
          // Tracked fields do not have transitive dependencies, and their dependencies are covered by
          // the base inputs.
---- salsa-0.28.5/src/tracked_struct.rs	2026-11-15 12:11:39.142661400 -0800
-+++ salsa/src/tracked_struct.rs	2026-11-15 12:11:39.524551804 -0800
+--- salsa-0.28.5/src/tracked_struct.rs	2026-11-15 13:43:23.559319720 -0800
++++ salsa/src/tracked_struct.rs	2026-11-15 13:43:23.932858438 -0800
 @@ -1000,7 +1000,7 @@
          _zalsa: &Zalsa,
          _edge: QueryEdge,
@@ -1581,8 +1620,8 @@
      ) {
          // Note that tracked structs are referenced by the identity map, but that
          // only matters if we are serializing the creating query, in which case
---- salsa-0.28.5/src/zalsa_local.rs	2026-11-15 12:11:39.170661872 -0800
-+++ salsa/src/zalsa_local.rs	2026-11-15 12:11:39.524923755 -0800
+--- salsa-0.28.5/src/zalsa_local.rs	2026-11-15 13:43:23.587320178 -0800
++++ salsa/src/zalsa_local.rs	2026-11-15 13:43:23.933212941 -0800
 @@ -879,6 +879,8 @@
      #[inline]
      pub(crate) fn inputs(self) -> impl DoubleEndedIterator<Item = DatabaseKeyIndex> + use<'a> {
@@ -1687,8 +1726,8 @@
                  #[cfg(feature = "accumulator")]
                  accumulated_inputs: Default::default(), // TODO: Support serializing accumulators
                  verified_final: revisions.verified_final,
---- salsa-0.28.5/src/zalsa.rs	2026-11-15 12:11:39.159661687 -0800
-+++ salsa/src/zalsa.rs	2026-11-15 12:11:39.524768625 -0800
+--- salsa-0.28.5/src/zalsa.rs	2026-11-15 13:43:23.574319966 -0800
++++ salsa/src/zalsa.rs	2026-11-15 13:43:23.933059937 -0800
 @@ -76,7 +76,7 @@
      /// The maximum supported ingredient index.
      ///

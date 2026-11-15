@@ -131,3 +131,95 @@ fn an_edit_between_runs_reaches_the_taken_up_contexts() -> Result<()> {
     assert!(names.contains(&"harness".to_owned()));
     Ok(())
 }
+
+/// A workspace of two local crates, one depending on the other, each with code gated on cfg.
+fn two_crates() -> Result<tempfile::TempDir> {
+    let root = tempfile::tempdir().into_diagnostic()?;
+    for directory in ["src", "inner/src"] {
+        std::fs::create_dir_all(root.path().join(directory)).into_diagnostic()?;
+    }
+    std::fs::write(
+        root.path().join("Cargo.toml"),
+        "[package]\nname='gated'\nversion='0.1.0'\nedition='2024'\n\
+         [dependencies]\ninner = { path = \"inner\" }\n[workspace]\n",
+    )
+    .into_diagnostic()?;
+    std::fs::write(
+        root.path().join("inner/Cargo.toml"),
+        "[package]\nname='inner'\nversion='0.1.0'\nedition='2024'\n",
+    )
+    .into_diagnostic()?;
+    std::fs::write(
+        root.path().join("inner/src/lib.rs"),
+        "pub fn helper() {}\n#[cfg(kani)]\npub fn kani_only() { helper(); }\n\
+         #[cfg(creusot)]\npub fn creusot_only() { helper(); }\n",
+    )
+    .into_diagnostic()?;
+    std::fs::write(
+        root.path().join("src/lib.rs"),
+        "pub fn ordinary() { inner::helper(); }\n#[cfg(kani)]\npub fn harness() { inner::kani_only(); }\n\
+         #[cfg(creusot)]\npub fn proof() { inner::creusot_only(); }\n",
+    )
+    .into_diagnostic()?;
+    Ok(root)
+}
+
+fn run_many(root: &Path, saved: &SavedState) -> Result<bool> {
+    let options = SemanticCargoOptions::default()
+        .with_cfg_contexts(vec![
+            SemanticContextKey::enabling(["kani"]),
+            SemanticContextKey::enabling(["creusot"]),
+        ])
+        .with_cfg_planning(CfgPlanning::Explicit);
+    let mut session =
+        SourceDatabase::load_saved(root, &options, Some(saved.clone())).into_diagnostic()?;
+    let restored = session.restored();
+    session
+        .project(&CrateTarget::new("gated", root), &[root.join("src/lib.rs")])
+        .into_diagnostic()?;
+    Ok(restored)
+}
+
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn a_restored_run_reuses_what_several_contexts_over_dependent_crates_computed() -> Result<()> {
+    cordial::init_tracing();
+    let metrics = support::semantic_metrics::QueryMetrics::default();
+    let subscriber = tracing_subscriber::registry()
+        .with(metrics.clone())
+        .with(cordial::tracing_fmt_layer());
+    let _subscriber = tracing::subscriber::set_default(subscriber);
+    let root = two_crates()?;
+    let state = tempfile::tempdir().into_diagnostic()?;
+    let saved = SavedState::at(state.path().join("analysis-state"));
+
+    assert!(!run_many(root.path(), &saved)?);
+    let cold_counts = metrics.snapshot();
+    assert!(!cold_counts.is_empty());
+
+    assert!(
+        run_many(root.path(), &saved)?,
+        "the second run starts from the first's state"
+    );
+    const JOINS: [&str; 5] = [
+        "antipattern_crate_facts:",
+        "architecture_catalog:",
+        "panic_graph:",
+        "panic_reachable:",
+        "signature_index:",
+    ];
+    let recomputed: std::collections::BTreeMap<String, usize> = metrics
+        .snapshot()
+        .into_iter()
+        .filter_map(|(key, count)| {
+            let before = cold_counts.get(&key).copied().unwrap_or(0);
+            (count > before && !JOINS.iter().any(|join| key.starts_with(join)))
+                .then(|| (key, count - before))
+        })
+        .collect();
+    assert!(
+        recomputed.is_empty(),
+        "the restored run computed again: {recomputed:#?}"
+    );
+    Ok(())
+}

@@ -349,10 +349,18 @@ fn path_of(db: &RootDatabase, file: FileId) -> Option<PathText> {
 #[instrument(level = "trace", skip(db))]
 fn file_at(db: &RootDatabase, path: &PathText) -> Option<FileId> {
     let wanted = path.vfs();
+    // A context's copy is in that context's source root and nowhere else, and any other file
+    // is in none of them: looking where the file cannot be would make what is found depend on
+    // roots that have nothing to do with it (every context's copies, for an ordinary file).
+    let copy_root = super::context_crates::copy_root_of(&wanted);
     db.files()
         .source_root_inputs()
         .into_iter()
-        .find_map(|root| root.source_root(db).file_for_path(&wanted).copied())
+        .filter(|(id, _)| match copy_root {
+            Some(root) => *id == root,
+            None => id.0 < ra_ap_ide_db::base_db::TOOL_SOURCE_ROOTS,
+        })
+        .find_map(|(_, root)| root.source_root(db).file_for_path(&wanted).copied())
 }
 
 /// The description of `definition`: its site, or a nonce of this process.
