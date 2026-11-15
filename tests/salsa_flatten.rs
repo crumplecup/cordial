@@ -211,3 +211,79 @@ fn a_shared_graph_is_walked_once_and_what_is_saved_still_covers_it() {
         "each memo noticed the change"
     );
 }
+
+#[salsa::input(persist, singleton)]
+struct Library {
+    #[returns(copy)]
+    value: usize,
+}
+
+/// Reads the input that changes (workspace) and the one that rarely does (library).
+#[salsa::tracked(returns(copy), persist)]
+fn reads_both<'db>(db: &'db dyn Database, key: Key<'db>) -> usize {
+    EXECUTED_BOTH.fetch_add(1, Ordering::SeqCst);
+    Source::get(db).value(db) + Library::get(db).value(db) + key.n(db)
+}
+
+/// Reads only the workspace's input.
+#[salsa::tracked(returns(copy), persist)]
+fn reads_workspace<'db>(db: &'db dyn Database, key: Key<'db>) -> usize {
+    EXECUTED_WORKSPACE.fetch_add(1, Ordering::SeqCst);
+    Source::get(db).value(db) + key.n(db)
+}
+
+static EXECUTED_BOTH: AtomicUsize = AtomicUsize::new(0);
+static EXECUTED_WORKSPACE: AtomicUsize = AtomicUsize::new(0);
+
+#[test]
+fn what_rarely_changes_is_one_edge_and_still_invalidates_what_read_it() {
+    let mut db = Db::default();
+    Source::new(&db, 1);
+    let _library = Library::builder(10)
+        .durability(salsa::Durability::HIGH)
+        .new(&db);
+    let key = Key::new(&db, 0);
+    assert_eq!(reads_both(&db, key), 11);
+    assert_eq!(reads_workspace(&db, key), 1);
+
+    let saved = serde_json::to_string(&<dyn Database>::as_serialize(&mut db))
+        .unwrap_or_else(|error| panic!("serializing: {error}"));
+    // The library input is not an edge of its own: one edge stands for it, so a memo that
+    // reads it carries two edges (the workspace input and the watermark), not thousands.
+    assert!(
+        !saved.contains("Library"),
+        "no edge names the library input: {saved}"
+    );
+
+    let mut restored = Db::default();
+    <dyn Database>::deserialize(
+        &mut restored,
+        &mut serde_json::Deserializer::from_str(&saved),
+    )
+    .unwrap_or_else(|error| panic!("deserializing: {error}"));
+    let key = Key::new(&restored, 0);
+    let (both, workspace) = (
+        EXECUTED_BOTH.load(Ordering::SeqCst),
+        EXECUTED_WORKSPACE.load(Ordering::SeqCst),
+    );
+
+    // Nothing changed: both are reused.
+    assert_eq!(reads_both(&restored, key), 11);
+    assert_eq!(reads_workspace(&restored, key), 1);
+    assert_eq!(EXECUTED_BOTH.load(Ordering::SeqCst), both);
+    assert_eq!(EXECUTED_WORKSPACE.load(Ordering::SeqCst), workspace);
+
+    // The workspace's input changes: only what read it is computed again.
+    Source::get(&restored).set_value(&mut restored).to(2);
+    let key = Key::new(&restored, 0);
+    assert_eq!(reads_both(&restored, key), 12);
+    assert_eq!(reads_workspace(&restored, key), 2);
+    assert_eq!(EXECUTED_BOTH.load(Ordering::SeqCst), both + 1);
+    assert_eq!(EXECUTED_WORKSPACE.load(Ordering::SeqCst), workspace + 1);
+
+    // The library's input changes: what read it is computed again, whichever of its inputs.
+    Library::get(&restored).set_value(&mut restored).to(20);
+    let key = Key::new(&restored, 0);
+    assert_eq!(reads_both(&restored, key), 22);
+    assert_eq!(EXECUTED_BOTH.load(Ordering::SeqCst), both + 2);
+}

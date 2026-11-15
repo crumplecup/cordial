@@ -191,6 +191,13 @@ pub trait Ingredient: Any + fmt::Debug + Send + Sync {
         false
     }
 
+    /// Whether a persisted memo's dependency on `input` is saved as the watermark edge instead:
+    /// the input is of the durability that rarely changes, and the memo is out of date whenever
+    /// any such input has changed, without saying which.
+    fn watermarked(&self, _zalsa: &Zalsa, _input: Id) -> bool {
+        false
+    }
+
     /// Whether there is data to serialize for this ingredient.
     ///
     /// If this returns `false`, the ingredient will not be serialized, even if `is_persistable`

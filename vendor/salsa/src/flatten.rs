@@ -16,9 +16,15 @@
 
 use std::time::Instant;
 
+use crate::durability::Durability;
 use crate::hash::{FxHashMap, FxIndexSet};
 use crate::sync::Arc;
 use crate::zalsa_local::QueryEdge;
+
+/// Inputs of this durability or higher are summarized by one edge in a persisted memo (see
+/// [`QueryEdge::watermark`]): they are the library's and the crate graph's, thousands for a
+/// memo that reads a definition map, and they change together and rarely.
+pub(crate) const WATERMARK_DURABILITY: Durability = Durability::MEDIUM;
 
 /// The persisted edges reached from each query that is not persisted, kept for one
 /// ingredient's memos while they are serialized.

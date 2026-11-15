@@ -595,6 +595,16 @@ fn deep_verify_edges(
     // valid, then some later input I1 might never have executed at all, so verifying
     // it is still up to date is meaningless.
     for edge in edges {
+        // A persisted memo's dependencies on inputs that rarely change are one edge: it is out of
+        // date if any input of that durability changed since the memo was verified.
+        if edge.is_watermark() {
+            if zalsa.last_changed_revision(crate::flatten::WATERMARK_DURABILITY) > old_verified_at
+            {
+                return VerifyResult::changed();
+            }
+            continue;
+        }
+
         match edge.kind() {
             QueryEdgeKind::Input => {
                 let dependency_index = edge.key();

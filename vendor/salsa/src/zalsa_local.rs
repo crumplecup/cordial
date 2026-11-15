@@ -879,6 +879,8 @@ impl<'a> QueryOriginRef<'a> {
     #[inline]
     pub(crate) fn inputs(self) -> impl DoubleEndedIterator<Item = DatabaseKeyIndex> + use<'a> {
         self.edges().iter().filter_map(|edge| match edge.kind() {
+            // The watermark stands for inputs, not for a query.
+            QueryEdgeKind::Input if edge.is_watermark() => None,
             QueryEdgeKind::Input => Some(edge.key()),
             QueryEdgeKind::Output => None,
         })
@@ -1674,6 +1676,23 @@ impl QueryEdge {
         } else {
             QueryEdgeKind::Input
         }
+    }
+
+    /// The edge a persisted memo has in place of its dependencies on inputs of the watermark
+    /// durability or higher: it stands for all of them, and is out of date once any input of
+    /// that durability has changed since the memo was verified. It belongs to no ingredient
+    /// (it uses the one index no ingredient has) and is checked where edges are verified.
+    pub(crate) const fn watermark() -> QueryEdge {
+        QueryEdge {
+            index: 0,
+            generation: 0,
+            ingredient: unsafe { IngredientIndex::new_unchecked(IngredientIndex::MAX_INDEX) },
+        }
+    }
+
+    /// Whether this is [`Self::watermark`].
+    pub(crate) const fn is_watermark(self) -> bool {
+        self.ingredient.as_u32() == IngredientIndex::MAX_INDEX
     }
 
     const fn id(self) -> Id {

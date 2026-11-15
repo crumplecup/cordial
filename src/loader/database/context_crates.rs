@@ -44,6 +44,10 @@ pub(super) fn original_path(path: &VfsPath) -> Option<std::path::PathBuf> {
 /// above any id the workspace loader used.
 const FIRST_COPY_ROOT: u32 = ra_ap_ide_db::base_db::TOOL_SOURCE_ROOTS;
 
+// The crates and copies a context adds are written during a run, after results exist that
+// were saved: a write of the watermark durability or higher makes every restored result stale
+// (see `salsa::flatten`), so they are the workspace's own (LOW), like the files they copy.
+
 /// A context's copy of the workspace: the same source files under a source root of
 /// its own, and a copy of each local crate rooted at them under the context's cfg.
 ///
@@ -236,7 +240,7 @@ impl SourceDatabase {
                         let value = $value;
                         if *copy.$field(&self.db) != value {
                             copy.$set(&mut self.db)
-                                .with_durability(Durability::MEDIUM)
+                                .with_durability(Durability::LOW)
                                 .to(value);
                         }
                     }};
@@ -249,7 +253,7 @@ impl SourceDatabase {
                 copy
             } else {
                 InputCrate::builder(data, extra, workspace, changed, env)
-                    .durability(Durability::MEDIUM)
+                    .durability(Durability::LOW)
                     .new(&self.db)
             };
             shadows.push((*krate, copy));
@@ -298,7 +302,7 @@ impl SourceDatabase {
             }
         }
         if registered.as_slice() != &*current {
-            set_tool_crates_with_durability(&mut self.db, registered, Durability::MEDIUM);
+            set_tool_crates_with_durability(&mut self.db, registered, Durability::LOW);
         }
     }
 

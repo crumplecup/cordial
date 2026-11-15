@@ -467,6 +467,10 @@ where
 
         // Collect the minimum dependency tree.
         for dependency_edge in memo.header().origin().edges() {
+            if dependency_edge.is_watermark() {
+                found.insert(dependency_edge);
+                continue;
+            }
             let dependency = zalsa.lookup_ingredient(dependency_edge.key().ingredient_index());
 
             // A persisted query is serialized itself: depend on it, and do not walk through
@@ -833,9 +837,13 @@ mod persistence {
 
                             emitted += flattened_edges.len() as u64;
                             for edge in &flattened_edges {
-                                let name = zalsa
-                                    .lookup_ingredient(edge.key().ingredient_index())
-                                    .debug_name();
+                                let name = if edge.is_watermark() {
+                                    "<watermark>"
+                                } else {
+                                    zalsa
+                                        .lookup_ingredient(edge.key().ingredient_index())
+                                        .debug_name()
+                                };
                                 *by_kind.entry(name).or_default() += 1;
                             }
                             PersistentQueryOrigin::derived(flattened_edges.drain(..))
@@ -914,11 +922,22 @@ mod persistence {
         flattened_edges: &mut FxIndexSet<QueryEdge>,
     ) {
         for edge in edges {
+            // A memo restored and saved again still has its watermark.
+            if edge.is_watermark() {
+                flattened_edges.insert(edge);
+                continue;
+            }
+
             let dependency = zalsa.lookup_ingredient(edge.key().ingredient_index());
 
             if dependency.is_persistable() {
-                // If the dependency will be serialized, we can serialize the edge directly.
-                flattened_edges.insert(edge);
+                // If the dependency will be serialized, we can serialize the edge directly (or
+                // the watermark, for an input that rarely changes).
+                flattened_edges.insert(if dependency.watermarked(zalsa, edge.key().key_index()) {
+                    QueryEdge::watermark()
+                } else {
+                    edge
+                });
             } else {
                 // Otherwise, serialize the minimum edges necessary to cover the dependency.
                 // SAFETY: The caller prevents database writes throughout the traversal.

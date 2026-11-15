@@ -1,5 +1,5 @@
---- a/ra_ap_base_db-0.0.358/Cargo.toml	2026-11-15 09:18:49.051858650 -0800
-+++ b/ra_ap_base_db/Cargo.toml	2026-11-15 09:18:49.145723411 -0800
+--- a/ra_ap_base_db-0.0.358/Cargo.toml	2026-11-15 10:05:01.493956452 -0800
++++ b/ra_ap_base_db/Cargo.toml	2026-11-15 10:05:01.538176807 -0800
 @@ -65,6 +65,10 @@
  [dependencies.rustc-hash]
  version = "2.1.1"
@@ -28,8 +28,8 @@
  default-features = false
  
  [dependencies.vfs]
---- a/ra_ap_base_db-0.0.358/src/change.rs	2026-11-15 09:18:49.052133648 -0800
-+++ b/ra_ap_base_db/src/change.rs	2026-11-15 09:18:49.145796330 -0800
+--- a/ra_ap_base_db-0.0.358/src/change.rs	2026-11-15 10:05:01.494184697 -0800
++++ b/ra_ap_base_db/src/change.rs	2026-11-15 10:05:01.538266246 -0800
 @@ -69,8 +69,15 @@
  
                  db.set_source_root_with_durability(root_id, Arc::new(root), durability);
@@ -48,8 +48,8 @@
          }
  
          for (file_id, text) in self.files_changed {
---- a/ra_ap_base_db-0.0.358/src/input.rs	2026-11-15 09:18:49.096739954 -0800
-+++ b/ra_ap_base_db/src/input.rs	2026-11-15 09:18:49.145996167 -0800
+--- a/ra_ap_base_db-0.0.358/src/input.rs	2026-11-15 10:05:01.514519772 -0800
++++ b/ra_ap_base_db/src/input.rs	2026-11-15 10:05:01.538504787 -0800
 @@ -23,7 +23,7 @@
  use vfs::{AbsPathBuf, AnchoredPath, FileId, VfsPath, file_set::FileSet};
  
@@ -203,8 +203,8 @@
  
          // For some reason in some repositories we have duplicate crates, so we use a set and not `Vec`.
          // We use an `IndexSet` because the list needs to be topologically sorted.
---- a/ra_ap_base_db-0.0.358/src/lib.rs	2026-11-15 09:18:49.142740687 -0800
-+++ b/ra_ap_base_db/src/lib.rs	2026-11-15 09:18:49.145886327 -0800
+--- a/ra_ap_base_db-0.0.358/src/lib.rs	2026-11-15 10:05:01.535520128 -0800
++++ b/ra_ap_base_db/src/lib.rs	2026-11-15 10:05:01.538391950 -0800
 @@ -30,7 +30,8 @@
          BuiltCrateData, BuiltDependency, Crate, CrateBuilder, CrateBuilderId, CrateDataBuilder,
          CrateDisplayName, CrateGraphBuilder, CrateName, CrateOrigin, CratesIdMap, CratesMap,
@@ -469,8 +469,8 @@
          crates
              .iter()
              .copied()
---- a/ra_ap_base_db-0.0.358/src/target.rs	2026-11-15 09:18:49.143808262 -0800
-+++ b/ra_ap_base_db/src/target.rs	2026-11-15 09:18:49.145925890 -0800
+--- a/ra_ap_base_db-0.0.358/src/target.rs	2026-11-15 10:05:01.536025587 -0800
++++ b/ra_ap_base_db/src/target.rs	2026-11-15 10:05:01.538444081 -0800
 @@ -5,6 +5,7 @@
  use triomphe::Arc;
  
@@ -503,8 +503,8 @@
  impl fmt::Debug for TargetLoadError {
      fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
          fmt::Debug::fmt(&self.0, f)
---- a/ra_ap_cfg-0.0.358/Cargo.toml	2026-11-15 09:18:49.186301025 -0800
-+++ b/ra_ap_cfg/Cargo.toml	2026-11-15 09:18:49.252966681 -0800
+--- a/ra_ap_cfg-0.0.358/Cargo.toml	2026-11-15 10:05:01.636957497 -0800
++++ b/ra_ap_cfg/Cargo.toml	2026-11-15 10:05:01.678656496 -0800
 @@ -33,6 +33,10 @@
  syntax = ["dep:syntax"]
  tt = ["dep:tt"]
@@ -516,8 +516,8 @@
  [lib]
  name = "ra_ap_cfg"
  path = "src/lib.rs"
---- a/ra_ap_cfg-0.0.358/src/cfg_expr.rs	2026-11-15 09:18:49.231742106 -0800
-+++ b/ra_ap_cfg/src/cfg_expr.rs	2026-11-15 09:18:49.253053088 -0800
+--- a/ra_ap_cfg-0.0.358/src/cfg_expr.rs	2026-11-15 10:05:01.658522211 -0800
++++ b/ra_ap_cfg/src/cfg_expr.rs	2026-11-15 10:05:01.678718091 -0800
 @@ -8,6 +8,7 @@
  
  /// A simple configuration value passed in from the outside.
@@ -526,8 +526,8 @@
  pub enum CfgAtom {
      /// eg. `#[cfg(test)]`
      Flag(Symbol),
---- a/ra_ap_cfg-0.0.358/src/lib.rs	2026-11-15 09:18:49.239742234 -0800
-+++ b/ra_ap_cfg/src/lib.rs	2026-11-15 09:18:49.253177614 -0800
+--- a/ra_ap_cfg-0.0.358/src/lib.rs	2026-11-15 10:05:01.666522347 -0800
++++ b/ra_ap_cfg/src/lib.rs	2026-11-15 10:05:01.678845983 -0800
 @@ -30,6 +30,7 @@
  ///
  /// See: <https://doc.rust-lang.org/reference/conditional-compilation.html#set-configuration-options>
@@ -544,8 +544,8 @@
  pub struct HashableCfgOptions {
      _enabled: Box<[CfgAtom]>,
  }
---- a/ra_ap_edition-0.0.358/Cargo.toml	2026-11-15 09:18:49.256347013 -0800
-+++ b/ra_ap_edition/Cargo.toml	2026-11-15 09:18:49.258336802 -0800
+--- a/ra_ap_edition-0.0.358/Cargo.toml	2026-11-15 10:05:01.692392686 -0800
++++ b/ra_ap_edition/Cargo.toml	2026-11-15 10:05:01.693698508 -0800
 @@ -27,6 +27,10 @@
  repository = "https://github.com/rust-lang/rust-analyzer"
  resolver = "2"
@@ -557,8 +557,8 @@
  [lib]
  name = "ra_ap_edition"
  path = "src/lib.rs"
---- a/ra_ap_edition-0.0.358/src/lib.rs	2026-11-15 09:18:49.256493656 -0800
-+++ b/ra_ap_edition/src/lib.rs	2026-11-15 09:18:49.258425526 -0800
+--- a/ra_ap_edition-0.0.358/src/lib.rs	2026-11-15 10:05:01.692521690 -0800
++++ b/ra_ap_edition/src/lib.rs	2026-11-15 10:05:01.693761766 -0800
 @@ -2,6 +2,7 @@
  // This should live in a separate crate because we use it in both actual code and codegen.
  use std::fmt;
@@ -567,8 +567,8 @@
  #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
  #[repr(u8)]
  pub enum Edition {
---- a/ra_ap_hir_def-0.0.358/Cargo.toml	2026-11-15 09:18:49.320743525 -0800
-+++ b/ra_ap_hir_def/Cargo.toml	2026-11-15 09:18:49.965890434 -0800
+--- a/ra_ap_hir_def-0.0.358/Cargo.toml	2026-11-15 10:05:01.730523431 -0800
++++ b/ra_ap_hir_def/Cargo.toml	2026-11-15 10:05:02.432687140 -0800
 @@ -101,6 +101,10 @@
  [dependencies.rustc_apfloat]
  version = "0.2.3"
@@ -580,8 +580,8 @@
  [dependencies.salsa]
  version = "0.28.5"
  features = [
---- a/ra_ap_hir_def-0.0.358/src/lib.rs	2026-11-15 09:18:49.758750510 -0800
-+++ b/ra_ap_hir_def/src/lib.rs	2026-11-15 09:18:49.968833706 -0800
+--- a/ra_ap_hir_def-0.0.358/src/lib.rs	2026-11-15 10:05:02.243532119 -0800
++++ b/ra_ap_hir_def/src/lib.rs	2026-11-15 10:05:02.472861427 -0800
 @@ -103,7 +103,7 @@
  ///
  /// Note: this struct shouldn't be exposed to ide crates -- consider using
@@ -591,8 +591,8 @@
  pub(crate) struct ExpandProcAttrMacros {
      #[returns(copy)]
      pub(crate) enabled: bool,
---- a/ra_ap_hir_expand-0.0.358/Cargo.toml	2026-11-15 09:18:50.024396690 -0800
-+++ b/ra_ap_hir_expand/Cargo.toml	2026-11-15 09:18:50.605744416 -0800
+--- a/ra_ap_hir_expand-0.0.358/Cargo.toml	2026-11-15 10:05:02.608262753 -0800
++++ b/ra_ap_hir_expand/Cargo.toml	2026-11-15 10:05:02.940218112 -0800
 @@ -71,6 +71,10 @@
  [dependencies.rustc-hash]
  version = "2.1.1"
@@ -604,8 +604,8 @@
  [dependencies.salsa]
  version = "0.28.5"
  features = [
---- a/ra_ap_hir_expand-0.0.358/src/proc_macro.rs	2026-11-15 09:18:50.594763840 -0800
-+++ b/ra_ap_hir_expand/src/proc_macro.rs	2026-11-15 09:18:50.606892361 -0800
+--- a/ra_ap_hir_expand-0.0.358/src/proc_macro.rs	2026-11-15 10:05:02.920543586 -0800
++++ b/ra_ap_hir_expand/src/proc_macro.rs	2026-11-15 10:05:02.942006295 -0800
 @@ -14,6 +14,7 @@
  use crate::{ExpandError, ExpandErrorKind, ExpandResult, tt};
  
@@ -825,8 +825,8 @@
  pub struct ProcMacros {
      #[returns(ref)]
      pub by_crate: FxHashMap<Crate, Arc<CrateProcMacros>>,
---- a/ra_ap_ide_db-0.0.358/src/lib.rs	2026-11-15 09:18:50.948769485 -0800
-+++ b/ra_ap_ide_db/src/lib.rs	2026-11-15 09:18:51.342800213 -0800
+--- a/ra_ap_ide_db-0.0.358/src/lib.rs	2026-11-15 10:05:03.600555102 -0800
++++ b/ra_ap_ide_db/src/lib.rs	2026-11-15 10:05:04.075802256 -0800
 @@ -190,6 +190,23 @@
  }
  
@@ -851,8 +851,8 @@
      pub fn new(lru_capacity: Option<u16>) -> RootDatabase {
          let mut db = RootDatabase {
              storage: ManuallyDrop::new(salsa::Storage::default()),
---- a/ra_ap_intern-0.0.358/Cargo.toml	2026-11-15 09:18:51.420314066 -0800
-+++ b/ra_ap_intern/Cargo.toml	2026-11-15 09:18:51.496121782 -0800
+--- a/ra_ap_intern-0.0.358/Cargo.toml	2026-11-15 10:05:04.154004960 -0800
++++ b/ra_ap_intern/Cargo.toml	2026-11-15 10:05:04.262939720 -0800
 @@ -30,6 +30,10 @@
  [features]
  prevent-gc = []
@@ -864,8 +864,8 @@
  [lib]
  name = "ra_ap_intern"
  path = "src/lib.rs"
---- a/ra_ap_intern-0.0.358/src/symbol.rs	2026-11-15 09:18:51.492778160 -0800
-+++ b/ra_ap_intern/src/symbol.rs	2026-11-15 09:18:51.496471973 -0800
+--- a/ra_ap_intern-0.0.358/src/symbol.rs	2026-11-15 10:05:04.259566263 -0800
++++ b/ra_ap_intern/src/symbol.rs	2026-11-15 10:05:04.311567144 -0800
 @@ -121,6 +121,19 @@
      repr: TaggedArcPtr,
  }
@@ -886,8 +886,8 @@
  impl fmt::Debug for Symbol {
      fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
          self.as_str().fmt(f)
---- a/ra_ap_load-cargo-0.0.358/src/lib.rs	2026-11-15 09:18:51.563779292 -0800
-+++ b/ra_ap_load-cargo/src/lib.rs	2026-11-15 09:18:51.567255379 -0800
+--- a/ra_ap_load-cargo-0.0.358/src/lib.rs	2026-11-15 10:05:04.413568871 -0800
++++ b/ra_ap_load-cargo/src/lib.rs	2026-11-15 10:05:04.418069933 -0800
 @@ -8,7 +8,7 @@
  #[cfg(feature = "in-rust-tree")]
  extern crate rustc_driver as _;
@@ -1004,8 +1004,8 @@
 +        Err(_) => "unreadable".to_owned(),
 +    }
 +}
---- a/ra_ap_paths-0.0.358/Cargo.toml	2026-11-15 09:18:51.570837449 -0800
-+++ b/ra_ap_paths/Cargo.toml	2026-11-15 09:18:51.609762601 -0800
+--- a/ra_ap_paths-0.0.358/Cargo.toml	2026-11-15 10:05:04.421324175 -0800
++++ b/ra_ap_paths/Cargo.toml	2026-11-15 10:05:04.435250597 -0800
 @@ -30,6 +30,10 @@
  [features]
  serde1 = ["camino/serde1"]
@@ -1025,8 +1025,8 @@
  
  [lints.clippy]
  assigning_clones = "allow"
---- a/ra_ap_paths-0.0.358/src/lib.rs	2026-11-15 09:18:51.606779978 -0800
-+++ b/ra_ap_paths/src/lib.rs	2026-11-15 09:18:51.609853829 -0800
+--- a/ra_ap_paths-0.0.358/src/lib.rs	2026-11-15 10:05:04.432569193 -0800
++++ b/ra_ap_paths/src/lib.rs	2026-11-15 10:05:04.449569481 -0800
 @@ -12,6 +12,7 @@
  
  /// A [`Utf8PathBuf`] that is guaranteed to be absolute.
@@ -1035,8 +1035,8 @@
  pub struct AbsPathBuf(Utf8PathBuf);
  
  impl From<AbsPathBuf> for Utf8PathBuf {
---- a/ra_ap_span-0.0.358/Cargo.toml	2026-11-15 09:18:51.637150080 -0800
-+++ b/ra_ap_span/Cargo.toml	2026-11-15 09:18:51.689690451 -0800
+--- a/ra_ap_span-0.0.358/Cargo.toml	2026-11-15 10:05:04.479042472 -0800
++++ b/ra_ap_span/Cargo.toml	2026-11-15 10:05:04.532273614 -0800
 @@ -31,6 +31,10 @@
  default = ["salsa"]
  in-rust-tree = []
@@ -1048,8 +1048,8 @@
  [lib]
  name = "ra_ap_span"
  path = "src/lib.rs"
---- a/ra_ap_vfs-0.0.358/Cargo.toml	2026-11-15 09:18:51.740846566 -0800
-+++ b/ra_ap_vfs/Cargo.toml	2026-11-15 09:18:51.782380481 -0800
+--- a/ra_ap_vfs-0.0.358/Cargo.toml	2026-11-15 10:05:04.599168418 -0800
++++ b/ra_ap_vfs/Cargo.toml	2026-11-15 10:05:04.707479178 -0800
 @@ -27,6 +27,10 @@
  repository = "https://github.com/rust-lang/rust-analyzer"
  resolver = "2"
@@ -1061,8 +1061,8 @@
  [lib]
  name = "ra_ap_vfs"
  path = "src/lib.rs"
---- a/ra_ap_vfs-0.0.358/src/file_set.rs	2026-11-15 09:18:51.743782162 -0800
-+++ b/ra_ap_vfs/src/file_set.rs	2026-11-15 09:18:51.782494219 -0800
+--- a/ra_ap_vfs-0.0.358/src/file_set.rs	2026-11-15 10:05:04.602572071 -0800
++++ b/ra_ap_vfs/src/file_set.rs	2026-11-15 10:05:04.718574036 -0800
 @@ -12,6 +12,7 @@
  
  /// A set of [`VfsPath`]s identified by [`FileId`]s.
@@ -1071,8 +1071,8 @@
  pub struct FileSet {
      files: FxHashMap<VfsPath, FileId>,
      paths: IndexMap<FileId, VfsPath, FxBuildHasher>,
---- a/ra_ap_vfs-0.0.358/src/lib.rs	2026-11-15 09:18:51.755782354 -0800
-+++ b/ra_ap_vfs/src/lib.rs	2026-11-15 09:18:51.782612142 -0800
+--- a/ra_ap_vfs-0.0.358/src/lib.rs	2026-11-15 10:05:04.664573121 -0800
++++ b/ra_ap_vfs/src/lib.rs	2026-11-15 10:05:04.788575222 -0800
 @@ -63,6 +63,7 @@
  ///
  /// Most functions in rust-analyzer use this when they need to refer to a file.
@@ -1094,8 +1094,8 @@
      /// Returns an iterator over the stored ids and their corresponding paths.
      ///
      /// This will skip deleted files.
---- a/ra_ap_vfs-0.0.358/src/vfs_path.rs	2026-11-15 09:18:51.778782720 -0800
-+++ b/ra_ap_vfs/src/vfs_path.rs	2026-11-15 09:18:51.782718413 -0800
+--- a/ra_ap_vfs-0.0.358/src/vfs_path.rs	2026-11-15 10:05:04.703573782 -0800
++++ b/ra_ap_vfs/src/vfs_path.rs	2026-11-15 10:05:04.839576085 -0800
 @@ -10,6 +10,7 @@
  ///
  /// [`Vfs`]: crate::Vfs

@@ -184,6 +184,25 @@ The fix is an identity for each expander, and a comparison before the write:
 What this does not do yet: the server is still started and the dylibs loaded on every run. With the
 identity known from a stat of the dylib's path, both can wait until something expands a macro.
 
+## The durability watermark
+
+A persisted memo's flattened dependencies were about 8,000 inputs on cordial, almost all of them the
+library's (file texts, source roots) and the crate graph's (crate data, cfg, env). Salsa already has the
+idea that makes these cheap to check: an input is written with a durability, and `last_changed_revision(d)`
+says when an input of durability `d` or higher last changed. The vendored Salsa now saves one edge, the
+watermark, for every input of MEDIUM durability or higher a memo reads, and verifies it as "has any such
+input changed since this memo was verified". The inputs that remain as edges of their own are the
+workspace's files (LOW). Measured on cordial: about 1,930 edges per memo instead of 8,000.
+
+The cost is imprecision: any change to a library file or to the crate graph makes every restored memo that
+read one stale, not only the memos that read the changed input. That is rare, and a run that finds it is a
+cold run, which is what it would have been.
+
+What this needs from the rest of the system: nothing may write a MEDIUM or higher input during a run that
+restored a state (it would make every restored memo stale). The loader compares before it writes
+(source roots, file texts, the crate graph, proc macros), and the crates and file copies a cfg context adds
+are LOW durability for this reason.
+
 ## Persisted cfg contexts (done)
 
 A context is shadow crates and copies of the workspace's files (virtual paths, source roots from

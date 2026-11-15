@@ -68,7 +68,7 @@ where
 
     unsafe fn collect_minimum_serialized_edges(
         &self,
-        _zalsa: &Zalsa,
+        zalsa: &Zalsa,
         edge: QueryEdge,
         serialized_edges: &mut FxIndexSet<QueryEdge>,
         _flattener: &mut crate::flatten::EdgeFlattener,
@@ -79,8 +79,13 @@ where
             C::DEBUG_NAME
         );
 
-        // Input dependencies are the leaves of the minimum dependency tree.
-        serialized_edges.insert(edge);
+        // Input dependencies are the leaves of the minimum dependency tree; the ones that
+        // rarely change are covered by one edge.
+        if self.watermarked(zalsa, edge.key().key_index()) {
+            serialized_edges.insert(QueryEdge::watermark());
+        } else {
+            serialized_edges.insert(edge);
+        }
     }
 
     fn flatten_cycle_head_dependencies(
@@ -101,6 +106,11 @@ where
             field = C::FIELD_DEBUG_NAMES[self.field_index],
             id = index
         )
+    }
+
+    fn watermarked(&self, zalsa: &Zalsa, input: Id) -> bool {
+        let value = <IngredientImpl<C>>::data(zalsa, input);
+        value.durabilities[self.field_index] >= crate::flatten::WATERMARK_DURABILITY
     }
 
     fn debug_name(&self) -> &'static str {

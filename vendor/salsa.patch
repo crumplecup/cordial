@@ -1,5 +1,5 @@
---- salsa-0.28.5/Cargo.toml	2026-11-15 09:18:52.013786468 -0800
-+++ salsa/Cargo.toml	2026-11-15 09:18:52.990711921 -0800
+--- salsa-0.28.5/Cargo.toml	2026-11-15 10:05:05.346584671 -0800
++++ salsa/Cargo.toml	2026-11-15 10:05:10.263915281 -0800
 @@ -60,549 +60,6 @@
  name = "salsa"
  path = "src/lib.rs"
@@ -550,8 +550,8 @@
  [dependencies.boxcar]
  version = "0.2.14"
  
---- salsa-0.28.5/src/accumulator.rs	2026-11-15 09:18:52.215789689 -0800
-+++ salsa/src/accumulator.rs	2026-11-15 09:18:52.987588220 -0800
+--- salsa-0.28.5/src/accumulator.rs	2026-11-15 10:05:06.147598235 -0800
++++ salsa/src/accumulator.rs	2026-11-15 10:05:10.244667607 -0800
 @@ -116,7 +116,7 @@
          _zalsa: &Zalsa,
          _edge: QueryEdge,
@@ -562,8 +562,8 @@
          panic!("nothing should ever depend on an accumulator directly")
      }
 --- salsa-0.28.5/src/flatten.rs	1969-12-31 16:00:00.000000000 -0800
-+++ salsa/src/flatten.rs	2026-11-15 09:18:52.990593783 -0800
-@@ -0,0 +1,162 @@
++++ salsa/src/flatten.rs	2026-11-15 10:05:10.263761754 -0800
+@@ -0,0 +1,168 @@
 +//! Flattening a query's dependencies down to what is persisted, once per query.
 +//!
 +//! A persisted memo's dependencies are rewritten before it is serialized: the queries that
@@ -582,9 +582,15 @@
 +
 +use std::time::Instant;
 +
++use crate::durability::Durability;
 +use crate::hash::{FxHashMap, FxIndexSet};
 +use crate::sync::Arc;
 +use crate::zalsa_local::QueryEdge;
++
++/// Inputs of this durability or higher are summarized by one edge in a persisted memo (see
++/// [`QueryEdge::watermark`]): they are the library's and the crate graph's, thousands for a
++/// memo that reads a definition map, and they change together and rarely.
++pub(crate) const WATERMARK_DURABILITY: Durability = Durability::MEDIUM;
 +
 +/// The persisted edges reached from each query that is not persisted, kept for one
 +/// ingredient's memos while they are serialized.
@@ -726,8 +732,27 @@
 +    order: usize,
 +    outer: usize,
 +}
---- salsa-0.28.5/src/function.rs	2026-11-15 09:18:52.325791443 -0800
-+++ salsa/src/function.rs	2026-11-15 09:18:52.990654072 -0800
+--- salsa-0.28.5/src/function/maybe_changed_after.rs	2026-11-15 10:05:07.123614762 -0800
++++ salsa/src/function/maybe_changed_after.rs	2026-11-15 10:05:10.261140890 -0800
+@@ -595,6 +595,16 @@
+     // valid, then some later input I1 might never have executed at all, so verifying
+     // it is still up to date is meaningless.
+     for edge in edges {
++        // A persisted memo's dependencies on inputs that rarely change are one edge: it is out of
++        // date if any input of that durability changed since the memo was verified.
++        if edge.is_watermark() {
++            if zalsa.last_changed_revision(crate::flatten::WATERMARK_DURABILITY) > old_verified_at
++            {
++                return VerifyResult::changed();
++            }
++            continue;
++        }
++
+         match edge.kind() {
+             QueryEdgeKind::Input => {
+                 let dependency_index = edge.key();
+--- salsa-0.28.5/src/function.rs	2026-11-15 10:05:07.273617302 -0800
++++ salsa/src/function.rs	2026-11-15 10:05:10.263840524 -0800
 @@ -10,6 +10,7 @@
  
  use crate::cycle::{CycleRecoveryStrategy, IterationStamp, ProvisionalStatus};
@@ -736,7 +761,7 @@
  use crate::function::delete::DeletedEntries;
  use crate::hash::{FxHashSet, FxIndexSet};
  use crate::ingredient::Ingredient;
-@@ -441,17 +442,62 @@
+@@ -441,17 +442,66 @@
          zalsa: &Zalsa,
          edge: QueryEdge,
          serialized_edges: &mut FxIndexSet<QueryEdge>,
@@ -769,6 +794,10 @@
 +
 +        // Collect the minimum dependency tree.
 +        for dependency_edge in memo.header().origin().edges() {
++            if dependency_edge.is_watermark() {
++                found.insert(dependency_edge);
++                continue;
++            }
 +            let dependency = zalsa.lookup_ingredient(dependency_edge.key().ingredient_index());
 +
 +            // A persisted query is serialized itself: depend on it, and do not walk through
@@ -803,7 +832,7 @@
      }
  
      fn as_function(&self) -> Option<FunctionIngredientRef<'_>> {
-@@ -595,44 +641,6 @@
+@@ -595,44 +645,6 @@
      }
  }
  
@@ -848,7 +877,7 @@
  fn flatten_cycle_head_dependencies(
      ingredient: &dyn FunctionIngredient,
      zalsa: &Zalsa,
-@@ -744,7 +752,8 @@
+@@ -744,7 +756,8 @@
  #[cfg(feature = "persistence")]
  mod persistence {
      use super::{Configuration, IngredientImpl, Memo};
@@ -858,7 +887,7 @@
      use crate::plumbing::{MemoIngredientMap, SalsaStructInDb};
      use crate::zalsa::Zalsa;
      use crate::zalsa_local::persistence::PersistentQueryOrigin;
-@@ -792,8 +801,10 @@
+@@ -792,8 +805,10 @@
  
              let mut map = serializer.serialize_map(Some(count))?;
  
@@ -870,7 +899,7 @@
  
              for entry in <C::SalsaStruct<'_> as SalsaStructInDb>::entries(zalsa) {
                  let memo_ingredient_index = ingredient
-@@ -815,11 +826,18 @@
+@@ -815,11 +830,22 @@
                                  collect_minimum_serialized_edges(
                                      zalsa,
                                      edges,
@@ -882,15 +911,19 @@
  
 +                            emitted += flattened_edges.len() as u64;
 +                            for edge in &flattened_edges {
-+                                let name = zalsa
-+                                    .lookup_ingredient(edge.key().ingredient_index())
-+                                    .debug_name();
++                                let name = if edge.is_watermark() {
++                                    "<watermark>"
++                                } else {
++                                    zalsa
++                                        .lookup_ingredient(edge.key().ingredient_index())
++                                        .debug_name()
++                                };
 +                                *by_kind.entry(name).or_default() += 1;
 +                            }
                              PersistentQueryOrigin::derived(flattened_edges.drain(..))
                          }
                          QueryOriginRef::DerivedUntracked(edges) => {
-@@ -828,11 +846,12 @@
+@@ -828,11 +854,12 @@
                                  collect_minimum_serialized_edges(
                                      zalsa,
                                      edges,
@@ -904,7 +937,7 @@
                              PersistentQueryOrigin::derived_untracked(flattened_edges.drain(..))
                          }
                          QueryOriginRef::Assigned(key) => {
-@@ -857,11 +876,27 @@
+@@ -857,11 +884,27 @@
                      );
  
                      map.serialize_entry(&key, &memo)?;
@@ -934,7 +967,7 @@
              map.end()
          }
      }
-@@ -875,7 +910,7 @@
+@@ -875,15 +918,26 @@
      unsafe fn collect_minimum_serialized_edges(
          zalsa: &Zalsa,
          edges: crate::zalsa_local::QueryEdges<'_>,
@@ -943,7 +976,28 @@
          flattened_edges: &mut FxIndexSet<QueryEdge>,
      ) {
          for edge in edges {
-@@ -892,7 +927,7 @@
++            // A memo restored and saved again still has its watermark.
++            if edge.is_watermark() {
++                flattened_edges.insert(edge);
++                continue;
++            }
++
+             let dependency = zalsa.lookup_ingredient(edge.key().ingredient_index());
+ 
+             if dependency.is_persistable() {
+-                // If the dependency will be serialized, we can serialize the edge directly.
+-                flattened_edges.insert(edge);
++                // If the dependency will be serialized, we can serialize the edge directly (or
++                // the watermark, for an input that rarely changes).
++                flattened_edges.insert(if dependency.watermarked(zalsa, edge.key().key_index()) {
++                    QueryEdge::watermark()
++                } else {
++                    edge
++                });
+             } else {
+                 // Otherwise, serialize the minimum edges necessary to cover the dependency.
+                 // SAFETY: The caller prevents database writes throughout the traversal.
+@@ -892,7 +946,7 @@
                          zalsa,
                          edge,
                          flattened_edges,
@@ -952,8 +1006,8 @@
                      );
                  }
              }
---- salsa-0.28.5/src/hash.rs	2026-11-15 09:18:52.327214393 -0800
-+++ salsa/src/hash.rs	2026-11-15 09:18:52.988888824 -0800
+--- salsa-0.28.5/src/hash.rs	2026-11-15 10:05:07.274939881 -0800
++++ salsa/src/hash.rs	2026-11-15 10:05:10.261432052 -0800
 @@ -4,6 +4,7 @@
  pub(crate) type FxIndexSet<K> = indexmap::IndexSet<K, FxHasher>;
  pub(crate) type FxLinkedHashSet<K> = hashlink::LinkedHashSet<K, FxHasher>;
@@ -962,8 +1016,8 @@
  
  pub(crate) fn hash<T: Hash>(t: &T) -> u64 {
      FxHasher::default().hash_one(t)
---- salsa-0.28.5/src/ingredient.rs	2026-11-15 09:18:52.343791730 -0800
-+++ salsa/src/ingredient.rs	2026-11-15 09:18:52.988974324 -0800
+--- salsa-0.28.5/src/ingredient.rs	2026-11-15 10:05:07.366618877 -0800
++++ salsa/src/ingredient.rs	2026-11-15 10:05:10.261554789 -0800
 @@ -68,7 +68,7 @@
          zalsa: &Zalsa,
          edge: QueryEdge,
@@ -973,10 +1027,28 @@
      );
  
      /// Returns the function-specific interface for this ingredient, if any.
---- salsa-0.28.5/src/input/input_field.rs	2026-11-15 09:18:52.367792113 -0800
-+++ salsa/src/input/input_field.rs	2026-11-15 09:18:52.989079194 -0800
-@@ -71,7 +71,7 @@
-         _zalsa: &Zalsa,
+@@ -191,6 +191,13 @@
+         false
+     }
+ 
++    /// Whether a persisted memo's dependency on `input` is saved as the watermark edge instead:
++    /// the input is of the durability that rarely changes, and the memo is out of date whenever
++    /// any such input has changed, without saying which.
++    fn watermarked(&self, _zalsa: &Zalsa, _input: Id) -> bool {
++        false
++    }
++
+     /// Whether there is data to serialize for this ingredient.
+     ///
+     /// If this returns `false`, the ingredient will not be serialized, even if `is_persistable`
+--- salsa-0.28.5/src/input/input_field.rs	2026-11-15 10:05:07.506621247 -0800
++++ salsa/src/input/input_field.rs	2026-11-15 10:05:10.261717633 -0800
+@@ -68,10 +68,10 @@
+ 
+     unsafe fn collect_minimum_serialized_edges(
+         &self,
+-        _zalsa: &Zalsa,
++        zalsa: &Zalsa,
          edge: QueryEdge,
          serialized_edges: &mut FxIndexSet<QueryEdge>,
 -        _visited_edges: &mut FxHashSet<QueryEdge>,
@@ -984,8 +1056,36 @@
      ) {
          assert!(
              C::PERSIST,
---- salsa-0.28.5/src/input.rs	2026-11-15 09:18:52.398792607 -0800
-+++ salsa/src/input.rs	2026-11-15 09:18:52.989231162 -0800
+@@ -79,8 +79,13 @@
+             C::DEBUG_NAME
+         );
+ 
+-        // Input dependencies are the leaves of the minimum dependency tree.
+-        serialized_edges.insert(edge);
++        // Input dependencies are the leaves of the minimum dependency tree; the ones that
++        // rarely change are covered by one edge.
++        if self.watermarked(zalsa, edge.key().key_index()) {
++            serialized_edges.insert(QueryEdge::watermark());
++        } else {
++            serialized_edges.insert(edge);
++        }
+     }
+ 
+     fn flatten_cycle_head_dependencies(
+@@ -103,6 +108,11 @@
+         )
+     }
+ 
++    fn watermarked(&self, zalsa: &Zalsa, input: Id) -> bool {
++        let value = <IngredientImpl<C>>::data(zalsa, input);
++        value.durabilities[self.field_index] >= crate::flatten::WATERMARK_DURABILITY
++    }
++
+     fn debug_name(&self) -> &'static str {
+         C::FIELD_DEBUG_NAMES[self.field_index]
+     }
+--- salsa-0.28.5/src/input.rs	2026-11-15 10:05:07.770625718 -0800
++++ salsa/src/input.rs	2026-11-15 10:05:10.261918731 -0800
 @@ -323,7 +323,7 @@
          _zalsa: &Zalsa,
          _edge: QueryEdge,
@@ -995,8 +1095,8 @@
      ) {
          panic!("nothing should ever depend on an input struct directly")
      }
---- salsa-0.28.5/src/interned.rs	2026-11-15 09:18:52.411792815 -0800
-+++ salsa/src/interned.rs	2026-11-15 09:18:52.989317376 -0800
+--- salsa-0.28.5/src/interned.rs	2026-11-15 10:05:07.817626514 -0800
++++ salsa/src/interned.rs	2026-11-15 10:05:10.262026335 -0800
 @@ -1139,7 +1139,7 @@
          _zalsa: &Zalsa,
          edge: QueryEdge,
@@ -1006,8 +1106,8 @@
      ) {
          if C::PERSIST && C::REVISIONS != IMMORTAL {
              // If the interned struct is being persisted, it may be reachable through transitive queries.
---- salsa-0.28.5/src/lib.rs	2026-11-15 09:18:52.458793564 -0800
-+++ salsa/src/lib.rs	2026-11-15 09:18:52.989432976 -0800
+--- salsa-0.28.5/src/lib.rs	2026-11-15 10:05:07.914628156 -0800
++++ salsa/src/lib.rs	2026-11-15 10:05:10.262196759 -0800
 @@ -262,6 +262,7 @@
  mod database_impl;
  mod durability;
@@ -1016,8 +1116,8 @@
  mod function;
  mod hash;
  mod id;
---- salsa-0.28.5/src/tracked_struct/tracked_field.rs	2026-11-15 09:18:52.517794505 -0800
-+++ salsa/src/tracked_struct/tracked_field.rs	2026-11-15 09:18:52.990200984 -0800
+--- salsa-0.28.5/src/tracked_struct/tracked_field.rs	2026-11-15 10:05:08.523638467 -0800
++++ salsa/src/tracked_struct/tracked_field.rs	2026-11-15 10:05:10.263231212 -0800
 @@ -77,7 +77,7 @@
          _zalsa: &Zalsa,
          _edge: QueryEdge,
@@ -1027,8 +1127,8 @@
      ) {
          // Tracked fields do not have transitive dependencies, and their dependencies are covered by
          // the base inputs.
---- salsa-0.28.5/src/tracked_struct.rs	2026-11-15 09:18:52.528794680 -0800
-+++ salsa/src/tracked_struct.rs	2026-11-15 09:18:52.990280587 -0800
+--- salsa-0.28.5/src/tracked_struct.rs	2026-11-15 10:05:08.550638925 -0800
++++ salsa/src/tracked_struct.rs	2026-11-15 10:05:10.263354298 -0800
 @@ -1000,7 +1000,7 @@
          _zalsa: &Zalsa,
          _edge: QueryEdge,
@@ -1038,3 +1138,49 @@
      ) {
          // Note that tracked structs are referenced by the identity map, but that
          // only matters if we are serializing the creating query, in which case
+--- salsa-0.28.5/src/zalsa_local.rs	2026-11-15 10:05:08.704641533 -0800
++++ salsa/src/zalsa_local.rs	2026-11-15 10:05:10.263643635 -0800
+@@ -879,6 +879,8 @@
+     #[inline]
+     pub(crate) fn inputs(self) -> impl DoubleEndedIterator<Item = DatabaseKeyIndex> + use<'a> {
+         self.edges().iter().filter_map(|edge| match edge.kind() {
++            // The watermark stands for inputs, not for a query.
++            QueryEdgeKind::Input if edge.is_watermark() => None,
+             QueryEdgeKind::Input => Some(edge.key()),
+             QueryEdgeKind::Output => None,
+         })
+@@ -1676,6 +1678,23 @@
+         }
+     }
+ 
++    /// The edge a persisted memo has in place of its dependencies on inputs of the watermark
++    /// durability or higher: it stands for all of them, and is out of date once any input of
++    /// that durability has changed since the memo was verified. It belongs to no ingredient
++    /// (it uses the one index no ingredient has) and is checked where edges are verified.
++    pub(crate) const fn watermark() -> QueryEdge {
++        QueryEdge {
++            index: 0,
++            generation: 0,
++            ingredient: unsafe { IngredientIndex::new_unchecked(IngredientIndex::MAX_INDEX) },
++        }
++    }
++
++    /// Whether this is [`Self::watermark`].
++    pub(crate) const fn is_watermark(self) -> bool {
++        self.ingredient.as_u32() == IngredientIndex::MAX_INDEX
++    }
++
+     const fn id(self) -> Id {
+         // SAFETY: `index` came from a valid `Id` in `QueryEdge::input`.
+         unsafe { Id::from_index(self.index) }.with_generation(self.generation)
+--- salsa-0.28.5/src/zalsa.rs	2026-11-15 10:05:08.640640449 -0800
++++ salsa/src/zalsa.rs	2026-11-15 10:05:10.263506586 -0800
+@@ -76,7 +76,7 @@
+     /// The maximum supported ingredient index.
+     ///
+     /// This reserves one bit for an optional tag.
+-    const MAX_INDEX: u32 = 0x7FFF_FFFF;
++    pub(crate) const MAX_INDEX: u32 = 0x7FFF_FFFF;
+ 
+     /// Create an ingredient index from a `u32`.
+     pub(crate) fn new(v: u32) -> Self {
