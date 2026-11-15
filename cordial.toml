@@ -7,6 +7,11 @@
 # Etiquette tables accept `enabled` (default true). `enabled = false` skips
 # that etiquette for the project (`cordial explain` names this line).
 
+# How much memory a run may use before it stops itself, saying where it was: a size
+# (`12G`, `512M`), a share of the memory available when it starts (`75%`, the default),
+# or `0` for none. `--memory-limit` and `CORDIAL_MEMORY_LIMIT` win over this.
+memory_limit = "75%"
+
 # Relative paths are resolved inside this project's Cordial store.
 [hotpath]
 output_path = "hotpath.json"

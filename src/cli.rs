@@ -56,15 +56,15 @@ pub struct Cli {
     pub stop_after: Option<String>,
 
     /// Stop the run, with a message saying where it was, when this process uses more memory
-    /// than this: a size such as 8G or 512M, or 0 for no limit.
-    /// (default: 8G, or `memory_limit` in `cordial.toml`).
+    /// than this: a size such as 12G or 512M, a share of the memory available when it starts
+    /// such as 75%, or 0 for no limit (default: 75%, or `memory_limit` in `cordial.toml`).
     #[arg(
         long,
         env = "CORDIAL_MEMORY_LIMIT",
         global = true,
-        value_parser = crate::parse_size
+        value_parser = crate::parse_limit
     )]
-    pub memory_limit: Option<u64>,
+    pub memory_limit: Option<crate::MemoryLimit>,
 
     /// Nested clap subcommand.
     #[command(subcommand)]
