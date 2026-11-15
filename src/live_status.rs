@@ -27,6 +27,7 @@ pub struct LiveStatus {
     started: Instant,
     executed: AtomicU64,
     latest: Mutex<String>,
+    phase: Mutex<String>,
 }
 
 impl LiveStatus {
@@ -39,7 +40,25 @@ impl LiveStatus {
             started: Instant::now(),
             executed: AtomicU64::new(0),
             latest: Mutex::new(String::new()),
+            phase: Mutex::new(String::new()),
         })
+    }
+
+    /// Say what the run is doing now, in the words of its progress display.
+    #[instrument(level = "trace", skip(self, phase))]
+    pub fn set_phase(&self, phase: &str) {
+        if let Ok(mut current) = self.phase.lock() {
+            phase.clone_into(&mut current);
+        }
+    }
+
+    /// What the run was last said to be doing.
+    #[instrument(level = "trace", skip(self))]
+    pub fn phase(&self) -> String {
+        self.phase
+            .lock()
+            .map(|phase| phase.clone())
+            .unwrap_or_default()
     }
 
     /// Salsa queries executed so far.

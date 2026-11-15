@@ -73,6 +73,7 @@ impl LineProgress {
     #[instrument(level = "debug", skip(self))]
     #[hotpath::measure]
     fn start(&self, message: String, total: Option<u64>) -> Box<dyn ProgressTask> {
+        crate::LiveStatus::global().set_phase(&message);
         write_progress_line(&self.output, &format!("Starting: {message}"));
         let state = Arc::new(crate::sync::mutex!(
             LineTaskState {
@@ -185,6 +186,7 @@ impl LineTask {
 impl ProgressTask for LineTask {
     #[instrument(level = "trace", skip(self))]
     fn set_message(&self, message: String) {
+        crate::LiveStatus::global().set_phase(&message);
         if let Ok(mut state) = self.state.lock()
             && state.message != message
         {

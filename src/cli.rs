@@ -55,6 +55,17 @@ pub struct Cli {
     #[arg(long, global = true, value_parser = clap::builder::PossibleValuesParser::new(crate::STAGES))]
     pub stop_after: Option<String>,
 
+    /// Stop the run, with a message saying where it was, when this process uses more memory
+    /// than this: a size such as 8G or 512M, or 0 for no limit.
+    /// (default: 8G, or `memory_limit` in `cordial.toml`).
+    #[arg(
+        long,
+        env = "CORDIAL_MEMORY_LIMIT",
+        global = true,
+        value_parser = crate::parse_size
+    )]
+    pub memory_limit: Option<u64>,
+
     /// Nested clap subcommand.
     #[command(subcommand)]
     pub command: Commands,
@@ -71,6 +82,11 @@ impl Cli {
         };
         let slug = project_slug_from_path(&project_root);
         let store_home = self.store_home.clone().unwrap_or_else(default_store_home);
+        let configured = crate::load_cordial_config(&project_root, &store_home);
+        crate::enforce(crate::resolve_memory_limit(
+            self.memory_limit,
+            configured.memory_limit().as_deref(),
+        ));
         let store_root = store_home.join(&slug);
         let store = StoreLayout::from_root(store_root.clone(), slug);
         // The guard spans command execution and writes its report on drop.

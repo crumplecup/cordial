@@ -36,6 +36,7 @@ impl ProgressSink for IndicatifProgress {
     fn spinner(&self, message: String) -> Box<dyn ProgressTask> {
         let bar = self.multi.add(ProgressBar::new_spinner());
         bar.set_style(spinner_style());
+        crate::LiveStatus::global().set_phase(&message);
         bar.set_message(message);
         bar.enable_steady_tick(Duration::from_millis(100));
         Box::new(IndicatifTask::new(bar))
@@ -45,6 +46,7 @@ impl ProgressSink for IndicatifProgress {
     fn bar(&self, message: String, len: u64) -> Box<dyn ProgressTask> {
         let bar = self.multi.add(ProgressBar::new(len));
         bar.set_style(bar_style());
+        crate::LiveStatus::global().set_phase(&message);
         bar.set_message(message);
         // The live status moves while the position does not.
         bar.enable_steady_tick(Duration::from_millis(500));
@@ -77,6 +79,7 @@ impl IndicatifTask {
 impl ProgressTask for IndicatifTask {
     #[instrument(level = "trace", skip(self))]
     fn set_message(&self, message: String) {
+        crate::LiveStatus::global().set_phase(&message);
         self.bar.set_message(message);
     }
 

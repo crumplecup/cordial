@@ -35,6 +35,7 @@ pub mod host;
 mod ir;
 mod live_status;
 mod loader;
+mod memory_limit;
 mod objects;
 pub mod perf;
 mod plugin;
@@ -282,6 +283,10 @@ pub use etiquettes::quality_etiquettes;
 #[cfg(feature = "amenable_ext")]
 pub use etiquettes::{AMENABLE_EXT_JIFF_ETIQUETTE, ExtReporter};
 pub use live_status::{LiveLayer, LiveStatus, live_filter};
+pub use memory_limit::{
+    DEFAULT_MEMORY_LIMIT, MEMORY_LIMIT_EXIT, enforce, exceeds, parse_size,
+    resolve as resolve_memory_limit,
+};
 #[cfg(all(feature = "rustdoc", feature = "impl_coverage"))]
 pub use plugin::classify_elicit_complete_gap;
 #[cfg(feature = "elicitation")]

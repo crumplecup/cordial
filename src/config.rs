@@ -59,6 +59,11 @@ use crate::session::SessionView;
 /// All Cordial settings loaded from `cordial.toml`.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, derive_getters::Getters)]
 pub struct CordialConfig {
+    /// How much memory a run may use before it stops itself, as a size such as `8G` or `512M`
+    /// (`0` for no limit). The `--memory-limit` flag and `CORDIAL_MEMORY_LIMIT` take precedence;
+    /// the default is eight gibibytes.
+    #[serde(default)]
+    memory_limit: Option<String>,
     /// Shared enable and path policy, keyed by etiquette configuration identity.
     #[serde(default)]
     lints: std::collections::BTreeMap<String, LintPolicy>,
