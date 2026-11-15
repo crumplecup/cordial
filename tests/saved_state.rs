@@ -126,15 +126,14 @@ fn a_restored_run_does_not_compute_the_evidence_it_was_saved_with() -> Result<()
         "a cold run computes the evidence of the crate's functions"
     );
 
-    // Nothing changed: the saved evidence answers. What is computed is the two `helper`s a
-    // macro generates, which no description can find again, so they have no saved evidence.
+    // Nothing changed: the saved evidence answers, for the two `helper`s a macro generates too
+    // (a description finds a generated function in the crate's index of what was generated).
     let (restored, targets, _) = run(root.path(), &saved)?;
     assert!(restored);
     assert_eq!(
         evaluated(),
-        Some(2),
-        "only the macro-generated functions are computed again; the other {} are reused",
-        cold - 2
+        Some(0),
+        "nothing is computed again; all {cold} are reused"
     );
     assert_eq!(targets, first_targets);
 

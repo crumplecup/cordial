@@ -64,7 +64,7 @@ fn descriptions_tell_apart_definitions_with_one_name() -> Result<()> {
 
 #[test]
 #[tracing::instrument(level = "debug", err(level = "warn"))]
-fn a_definition_with_a_site_is_found_again_and_one_without_is_not() -> Result<()> {
+fn a_definition_is_found_again_whether_it_is_written_in_a_file_or_generated() -> Result<()> {
     cordial::init_tracing();
     let root = specimen()?;
     let mut session = SourceDatabase::load(root.path()).into_diagnostic()?;
@@ -79,10 +79,10 @@ fn a_definition_with_a_site_is_found_again_and_one_without_is_not() -> Result<()
             .nth(3)
             .is_some_and(|chain| !chain.is_empty());
         generated += usize::from(from_macro);
-        assert_eq!(
+        assert!(
             session.knows_item(*id),
-            !from_macro,
-            "{description}: found again exactly when it is written in a file"
+            "{description}: found again, from the file it is written in or from the macro \
+             expansion it came out of"
         );
     }
     assert_eq!(generated, 2, "the two `helper`s come from macro calls");

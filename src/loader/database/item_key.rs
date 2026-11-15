@@ -66,6 +66,12 @@ pub(super) fn function_of(
     }
 }
 
+/// What `key` describes, as text.
+#[instrument(level = "trace", skip(db, key))]
+pub(super) fn key_text(db: &RootDatabase, key: ItemKey<'_>) -> String {
+    key.descriptor(db).clone()
+}
+
 /// What `id` describes, as text.
 #[instrument(level = "trace", skip(db, id))]
 pub(super) fn description(db: &RootDatabase, id: SemanticItemId) -> String {
@@ -98,22 +104,56 @@ fn resolve<'db>(db: &'db dyn SemanticDatabase, key: ItemKey<'db>) -> Option<Modu
     let descriptor = key.descriptor(db);
     let site = Site::parse(descriptor)?;
     let file = file_at(root, &site.path)?;
-    attach_db(root, || {
+    let direct = attach_db(root, || {
         let sema = Semantics::new(root);
         let tree = sema.parse(sema.attach_first_edition_opt(file)?);
         let candidates: Vec<ModuleDef> = match site.chain.len() {
+            // A function synthesized for a derive is written nowhere: only the index has it.
+            _ if site.member.is_some() => Vec::new(),
             0 => written_in_file(&sema, &tree, &site).into_iter().collect(),
             // A function an attribute macro generated: the annotated function is
             // where the call is.
             1 if site.kind == KIND_FUNCTION => annotated_function(&sema, &tree, &site),
-            // Anything else a macro generated cannot be found without expanding it
-            // again.
-            _ => return None,
+            _ => Vec::new(),
         };
         // Whatever was found must say it is this definition.
         candidates
             .into_iter()
             .find(|candidate| describe(root, *candidate) == *descriptor)
+    });
+    // Anything else a macro generated (a derive's methods, what two attribute macros wrapped,
+    // what a `macro_rules!` call defined) has no text to read the definition from: it is in
+    // the crate's index of what was generated.
+    direct.or_else(|| {
+        if site.chain.is_empty() && site.member.is_none() {
+            return None;
+        }
+        ra_ap_ide_db::base_db::relevant_crates(root, file)
+            .iter()
+            .find_map(|krate| generated_in(db, *krate).get(descriptor.as_str()).copied())
+    })
+}
+
+/// Every definition of `krate` that a macro generated, by description: the way back from a
+/// description to a definition with no text of its own to read it from. Built once for the
+/// crate, and out of date when anything the crate's definitions depend on has changed.
+#[salsa::tracked(returns(ref))]
+#[instrument(level = "debug", skip(db))]
+#[hotpath::measure]
+fn generated_in(
+    db: &dyn SemanticDatabase,
+    krate: ra_ap_ide_db::base_db::Crate,
+) -> std::collections::HashMap<String, ModuleDef> {
+    let root = db.root_database();
+    attach_db(root, || {
+        super::context_crates::declared_in(root, ra_ap_hir::Crate::from(krate))
+            .into_iter()
+            .filter(|definition| {
+                site_of(root, *definition)
+                    .is_some_and(|site| !site.chain.is_empty() || site.member.is_some())
+            })
+            .map(|definition| (describe(root, definition), definition))
+            .collect()
     })
 }
 
@@ -203,6 +243,9 @@ pub(super) struct DefSite {
     pub(super) file: FileId,
     pub(super) offset: u32,
     pub(super) chain: Vec<u32>,
+    /// For a function the compiler synthesizes for a derive: the trait and method, written
+    /// beside the site of the type it is for.
+    pub(super) member: Option<String>,
 }
 
 /// A [`DefSite`] with its file named by path, which means the same in every process.
@@ -212,6 +255,7 @@ struct Site {
     path: PathText,
     offset: u32,
     chain: Vec<u32>,
+    member: Option<String>,
 }
 
 /// A file's path in the database, and whether the database holds it as a real
@@ -250,7 +294,7 @@ impl PathText {
 impl Site {
     #[instrument(level = "trace", skip(text))]
     fn parse(text: &str) -> Option<Self> {
-        let mut parts = text.splitn(5, '|');
+        let mut parts = text.splitn(6, '|');
         let kind = parts.next()?.parse().ok()?;
         let real = match parts.next()? {
             "real" => true,
@@ -267,6 +311,10 @@ impl Site {
                 .map(|part| part.parse().ok())
                 .collect::<Option<Vec<u32>>>()?
         };
+        let member = match parts.next()? {
+            "" => None,
+            member => Some(member.to_owned()),
+        };
         Some(Self {
             kind,
             path: PathText {
@@ -275,6 +323,7 @@ impl Site {
             },
             offset,
             chain,
+            member,
         })
     }
 
@@ -288,8 +337,11 @@ impl Site {
             .collect::<Vec<_>>()
             .join(",");
         format!(
-            "{}|{route}|{}|{chain}|{}",
-            self.kind, self.offset, self.path.text
+            "{}|{route}|{}|{chain}|{}|{}",
+            self.kind,
+            self.offset,
+            self.member.as_deref().unwrap_or(""),
+            self.path.text
         )
     }
 }
@@ -298,7 +350,9 @@ impl Site {
 #[instrument(level = "trace", skip(db, definition))]
 pub(super) fn site_of(db: &RootDatabase, definition: ModuleDef) -> Option<DefSite> {
     match definition {
-        ModuleDef::Function(it) => site_in(db, KIND_FUNCTION, it.source(db)?),
+        ModuleDef::Function(it) => {
+            derived_site(db, it).or_else(|| site_in(db, KIND_FUNCTION, it.source(db)?))
+        }
         ModuleDef::Adt(Adt::Struct(it)) => site_in(db, KIND_STRUCT, it.source(db)?),
         ModuleDef::Adt(Adt::Enum(it)) => site_in(db, KIND_ENUM, it.source(db)?),
         ModuleDef::Adt(Adt::Union(it)) => site_in(db, KIND_UNION, it.source(db)?),
@@ -308,6 +362,37 @@ pub(super) fn site_of(db: &RootDatabase, definition: ModuleDef) -> Option<DefSit
         ModuleDef::Static(it) => site_in(db, KIND_STATIC, it.source(db)?),
         _ => None,
     }
+}
+
+/// The site of a function the compiler synthesizes for a built-in derive. Its source is the
+/// trait's own method (`Clone::clone` in `core`), the same for every type that derives the
+/// trait, so it is described by the type the impl is for, the trait and the method.
+#[instrument(level = "trace", skip(db, function))]
+fn derived_site(db: &RootDatabase, function: ra_ap_hir::Function) -> Option<DefSite> {
+    let source = function.source(db)?;
+    let own = function.module(db).krate(db).base();
+    let file = source
+        .file_id
+        .original_file_respecting_includes(db)
+        .file_id(db);
+    if ra_ap_ide_db::base_db::relevant_crates(db, file).contains(&own) {
+        return None;
+    }
+    let ra_ap_hir::AssocItemContainer::Impl(implementation) =
+        ra_ap_hir::AsAssocItem::as_assoc_item(function, db)?.container(db)
+    else {
+        return None;
+    };
+    let adt = implementation.self_ty(db).as_adt()?;
+    let derived = implementation.trait_(db)?;
+    let mut site = site_of(db, ModuleDef::Adt(adt))?;
+    site.kind = KIND_FUNCTION;
+    site.member = Some(format!(
+        "{}::{}",
+        derived.name(db).as_str(),
+        function.name(db).as_str()
+    ));
+    Some(site)
 }
 
 /// The site of an item's name, following each macro expansion out to the call that
@@ -334,6 +419,7 @@ fn site_in<N: AstNode + HasName>(
         file,
         offset,
         chain,
+        member: None,
     })
 }
 
@@ -374,6 +460,7 @@ fn describe(db: &RootDatabase, definition: ModuleDef) -> String {
                     path: path_of(db, site.file)?,
                     offset: site.offset,
                     chain: site.chain,
+                    member: site.member,
                 }
                 .text(),
             )

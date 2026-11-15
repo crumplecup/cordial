@@ -554,7 +554,7 @@ type Place = super::item_key::DefSite;
 /// traits and constants, including the associated items of impls and traits.
 #[instrument(level = "debug", skip(db))]
 #[hotpath::measure]
-fn declared_in(db: &RootDatabase, krate: Crate) -> Vec<ModuleDef> {
+pub(super) fn declared_in(db: &RootDatabase, krate: Crate) -> Vec<ModuleDef> {
     let mut found = Vec::new();
     for module in krate.modules(db) {
         found.extend(module.declarations(db));

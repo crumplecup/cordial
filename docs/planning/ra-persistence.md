@@ -218,6 +218,29 @@ persisted query has executed in the process since it began (`salsa::persisted_ex
 a function memo with `persist` executes): what it would write is what is there. It says so
 (`analysis state: nothing new to save`).
 
+## Functions macros generate
+
+A description is the site of a definition's name: the file's path, the offset, and, for a generated
+definition, the chain of offsets through each expansion. Reading one back found a definition written
+in the file, or a function one attribute macro wrapped (the annotated function sits at the call).
+Everything else came back "not found" and was evaluated again in every run: a derive's methods, a
+function two attribute macros wrapped (`#[instrument]` and `#[hotpath::measure]`, which cordial puts on
+nearly every function), what a `macro_rules!` call defined. `tests/saved_generated.rs` had 7 of its 11
+functions in that state.
+
+- **An index of what was generated.** `generated_in(crate)` lists the crate's definitions whose site
+  has an expansion chain, by description (the crate's modules and the associated items of its impls and
+  traits, which is where a derive's methods are). `resolve` tries the cheap reads first and falls back
+  to the index. It is a tracked query, so it is out of date when the crate's definitions are, which a
+  persisted memo already depends on.
+- **Built-in derives.** `Clone::clone` of a `#[derive(Clone)]` has the trait's own method (in `core`) as
+  its source, the same for every type, so every such function had one description and none could be
+  found. A function whose source is in another crate than its own is described by the site of the type
+  its impl is for, plus `Trait::method`. The description has a member field for it:
+  `kind|route|offset|chain|member|path`.
+- **What it cannot do.** A proc macro that produces different text in different runs gives different
+  offsets, and so a different description: its functions are evaluated again, which is correct.
+
 ## A context depends on its own crates and nothing of another context's
 
 Adding a context used to write one input that listed every context's crates, and every memo about

@@ -334,6 +334,11 @@ pub(super) fn evidence_of<'db>(
     if super::item_key::finds(db, key, definition) {
         persisted_evidence(db, key)
     } else {
+        tracing::debug!(
+            target: "cordial::semantic::identity",
+            description = %super::item_key::key_text(root, key),
+            "evidence computed in this process: the description does not find this function again"
+        );
         function_evidence(db, FunctionKey::new(db, function))
     }
 }
