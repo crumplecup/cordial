@@ -1139,7 +1139,7 @@ where
         _zalsa: &Zalsa,
         edge: QueryEdge,
         serialized_edges: &mut FxIndexSet<QueryEdge>,
-        _visited_edges: &mut FxHashSet<QueryEdge>,
+        _flattener: &mut crate::flatten::EdgeFlattener,
     ) {
         if C::PERSIST && C::REVISIONS != IMMORTAL {
             // If the interned struct is being persisted, it may be reachable through transitive queries.

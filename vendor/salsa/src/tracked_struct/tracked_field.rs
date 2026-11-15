@@ -77,7 +77,7 @@ where
         _zalsa: &Zalsa,
         _edge: QueryEdge,
         _serialized_edges: &mut FxIndexSet<QueryEdge>,
-        _visited_edges: &mut FxHashSet<QueryEdge>,
+        _flattener: &mut crate::flatten::EdgeFlattener,
     ) {
         // Tracked fields do not have transitive dependencies, and their dependencies are covered by
         // the base inputs.

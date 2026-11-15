@@ -1,0 +1,1032 @@
+--- salsa-0.28.5/Cargo.toml	2026-11-14 19:15:09.907877757 -0800
++++ salsa/Cargo.toml	2026-11-14 19:15:10.497530303 -0800
+@@ -60,549 +60,6 @@
+ name = "salsa"
+ path = "src/lib.rs"
+ 
+-[[example]]
+-name = "calc"
+-path = "examples/calc/main.rs"
+-required-features = ["accumulator"]
+-
+-[[example]]
+-name = "lazy-input"
+-path = "examples/lazy-input/main.rs"
+-required-features = ["accumulator"]
+-
+-[[test]]
+-name = "accumulate"
+-path = "tests/accumulate.rs"
+-
+-[[test]]
+-name = "accumulate-behind-tracked-fn"
+-path = "tests/accumulate-behind-tracked-fn.rs"
+-
+-[[test]]
+-name = "accumulate-chain"
+-path = "tests/accumulate-chain.rs"
+-
+-[[test]]
+-name = "accumulate-custom-debug"
+-path = "tests/accumulate-custom-debug.rs"
+-
+-[[test]]
+-name = "accumulate-dag"
+-path = "tests/accumulate-dag.rs"
+-
+-[[test]]
+-name = "accumulate-execution-order"
+-path = "tests/accumulate-execution-order.rs"
+-
+-[[test]]
+-name = "accumulate-from-tracked-fn"
+-path = "tests/accumulate-from-tracked-fn.rs"
+-
+-[[test]]
+-name = "accumulate-no-duplicates"
+-path = "tests/accumulate-no-duplicates.rs"
+-
+-[[test]]
+-name = "accumulate-reuse"
+-path = "tests/accumulate-reuse.rs"
+-
+-[[test]]
+-name = "accumulate-reuse-workaround"
+-path = "tests/accumulate-reuse-workaround.rs"
+-
+-[[test]]
+-name = "accumulate-shallow-verify"
+-path = "tests/accumulate-shallow-verify.rs"
+-
+-[[test]]
+-name = "accumulated_backdate"
+-path = "tests/accumulated_backdate.rs"
+-
+-[[test]]
+-name = "backdate_untracked_db_field"
+-path = "tests/backdate_untracked_db_field.rs"
+-
+-[[test]]
+-name = "backtrace"
+-path = "tests/backtrace.rs"
+-
+-[[test]]
+-name = "cancellation-event-panic"
+-path = "tests/cancellation-event-panic.rs"
+-
+-[[test]]
+-name = "cancellation_token"
+-path = "tests/cancellation_token.rs"
+-
+-[[test]]
+-name = "check_auto_traits"
+-path = "tests/check_auto_traits.rs"
+-
+-[[test]]
+-name = "compile_fail"
+-path = "tests/compile_fail.rs"
+-
+-[[test]]
+-name = "compile_pass"
+-path = "tests/compile_pass.rs"
+-
+-[[test]]
+-name = "cycle"
+-path = "tests/cycle.rs"
+-
+-[[test]]
+-name = "cycle_accumulate"
+-path = "tests/cycle_accumulate.rs"
+-
+-[[test]]
+-name = "cycle_dependency_order_different_entry_queries"
+-path = "tests/cycle_dependency_order_different_entry_queries.rs"
+-
+-[[test]]
+-name = "cycle_displaced_memo"
+-path = "tests/cycle_displaced_memo.rs"
+-
+-[[test]]
+-name = "cycle_fallback_immediate"
+-path = "tests/cycle_fallback_immediate.rs"
+-
+-[[test]]
+-name = "cycle_initial_call_back_into_cycle"
+-path = "tests/cycle_initial_call_back_into_cycle.rs"
+-
+-[[test]]
+-name = "cycle_initial_call_query"
+-path = "tests/cycle_initial_call_query.rs"
+-
+-[[test]]
+-name = "cycle_input_different_cycle_head"
+-path = "tests/cycle_input_different_cycle_head.rs"
+-
+-[[test]]
+-name = "cycle_left_recursive_query"
+-path = "tests/cycle_left_recursive_query.rs"
+-
+-[[test]]
+-name = "cycle_maybe_changed_after"
+-path = "tests/cycle_maybe_changed_after.rs"
+-
+-[[test]]
+-name = "cycle_nested_converge_early"
+-path = "tests/cycle_nested_converge_early.rs"
+-
+-[[test]]
+-name = "cycle_nested_converges_never"
+-path = "tests/cycle_nested_converges_never.rs"
+-
+-[[test]]
+-name = "cycle_output"
+-path = "tests/cycle_output.rs"
+-
+-[[test]]
+-name = "cycle_recovery_call_back_into_cycle"
+-path = "tests/cycle_recovery_call_back_into_cycle.rs"
+-
+-[[test]]
+-name = "cycle_recovery_call_query"
+-path = "tests/cycle_recovery_call_query.rs"
+-
+-[[test]]
+-name = "cycle_recovery_dependencies"
+-path = "tests/cycle_recovery_dependencies.rs"
+-
+-[[test]]
+-name = "cycle_regression_455"
+-path = "tests/cycle_regression_455.rs"
+-
+-[[test]]
+-name = "cycle_result_dependencies"
+-path = "tests/cycle_result_dependencies.rs"
+-
+-[[test]]
+-name = "cycle_specify"
+-path = "tests/cycle_specify.rs"
+-
+-[[test]]
+-name = "cycle_stale_cycle_heads"
+-path = "tests/cycle_stale_cycle_heads.rs"
+-
+-[[test]]
+-name = "cycle_tracked"
+-path = "tests/cycle_tracked.rs"
+-
+-[[test]]
+-name = "cycle_tracked_own_input"
+-path = "tests/cycle_tracked_own_input.rs"
+-
+-[[test]]
+-name = "dataflow"
+-path = "tests/dataflow.rs"
+-
+-[[test]]
+-name = "debug"
+-path = "tests/debug.rs"
+-
+-[[test]]
+-name = "debug_bounds"
+-path = "tests/debug_bounds.rs"
+-
+-[[test]]
+-name = "debug_db_contents"
+-path = "tests/debug_db_contents.rs"
+-
+-[[test]]
+-name = "deletion"
+-path = "tests/deletion.rs"
+-
+-[[test]]
+-name = "deletion-cascade"
+-path = "tests/deletion-cascade.rs"
+-
+-[[test]]
+-name = "deletion-drops"
+-path = "tests/deletion-drops.rs"
+-
+-[[test]]
+-name = "derive_salsa_value"
+-path = "tests/derive_salsa_value.rs"
+-
+-[[test]]
+-name = "durability"
+-path = "tests/durability.rs"
+-
+-[[test]]
+-name = "elided-lifetime-in-tracked-fn"
+-path = "tests/elided-lifetime-in-tracked-fn.rs"
+-
+-[[test]]
+-name = "expect_reuse_field_x_of_a_tracked_struct_changes_but_fn_depends_on_field_y"
+-path = "tests/expect_reuse_field_x_of_a_tracked_struct_changes_but_fn_depends_on_field_y.rs"
+-
+-[[test]]
+-name = "expect_reuse_field_x_of_an_input_changes_but_fn_depends_on_field_y"
+-path = "tests/expect_reuse_field_x_of_an_input_changes_but_fn_depends_on_field_y.rs"
+-
+-[[test]]
+-name = "hash_collision"
+-path = "tests/hash_collision.rs"
+-
+-[[test]]
+-name = "hello_world"
+-path = "tests/hello_world.rs"
+-
+-[[test]]
+-name = "input_default"
+-path = "tests/input_default.rs"
+-
+-[[test]]
+-name = "input_field_durability"
+-path = "tests/input_field_durability.rs"
+-
+-[[test]]
+-name = "input_setter_preserves_durability"
+-path = "tests/input_setter_preserves_durability.rs"
+-
+-[[test]]
+-name = "intern_access_in_different_revision"
+-path = "tests/intern_access_in_different_revision.rs"
+-
+-[[test]]
+-name = "interned-atomic"
+-path = "tests/interned-atomic.rs"
+-
+-[[test]]
+-name = "interned-bad-eq"
+-path = "tests/interned-bad-eq.rs"
+-
+-[[test]]
+-name = "interned-revisions"
+-path = "tests/interned-revisions.rs"
+-
+-[[test]]
+-name = "interned-structs"
+-path = "tests/interned-structs.rs"
+-
+-[[test]]
+-name = "lru"
+-path = "tests/lru.rs"
+-
+-[[test]]
+-name = "manual_registration"
+-path = "tests/manual_registration.rs"
+-
+-[[test]]
+-name = "memory-usage"
+-path = "tests/memory-usage.rs"
+-
+-[[test]]
+-name = "mutate_in_place"
+-path = "tests/mutate_in_place.rs"
+-
+-[[test]]
+-name = "never_change"
+-path = "tests/never_change.rs"
+-
+-[[test]]
+-name = "never_change_accumulate"
+-path = "tests/never_change_accumulate.rs"
+-
+-[[test]]
+-name = "override_new_get_set"
+-path = "tests/override_new_get_set.rs"
+-
+-[[test]]
+-name = "panic-when-creating-tracked-struct-outside-of-tracked-fn"
+-path = "tests/panic-when-creating-tracked-struct-outside-of-tracked-fn.rs"
+-
+-[[test]]
+-name = "parallel"
+-path = "tests/parallel/main.rs"
+-
+-[[test]]
+-name = "persistence"
+-path = "tests/persistence.rs"
+-
+-[[test]]
+-name = "persistence_never_change"
+-path = "tests/persistence_never_change.rs"
+-
+-[[test]]
+-name = "persistence_stale_interned"
+-path = "tests/persistence_stale_interned.rs"
+-
+-[[test]]
+-name = "preverify-struct-with-leaked-data"
+-path = "tests/preverify-struct-with-leaked-data.rs"
+-
+-[[test]]
+-name = "preverify-struct-with-leaked-data-2"
+-path = "tests/preverify-struct-with-leaked-data-2.rs"
+-
+-[[test]]
+-name = "return_mode"
+-path = "tests/return_mode.rs"
+-
+-[[test]]
+-name = "singleton"
+-path = "tests/singleton.rs"
+-
+-[[test]]
+-name = "specify-discards-derived-tracked-outputs"
+-path = "tests/specify-discards-derived-tracked-outputs.rs"
+-
+-[[test]]
+-name = "specify-only-works-if-the-key-is-created-in-the-current-query"
+-path = "tests/specify-only-works-if-the-key-is-created-in-the-current-query.rs"
+-
+-[[test]]
+-name = "specify-preserves-current-memo"
+-path = "tests/specify-preserves-current-memo.rs"
+-
+-[[test]]
+-name = "supertype_overlap"
+-path = "tests/supertype_overlap.rs"
+-
+-[[test]]
+-name = "synthetic_write"
+-path = "tests/synthetic_write.rs"
+-
+-[[test]]
+-name = "tracked-struct-entries"
+-path = "tests/tracked-struct-entries.rs"
+-
+-[[test]]
+-name = "tracked-struct-entries-persistence"
+-path = "tests/tracked-struct-entries-persistence.rs"
+-
+-[[test]]
+-name = "tracked-struct-id-field-bad-eq"
+-path = "tests/tracked-struct-id-field-bad-eq.rs"
+-
+-[[test]]
+-name = "tracked-struct-id-field-bad-hash"
+-path = "tests/tracked-struct-id-field-bad-hash.rs"
+-
+-[[test]]
+-name = "tracked-struct-unchanged-in-new-rev"
+-path = "tests/tracked-struct-unchanged-in-new-rev.rs"
+-
+-[[test]]
+-name = "tracked-struct-value-field-bad-eq"
+-path = "tests/tracked-struct-value-field-bad-eq.rs"
+-
+-[[test]]
+-name = "tracked-struct-value-field-not-eq"
+-path = "tests/tracked-struct-value-field-not-eq.rs"
+-
+-[[test]]
+-name = "tracked_assoc_fn"
+-path = "tests/tracked_assoc_fn.rs"
+-
+-[[test]]
+-name = "tracked_fn_constant"
+-path = "tests/tracked_fn_constant.rs"
+-
+-[[test]]
+-name = "tracked_fn_high_durability_dependency"
+-path = "tests/tracked_fn_high_durability_dependency.rs"
+-
+-[[test]]
+-name = "tracked_fn_interned_lifetime"
+-path = "tests/tracked_fn_interned_lifetime.rs"
+-
+-[[test]]
+-name = "tracked_fn_multiple_args"
+-path = "tests/tracked_fn_multiple_args.rs"
+-
+-[[test]]
+-name = "tracked_fn_no_eq"
+-path = "tests/tracked_fn_no_eq.rs"
+-
+-[[test]]
+-name = "tracked_fn_on_input"
+-path = "tests/tracked_fn_on_input.rs"
+-
+-[[test]]
+-name = "tracked_fn_on_input_with_high_durability"
+-path = "tests/tracked_fn_on_input_with_high_durability.rs"
+-
+-[[test]]
+-name = "tracked_fn_on_interned"
+-path = "tests/tracked_fn_on_interned.rs"
+-
+-[[test]]
+-name = "tracked_fn_on_interned_enum"
+-path = "tests/tracked_fn_on_interned_enum.rs"
+-
+-[[test]]
+-name = "tracked_fn_on_tracked"
+-path = "tests/tracked_fn_on_tracked.rs"
+-
+-[[test]]
+-name = "tracked_fn_on_tracked_specify"
+-path = "tests/tracked_fn_on_tracked_specify.rs"
+-
+-[[test]]
+-name = "tracked_fn_orphan_escape_hatch"
+-path = "tests/tracked_fn_orphan_escape_hatch.rs"
+-
+-[[test]]
+-name = "tracked_fn_read_own_entity"
+-path = "tests/tracked_fn_read_own_entity.rs"
+-
+-[[test]]
+-name = "tracked_fn_read_own_specify"
+-path = "tests/tracked_fn_read_own_specify.rs"
+-
+-[[test]]
+-name = "tracked_fn_return_ref"
+-path = "tests/tracked_fn_return_ref.rs"
+-
+-[[test]]
+-name = "tracked_method"
+-path = "tests/tracked_method.rs"
+-
+-[[test]]
+-name = "tracked_method_inherent_return_deref"
+-path = "tests/tracked_method_inherent_return_deref.rs"
+-
+-[[test]]
+-name = "tracked_method_inherent_return_ref"
+-path = "tests/tracked_method_inherent_return_ref.rs"
+-
+-[[test]]
+-name = "tracked_method_on_tracked_struct"
+-path = "tests/tracked_method_on_tracked_struct.rs"
+-
+-[[test]]
+-name = "tracked_method_trait_return_ref"
+-path = "tests/tracked_method_trait_return_ref.rs"
+-
+-[[test]]
+-name = "tracked_method_with_self_ty"
+-path = "tests/tracked_method_with_self_ty.rs"
+-
+-[[test]]
+-name = "tracked_struct"
+-path = "tests/tracked_struct.rs"
+-
+-[[test]]
+-name = "tracked_struct_db1_lt"
+-path = "tests/tracked_struct_db1_lt.rs"
+-
+-[[test]]
+-name = "tracked_struct_disambiguates"
+-path = "tests/tracked_struct_disambiguates.rs"
+-
+-[[test]]
+-name = "tracked_struct_durability"
+-path = "tests/tracked_struct_durability.rs"
+-
+-[[test]]
+-name = "tracked_struct_mixed_tracked_fields"
+-path = "tests/tracked_struct_mixed_tracked_fields.rs"
+-
+-[[test]]
+-name = "tracked_struct_recreate_new_revision"
+-path = "tests/tracked_struct_recreate_new_revision.rs"
+-
+-[[test]]
+-name = "tracked_struct_with_interned_query"
+-path = "tests/tracked_struct_with_interned_query.rs"
+-
+-[[test]]
+-name = "tracked_with_intern"
+-path = "tests/tracked_with_intern.rs"
+-
+-[[test]]
+-name = "tracked_with_struct_db"
+-path = "tests/tracked_with_struct_db.rs"
+-
+-[[test]]
+-name = "tracked_with_struct_ord"
+-path = "tests/tracked_with_struct_ord.rs"
+-
+-[[test]]
+-name = "warnings"
+-path = "tests/warnings/main.rs"
+-
+-[[bench]]
+-name = "accumulator"
+-path = "benches/accumulator.rs"
+-harness = false
+-required-features = ["accumulator"]
+-
+-[[bench]]
+-name = "creation"
+-path = "benches/creation.rs"
+-harness = false
+-
+-[[bench]]
+-name = "dataflow"
+-path = "benches/dataflow.rs"
+-harness = false
+-
+-[[bench]]
+-name = "eviction"
+-path = "benches/eviction.rs"
+-harness = false
+-
+-[[bench]]
+-name = "eviction_walltime"
+-path = "benches/eviction_walltime.rs"
+-harness = false
+-required-features = ["rayon"]
+-
+-[[bench]]
+-name = "field_access"
+-path = "benches/field_access.rs"
+-harness = false
+-
+-[[bench]]
+-name = "query_fetch"
+-path = "benches/query_fetch.rs"
+-harness = false
+-
+ [dependencies.boxcar]
+ version = "0.2.14"
+ 
+--- salsa-0.28.5/src/accumulator.rs	2026-11-14 19:15:10.020194108 -0800
++++ salsa/src/accumulator.rs	2026-11-14 19:15:10.494548410 -0800
+@@ -116,7 +116,7 @@
+         _zalsa: &Zalsa,
+         _edge: QueryEdge,
+         _serialized_edges: &mut FxIndexSet<QueryEdge>,
+-        _visited_edges: &mut FxHashSet<QueryEdge>,
++        _flattener: &mut crate::flatten::EdgeFlattener,
+     ) {
+         panic!("nothing should ever depend on an accumulator directly")
+     }
+--- salsa-0.28.5/src/flatten.rs	1969-12-31 16:00:00.000000000 -0800
++++ salsa/src/flatten.rs	2026-11-14 19:15:10.497421790 -0800
+@@ -0,0 +1,162 @@
++//! Flattening a query's dependencies down to what is persisted, once per query.
++//!
++//! A persisted memo's dependencies are rewritten before it is serialized: the queries that
++//! are not themselves persisted are replaced by the persisted inputs they read (see
++//! `Ingredient::collect_minimum_serialized_edges`). Walking those queries afresh for every
++//! persisted memo costs the number of persisted memos times the size of the graph each one
++//! reaches, and a rust-analyzer-sized graph is millions of queries. The set of persisted
++//! edges a query reaches does not depend on who asks, so it is worked out once and kept.
++//!
++//! Queries that call each other (rust-analyzer has large groups of them) all reach the same
++//! persisted edges, so they are worked out together: a walk is Tarjan's strongly connected
++//! components algorithm, and when the first query of a group finishes, every member of the
++//! group is given its result. A query reached again while its group is still open is skipped:
++//! the group's first query collects what it reaches. Without that, a group of K queries that
++//! all call each other is walked along every path through it, K! times.
++
++use std::time::Instant;
++
++use crate::hash::{FxHashMap, FxIndexSet};
++use crate::sync::Arc;
++use crate::zalsa_local::QueryEdge;
++
++/// The persisted edges reached from each query that is not persisted, kept for one
++/// ingredient's memos while they are serialized.
++#[doc(hidden)]
++pub struct EdgeFlattener {
++    /// The finished result for a query: exact, whoever asked.
++    done: FxHashMap<QueryEdge, Arc<[QueryEdge]>>,
++    /// Queries walked whose group is still open, with the order they were first reached in.
++    open: FxHashMap<QueryEdge, usize>,
++    /// The open queries, in the order they were first reached.
++    stack: Vec<QueryEdge>,
++    /// The order the next query walked will be given.
++    next: usize,
++    /// The earliest open query reached from within the walk of the current query.
++    lowlink: usize,
++    /// The result of the query just walked, for the caller to take.
++    last: Option<Arc<[QueryEdge]>>,
++    started: Instant,
++    stats: FlattenStats,
++}
++
++/// What a flattening did, for the log.
++#[derive(Debug, Default, Clone, Copy)]
++pub(crate) struct FlattenStats {
++    /// Queries walked.
++    pub(crate) walked: u64,
++    /// Queries answered from what was kept.
++    pub(crate) reused: u64,
++    /// Queries that finished while the group they belong to was still open.
++    pub(crate) incomplete: u64,
++    /// Results that were the same as one of their callees' and shared its storage.
++    pub(crate) shared: u64,
++    /// Edges handed to callers, counting repeats.
++    pub(crate) handed_out: u64,
++}
++
++impl Default for EdgeFlattener {
++    fn default() -> Self {
++        Self {
++            done: FxHashMap::default(),
++            open: FxHashMap::default(),
++            stack: Vec::new(),
++            next: 0,
++            lowlink: usize::MAX,
++            last: None,
++            started: Instant::now(),
++            stats: FlattenStats::default(),
++        }
++    }
++}
++
++impl EdgeFlattener {
++    /// The kept result for `edge`, if its walk finished.
++    pub(crate) fn kept(&mut self, edge: QueryEdge) -> Option<Arc<[QueryEdge]>> {
++        let result = self.done.get(&edge).cloned()?;
++        self.stats.reused += 1;
++        Some(result)
++    }
++
++    /// Whether `edge` was walked and its group is still open. If it was, whatever the
++    /// walk of the query asking reaches is part of that group.
++    pub(crate) fn reached_again(&mut self, edge: QueryEdge) -> bool {
++        let Some(&order) = self.open.get(&edge) else {
++            return false;
++        };
++        self.lowlink = self.lowlink.min(order);
++        true
++    }
++
++    /// Start walking `edge`. Returns what [`Self::finish`] needs back.
++    pub(crate) fn enter(&mut self, edge: QueryEdge) -> Walk {
++        let order = self.next;
++        self.next += 1;
++        self.open.insert(edge, order);
++        self.stack.push(edge);
++        self.stats.walked += 1;
++        Walk {
++            order,
++            outer: std::mem::replace(&mut self.lowlink, usize::MAX),
++        }
++    }
++
++    /// Finish walking `edge`, whose persisted edges are `found`. `largest` is the biggest
++    /// result among the queries it called: a result no bigger than that is that result.
++    pub(crate) fn finish(
++        &mut self,
++        edge: QueryEdge,
++        walk: Walk,
++        found: FxIndexSet<QueryEdge>,
++        largest: Option<Arc<[QueryEdge]>>,
++    ) -> Arc<[QueryEdge]> {
++        let result = match largest {
++            Some(largest) if largest.len() == found.len() => {
++                self.stats.shared += 1;
++                largest
++            }
++            _ => found.into_iter().collect(),
++        };
++        if self.lowlink >= walk.order {
++            // The first query of its group: everything the group reaches has been found, and
++            // each member reaches exactly what the others do.
++            while let Some(member) = self.stack.pop() {
++                self.open.remove(&member);
++                self.done.insert(member, Arc::clone(&result));
++                if member == edge {
++                    break;
++                }
++            }
++            self.lowlink = walk.outer;
++        } else {
++            // A member of a group opened above it: its result is the group's, given when the
++            // group's first query finishes.
++            self.stats.incomplete += 1;
++            self.lowlink = walk.outer.min(self.lowlink);
++        }
++        result
++    }
++
++    /// Say what the caller of the last walk gets.
++    pub(crate) fn hand_out(&mut self, result: &Arc<[QueryEdge]>) {
++        self.stats.handed_out += result.len() as u64;
++        self.last = Some(Arc::clone(result));
++    }
++
++    /// The result of the query just walked, if there was one.
++    pub(crate) fn take_last(&mut self) -> Option<Arc<[QueryEdge]>> {
++        self.last.take()
++    }
++
++    /// What this has done so far, and for how long.
++    pub(crate) fn report(&self) -> (FlattenStats, std::time::Duration) {
++        (self.stats, self.started.elapsed())
++    }
++}
++
++/// The state of a query's walk that must be given back when it finishes.
++#[derive(Debug, Clone, Copy)]
++pub(crate) struct Walk {
++    order: usize,
++    outer: usize,
++}
+--- salsa-0.28.5/src/function.rs	2026-11-14 19:15:10.154385603 -0800
++++ salsa/src/function.rs	2026-11-14 19:15:10.497475640 -0800
+@@ -10,6 +10,7 @@
+ 
+ use crate::cycle::{CycleRecoveryStrategy, IterationStamp, ProvisionalStatus};
+ use crate::database::RawDatabase;
++use crate::flatten::EdgeFlattener;
+ use crate::function::delete::DeletedEntries;
+ use crate::hash::{FxHashSet, FxIndexSet};
+ use crate::ingredient::Ingredient;
+@@ -441,17 +442,62 @@
+         zalsa: &Zalsa,
+         edge: QueryEdge,
+         serialized_edges: &mut FxIndexSet<QueryEdge>,
+-        visited_edges: &mut FxHashSet<QueryEdge>,
++        flattener: &mut EdgeFlattener,
+     ) {
++        // What this query reaches does not depend on who asks: it is worked out once.
++        if let Some(result) = flattener.kept(edge) {
++            serialized_edges.extend(result.iter().copied());
++            flattener.hand_out(&result);
++            return;
++        }
++
++        // A query still being worked out is on a cycle; its head collects the rest.
++        if flattener.reached_again(edge) {
++            return;
++        }
++
+         // SAFETY: The caller prevents database writes throughout the traversal.
+         let Some(memo) = (unsafe { self.memo_unchecked(zalsa, edge.key().key_index()) }) else {
+             return;
+         };
+ 
+-        // SAFETY: The caller prevents database writes throughout the traversal.
+-        unsafe {
+-            collect_minimum_serialized_edges(memo, zalsa, edge, serialized_edges, visited_edges);
++        let walk = flattener.enter(edge);
++        let mut found = FxIndexSet::default();
++        let mut largest: Option<Arc<[QueryEdge]>> = None;
++
++        // Collect the minimum dependency tree.
++        for dependency_edge in memo.header().origin().edges() {
++            let dependency = zalsa.lookup_ingredient(dependency_edge.key().ingredient_index());
++
++            // A persisted query is serialized itself: depend on it, and do not walk through
++            // it (its own dependencies are covered by its own memo).
++            if dependency.as_function().is_some() && dependency.is_persistable() {
++                found.insert(dependency_edge);
++                continue;
++            }
++
++            flattener.take_last();
++            // SAFETY: The caller prevents database writes throughout recursive traversal.
++            unsafe {
++                dependency.collect_minimum_serialized_edges(
++                    zalsa,
++                    dependency_edge,
++                    &mut found,
++                    flattener,
++                );
++            }
++            if let Some(result) = flattener.take_last()
++                && largest
++                    .as_ref()
++                    .is_none_or(|largest| result.len() > largest.len())
++            {
++                largest = Some(result);
++            }
+         }
++
++        let result = flattener.finish(edge, walk, found, largest);
++        serialized_edges.extend(result.iter().copied());
++        flattener.hand_out(&result);
+     }
+ 
+     fn as_function(&self) -> Option<FunctionIngredientRef<'_>> {
+@@ -595,44 +641,6 @@
+     }
+ }
+ 
+-/// # Safety
+-///
+-/// The caller must prevent database writes throughout the traversal, including query
+-/// execution that can reuse slots or modify memos. Concurrent read-only access is allowed.
+-unsafe fn collect_minimum_serialized_edges(
+-    memo: ErasedMemo<'_>,
+-    zalsa: &Zalsa,
+-    edge: QueryEdge,
+-    serialized_edges: &mut FxIndexSet<QueryEdge>,
+-    visited_edges: &mut FxHashSet<QueryEdge>,
+-) {
+-    visited_edges.insert(edge);
+-
+-    // Collect the minimum dependency tree.
+-    for edge in memo.header().origin().edges() {
+-        // Avoid forming cycles.
+-        if visited_edges.contains(&edge) {
+-            continue;
+-        }
+-
+-        // Avoid flattening edges that we're going to serialize directly.
+-        if serialized_edges.contains(&edge) {
+-            continue;
+-        }
+-
+-        let dependency = zalsa.lookup_ingredient(edge.key().ingredient_index());
+-        // SAFETY: The caller prevents database writes throughout recursive traversal.
+-        unsafe {
+-            dependency.collect_minimum_serialized_edges(
+-                zalsa,
+-                edge,
+-                serialized_edges,
+-                visited_edges,
+-            );
+-        }
+-    }
+-}
+-
+ fn flatten_cycle_head_dependencies(
+     ingredient: &dyn FunctionIngredient,
+     zalsa: &Zalsa,
+@@ -744,7 +752,8 @@
+ #[cfg(feature = "persistence")]
+ mod persistence {
+     use super::{Configuration, IngredientImpl, Memo};
+-    use crate::hash::{FxHashSet, FxIndexSet};
++    use crate::flatten::EdgeFlattener;
++    use crate::hash::FxIndexSet;
+     use crate::plumbing::{MemoIngredientMap, SalsaStructInDb};
+     use crate::zalsa::Zalsa;
+     use crate::zalsa_local::persistence::PersistentQueryOrigin;
+@@ -792,8 +801,9 @@
+ 
+             let mut map = serializer.serialize_map(Some(count))?;
+ 
+-            let mut visited_edges = FxHashSet::default();
++            let mut flattener = EdgeFlattener::default();
+             let mut flattened_edges = FxIndexSet::default();
++            let mut emitted: u64 = 0;
+ 
+             for entry in <C::SalsaStruct<'_> as SalsaStructInDb>::entries(zalsa) {
+                 let memo_ingredient_index = ingredient
+@@ -815,11 +825,12 @@
+                                 collect_minimum_serialized_edges(
+                                     zalsa,
+                                     edges,
+-                                    &mut visited_edges,
++                                    &mut flattener,
+                                     &mut flattened_edges,
+                                 );
+                             }
+ 
++                            emitted += flattened_edges.len() as u64;
+                             PersistentQueryOrigin::derived(flattened_edges.drain(..))
+                         }
+                         QueryOriginRef::DerivedUntracked(edges) => {
+@@ -828,11 +839,12 @@
+                                 collect_minimum_serialized_edges(
+                                     zalsa,
+                                     edges,
+-                                    &mut visited_edges,
++                                    &mut flattener,
+                                     &mut flattened_edges,
+                                 );
+                             }
+ 
++                            emitted += flattened_edges.len() as u64;
+                             PersistentQueryOrigin::derived_untracked(flattened_edges.drain(..))
+                         }
+                         QueryOriginRef::Assigned(key) => {
+@@ -857,11 +869,26 @@
+                     );
+ 
+                     map.serialize_entry(&key, &memo)?;
+-
+-                    visited_edges.clear();
+                 }
+             }
+ 
++            if count > 0 {
++                let (stats, elapsed) = flattener.report();
++                ::tracing::info!(
++                    target: "salsa::persistence",
++                    ingredient = C::DEBUG_NAME,
++                    memos = count,
++                    edges = emitted,
++                    walked = stats.walked,
++                    reused = stats.reused,
++                    shared = stats.shared,
++                    incomplete = stats.incomplete,
++                    handed_out = stats.handed_out,
++                    elapsed = ?elapsed,
++                    "flattened the dependencies of the persisted memos"
++                );
++            }
++
+             map.end()
+         }
+     }
+@@ -875,7 +902,7 @@
+     unsafe fn collect_minimum_serialized_edges(
+         zalsa: &Zalsa,
+         edges: crate::zalsa_local::QueryEdges<'_>,
+-        visited_edges: &mut FxHashSet<QueryEdge>,
++        flattener: &mut EdgeFlattener,
+         flattened_edges: &mut FxIndexSet<QueryEdge>,
+     ) {
+         for edge in edges {
+@@ -892,7 +919,7 @@
+                         zalsa,
+                         edge,
+                         flattened_edges,
+-                        visited_edges,
++                        flattener,
+                     );
+                 }
+             }
+--- salsa-0.28.5/src/hash.rs	2026-11-14 19:15:10.154539437 -0800
++++ salsa/src/hash.rs	2026-11-14 19:15:10.495767200 -0800
+@@ -4,6 +4,7 @@
+ pub(crate) type FxIndexSet<K> = indexmap::IndexSet<K, FxHasher>;
+ pub(crate) type FxLinkedHashSet<K> = hashlink::LinkedHashSet<K, FxHasher>;
+ pub(crate) type FxHashSet<K> = std::collections::HashSet<K, FxHasher>;
++pub(crate) type FxHashMap<K, V> = std::collections::HashMap<K, V, FxHasher>;
+ 
+ pub(crate) fn hash<T: Hash>(t: &T) -> u64 {
+     FxHasher::default().hash_one(t)
+--- salsa-0.28.5/src/ingredient.rs	2026-11-14 19:15:10.160089623 -0800
++++ salsa/src/ingredient.rs	2026-11-14 19:15:10.495854432 -0800
+@@ -68,7 +68,7 @@
+         zalsa: &Zalsa,
+         edge: QueryEdge,
+         serialized_edges: &mut FxIndexSet<QueryEdge>,
+-        visited_edges: &mut FxHashSet<QueryEdge>,
++        flattener: &mut crate::flatten::EdgeFlattener,
+     );
+ 
+     /// Returns the function-specific interface for this ingredient, if any.
+--- salsa-0.28.5/src/input/input_field.rs	2026-11-14 19:15:10.160874615 -0800
++++ salsa/src/input/input_field.rs	2026-11-14 19:15:10.495957348 -0800
+@@ -71,7 +71,7 @@
+         _zalsa: &Zalsa,
+         edge: QueryEdge,
+         serialized_edges: &mut FxIndexSet<QueryEdge>,
+-        _visited_edges: &mut FxHashSet<QueryEdge>,
++        _flattener: &mut crate::flatten::EdgeFlattener,
+     ) {
+         assert!(
+             C::PERSIST,
+--- salsa-0.28.5/src/input.rs	2026-11-14 19:15:10.161293027 -0800
++++ salsa/src/input.rs	2026-11-14 19:15:10.496112640 -0800
+@@ -323,7 +323,7 @@
+         _zalsa: &Zalsa,
+         _edge: QueryEdge,
+         _serialized_edges: &mut FxIndexSet<QueryEdge>,
+-        _visited_edges: &mut FxHashSet<QueryEdge>,
++        _flattener: &mut crate::flatten::EdgeFlattener,
+     ) {
+         panic!("nothing should ever depend on an input struct directly")
+     }
+--- salsa-0.28.5/src/interned.rs	2026-11-14 19:15:10.161443097 -0800
++++ salsa/src/interned.rs	2026-11-14 19:15:10.496197216 -0800
+@@ -1139,7 +1139,7 @@
+         _zalsa: &Zalsa,
+         edge: QueryEdge,
+         serialized_edges: &mut FxIndexSet<QueryEdge>,
+-        _visited_edges: &mut FxHashSet<QueryEdge>,
++        _flattener: &mut crate::flatten::EdgeFlattener,
+     ) {
+         if C::PERSIST && C::REVISIONS != IMMORTAL {
+             // If the interned struct is being persisted, it may be reachable through transitive queries.
+--- salsa-0.28.5/src/lib.rs	2026-11-14 19:15:10.161699433 -0800
++++ salsa/src/lib.rs	2026-11-14 19:15:10.496314800 -0800
+@@ -262,6 +262,7 @@
+ mod database_impl;
+ mod durability;
+ mod event;
++mod flatten;
+ mod function;
+ mod hash;
+ mod id;
+--- salsa-0.28.5/src/tracked_struct/tracked_field.rs	2026-11-14 19:15:10.208780212 -0800
++++ salsa/src/tracked_struct/tracked_field.rs	2026-11-14 19:15:10.497059241 -0800
+@@ -77,7 +77,7 @@
+         _zalsa: &Zalsa,
+         _edge: QueryEdge,
+         _serialized_edges: &mut FxIndexSet<QueryEdge>,
+-        _visited_edges: &mut FxHashSet<QueryEdge>,
++        _flattener: &mut crate::flatten::EdgeFlattener,
+     ) {
+         // Tracked fields do not have transitive dependencies, and their dependencies are covered by
+         // the base inputs.
+--- salsa-0.28.5/src/tracked_struct.rs	2026-11-14 19:15:10.208855843 -0800
++++ salsa/src/tracked_struct.rs	2026-11-14 19:15:10.497137256 -0800
+@@ -1000,7 +1000,7 @@
+         _zalsa: &Zalsa,
+         _edge: QueryEdge,
+         _serialized_edges: &mut FxIndexSet<QueryEdge>,
+-        _visited_edges: &mut FxHashSet<QueryEdge>,
++        _flattener: &mut crate::flatten::EdgeFlattener,
+     ) {
+         // Note that tracked structs are referenced by the identity map, but that
+         // only matters if we are serializing the creating query, in which case

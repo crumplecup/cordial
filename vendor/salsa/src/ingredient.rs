@@ -68,7 +68,7 @@ pub trait Ingredient: Any + fmt::Debug + Send + Sync {
         zalsa: &Zalsa,
         edge: QueryEdge,
         serialized_edges: &mut FxIndexSet<QueryEdge>,
-        visited_edges: &mut FxHashSet<QueryEdge>,
+        flattener: &mut crate::flatten::EdgeFlattener,
     );
 
     /// Returns the function-specific interface for this ingredient, if any.

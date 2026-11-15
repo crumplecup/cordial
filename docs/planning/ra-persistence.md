@@ -128,6 +128,37 @@ evaluated again. What this buys: evidence survives anything that does not change
 rust-analyzer read: a policy or configuration change, an edit to a fixture or a document, an
 edit in another crate of a workspace.
 
+## Salsa's serialization, and the patch to it
+
+Salsa 0.28.5 rewrites each persisted memo's dependencies before it is saved: every query that is
+not itself persisted is replaced by the persisted inputs it reads (`collect_minimum_serialized_edges`
+in `function.rs`). It does that by walking the non-persisted queries from each persisted memo and
+clearing its visited set between memos, so the cost is the number of persisted memos times the size of
+the graph each one reaches. On the specimen crates that is nothing; on cordial (about 19,000
+function-evidence memos plus every per-file query over a graph of millions of rust-analyzer queries)
+the save did not finish in ten minutes. It looked like a hang: no query ran, memory crept up, and the
+phase message was still the last one set.
+
+`vendor/salsa` is Salsa 0.28.5 with the walk done once per query (`vendor/salsa.patch`, about 115 changed
+lines in `function.rs` and a new `flatten.rs`; the rest is the manifest losing its test targets):
+
+- `EdgeFlattener` keeps, for each non-persisted function memo, the persisted edges it reaches. The
+  hook's `visited_edges` parameter became the flattener, so six `Ingredient` implementations changed
+  one parameter type.
+- A query reached again while it is still being walked sits on a cycle; its result is incomplete until
+  the head of the cycle finishes, so it is not kept (the lowlink rule). Everything else is exact.
+- A result equal to its biggest callee's shares that callee's storage.
+- A persisted function reached through a non-persisted one is now a leaf edge (a dependency on its memo)
+  instead of being walked through; its own memo covers its inputs. That is smaller, and sound.
+- The flattener lives for one function ingredient's memos, so each persisted query family walks the
+  shared graph once (about 25 walks, not 25,000).
+- Each ingredient logs one `salsa::persistence` event: memos, edges, queries walked, reused, shared,
+  incomplete, edges handed out, time. `RUST_LOG=salsa::persistence=info` shows them.
+
+`tests/salsa_flatten.rs` pins it: forty persisted memos over a chain and a cycle of queries that are not
+persisted walk the graph once between them, a restored database reuses every memo, and changing the input
+recomputes every memo, so the flattened edges still cover what the queries between them read.
+
 ## Persisted cfg contexts (done)
 
 A context is shadow crates and copies of the workspace's files (virtual paths, source roots from

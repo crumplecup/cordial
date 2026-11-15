@@ -262,6 +262,7 @@ mod database;
 mod database_impl;
 mod durability;
 mod event;
+mod flatten;
 mod function;
 mod hash;
 mod id;

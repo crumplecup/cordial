@@ -10,6 +10,7 @@ use std::sync::atomic::Ordering;
 
 use crate::cycle::{CycleRecoveryStrategy, IterationStamp, ProvisionalStatus};
 use crate::database::RawDatabase;
+use crate::flatten::EdgeFlattener;
 use crate::function::delete::DeletedEntries;
 use crate::hash::{FxHashSet, FxIndexSet};
 use crate::ingredient::Ingredient;
@@ -441,17 +442,62 @@ where
         zalsa: &Zalsa,
         edge: QueryEdge,
         serialized_edges: &mut FxIndexSet<QueryEdge>,
-        visited_edges: &mut FxHashSet<QueryEdge>,
+        flattener: &mut EdgeFlattener,
     ) {
+        // What this query reaches does not depend on who asks: it is worked out once.
+        if let Some(result) = flattener.kept(edge) {
+            serialized_edges.extend(result.iter().copied());
+            flattener.hand_out(&result);
+            return;
+        }
+
+        // A query still being worked out is on a cycle; its head collects the rest.
+        if flattener.reached_again(edge) {
+            return;
+        }
+
         // SAFETY: The caller prevents database writes throughout the traversal.
         let Some(memo) = (unsafe { self.memo_unchecked(zalsa, edge.key().key_index()) }) else {
             return;
         };
 
-        // SAFETY: The caller prevents database writes throughout the traversal.
-        unsafe {
-            collect_minimum_serialized_edges(memo, zalsa, edge, serialized_edges, visited_edges);
+        let walk = flattener.enter(edge);
+        let mut found = FxIndexSet::default();
+        let mut largest: Option<Arc<[QueryEdge]>> = None;
+
+        // Collect the minimum dependency tree.
+        for dependency_edge in memo.header().origin().edges() {
+            let dependency = zalsa.lookup_ingredient(dependency_edge.key().ingredient_index());
+
+            // A persisted query is serialized itself: depend on it, and do not walk through
+            // it (its own dependencies are covered by its own memo).
+            if dependency.as_function().is_some() && dependency.is_persistable() {
+                found.insert(dependency_edge);
+                continue;
+            }
+
+            flattener.take_last();
+            // SAFETY: The caller prevents database writes throughout recursive traversal.
+            unsafe {
+                dependency.collect_minimum_serialized_edges(
+                    zalsa,
+                    dependency_edge,
+                    &mut found,
+                    flattener,
+                );
+            }
+            if let Some(result) = flattener.take_last()
+                && largest
+                    .as_ref()
+                    .is_none_or(|largest| result.len() > largest.len())
+            {
+                largest = Some(result);
+            }
         }
+
+        let result = flattener.finish(edge, walk, found, largest);
+        serialized_edges.extend(result.iter().copied());
+        flattener.hand_out(&result);
     }
 
     fn as_function(&self) -> Option<FunctionIngredientRef<'_>> {
@@ -595,44 +641,6 @@ where
     }
 }
 
-/// # Safety
-///
-/// The caller must prevent database writes throughout the traversal, including query
-/// execution that can reuse slots or modify memos. Concurrent read-only access is allowed.
-unsafe fn collect_minimum_serialized_edges(
-    memo: ErasedMemo<'_>,
-    zalsa: &Zalsa,
-    edge: QueryEdge,
-    serialized_edges: &mut FxIndexSet<QueryEdge>,
-    visited_edges: &mut FxHashSet<QueryEdge>,
-) {
-    visited_edges.insert(edge);
-
-    // Collect the minimum dependency tree.
-    for edge in memo.header().origin().edges() {
-        // Avoid forming cycles.
-        if visited_edges.contains(&edge) {
-            continue;
-        }
-
-        // Avoid flattening edges that we're going to serialize directly.
-        if serialized_edges.contains(&edge) {
-            continue;
-        }
-
-        let dependency = zalsa.lookup_ingredient(edge.key().ingredient_index());
-        // SAFETY: The caller prevents database writes throughout recursive traversal.
-        unsafe {
-            dependency.collect_minimum_serialized_edges(
-                zalsa,
-                edge,
-                serialized_edges,
-                visited_edges,
-            );
-        }
-    }
-}
-
 fn flatten_cycle_head_dependencies(
     ingredient: &dyn FunctionIngredient,
     zalsa: &Zalsa,
@@ -744,7 +752,8 @@ where
 #[cfg(feature = "persistence")]
 mod persistence {
     use super::{Configuration, IngredientImpl, Memo};
-    use crate::hash::{FxHashSet, FxIndexSet};
+    use crate::flatten::EdgeFlattener;
+    use crate::hash::FxIndexSet;
     use crate::plumbing::{MemoIngredientMap, SalsaStructInDb};
     use crate::zalsa::Zalsa;
     use crate::zalsa_local::persistence::PersistentQueryOrigin;
@@ -792,8 +801,9 @@ mod persistence {
 
             let mut map = serializer.serialize_map(Some(count))?;
 
-            let mut visited_edges = FxHashSet::default();
+            let mut flattener = EdgeFlattener::default();
             let mut flattened_edges = FxIndexSet::default();
+            let mut emitted: u64 = 0;
 
             for entry in <C::SalsaStruct<'_> as SalsaStructInDb>::entries(zalsa) {
                 let memo_ingredient_index = ingredient
@@ -815,11 +825,12 @@ mod persistence {
                                 collect_minimum_serialized_edges(
                                     zalsa,
                                     edges,
-                                    &mut visited_edges,
+                                    &mut flattener,
                                     &mut flattened_edges,
                                 );
                             }
 
+                            emitted += flattened_edges.len() as u64;
                             PersistentQueryOrigin::derived(flattened_edges.drain(..))
                         }
                         QueryOriginRef::DerivedUntracked(edges) => {
@@ -828,11 +839,12 @@ mod persistence {
                                 collect_minimum_serialized_edges(
                                     zalsa,
                                     edges,
-                                    &mut visited_edges,
+                                    &mut flattener,
                                     &mut flattened_edges,
                                 );
                             }
 
+                            emitted += flattened_edges.len() as u64;
                             PersistentQueryOrigin::derived_untracked(flattened_edges.drain(..))
                         }
                         QueryOriginRef::Assigned(key) => {
@@ -857,9 +869,24 @@ mod persistence {
                     );
 
                     map.serialize_entry(&key, &memo)?;
-
-                    visited_edges.clear();
                 }
+            }
+
+            if count > 0 {
+                let (stats, elapsed) = flattener.report();
+                ::tracing::info!(
+                    target: "salsa::persistence",
+                    ingredient = C::DEBUG_NAME,
+                    memos = count,
+                    edges = emitted,
+                    walked = stats.walked,
+                    reused = stats.reused,
+                    shared = stats.shared,
+                    incomplete = stats.incomplete,
+                    handed_out = stats.handed_out,
+                    elapsed = ?elapsed,
+                    "flattened the dependencies of the persisted memos"
+                );
             }
 
             map.end()
@@ -875,7 +902,7 @@ mod persistence {
     unsafe fn collect_minimum_serialized_edges(
         zalsa: &Zalsa,
         edges: crate::zalsa_local::QueryEdges<'_>,
-        visited_edges: &mut FxHashSet<QueryEdge>,
+        flattener: &mut EdgeFlattener,
         flattened_edges: &mut FxIndexSet<QueryEdge>,
     ) {
         for edge in edges {
@@ -892,7 +919,7 @@ mod persistence {
                         zalsa,
                         edge,
                         flattened_edges,
-                        visited_edges,
+                        flattener,
                     );
                 }
             }

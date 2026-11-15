@@ -1000,7 +1000,7 @@ where
         _zalsa: &Zalsa,
         _edge: QueryEdge,
         _serialized_edges: &mut FxIndexSet<QueryEdge>,
-        _visited_edges: &mut FxHashSet<QueryEdge>,
+        _flattener: &mut crate::flatten::EdgeFlattener,
     ) {
         // Note that tracked structs are referenced by the identity map, but that
         // only matters if we are serializing the creating query, in which case

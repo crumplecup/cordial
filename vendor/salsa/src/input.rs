@@ -323,7 +323,7 @@ impl<C: Configuration> Ingredient for IngredientImpl<C> {
         _zalsa: &Zalsa,
         _edge: QueryEdge,
         _serialized_edges: &mut FxIndexSet<QueryEdge>,
-        _visited_edges: &mut FxHashSet<QueryEdge>,
+        _flattener: &mut crate::flatten::EdgeFlattener,
     ) {
         panic!("nothing should ever depend on an input struct directly")
     }
