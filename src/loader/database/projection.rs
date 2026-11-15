@@ -103,6 +103,19 @@ impl SourceDatabase {
         })?;
         drop(ordinary_watch);
         crate::process_memory::log("ordinary projection done");
+        if self.restored {
+            // Which dependency of a restored memo had changed when it was verified, so that a
+            // restore that reuses little says why.
+            let stale = salsa::stale_report()
+                .into_iter()
+                .map(|(name, count)| format!("{name}: {count}"))
+                .collect::<Vec<_>>()
+                .join(", ");
+            crate::host::event(format!(
+                "analysis state: restored memos found out of date, by first changed input: {}",
+                if stale.is_empty() { "none" } else { &stale }
+            ));
+        }
         // Gated code is analysed by changing the database's cfg input, which
         // needs the exclusive borrow the ordinary pass does not have.
         let rest = self.project_after_ordinary(paths, &outline, &mut graph);

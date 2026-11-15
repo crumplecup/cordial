@@ -47,6 +47,33 @@ pub fn persisted_executions() -> u64 {
     PERSISTED_EXECUTIONS.load(std::sync::atomic::Ordering::Relaxed)
 }
 
+static STALE: std::sync::Mutex<std::collections::BTreeMap<String, u64>> =
+    std::sync::Mutex::new(std::collections::BTreeMap::new());
+
+/// Record that a memo was found out of date because of the dependency `edge`.
+pub(crate) fn note_stale(zalsa: &Zalsa, edge: QueryEdge) {
+    let name = if edge.is_watermark() {
+        "<watermark>".to_owned()
+    } else {
+        zalsa
+            .lookup_ingredient(edge.key().ingredient_index())
+            .debug_name()
+            .to_owned()
+    };
+    if let Ok(mut stale) = STALE.lock() {
+        *stale.entry(name).or_default() += 1;
+    }
+}
+
+/// Which dependencies made memos out of date when they were verified, with how many memos each
+/// did. The first dependency found to have changed is the one counted.
+pub fn stale_report() -> Vec<(String, u64)> {
+    STALE
+        .lock()
+        .map(|stale| stale.iter().map(|(name, count)| (name.clone(), *count)).collect())
+        .unwrap_or_default()
+}
+
 /// A set of persisted edges, as the bits of the edges' numbers in one [`EdgeFlattener`].
 #[derive(PartialEq, Eq, Hash)]
 pub(crate) struct Bits(Box<[u64]>);

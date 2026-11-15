@@ -600,6 +600,7 @@ fn deep_verify_edges(
         if edge.is_watermark() {
             if zalsa.last_changed_revision(crate::flatten::WATERMARK_DURABILITY) > old_verified_at
             {
+                crate::flatten::note_stale(zalsa, edge);
                 return VerifyResult::changed();
             }
             continue;
@@ -612,6 +613,7 @@ fn deep_verify_edges(
 
                 match input_result {
                     VerifyResult::Changed => {
+                        crate::flatten::note_stale(zalsa, edge);
                         return VerifyResult::changed();
                     }
                     #[cfg(feature = "accumulator")]
