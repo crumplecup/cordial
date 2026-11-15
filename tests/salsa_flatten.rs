@@ -297,3 +297,84 @@ fn what_rarely_changes_is_one_edge_and_still_invalidates_what_read_it() {
     assert_eq!(reads_both(&restored, key), 22);
     assert_eq!(EXECUTED_BOTH.load(Ordering::SeqCst), both + 2);
 }
+
+/// An interned struct that is not persisted.
+#[salsa::interned]
+struct Plain<'db> {
+    n: usize,
+}
+
+#[salsa::input(persist, singleton)]
+struct Unrelated {
+    #[returns(copy)]
+    value: usize,
+}
+
+/// Not persisted, keyed by an interned value.
+#[salsa::tracked(returns(copy))]
+fn keyed_by_plain<'db>(db: &'db dyn Database, key: Plain<'db>) -> usize {
+    Source::get(db).value(db) + key.n(db)
+}
+
+/// Whether the query that interns the key has read an input yet.
+///
+/// An interned value takes the durability of what its creator read before interning it. One
+/// interned first has the highest durability and is never reused, so the database never treats
+/// it as stale. One interned after a read of an input that changes is reusable, and is stale
+/// once revisions pass without it being interned again: the case rust-analyzer's keys are in.
+#[derive(Clone, Copy, Debug)]
+enum Scenario {
+    SomethingToCatch,
+    NothingToSeeHere,
+}
+
+#[salsa::input(persist, singleton)]
+struct Mode {
+    #[returns(copy)]
+    read_before_interning: bool,
+}
+
+#[salsa::tracked(returns(copy), persist)]
+fn reads_keyed_by_plain(db: &dyn Database) -> usize {
+    if Mode::get(db).read_before_interning(db) {
+        let _ = Unrelated::get(db).value(db);
+    }
+    keyed_by_plain(db, Plain::new(db, 7))
+}
+
+/// Compute the query, let revisions pass that neither read it nor intern its key again, save,
+/// restore, and ask again.
+fn save_and_restore(scenario: Scenario) -> usize {
+    let mut db = Db::default();
+    Source::new(&db, 1);
+    Mode::new(&db, matches!(scenario, Scenario::SomethingToCatch));
+    let unrelated = Unrelated::new(&db, 0);
+    assert_eq!(reads_keyed_by_plain(&db), 8);
+
+    for step in 1..=4 {
+        unrelated.set_value(&mut db).to(step);
+    }
+
+    // Saving looks at the memo of the query behind the interned key, which was last interned
+    // revisions ago.
+    let saved = serde_json::to_string(&<dyn Database>::as_serialize(&mut db))
+        .unwrap_or_else(|error| panic!("serializing {scenario:?}: {error}"));
+
+    let mut restored = Db::default();
+    <dyn Database>::deserialize(
+        &mut restored,
+        &mut serde_json::Deserializer::from_str(&saved),
+    )
+    .unwrap_or_else(|error| panic!("deserializing {scenario:?}: {error}"));
+    reads_keyed_by_plain(&restored)
+}
+
+/// Saving must not look at a stale interned key through the checked accessor: it refused
+/// (a panic, "was not interned in the latest revision for its durability") and a cold run of
+/// cordial died in its save. `SomethingToCatch` is that case; `NothingToSeeHere` never could be.
+#[test]
+fn a_memo_behind_a_stale_interned_key_can_be_saved_whether_or_not_there_is_one() {
+    for scenario in [Scenario::SomethingToCatch, Scenario::NothingToSeeHere] {
+        assert_eq!(save_and_restore(scenario), 8, "{scenario:?}");
+    }
+}

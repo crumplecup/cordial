@@ -181,6 +181,23 @@ impl<'db> FunctionIngredientRef<'db> {
         self.ingredient.sync_table()
     }
 
+    /// Returns the cached memo for `input`, relying on the caller to prevent its storage from
+    /// being reused or freed (unlike [`Self::memo`], which asserts that an interned key was
+    /// interned in the latest revision, and so fails for the memos of keys that have been idle).
+    ///
+    /// # Safety
+    ///
+    /// The caller must prevent database writes for `'db`, including query execution that can
+    /// reuse slots or modify memos. Concurrent read-only access is allowed.
+    pub(crate) unsafe fn memo_unchecked(
+        &self,
+        zalsa: &'db Zalsa,
+        input: Id,
+    ) -> Option<ErasedMemo<'db>> {
+        // SAFETY: The caller prevents database writes.
+        unsafe { self.ingredient.memo_unchecked(zalsa, input) }
+    }
+
     /// Returns information about the current provisional status of `input`.
     ///
     /// Is it a provisional value, a poisoned provisional memo, or has it been finalized and in
@@ -198,6 +215,16 @@ impl<'db> FunctionIngredientRef<'db> {
 
 pub(crate) trait FunctionIngredient: Send + Sync {
     fn memo<'db>(&'db self, zalsa: &'db Zalsa, input: Id) -> Option<ErasedMemo<'db>>;
+
+    /// # Safety
+    ///
+    /// The caller must prevent database writes for `'db`, including query execution that can
+    /// reuse slots or modify memos. Concurrent read-only access is allowed.
+    unsafe fn memo_unchecked<'db>(
+        &'db self,
+        zalsa: &'db Zalsa,
+        input: Id,
+    ) -> Option<ErasedMemo<'db>>;
 
     fn sync_table(&self) -> &SyncTable;
 
@@ -378,6 +405,22 @@ where
         let memo_slot = unsafe {
             MemoSlot::new(
                 zalsa.memo_table_for::<C::SalsaStruct<'_>>(input),
+                self.memo_ingredient_index(zalsa, input),
+            )
+        };
+
+        memo_slot.get_erased()
+    }
+
+    unsafe fn memo_unchecked<'db>(
+        &'db self,
+        zalsa: &'db Zalsa,
+        input: Id,
+    ) -> Option<ErasedMemo<'db>> {
+        // SAFETY: The caller prevents database writes, keeping the slot and memo alive for `'db`.
+        let memo_slot = unsafe {
+            MemoSlot::new(
+                zalsa.table().dyn_memos_unchecked(input),
                 self.memo_ingredient_index(zalsa, input),
             )
         };

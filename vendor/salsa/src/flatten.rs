@@ -206,7 +206,13 @@ pub(crate) unsafe fn leaves_of(
     }
 
     let ingredient = zalsa.lookup_ingredient(edge.key().ingredient_index());
-    let memo = ingredient.as_function()?.memo(zalsa, edge.key().key_index())?;
+    // SAFETY: The caller prevents database writes throughout the traversal. The checked
+    // accessor would refuse the memos of interned keys that have not been used lately.
+    let memo = unsafe {
+        ingredient
+            .as_function()?
+            .memo_unchecked(zalsa, edge.key().key_index())
+    }?;
 
     let order = flattener.next;
     flattener.next += 1;
