@@ -805,13 +805,18 @@ fn shared_support_file() -> Result<tempfile::TempDir> {
     std::fs::create_dir_all(root.path().join("tests/support")).into_diagnostic()?;
     std::fs::write(
         root.path().join("tests/support/mod.rs"),
-        "pub fn helper() {}\npub fn other_helper() { helper(); }\n",
+        "pub fn helper() {}\npub fn other_helper() { helper(); }\n\
+         pub fn with_local_impl() { struct Local; impl Local { fn inside(&self) {} } Local.inside(); }\n",
     )
     .into_diagnostic()?;
     for name in ["first", "second"] {
         std::fs::write(
             root.path().join(format!("tests/{name}.rs")),
-            "mod support;\n#[test]\nfn uses_support() { support::other_helper(); }\n",
+            "mod support;\n#[test]\nfn uses_support() { support::other_helper(); }\n\
+             trait Layer { fn on_event(&self); }\nstruct Reports;\n\
+             impl Layer for Reports {\n    fn on_event(&self) {\n        struct Fields;\n\
+                 trait Visit { fn record(&self); }\n\
+                 impl Visit for Fields { fn record(&self) {} }\n        Fields.record();\n    }\n}\n",
         )
         .into_diagnostic()?;
     }

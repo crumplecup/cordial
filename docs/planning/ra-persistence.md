@@ -266,6 +266,21 @@ On `elicit_doc`, restored: 0 of 2,142 functions evaluated, 108,264 queries (290,
 shared-file fix), 26 s: 5 s to restore and load, 8 s to name each function and find its memo, 8 s to
 build the graph from the evidence, 5 s for the contexts and leaf passes.
 
+### What cordial's restored run showed next
+
+With the shared-file fix cordial's restored run evaluated 90 of 20,411 functions (660 before) and 10
+per leaf pass (0 before), and was stopped by its memory limit (12.4 GB, 75% of the 16.5 GB available)
+in context 1. The 190 functions it could not find again had two causes of ours:
+
+- A derive's expansion has the `derive(...)` meta node of its attribute as the call it came from, and
+  the place index labelled items only, so every derived item in a file had an empty place and two types
+  deriving the same macro collided. Attributes and their meta nodes are labelled now (`attr derive`,
+  `meta derive`); a debug event (`cordial::semantic::identity`, "a node with no place") names any node
+  kind that still misses.
+- A file in several crates (every file of a library that also builds its unit-test target) was resolved
+  only through the crate's index, which lists no item declared inside a function body. The direct route
+  runs first again and keeps a candidate only when its own description, which names the crate, matches.
+
 ### Staged plan toward per-function reuse within a file
 
 1. Place-based description (done): `a_comment_above_a_function_does_not_change_what_describes_it`.

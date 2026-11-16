@@ -116,9 +116,9 @@ fn resolve<'db>(db: &'db dyn SemanticDatabase, key: ItemKey<'db>) -> Option<Modu
         let candidates: Vec<ModuleDef> = match site.chain.len() {
             // A function synthesized for a derive is written nowhere: only the index has it.
             _ if site.member.is_some() => Vec::new(),
-            // A file in several crates holds one definition for each; the file's own module
-            // is the first crate's, so which one this is only the crate's index can say.
-            _ if !site.krate.is_empty() => Vec::new(),
+            // A file in several crates holds one definition for each: the candidates are the
+            // first crate's, and only the description (which names the crate) says whether this
+            // is that one; the other crates' definitions are in their crates' indexes.
             0 => node_at(root, file, &tree, &site.place)
                 .and_then(|owner| written_in_file(&sema, owner, site.kind))
                 .into_iter()
@@ -454,7 +454,7 @@ fn site_in<N: AstNode + HasName>(
 }
 
 /// What names `node` among the items of its file, if it is one that can be named: the kind of
-/// item and its name, an impl's trait and type, a macro call's path.
+/// item and its name, an impl's trait and type, a macro call's or an attribute's path.
 #[instrument(level = "trace", skip(node))]
 fn label(node: &SyntaxNode) -> Option<String> {
     fn named<N: AstNode + HasName>(tag: &str, node: &SyntaxNode) -> Option<String> {
@@ -495,6 +495,20 @@ fn label(node: &SyntaxNode) -> Option<String> {
                 squeezed(ast::MacroCall::cast(node.clone())?.path())
             )
         }
+        // The call a derive macro is expanded from is the attribute, not the type.
+        SyntaxKind::ATTR => format!("attr {}", squeezed(ast::Attr::cast(node.clone())?.path())),
+        // What a derive is expanded from, in the newer syntax trees: the `derive(...)` inside the
+        // attribute. Its path, not the list of derives, names it.
+        SyntaxKind::TOKEN_TREE_META => format!(
+            "meta {}",
+            node.text()
+                .to_string()
+                .split('(')
+                .next()
+                .unwrap_or_default()
+                .split_whitespace()
+                .collect::<String>()
+        ),
         _ => return None,
     };
     // `|` separates a description's fields and `/` a place's segments.
@@ -606,11 +620,17 @@ fn index_of(db: &RootDatabase, file: FileId) -> &PlaceIndex {
 #[instrument(level = "trace", skip(db, node))]
 pub(super) fn place_in_file(db: &RootDatabase, file: FileId, node: &SyntaxNode) -> String {
     let at = (node.kind(), u32::from(node.text_range().start()));
-    index_of(db, file)
-        .by_node
-        .get(&at)
-        .cloned()
-        .unwrap_or_default()
+    let place = index_of(db, file).by_node.get(&at).cloned();
+    if place.is_none() {
+        tracing::debug!(
+            target: "cordial::semantic::identity",
+            kind = ?node.kind(),
+            start = at.1,
+            text = %node.text().to_string().chars().take(60).collect::<String>(),
+            "a node with no place in its file"
+        );
+    }
+    place.unwrap_or_default()
 }
 
 /// The item of `tree`, the parse of `file`, at `place`.

@@ -280,3 +280,33 @@ fn the_queries_of_a_restored_run_by_the_macros_in_and_on_each_function() -> Resu
     );
     Ok(())
 }
+
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn two_types_deriving_the_same_macro_in_one_file_are_each_found_again() -> Result<()> {
+    cordial::init_tracing();
+    let root = specimen()?;
+    std::fs::write(
+        root.path().join("src/lib.rs"),
+        "use macros::Accessors;\n\
+         #[derive(Clone, Accessors)]\npub struct First { a: u8, b: u8 }\n\
+         #[derive(Debug, Accessors)]\npub struct Second { a: u8, b: u8 }\n\
+         #[derive(Accessors)]\n#[derive(Clone)]\npub struct Third { a: u8 }\n",
+    )
+    .into_diagnostic()?;
+    let state = tempfile::tempdir().into_diagnostic()?;
+    let saved = SavedState::at(state.path().join("analysis-state"));
+    assert!(!run(root.path(), &saved)?);
+    let (cold, total) =
+        evaluated().ok_or_else(|| miette::miette!("the cold run logs its evidence"))?;
+    assert_eq!(cold, total);
+
+    assert!(run(root.path(), &saved)?);
+    let (again, total) =
+        evaluated().ok_or_else(|| miette::miette!("the restored run logs its evidence"))?;
+    assert_eq!(
+        again, 0,
+        "{again} of {total} functions were evaluated again"
+    );
+    Ok(())
+}
