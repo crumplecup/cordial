@@ -10,6 +10,7 @@
 
 mod copy_functions;
 mod flips;
+mod gates;
 #[cfg(feature = "tracing")]
 mod leaves;
 mod merge;

@@ -71,7 +71,7 @@ pub(in crate::loader::database) struct Covered(BTreeSet<(FileId, Clause)>);
 
 /// `expr` (or its negation) as a disjunction of clauses.
 #[instrument(level = "trace", skip(expr))]
-fn clauses(expr: &CfgExpr, negated: bool) -> Vec<Clause> {
+pub(super) fn clauses(expr: &CfgExpr, negated: bool) -> Vec<Clause> {
     let all = |parts: &[CfgExpr]| {
         parts.iter().fold(vec![Clause::default()], |acc, part| {
             let next = clauses(part, negated);
@@ -169,14 +169,12 @@ pub(in crate::loader::database) fn asked(
             if only.is_some_and(|only| !only.contains(&original)) {
                 continue;
             }
-            let tree = super::super::edition::edition_of(db, file).parse(db).tree();
-            let hosts = tree
-                .syntax()
-                .descendants()
-                .filter_map(ast::Attr::cast)
-                .filter_map(|attr| attr.syntax().parent());
-            for host in hosts {
-                for clause in clauses(&guard(&host), false) {
+            // A copy has its original's text, so it has its gates: they are read from the original.
+            let Some(gates) = super::gates::gates_of(db, original) else {
+                continue;
+            };
+            for set in &gates.clause_sets {
+                for clause in set.iter().cloned() {
                     if crates.iter().any(|cfg| clause.holds(cfg)) {
                         covered.0.insert((original, clause));
                         continue;

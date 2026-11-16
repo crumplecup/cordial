@@ -51,6 +51,22 @@ impl Flips {
         flips
     }
 
+    /// The flips of the gates `hosts`, which are the ones that flip.
+    pub(super) fn from_hosts<'a>(hosts: impl Iterator<Item = &'a super::gates::CfgHost>) -> Self {
+        let mut flips = Self::default();
+        for host in hosts {
+            flips.hosts.push(host.range);
+            flips.names.extend(host.names.iter().cloned());
+        }
+        flips
+    }
+
+    /// Whether any name is defined or used inside a flipped gate: when none is, no function
+    /// mentions one.
+    pub(super) fn has_names(&self) -> bool {
+        !self.names.is_empty()
+    }
+
     /// Whether `range` lies inside a flipped gate, or contains one.
     #[instrument(level = "trace", skip(self, range))]
     pub(super) fn touches(&self, range: TextRange) -> bool {
@@ -71,6 +87,6 @@ impl Flips {
 
 #[instrument(level = "debug", skip(cfg, predicate))]
 #[hotpath::measure]
-fn predicate_holds(cfg: &CfgOptions, predicate: &ra_ap_cfg::CfgExpr) -> bool {
+pub(super) fn predicate_holds(cfg: &CfgOptions, predicate: &ra_ap_cfg::CfgExpr) -> bool {
     cfg.check(predicate).unwrap_or(true)
 }

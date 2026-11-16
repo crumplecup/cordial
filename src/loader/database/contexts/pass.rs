@@ -9,6 +9,7 @@
 use super::LocalCfgs;
 use super::copy_functions::copy_functions;
 use super::flips::Flips;
+use super::gates::gates_of;
 use super::merge::{Pending, declares_a_name_twice, group};
 use super::plan::{Covered, asked};
 use crate::loader::database::{
@@ -287,14 +288,16 @@ impl SourceDatabase {
                     listed.filter(|records| records.iter().all(|record| *record.found()))
                 {
                     saved_files += 1;
-                    let tree = edition_of(&self.db, file).parse(&self.db).tree();
-                    let flips = Flips::collect(&tree, pairs);
-                    let items: HashMap<TextRange, ast::Fn> = tree
-                        .syntax()
-                        .descendants()
-                        .filter_map(ast::Fn::cast)
-                        .map(|function| (function.syntax().text_range(), function))
-                        .collect();
+                    // The copy has the original's text: its gates are read once, from the original,
+                    // and its syntax is the original's, which is parsed only if a function asks.
+                    let flips = match gates_of(&self.db, original) {
+                        Some(gates) => Flips::of(gates, pairs),
+                        None => Flips::collect(
+                            &edition_of(&self.db, original).parse(&self.db).tree(),
+                            pairs,
+                        ),
+                    };
+                    let items = std::cell::OnceCell::new();
                     for record in records {
                         let range =
                             TextRange::new((*record.start()).into(), (*record.end()).into());
@@ -311,9 +314,11 @@ impl SourceDatabase {
                         }
                         let relevant = new
                             || flips.touches(range)
-                            || items
-                                .get(&range)
-                                .is_some_and(|function| flips.mentions(function.syntax()));
+                            || (flips.has_names()
+                                && items
+                                    .get_or_init(|| functions_by_range(&self.db, original))
+                                    .get(&range)
+                                    .is_some_and(|function| flips.mentions(function.syntax())));
                         if !relevant {
                             continue;
                         }
@@ -433,6 +438,23 @@ impl SourceDatabase {
             Ok(finished)
         })
     }
+}
+
+/// The functions of `file`, by where each is: read from the file's parse.
+#[instrument(level = "trace", skip(db))]
+#[hotpath::measure]
+fn functions_by_range(
+    db: &ra_ap_ide_db::RootDatabase,
+    file: ra_ap_vfs::FileId,
+) -> HashMap<TextRange, ast::Fn> {
+    edition_of(db, file)
+        .parse(db)
+        .tree()
+        .syntax()
+        .descendants()
+        .filter_map(ast::Fn::cast)
+        .map(|function| (function.syntax().text_range(), function))
+        .collect()
 }
 
 /// The files of one projection, the graph node of each function in them, and the

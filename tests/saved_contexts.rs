@@ -516,7 +516,7 @@ fn a_restored_run_executes_few_rust_analyzer_queries() -> Result<()> {
     // What a restored run still asks rust-analyzer for is what it takes to name each function
     // (parse, item trees, attributes, macro expansion) so its saved evidence can be found: the
     // steps below. Anything else asking for analysis in a restored run is new work to account for.
-    const NAMING: [&str; 19] = [
+    const NAMING: [&str; 20] = [
         "local_functions",
         "derived_site",
         "inner_",
@@ -542,6 +542,8 @@ fn a_restored_run_executes_few_rust_analyzer_queries() -> Result<()> {
         // builds a definition map, as asking a file's module for its crate did.
         "edition_of",
         "project_panics",
+        // The gates of a file, read from its text once for the original and every copy of it.
+        "gates_in",
     ];
     let others: Vec<_> = by_step
         .keys()
@@ -1476,6 +1478,88 @@ fn a_file_no_context_compiles_is_not_read_through_rust_analyzer() -> Result<()> 
     assert!(
         unchanged < 40,
         "{unchanged} queries executed in a run nothing changed in"
+    );
+    Ok(())
+}
+
+/// Every Rust source file under `root`, as a run projects them.
+fn all_sources(root: &Path) -> Vec<std::path::PathBuf> {
+    let mut found = Vec::new();
+    let mut pending = vec![root.to_path_buf()];
+    while let Some(directory) = pending.pop() {
+        let Ok(entries) = std::fs::read_dir(&directory) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                pending.push(path);
+            } else if path.extension().is_some_and(|extension| extension == "rs") {
+                found.push(path);
+            }
+        }
+    }
+    found.sort();
+    found
+}
+
+/// Run the three-crate workspace with the first `contexts` of three contexts, projecting every
+/// source file.
+fn run_many_over_every_file(root: &Path, saved: &SavedState, contexts: usize) -> Result<bool> {
+    let all = [
+        SemanticContextKey::enabling(["kani"]),
+        SemanticContextKey::enabling(["creusot"]),
+        SemanticContextKey::enabling(["kani", "creusot"]),
+    ];
+    let options = SemanticCargoOptions::default()
+        .with_cfg_contexts(all.into_iter().take(contexts).collect())
+        .with_cfg_planning(CfgPlanning::Explicit);
+    let mut session =
+        SourceDatabase::load_saved(root, &options, Some(saved.clone())).into_diagnostic()?;
+    let restored = session.restored();
+    session
+        .project(&CrateTarget::new("gated", root), &all_sources(root))
+        .into_diagnostic()?;
+    Ok(restored)
+}
+
+/// How many files a restored run over every file, with `contexts` contexts, parsed.
+fn restored_parses(contexts: usize) -> Result<(usize, usize)> {
+    let executions = Executions::default();
+    let subscriber = tracing_subscriber::registry().with(executions.clone());
+    let _subscriber = tracing::subscriber::set_default(subscriber);
+    let root = chain_of_crates()?;
+    let files = all_sources(root.path()).len();
+    let state = tempfile::tempdir().into_diagnostic()?;
+    let saved = SavedState::at(state.path().join("analysis-state"));
+    assert!(!run_many_over_every_file(root.path(), &saved, contexts)?);
+    executions.take();
+    assert!(run_many_over_every_file(root.path(), &saved, contexts)?);
+    let parses = executions
+        .take()
+        .into_iter()
+        .filter(|(name, _)| name.ends_with("EditionedFileId::parse_"))
+        .map(|(_, count)| count)
+        .sum();
+    Ok((files, parses))
+}
+
+/// A context's copy of a file has its original's text, so what its gates say is read from the
+/// original: a run with three contexts parses no more files than one with one. Parsing each copy
+/// was one more parse of every file for every context.
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn a_contexts_copies_are_not_parsed_to_read_their_gates() -> Result<()> {
+    cordial::init_tracing();
+    let (files, one) = restored_parses(1)?;
+    let (_, three) = restored_parses(3)?;
+    assert!(
+        three <= files,
+        "{three} files parsed of {files} with three contexts, each copy parsed again"
+    );
+    assert!(
+        three <= one,
+        "{three} parses with three contexts against {one} with one: more contexts, more parses"
     );
     Ok(())
 }
