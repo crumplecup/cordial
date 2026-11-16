@@ -852,6 +852,7 @@ mod persistence {
             let Self { ingredient, zalsa } = self;
 
             let mut flattener = EdgeFlattener::default();
+            flattener.owner = Some(ingredient.index);
             let mut pending: Vec<(String, &Memo<C>, Flat)> = Vec::new();
 
             for entry in <C::SalsaStruct<'_> as SalsaStructInDb>::entries(zalsa) {
@@ -1055,6 +1056,11 @@ mod persistence {
                 } else {
                     edge
                 });
+            } else if let Some(fingerprint) =
+                crate::flatten::cutoff_edge(zalsa, flattener.owner, edge)
+            {
+                // A query whose value has a saved fingerprint: depend on that.
+                own.insert(fingerprint);
             } else if dependency.as_function().is_some() {
                 // SAFETY: The caller prevents database writes throughout the traversal.
                 if let Some((set, below)) =
@@ -1103,6 +1109,7 @@ mod persistence {
         let started = std::time::Instant::now();
         let current = zalsa.current_revision();
         let mut flattener = EdgeFlattener::default();
+        flattener.owner = Some(ingredient.index);
         // Whether each set has an edge that may have changed after a revision: found once for all
         // the memos that share the set.
         let mut unchanged: FxHashMap<(*const Bits, crate::Revision), bool> = FxHashMap::default();

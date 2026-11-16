@@ -563,7 +563,7 @@
      }
 --- salsa-0.28.5/src/database.rs
 +++ salsa/src/database.rs
-@@ -175,6 +175,55 @@
+@@ -175,6 +175,85 @@
      use serde::ser::SerializeMap;
  
      impl dyn Database {
@@ -616,10 +616,40 @@
 +            }
 +        }
 +
++        /// Say that the persisted tracked function `fingerprint` stands for the tracked function
++        /// `query`, both called by the names they are declared with, and taking the same salsa
++        /// struct as their only argument.
++        ///
++        /// A persisted memo that read `query` is then saved as depending on `fingerprint` of the
++        /// same argument, not on everything `query` read. It stays valid across an edit that makes
++        /// `query` read something else and give the same answer, because `fingerprint` is verified
++        /// as a query is: it runs again and, giving the same value as before, does not change.
++        ///
++        /// The value of `fingerprint` must determine what anything can read of the value of
++        /// `query`: if it leaves something out, a memo that read that stays valid when it changes.
++        /// `fingerprint` must be asked for, for each argument `query` was, before a save: where it
++        /// has not been, the save goes through `query` as before. Returns whether both were found.
++        pub fn register_cutoff(&self, query: &str, fingerprint: &str) -> bool {
++            let zalsa = self.zalsa();
++            let find = |name: &str| {
++                zalsa
++                    .ingredients()
++                    .find(|ingredient| ingredient.debug_name() == name && ingredient.as_function().is_some())
++                    .map(|ingredient| ingredient.ingredient_index())
++            };
++            match (find(query), find(fingerprint)) {
++                (Some(query), Some(fingerprint)) => {
++                    zalsa.register_cutoff(query, fingerprint);
++                    true
++                }
++                _ => false,
++            }
++        }
++
          /// Returns a type implementing [`serde::Serialize`], that can be used to serialize the
          /// current state of the database.
          ///
-@@ -369,8 +418,16 @@
+@@ -369,8 +448,16 @@
                  // to the ingredient as well as the database.
                  let mut ingredient = zalsa.take_ingredient(index);
  
@@ -639,7 +669,7 @@
              }
 --- salsa-0.28.5/src/flatten.rs
 +++ salsa/src/flatten.rs
-@@ -0,0 +1,698 @@
+@@ -0,0 +1,737 @@
 +//! Flattening a query's dependencies down to what is persisted, once per query.
 +//!
 +//! A persisted memo's dependencies are rewritten before it is saved: the queries that
@@ -813,6 +843,9 @@
 +    /// What the queries reached through a dependency on a tracked struct say, until the memo or
 +    /// query that depended on it takes them into its own closure.
 +    pub(crate) carried: Closure,
++    /// The ingredient whose memos are being flattened, which a fingerprint's own dependencies do
++    /// not stop short of the query it fingerprints for.
++    pub(crate) owner: Option<crate::IngredientIndex>,
 +    /// Queries walked whose group is still open, with the order they were first reached in.
 +    open: FxHashMap<QueryEdge, usize>,
 +    /// The open queries, in the order they were first reached.
@@ -851,6 +884,7 @@
 +            done: FxHashMap::default(),
 +            met_no_memo: false,
 +            carried: Closure::nothing(),
++            owner: None,
 +            open: FxHashMap::default(),
 +            stack: Vec::new(),
 +            next: 0,
@@ -952,6 +986,36 @@
 +    }
 +}
 +
++/// The leaf a dependency on `edge` is saved as in place of what the query reads, when `edge` is a
++/// query whose value has a saved fingerprint (see `Database::register_cutoff`): the fingerprint of
++/// the same argument. `None` when there is no fingerprint to depend on: the query has none, the
++/// fingerprint has not been asked for this argument (it has no memo), or the memo being flattened
++/// is the fingerprint itself, which has to go through the query it fingerprints.
++pub(crate) fn cutoff_edge(
++    zalsa: &Zalsa,
++    owner: Option<crate::IngredientIndex>,
++    edge: QueryEdge,
++) -> Option<QueryEdge> {
++    let fingerprint = zalsa.cutoff_of(edge.key().ingredient_index())?;
++    if owner == Some(fingerprint) {
++        return None;
++    }
++    // SAFETY: Callers prevent database writes throughout the traversal.
++    let present = unsafe {
++        zalsa
++            .lookup_ingredient(fingerprint)
++            .as_function()?
++            .memo_unchecked(zalsa, edge.key().key_index())
++    }
++    .is_some();
++    present.then(|| {
++        QueryEdge::input(crate::key::DatabaseKeyIndex::new(
++            fingerprint,
++            edge.key().key_index(),
++        ))
++    })
++}
++
 +/// The persisted edges the function memo at `edge` reaches, or `None` if there is no memo
 +/// (or it is being walked: see the module's note on groups).
 +///
@@ -1021,6 +1085,11 @@
 +                // A persisted query is serialized itself: depend on it, and do not walk through
 +                // it (its own dependencies are covered by its own memo).
 +                let number = flattener.number(dependency_edge);
++                found.set(number);
++            } else if let Some(fingerprint) = cutoff_edge(zalsa, flattener.owner, dependency_edge) {
++                // A query whose value has a saved fingerprint: depend on that, and do not walk
++                // through the query.
++                let number = flattener.number(fingerprint);
 +                found.set(number);
 +            } else if let Some((set, below)) =
 +                unsafe { leaves_of(zalsa, dependency_edge, flattener) }
@@ -1712,7 +1781,7 @@
      impl<C> serde::Serialize for SerializeIngredient<'_, C>
      where
          C: Configuration,
-@@ -774,26 +851,8 @@
+@@ -774,26 +851,9 @@
          {
              let Self { ingredient, zalsa } = self;
  
@@ -1737,11 +1806,12 @@
 -            let mut visited_edges = FxHashSet::default();
 -            let mut flattened_edges = FxIndexSet::default();
 +            let mut flattener = EdgeFlattener::default();
++            flattener.owner = Some(ingredient.index);
 +            let mut pending: Vec<(String, &Memo<C>, Flat)> = Vec::new();
  
              for entry in <C::SalsaStruct<'_> as SalsaStructInDb>::entries(zalsa) {
                  let memo_ingredient_index = ingredient
-@@ -806,97 +865,301 @@
+@@ -806,97 +866,307 @@
                      memo_ingredient_index,
                  );
  
@@ -1990,6 +2060,11 @@
 +                } else {
 +                    edge
 +                });
++            } else if let Some(fingerprint) =
++                crate::flatten::cutoff_edge(zalsa, flattener.owner, edge)
++            {
++                // A query whose value has a saved fingerprint: depend on that.
++                own.insert(fingerprint);
 +            } else if dependency.as_function().is_some() {
 +                // SAFETY: The caller prevents database writes throughout the traversal.
 +                if let Some((set, below)) =
@@ -2044,6 +2119,7 @@
 +        let started = std::time::Instant::now();
 +        let current = zalsa.current_revision();
 +        let mut flattener = EdgeFlattener::default();
++        flattener.owner = Some(ingredient.index);
 +        // Whether each set has an edge that may have changed after a revision: found once for all
 +        // the memos that share the set.
 +        let mut unchanged: FxHashMap<(*const Bits, crate::Revision), bool> = FxHashMap::default();
@@ -2104,7 +2180,7 @@
      }
  
      pub struct DeserializeIngredient<'db, C>
-@@ -937,7 +1200,23 @@
+@@ -937,7 +1207,23 @@
          {
              let DeserializeIngredient { zalsa, ingredient } = self;
  
@@ -2462,3 +2538,50 @@
  
      /// Create an ingredient index from a `u32`.
      pub(crate) fn new(v: u32) -> Self {
+@@ -171,6 +171,11 @@
+     runtime: Runtime,
+ 
+     event_callback: Option<Box<dyn Fn(crate::Event) + Send + Sync>>,
++
++    /// The queries whose value has a saved fingerprint, with the query that is the fingerprint: a
++    /// memo that read the first is saved as depending on the second instead of on everything the
++    /// first read (see `flatten::cutoff_edge`).
++    cutoffs: std::sync::RwLock<Vec<(IngredientIndex, IngredientIndex)>>,
+ }
+ 
+ /// All fields on Zalsa are locked behind [`Mutex`]es and [`RwLock`]s and cannot enter
+@@ -194,6 +199,7 @@
+             runtime: Runtime::default(),
+             memo_ingredient_indices: Default::default(),
+             event_callback,
++            cutoffs: std::sync::RwLock::new(Vec::new()),
+             #[cfg(not(feature = "inventory"))]
+             nonce: NONCE.nonce(),
+         };
+@@ -283,6 +289,26 @@
+             [memo_ingredient_index.as_usize()]
+     }
+ 
++    /// The query whose value is the saved fingerprint of the value of `query`, if there is one.
++    pub(crate) fn cutoff_of(&self, query: IngredientIndex) -> Option<IngredientIndex> {
++        self.cutoffs
++            .read()
++            .unwrap_or_else(|poisoned| poisoned.into_inner())
++            .iter()
++            .find_map(|(known, fingerprint)| (*known == query).then_some(*fingerprint))
++    }
++
++    /// Say that the value of `fingerprint` stands for the value of `query`.
++    pub(crate) fn register_cutoff(&self, query: IngredientIndex, fingerprint: IngredientIndex) {
++        let mut cutoffs = self
++            .cutoffs
++            .write()
++            .unwrap_or_else(|poisoned| poisoned.into_inner());
++        if !cutoffs.iter().any(|(known, _)| *known == query) {
++            cutoffs.push((query, fingerprint));
++        }
++    }
++
+     #[allow(unused)]
+     pub(crate) fn ingredients(&self) -> impl Iterator<Item = &dyn Ingredient> {
+         self.ingredients_vec

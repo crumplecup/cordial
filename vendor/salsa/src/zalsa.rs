@@ -171,6 +171,11 @@ pub struct Zalsa {
     runtime: Runtime,
 
     event_callback: Option<Box<dyn Fn(crate::Event) + Send + Sync>>,
+
+    /// The queries whose value has a saved fingerprint, with the query that is the fingerprint: a
+    /// memo that read the first is saved as depending on the second instead of on everything the
+    /// first read (see `flatten::cutoff_edge`).
+    cutoffs: std::sync::RwLock<Vec<(IngredientIndex, IngredientIndex)>>,
 }
 
 /// All fields on Zalsa are locked behind [`Mutex`]es and [`RwLock`]s and cannot enter
@@ -194,6 +199,7 @@ impl Zalsa {
             runtime: Runtime::default(),
             memo_ingredient_indices: Default::default(),
             event_callback,
+            cutoffs: std::sync::RwLock::new(Vec::new()),
             #[cfg(not(feature = "inventory"))]
             nonce: NONCE.nonce(),
         };
@@ -281,6 +287,26 @@ impl Zalsa {
     ) -> IngredientIndex {
         self.memo_ingredient_indices[struct_ingredient_index.as_u32() as usize]
             [memo_ingredient_index.as_usize()]
+    }
+
+    /// The query whose value is the saved fingerprint of the value of `query`, if there is one.
+    pub(crate) fn cutoff_of(&self, query: IngredientIndex) -> Option<IngredientIndex> {
+        self.cutoffs
+            .read()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .iter()
+            .find_map(|(known, fingerprint)| (*known == query).then_some(*fingerprint))
+    }
+
+    /// Say that the value of `fingerprint` stands for the value of `query`.
+    pub(crate) fn register_cutoff(&self, query: IngredientIndex, fingerprint: IngredientIndex) {
+        let mut cutoffs = self
+            .cutoffs
+            .write()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if !cutoffs.iter().any(|(known, _)| *known == query) {
+            cutoffs.push((query, fingerprint));
+        }
     }
 
     #[allow(unused)]

@@ -224,6 +224,36 @@ mod persistence {
             }
         }
 
+        /// Say that the persisted tracked function `fingerprint` stands for the tracked function
+        /// `query`, both called by the names they are declared with, and taking the same salsa
+        /// struct as their only argument.
+        ///
+        /// A persisted memo that read `query` is then saved as depending on `fingerprint` of the
+        /// same argument, not on everything `query` read. It stays valid across an edit that makes
+        /// `query` read something else and give the same answer, because `fingerprint` is verified
+        /// as a query is: it runs again and, giving the same value as before, does not change.
+        ///
+        /// The value of `fingerprint` must determine what anything can read of the value of
+        /// `query`: if it leaves something out, a memo that read that stays valid when it changes.
+        /// `fingerprint` must be asked for, for each argument `query` was, before a save: where it
+        /// has not been, the save goes through `query` as before. Returns whether both were found.
+        pub fn register_cutoff(&self, query: &str, fingerprint: &str) -> bool {
+            let zalsa = self.zalsa();
+            let find = |name: &str| {
+                zalsa
+                    .ingredients()
+                    .find(|ingredient| ingredient.debug_name() == name && ingredient.as_function().is_some())
+                    .map(|ingredient| ingredient.ingredient_index())
+            };
+            match (find(query), find(fingerprint)) {
+                (Some(query), Some(fingerprint)) => {
+                    zalsa.register_cutoff(query, fingerprint);
+                    true
+                }
+                _ => false,
+            }
+        }
+
         /// Returns a type implementing [`serde::Serialize`], that can be used to serialize the
         /// current state of the database.
         ///

@@ -1139,3 +1139,193 @@ fn what_flattening_shows_verifies_a_memo_only_when_nothing_it_covers_changed() {
         }
     }
 }
+
+// ---------------------------------------------------------------------------------------------
+// A query whose value has a saved fingerprint: what reads it depends on the fingerprint.
+// ---------------------------------------------------------------------------------------------
+
+/// Not persisted: how many cells of a group are large. A cell changing rarely changes this.
+#[salsa::tracked(returns(copy))]
+fn shape(db: &dyn Database, group: Group) -> usize {
+    group
+        .cells(db)
+        .iter()
+        .filter(|cell| cell.value(db) >= LARGE)
+        .count()
+}
+
+/// The value at which a cell is large.
+const LARGE: usize = 10_000;
+
+static SHAPE_FINGERPRINTED: AtomicUsize = AtomicUsize::new(0);
+
+/// Persisted, and what `shape` is a fingerprint of: its value, a number being its own fingerprint.
+#[salsa::tracked(returns(copy), persist)]
+fn shape_fingerprint(db: &dyn Database, group: Group) -> usize {
+    SHAPE_FINGERPRINTED.fetch_add(1, Ordering::SeqCst);
+    shape(db, group)
+}
+
+static SIZED_EXECUTIONS: AtomicUsize = AtomicUsize::new(0);
+
+/// Persisted, and reads only the shape of its group: not the cells.
+#[salsa::tracked(returns(copy), persist)]
+fn sized<'db>(db: &'db dyn Database, group: Group, key: Key<'db>) -> usize {
+    SIZED_EXECUTIONS.fetch_add(1, Ordering::SeqCst);
+    shape(db, group) + key.n(db)
+}
+
+/// Whether `shape` is declared to have a saved fingerprint.
+#[derive(Clone, Copy, Debug)]
+enum Cutoff {
+    /// It is: what read `shape` depends on the fingerprint.
+    Registered,
+    /// It is not: what read `shape` depends on every cell the shape was made from.
+    NotRegistered,
+}
+
+/// What is written to a cell of the first group.
+#[derive(Clone, Copy, Debug)]
+enum Edit {
+    /// A value that leaves the cell small: the shape is the same.
+    LeavesTheShape,
+    /// A value that makes the cell large: the shape is not the same.
+    ChangesTheShape,
+}
+
+/// The queries asked for, for each of the groups.
+fn ask_sizes(db: &Db, fixture: &Fixture) {
+    for n in 0..MEMBERS * 2 {
+        sized(db, fixture.groups[n % 2], Key::new(db, n));
+    }
+}
+
+/// The fingerprints asked for, which a save needs to find before it can depend on them, and
+/// which a restored run asks for before the memos that depend on them (so each is set up).
+fn ask_fingerprints(db: &Db, fixture: &Fixture) {
+    for group in fixture.groups {
+        shape_fingerprint(db, group);
+    }
+}
+
+/// How many `sized` queries ran again after `edit`, in a database saved and restored `trips` times
+/// in `format`, with `shape` declared as `cutoff` says.
+fn sized_after(cutoff: Cutoff, format: Format, trips: Trips, edit: Edit) -> usize {
+    let mut db = Db::default();
+    let fixture = Fixture::new(&db);
+    ask_sizes(&db, &fixture);
+    ask_fingerprints(&db, &fixture);
+    let declare = |db: &Db| {
+        if let Cutoff::Registered = cutoff {
+            assert!(
+                <dyn Database>::register_cutoff(db, "shape", "shape_fingerprint"),
+                "both queries are there to be declared"
+            );
+        }
+    };
+    declare(&db);
+    let (mut restored, _) = round_trip_in(&mut db, format);
+    declare(&restored);
+    ask_fingerprints(&restored, &fixture);
+    if let Trips::Twice = trips {
+        ask_sizes(&restored, &fixture);
+        let (again, _) = round_trip_in(&mut restored, format);
+        restored = again;
+        declare(&restored);
+        ask_fingerprints(&restored, &fixture);
+    }
+    // Asking before the edit settles what is verified, which the edit must not be hidden behind.
+    ask_sizes(&restored, &fixture);
+    let before = SIZED_EXECUTIONS.load(Ordering::SeqCst);
+    let cell = fixture.cells[0][CELLS / 2];
+    cell.set_value(&mut restored).to(match edit {
+        Edit::LeavesTheShape => 7,
+        Edit::ChangesTheShape => LARGE + 1,
+    });
+    ask_sizes(&restored, &fixture);
+    SIZED_EXECUTIONS.load(Ordering::SeqCst) - before
+}
+
+#[test]
+fn what_read_a_query_with_a_fingerprint_depends_on_the_fingerprint_and_not_on_what_it_read() {
+    for (format, trips) in all_ways() {
+        // An edit that leaves the shape as it was: what read the shape does not run again, when
+        // its fingerprint stands for it; and does, for every query of the group, when it does not.
+        assert_eq!(
+            sized_after(Cutoff::Registered, format, trips, Edit::LeavesTheShape),
+            0,
+            "{format:?}, {trips:?}: the shape did not change, and the fingerprint says so"
+        );
+        assert_eq!(
+            sized_after(Cutoff::NotRegistered, format, trips, Edit::LeavesTheShape),
+            MEMBERS,
+            "{format:?}, {trips:?}: without a fingerprint, every query of the group read the cell"
+        );
+        // An edit that changes the shape: those that read it run again, with a fingerprint or not,
+        // and only those of the group the cell is in.
+        for cutoff in [Cutoff::Registered, Cutoff::NotRegistered] {
+            assert_eq!(
+                sized_after(cutoff, format, trips, Edit::ChangesTheShape),
+                MEMBERS,
+                "{format:?}, {trips:?}, {cutoff:?}: the shape changed, so what read it runs again"
+            );
+        }
+    }
+}
+
+/// Which groups' fingerprints were asked for before the save.
+#[derive(Clone, Copy, Debug)]
+enum Asked {
+    BothGroups,
+    /// Only the first group's: the second has none for a save to depend on.
+    TheFirstGroupsOnly,
+}
+
+/// How many `sized` queries ran again after an edit to a cell of the second group that leaves its
+/// shape as it was, in a database saved and restored in `format` with `asked` fingerprints.
+fn sized_after_an_edit_to_the_second_group(asked: Asked, format: Format) -> usize {
+    let mut db = Db::default();
+    let fixture = Fixture::new(&db);
+    ask_sizes(&db, &fixture);
+    match asked {
+        Asked::BothGroups => ask_fingerprints(&db, &fixture),
+        Asked::TheFirstGroupsOnly => {
+            shape_fingerprint(&db, fixture.groups[0]);
+        }
+    }
+    assert!(<dyn Database>::register_cutoff(
+        &db,
+        "shape",
+        "shape_fingerprint"
+    ));
+    let (mut restored, _) = round_trip_in(&mut db, format);
+    assert!(<dyn Database>::register_cutoff(
+        &restored,
+        "shape",
+        "shape_fingerprint"
+    ));
+    ask_fingerprints(&restored, &fixture);
+    ask_sizes(&restored, &fixture);
+    let before = SIZED_EXECUTIONS.load(Ordering::SeqCst);
+    let cell = fixture.cells[1][CELLS / 2];
+    cell.set_value(&mut restored).to(7);
+    ask_sizes(&restored, &fixture);
+    SIZED_EXECUTIONS.load(Ordering::SeqCst) - before
+}
+
+#[test]
+fn a_query_with_no_fingerprint_asked_for_is_walked_through_and_not_depended_on() {
+    for format in [Format::Json, Format::MessagePack] {
+        assert_eq!(
+            sized_after_an_edit_to_the_second_group(Asked::BothGroups, format),
+            0,
+            "{format:?}: the second group has a fingerprint, which the edit did not change"
+        );
+        assert_eq!(
+            sized_after_an_edit_to_the_second_group(Asked::TheFirstGroupsOnly, format),
+            MEMBERS,
+            "{format:?}: the second group has none, so its queries depend on the cells they read, \
+             through the shape, and not on a fingerprint that is not there"
+        );
+    }
+}

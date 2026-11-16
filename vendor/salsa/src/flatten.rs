@@ -171,6 +171,9 @@ pub struct EdgeFlattener {
     /// What the queries reached through a dependency on a tracked struct say, until the memo or
     /// query that depended on it takes them into its own closure.
     pub(crate) carried: Closure,
+    /// The ingredient whose memos are being flattened, which a fingerprint's own dependencies do
+    /// not stop short of the query it fingerprints for.
+    pub(crate) owner: Option<crate::IngredientIndex>,
     /// Queries walked whose group is still open, with the order they were first reached in.
     open: FxHashMap<QueryEdge, usize>,
     /// The open queries, in the order they were first reached.
@@ -209,6 +212,7 @@ impl Default for EdgeFlattener {
             done: FxHashMap::default(),
             met_no_memo: false,
             carried: Closure::nothing(),
+            owner: None,
             open: FxHashMap::default(),
             stack: Vec::new(),
             next: 0,
@@ -310,6 +314,36 @@ impl EdgeFlattener {
     }
 }
 
+/// The leaf a dependency on `edge` is saved as in place of what the query reads, when `edge` is a
+/// query whose value has a saved fingerprint (see `Database::register_cutoff`): the fingerprint of
+/// the same argument. `None` when there is no fingerprint to depend on: the query has none, the
+/// fingerprint has not been asked for this argument (it has no memo), or the memo being flattened
+/// is the fingerprint itself, which has to go through the query it fingerprints.
+pub(crate) fn cutoff_edge(
+    zalsa: &Zalsa,
+    owner: Option<crate::IngredientIndex>,
+    edge: QueryEdge,
+) -> Option<QueryEdge> {
+    let fingerprint = zalsa.cutoff_of(edge.key().ingredient_index())?;
+    if owner == Some(fingerprint) {
+        return None;
+    }
+    // SAFETY: Callers prevent database writes throughout the traversal.
+    let present = unsafe {
+        zalsa
+            .lookup_ingredient(fingerprint)
+            .as_function()?
+            .memo_unchecked(zalsa, edge.key().key_index())
+    }
+    .is_some();
+    present.then(|| {
+        QueryEdge::input(crate::key::DatabaseKeyIndex::new(
+            fingerprint,
+            edge.key().key_index(),
+        ))
+    })
+}
+
 /// The persisted edges the function memo at `edge` reaches, or `None` if there is no memo
 /// (or it is being walked: see the module's note on groups).
 ///
@@ -379,6 +413,11 @@ pub(crate) unsafe fn leaves_of(
                 // A persisted query is serialized itself: depend on it, and do not walk through
                 // it (its own dependencies are covered by its own memo).
                 let number = flattener.number(dependency_edge);
+                found.set(number);
+            } else if let Some(fingerprint) = cutoff_edge(zalsa, flattener.owner, dependency_edge) {
+                // A query whose value has a saved fingerprint: depend on that, and do not walk
+                // through the query.
+                let number = flattener.number(fingerprint);
                 found.set(number);
             } else if let Some((set, below)) =
                 unsafe { leaves_of(zalsa, dependency_edge, flattener) }
