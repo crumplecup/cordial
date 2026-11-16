@@ -478,3 +478,71 @@ fn a_persisted_query_is_valid_when_restored_if_it_was_verified_before_the_save()
         "every persisted memo verified before the save is valid when restored"
     );
 }
+
+#[salsa::input(persist)]
+struct Page {
+    #[returns(copy)]
+    value: usize,
+}
+
+#[salsa::input(persist, singleton)]
+struct Pages {
+    #[returns(ref)]
+    all: Vec<Page>,
+}
+
+static EXECUTED_READERS: AtomicUsize = AtomicUsize::new(0);
+
+/// Persisted, and reads every page, as a function of a crate reads the files of every crate.
+#[salsa::tracked(returns(copy), persist)]
+fn reader<'db>(db: &'db dyn Database, k: Key<'db>) -> usize {
+    EXECUTED_READERS.fetch_add(1, Ordering::SeqCst);
+    Pages::get(db)
+        .all(db)
+        .iter()
+        .map(|page| page.value(db))
+        .sum::<usize>()
+        + k.n(db)
+}
+
+/// How long a restored database takes to find `readers` memos that each read `pages` inputs
+/// still valid, and how many ran again.
+fn verify_restored(pages: usize, readers: usize) -> (std::time::Duration, usize) {
+    let mut db = Db::default();
+    let all = (0..pages).map(|n| Page::new(&db, n)).collect();
+    Pages::new(&db, all);
+    Unrelated::new(&db, 0);
+    for n in 0..readers {
+        reader(&db, Key::new(&db, n));
+    }
+    let saved = serde_json::to_string(&<dyn Database>::as_serialize(&mut db))
+        .unwrap_or_else(|error| panic!("serializing: {error}"));
+    let mut restored = Db::default();
+    <dyn Database>::deserialize(
+        &mut restored,
+        &mut serde_json::Deserializer::from_str(&saved),
+    )
+    .unwrap_or_else(|error| panic!("deserializing: {error}"));
+    Unrelated::get(&restored).set_value(&mut restored).to(1);
+    let executed = EXECUTED_READERS.load(Ordering::SeqCst);
+    let started = std::time::Instant::now();
+    for n in 0..readers {
+        reader(&restored, Key::new(&restored, n));
+    }
+    (
+        started.elapsed(),
+        EXECUTED_READERS.load(Ordering::SeqCst) - executed,
+    )
+}
+
+#[test]
+fn restored_memos_over_many_inputs_are_verified_quickly() {
+    let (elapsed, executed) = verify_restored(2000, 1660);
+    assert_eq!(executed, 0, "nothing changed");
+    // Measured at 20 ms in release; the bound only catches verification turning into a walk of
+    // every input for every memo again.
+    assert!(
+        elapsed < std::time::Duration::from_secs(10),
+        "verifying {executed} restored memos over many inputs took {elapsed:?}"
+    );
+}

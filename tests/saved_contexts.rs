@@ -436,3 +436,116 @@ fn an_ordinary_functions_saved_memo_depends_on_nothing_a_context_made() -> Resul
     );
     Ok(())
 }
+
+/// How many times Salsa executed each query, by name, from its own events.
+#[derive(Default, Clone)]
+struct Executions(std::sync::Arc<std::sync::Mutex<std::collections::BTreeMap<String, usize>>>);
+
+impl<S> tracing_subscriber::Layer<S> for Executions
+where
+    S: tracing::Subscriber + for<'lookup> tracing_subscriber::registry::LookupSpan<'lookup>,
+{
+    fn on_event(
+        &self,
+        event: &tracing::Event<'_>,
+        context: tracing_subscriber::layer::Context<'_, S>,
+    ) {
+        if event.metadata().target() != "salsa::function::execute" {
+            return;
+        }
+        struct Message(String);
+        impl tracing::field::Visit for Message {
+            fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
+                if field.name() == "message" {
+                    self.0 = format!("{value:?}");
+                }
+            }
+        }
+        let mut message = Message(String::new());
+        event.record(&mut message);
+        let query = message.0.split('(').next().unwrap_or_default();
+        // The innermost span of cordial's own that the query runs under says which step asked.
+        let step = context
+            .event_scope(event)
+            .and_then(|scope| {
+                scope
+                    .into_iter()
+                    .find(|span| span.metadata().target().starts_with("cordial"))
+                    .map(|span| span.name())
+            })
+            .unwrap_or("outside cordial");
+        let name = format!("{step} > {query}");
+        if let Ok(mut counts) = self.0.lock() {
+            *counts.entry(name).or_default() += 1;
+        }
+    }
+}
+
+impl Executions {
+    fn take(&self) -> std::collections::BTreeMap<String, usize> {
+        self.0
+            .lock()
+            .map(|mut counts| std::mem::take(&mut *counts))
+            .unwrap_or_default()
+    }
+}
+
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn a_restored_run_executes_few_rust_analyzer_queries() -> Result<()> {
+    use tracing_subscriber::prelude::*;
+    cordial::init_tracing();
+    let executions = Executions::default();
+    let subscriber = tracing_subscriber::registry().with(executions.clone());
+    let _subscriber = tracing::subscriber::set_default(subscriber);
+    let root = chain_of_crates()?;
+    let state = tempfile::tempdir().into_diagnostic()?;
+    let saved = SavedState::at(state.path().join("analysis-state"));
+
+    assert!(!run_many(root.path(), &saved)?);
+    let cold = executions.take();
+    assert!(run_many(root.path(), &saved)?);
+    let restored = executions.take();
+
+    let mut by_step = std::collections::BTreeMap::<&str, usize>::new();
+    for (name, count) in &restored {
+        *by_step
+            .entry(name.split(" > ").next().unwrap_or_default())
+            .or_default() += count;
+    }
+    // What a restored run still asks rust-analyzer for is what it takes to name each function
+    // (parse, item trees, attributes, macro expansion) so its saved evidence can be found: the
+    // steps below. Anything else asking for analysis in a restored run is new work to account for.
+    const NAMING: [&str; 15] = [
+        "local_functions",
+        "derived_site",
+        "inner_",
+        "declared_in",
+        "resolve",
+        "harvest",
+        "written_in_file",
+        "generated_in",
+        // One each: the joins over a crate's files, rebuilt from the saved parts, the source
+        // captured for the run, and the warm-up's own question of the saved evidence.
+        "antipattern_crate_facts",
+        "architecture_catalog",
+        "captured_source",
+        "panic_graph",
+        "panic_reachable",
+        "persisted_evidence",
+        "signature_index",
+    ];
+    let others: Vec<_> = by_step
+        .keys()
+        .filter(|step| !NAMING.contains(step))
+        .collect();
+    assert!(
+        others.is_empty(),
+        "a restored run executed queries under steps that do not name functions: {others:?}"
+    );
+    assert!(
+        restored.values().sum::<usize>() < cold.values().sum::<usize>(),
+        "a restored run executes fewer queries than a cold one"
+    );
+    Ok(())
+}
