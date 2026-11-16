@@ -60,6 +60,7 @@ impl Locator<'_> {
         let Some(declared) = implemented_declaration(db, item_key::key_for(id)) else {
             return Ok(());
         };
+        let declared = &declared.location;
         graph.set_attr(
             node,
             crate::ATTR_TRAIT_IMPLEMENTATION,
@@ -83,15 +84,24 @@ fn start_of<'db>(db: &'db dyn SemanticDatabase, key: ItemKey<'db>) -> Option<(Pa
     start_of_function(root, function)
 }
 
+/// The trait method a function implements, and where the trait declares it. A struct, and not a
+/// nested `Option`, because a saved `Some(None)` reads back as `None`: a method of a trait whose
+/// declaration cannot be located would read back as no trait method at all.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub(super) struct Declared {
+    location: Option<(PathBuf, u32)>,
+}
+
 /// Whether the function `key` describes implements a trait method, and if it does, where the
-/// trait declares that method: see [`start_of`]. The inner `None` is a trait that cannot be located.
+/// trait declares that method: see [`start_of`]. The location is `None` for a trait that cannot be
+/// located.
 #[salsa::tracked(persist, returns(ref))]
 #[tracing::instrument(level = "debug", skip(db, key))]
 #[hotpath::measure]
 fn implemented_declaration<'db>(
     db: &'db dyn SemanticDatabase,
     key: ItemKey<'db>,
-) -> Option<Option<(PathBuf, u32)>> {
+) -> Option<Declared> {
     let root = db.root_database();
     let function = item_key::function_of(db, key)?;
     let declared = ra_ap_hir::attach_db(root, || {
@@ -110,7 +120,9 @@ fn implemented_declaration<'db>(
                 _ => None,
             })
     })?;
-    Some(start_of_function(root, declared))
+    Some(Declared {
+        location: start_of_function(root, declared),
+    })
 }
 
 #[tracing::instrument(level = "trace", skip(db, function))]

@@ -90,16 +90,34 @@ pub(super) fn antipattern_sites_file<'db>(
     })
 }
 
-/// A file's contract clauses, or `None` when this policy does not read the file.
+/// What a file's contract query answered. Three answers that one nested `Option` cannot keep
+/// apart when saved (it writes both `None` and `Some(None)` as nothing), so a restored run would
+/// read "this policy does not read the file" as "the query declined" for every file.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub(super) enum Contracts {
+    /// The file did not parse or the collector refused it: the direct path reports why.
+    Declined,
+    /// This policy does not read the file: outside `src`, under a `gallery` directory, or the
+    /// crate has no contract verifier.
+    NotRead,
+    /// The file's contract clauses.
+    Read(ContractFile),
+}
+
+/// A file's contract clauses: see [`Contracts`].
 #[salsa::tracked(persist, returns(ref))]
 #[instrument(level = "debug", skip(db, key))]
 #[hotpath::measure]
 pub(super) fn antipattern_contracts_file<'db>(
     db: &'db dyn SemanticDatabase,
     key: ContractKey<'db>,
-) -> Option<Option<ContractFile>> {
+) -> Contracts {
     let file = key.file(db);
-    carried(db, file, "antipattern_contracts_file", |source| {
+    match carried(db, file, "antipattern_contracts_file", |source| {
         file_clauses(file.root(db), key.crate_name(db), source)
-    })
+    }) {
+        None => Contracts::Declined,
+        Some(None) => Contracts::NotRead,
+        Some(Some(clauses)) => Contracts::Read(clauses),
+    }
 }

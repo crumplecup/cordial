@@ -1563,3 +1563,44 @@ fn a_contexts_copies_are_not_parsed_to_read_their_gates() -> Result<()> {
     );
     Ok(())
 }
+
+/// What a run is: the first, which computes what it saves, or the next, which restores it.
+#[derive(Clone, Copy, Debug)]
+enum Which {
+    Cold,
+    Restored,
+}
+
+/// How many times a run of the workspace fell back to asking rust-analyzer, or to reading a file
+/// that a saved query declined.
+fn fallbacks_in(which: Which) -> Result<usize> {
+    let fallbacks = FallbackEvents::default();
+    let subscriber = tracing_subscriber::registry().with(fallbacks.clone());
+    let _subscriber = tracing::subscriber::set_default(subscriber);
+    let root = fixture()?;
+    let state = tempfile::tempdir().into_diagnostic()?;
+    let saved = SavedState::at(state.path().join("analysis-state"));
+    if let Which::Restored = which {
+        run(root.path(), &saved)?;
+        fallbacks.0.store(0, std::sync::atomic::Ordering::Relaxed);
+    }
+    run(root.path(), &saved)?;
+    Ok(fallbacks.0.load(std::sync::atomic::Ordering::Relaxed))
+}
+
+/// A query that says "this policy does not read this file" says it the same way after a restore,
+/// and does not read as having declined: a file declined sends the whole target down the direct
+/// path, which a restored run would take every time.
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn a_restored_run_takes_no_direct_path_a_cold_run_did_not() -> Result<()> {
+    cordial::init_tracing();
+    let cold = fallbacks_in(Which::Cold)?;
+    let restored = fallbacks_in(Which::Restored)?;
+    assert_eq!(cold, 0, "a cold run fell back {cold} times");
+    assert_eq!(
+        restored, 0,
+        "a restored run fell back {restored} times where a cold run did {cold}"
+    );
+    Ok(())
+}

@@ -102,9 +102,9 @@ impl SourceDatabase {
                 queries::ContractKey::new(&self.db, *key, crate_name.to_owned()),
             );
             match contract {
-                Some(Some(file)) => found.push(file.clone()),
-                Some(None) => {}
-                None => {
+                queries::Contracts::Read(file) => found.push(file.clone()),
+                queries::Contracts::NotRead => {}
+                queries::Contracts::Declined => {
                     tracing::info!(
                         target: "cordial::semantic::fallback",
                         step = "antipatterns",
