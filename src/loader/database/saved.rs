@@ -183,6 +183,7 @@ impl SavedState {
     #[hotpath::measure(impl_type = "SavedState")]
     fn decode_salsa(database: &mut RootDatabase, salsa: &[u8]) -> Result<(), String> {
         let started = std::time::Instant::now();
+        let expanded_before = salsa::edges_expanded();
         let target: &mut dyn salsa::Database = database;
         target
             .deserialize(&mut rmp_serde::Deserializer::from_read_ref(salsa))
@@ -190,6 +191,7 @@ impl SavedState {
         tracing::debug!(
             target: "cordial::cache",
             bytes = salsa.len(),
+            edges = salsa::edges_expanded() - expanded_before,
             micros = u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX),
             "decoded the saved Salsa memos"
         );

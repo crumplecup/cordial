@@ -41,6 +41,16 @@ pub(crate) fn note_persisted_execution() {
     PERSISTED_EXECUTIONS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 }
 
+static EDGES_EXPANDED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// How many dependency edges deserializing saved memos has given memos of their own, one copy per
+/// memo of every set it refers to. A memo in a crate of `n` files has `n` of them, so the total
+/// is the number of memos times the files they depend on: the cost of a restore that no byte of
+/// the saved state accounts for.
+pub fn edges_expanded() -> u64 {
+    EDGES_EXPANDED.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 static DEEP_VERIFICATIONS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 static EDGES_CHECKED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
@@ -355,6 +365,7 @@ pub(crate) fn expand_saved(sets: &[u32], edges: &[QueryEdge]) -> Box<[QueryEdge]
             all.extend(set.iter().copied());
         }
         all.extend(edges.iter().copied());
+        EDGES_EXPANDED.fetch_add(all.len() as u64, std::sync::atomic::Ordering::Relaxed);
         all.into_iter().collect()
     })
 }

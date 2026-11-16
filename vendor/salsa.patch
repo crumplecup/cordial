@@ -601,7 +601,7 @@
              }
 --- salsa-0.28.5/src/flatten.rs
 +++ salsa/src/flatten.rs
-@@ -0,0 +1,417 @@
+@@ -0,0 +1,428 @@
 +//! Flattening a query's dependencies down to what is persisted, once per query.
 +//!
 +//! A persisted memo's dependencies are rewritten before it is saved: the queries that
@@ -643,6 +643,16 @@
 +/// what was restored.
 +pub(crate) fn note_persisted_execution() {
 +    PERSISTED_EXECUTIONS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
++}
++
++static EDGES_EXPANDED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
++
++/// How many dependency edges deserializing saved memos has given memos of their own, one copy per
++/// memo of every set it refers to. A memo in a crate of `n` files has `n` of them, so the total
++/// is the number of memos times the files they depend on: the cost of a restore that no byte of
++/// the saved state accounts for.
++pub fn edges_expanded() -> u64 {
++    EDGES_EXPANDED.load(std::sync::atomic::Ordering::Relaxed)
 +}
 +
 +static DEEP_VERIFICATIONS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
@@ -959,6 +969,7 @@
 +            all.extend(set.iter().copied());
 +        }
 +        all.extend(edges.iter().copied());
++        EDGES_EXPANDED.fetch_add(all.len() as u64, std::sync::atomic::Ordering::Relaxed);
 +        all.into_iter().collect()
 +    })
 +}
@@ -1760,7 +1771,7 @@
  mod durability;
  mod event;
 +mod flatten;
-+pub use flatten::{deep_verifications, persisted_executions};
++pub use flatten::{deep_verifications, edges_expanded, persisted_executions};
  mod function;
  mod hash;
  mod id;

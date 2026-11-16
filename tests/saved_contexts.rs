@@ -1065,7 +1065,7 @@ fn a_files_copies_are_not_walked_again_for_their_places() -> Result<()> {
 
 /// The bytes and microseconds of the saved Salsa memos' decoding, from the loader's own event.
 #[derive(Default, Clone)]
-struct DecodeRate(std::sync::Arc<std::sync::Mutex<Vec<(u64, u64)>>>);
+struct DecodeRate(std::sync::Arc<std::sync::Mutex<Vec<(u64, u64, u64)>>>);
 
 impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for DecodeRate {
     fn on_event(&self, event: &tracing::Event<'_>, _: tracing_subscriber::layer::Context<'_, S>) {
@@ -1073,12 +1073,14 @@ impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for DecodeRate {
         struct Fields {
             decoded: bool,
             bytes: u64,
+            edges: u64,
             micros: u64,
         }
         impl tracing::field::Visit for Fields {
             fn record_u64(&mut self, field: &tracing::field::Field, value: u64) {
                 match field.name() {
                     "bytes" => self.bytes = value,
+                    "edges" => self.edges = value,
                     "micros" => self.micros = value,
                     _ => {}
                 }
@@ -1094,7 +1096,7 @@ impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for DecodeRate {
         if fields.decoded
             && let Ok(mut all) = self.0.lock()
         {
-            all.push((fields.bytes, fields.micros));
+            all.push((fields.bytes, fields.micros, fields.edges));
         }
     }
 }
@@ -1118,7 +1120,7 @@ fn decode_micros(count: usize) -> Result<u64> {
     run(root.path(), &saved)?;
     let all = rate.0.lock().map_err(|_| miette::miette!("poisoned"))?;
     all.last()
-        .map(|(_, micros)| *micros)
+        .map(|(_, micros, _)| *micros)
         .ok_or_else(|| miette::miette!("the restored run decoded nothing"))
 }
 
