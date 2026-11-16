@@ -2,9 +2,15 @@
 //! evaluate it again: a derive's methods, a function an attribute macro wrapped, one two
 //! attribute macros wrapped, and one a `macro_rules!` call defined.
 
+mod support {
+    pub mod executions;
+}
+
 use cordial::{CrateTarget, SavedState, SemanticCargoOptions, SourceDatabase};
 use miette::{IntoDiagnostic, Result};
 use std::path::Path;
+use support::executions::Executions;
+use tracing_subscriber::prelude::*;
 
 const MACROS: &str = r#"
 extern crate proc_macro;
@@ -143,6 +149,66 @@ fn a_restored_run_does_not_evaluate_the_functions_macros_generated() -> Result<(
     assert_eq!(
         again, 0,
         "{again} of {total} functions were evaluated again in the restored run"
+    );
+    Ok(())
+}
+
+/// `count` of each: a type with derives, a function an attribute macro wrapped, and one a
+/// `macro_rules!` call defined.
+fn user_of(count: usize) -> String {
+    let mut text = String::from(
+        "use macros::{Accessors, wrap};\nmacro_rules! make { ($name:ident) => { pub fn $name() {} }; }\n",
+    );
+    for n in 0..count {
+        text.push_str(&format!(
+            "#[derive(Clone, Debug, Accessors)]\npub struct W{n} {{ a: u8, b: u8 }}\n\
+             #[wrap]\npub fn wrapped{n}() {{}}\nmake!(made{n});\n"
+        ));
+    }
+    text
+}
+
+/// What a restored run executed over `count` of each generated kind.
+fn restored_queries_over(count: usize) -> Result<std::collections::BTreeMap<String, usize>> {
+    let executions = Executions::default();
+    let subscriber = tracing_subscriber::registry().with(executions.clone());
+    let _subscriber = tracing::subscriber::set_default(subscriber);
+    let root = specimen()?;
+    std::fs::write(root.path().join("src/lib.rs"), user_of(count)).into_diagnostic()?;
+    let state = tempfile::tempdir().into_diagnostic()?;
+    let saved = SavedState::at(state.path().join("analysis-state"));
+    run(root.path(), &saved)?;
+    executions.take();
+    run(root.path(), &saved)?;
+    Ok(executions.take())
+}
+
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn the_queries_of_a_restored_run_grow_slowly_with_the_code_macros_generated() -> Result<()> {
+    cordial::init_tracing();
+    let few = restored_queries_over(5)?;
+    let many = restored_queries_over(45)?;
+    let total = |counts: &std::collections::BTreeMap<String, usize>| counts.values().sum::<usize>();
+    let mut grown: Vec<(String, usize)> = many
+        .iter()
+        .map(|(name, count)| {
+            (
+                name.clone(),
+                count.saturating_sub(few.get(name).copied().unwrap_or(0)),
+            )
+        })
+        .filter(|(_, grew)| *grew > 100)
+        .collect();
+    grown.sort_by_key(|(_, grew)| std::cmp::Reverse(*grew));
+    grown.truncate(10);
+    // Measured: about 8 queries for each generated item (a derive, an attribute macro's function,
+    // a `macro_rules!` call) over a fixed cost of about 52,000, most of it loading the sysroot and
+    // the proc-macro crate. Work in proportion to what the macros expand to would be far above.
+    let per_item = total(&many).saturating_sub(total(&few)) / 120;
+    assert!(
+        per_item < 50,
+        "a restored run executes {per_item} queries for each generated item: {grown:#?}"
     );
     Ok(())
 }
