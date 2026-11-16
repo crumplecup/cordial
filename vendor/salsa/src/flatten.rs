@@ -217,13 +217,38 @@ impl EdgeFlattener {
             return Arc::clone(set);
         }
         let mut builder = Builder::default();
-        for edge in shared_set(number).iter().copied() {
+        for edge in shared_set(number).edges() {
             let bit = self.number(edge);
             builder.set(bit);
         }
         let set = self.intern(builder);
         self.restored.insert(number, Arc::clone(&set));
         set
+    }
+
+    /// Every persisted edge numbered so far, by number: what a set is a set of positions in.
+    pub(crate) fn universe(&self) -> &[QueryEdge] {
+        &self.edges
+    }
+
+    /// The positions in [`Self::universe`] of the edges of `set`, as runs of consecutive positions:
+    /// `(first, how many)`. The edges of a crate's files are numbered one after another as they
+    /// are first reached, so a set is a few long runs, and saved as runs it is a few numbers.
+    pub(crate) fn runs_of(&self, set: &Bits) -> Vec<(u32, u32)> {
+        let mut runs: Vec<(u32, u32)> = Vec::new();
+        for (index, word) in set.0.iter().enumerate() {
+            let mut word = *word;
+            while word != 0 {
+                let bit = word.trailing_zeros();
+                word &= word - 1;
+                let position = u32::try_from(index * 64).expect("fewer than 2^32 edges") + bit;
+                match runs.last_mut() {
+                    Some((first, length)) if *first + *length == position => *length += 1,
+                    _ => runs.push((position, 1)),
+                }
+            }
+        }
+        runs
     }
 
     /// The edges in `set`.
@@ -291,8 +316,8 @@ pub(crate) unsafe fn leaves_of(
     for dependency_edge in memo.header().origin().edges() {
         if dependency_edge.is_set() {
             // The members of a restored set, as the edges they are.
-            for member in shared_set(dependency_edge.set_number()).iter() {
-                let number = flattener.number(*member);
+            for member in shared_set(dependency_edge.set_number()).edges() {
+                let number = flattener.number(member);
                 found.set(number);
             }
             continue;
@@ -360,6 +385,24 @@ thread_local! {
     static SAVED_BASE: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
 }
 
+/// A restored set: runs of positions in the list of edges its ingredient saved. It is as long as
+/// the runs are, not as the set is, so the sets of a crate of a thousand files are a few numbers each.
+pub(crate) struct RestoredSet {
+    universe: Arc<[QueryEdge]>,
+    runs: Box<[(u32, u32)]>,
+}
+
+impl RestoredSet {
+    /// The edges of the set.
+    pub(crate) fn edges(&self) -> impl Iterator<Item = QueryEdge> + '_ {
+        self.runs.iter().flat_map(|(first, length)| {
+            self.universe[*first as usize..(*first + *length) as usize]
+                .iter()
+                .copied()
+        })
+    }
+}
+
 /// The sets restored memos refer to, by number: every ingredient's, in the order restored.
 ///
 /// A set is shared by every memo that reaches the same edges (in a crate of a thousand files, the
@@ -367,10 +410,10 @@ thread_local! {
 /// restored memo does not copy the set into an edge list of its own: it holds one edge that
 /// refers to the set, so restoring costs a memo what it reads itself, and the set is checked once
 /// for all of them (see [`set_changed_after`]).
-static SHARED_SETS: std::sync::RwLock<Vec<Arc<[QueryEdge]>>> = std::sync::RwLock::new(Vec::new());
+static SHARED_SETS: std::sync::RwLock<Vec<Arc<RestoredSet>>> = std::sync::RwLock::new(Vec::new());
 
-/// The edges of the restored set `number`.
-pub(crate) fn shared_set(number: u32) -> Arc<[QueryEdge]> {
+/// The restored set `number`.
+pub(crate) fn shared_set(number: u32) -> Arc<RestoredSet> {
     let sets = SHARED_SETS.read().unwrap_or_else(|poisoned| poisoned.into_inner());
     Arc::clone(
         sets.get(number as usize)
@@ -384,10 +427,17 @@ pub(crate) struct SavedSets;
 
 #[cfg(feature = "persistence")]
 impl SavedSets {
-    pub(crate) fn install(sets: Vec<Box<[QueryEdge]>>) -> Self {
+    /// The sets of one ingredient: each as runs of positions in `universe`, its list of edges.
+    pub(crate) fn install(universe: Vec<QueryEdge>, sets: Vec<Vec<(u32, u32)>>) -> Self {
+        let universe: Arc<[QueryEdge]> = Arc::from(universe);
         let mut shared = SHARED_SETS.write().unwrap_or_else(|poisoned| poisoned.into_inner());
         let base = u32::try_from(shared.len()).expect("fewer than 2^32 restored sets");
-        shared.extend(sets.into_iter().map(Arc::from));
+        shared.extend(sets.into_iter().map(|runs| {
+            Arc::new(RestoredSet {
+                universe: Arc::clone(&universe),
+                runs: runs.into_boxed_slice(),
+            })
+        }));
         SAVED_BASE.with(|saved| saved.set(base));
         Self
     }
@@ -462,7 +512,7 @@ pub(crate) fn set_changed_after(
     }
     SET_COMPUTED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let mut changed = None;
-    for edge in shared_set(number).iter().copied() {
+    for edge in shared_set(number).edges() {
         SET_MEMBERS_CHECKED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         if edge.is_watermark() {
             if zalsa.last_changed_revision(WATERMARK_DURABILITY) > since {

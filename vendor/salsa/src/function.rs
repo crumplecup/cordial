@@ -898,13 +898,13 @@ mod persistence {
 
             // Each distinct set the memos refer to, once.
             let mut numbers: FxHashMap<*const Bits, u32> = FxHashMap::default();
-            let mut table: Vec<Box<[QueryEdge]>> = Vec::new();
+            let mut table: Vec<Vec<(u32, u32)>> = Vec::new();
             let mut by_kind: std::collections::BTreeMap<&'static str, u64> = Default::default();
             let mut own_edges: u64 = 0;
+            let mut set_edges: u64 = 0;
             let mut numbered = |set: &LeafSet, flattener: &EdgeFlattener| -> u32 {
                 *numbers.entry(Arc::as_ptr(set)).or_insert_with(|| {
-                    let edges: Box<[QueryEdge]> = flattener.edges_of(set).collect();
-                    for edge in &edges {
+                    for edge in flattener.edges_of(set) {
                         let name = if edge.is_watermark() {
                             "<watermark>"
                         } else {
@@ -914,7 +914,9 @@ mod persistence {
                         };
                         *by_kind.entry(name).or_default() += 1;
                     }
-                    table.push(edges);
+                    let runs = flattener.runs_of(set);
+                    set_edges += runs.iter().map(|(_, length)| u64::from(*length)).sum::<u64>();
+                    table.push(runs);
                     u32::try_from(table.len() - 1).expect("fewer than 2^32 sets")
                 })
             };
@@ -936,7 +938,10 @@ mod persistence {
             }
 
             let count = pending.len();
-            let mut map = serializer.serialize_map(Some(count + 1))?;
+            // The memos, and the list of edges and the sets they refer to.
+            let mut map = serializer.serialize_map(Some(count + 2))?;
+            // The list of edges the sets are positions in, then the sets.
+            map.serialize_entry("universe", flattener.universe())?;
             map.serialize_entry("sets", &table)?;
             for ((key, memo, _), origin) in pending.into_iter().zip(origins) {
                 map.serialize_entry(&key, &memo.with_origin(origin))?;
@@ -949,7 +954,8 @@ mod persistence {
                     ingredient = C::DEBUG_NAME,
                     memos = count,
                     sets = table.len(),
-                    set_edges = table.iter().map(|set| set.len() as u64).sum::<u64>(),
+                    set_edges,
+                    set_runs = table.iter().map(|set| set.len() as u64).sum::<u64>(),
                     own_edges,
                     walked = stats.walked,
                     reused = stats.reused,
@@ -1063,10 +1069,18 @@ mod persistence {
 
             // The sets the memos' dependencies are saved as, until the last memo is read.
             let mut _sets = None;
+            let mut universe: Vec<QueryEdge> = Vec::new();
 
             while let Some(key) = access.next_key::<&str>()? {
+                if key == "universe" {
+                    universe = access.next_value()?;
+                    continue;
+                }
                 if key == "sets" {
-                    _sets = Some(crate::flatten::SavedSets::install(access.next_value()?));
+                    _sets = Some(crate::flatten::SavedSets::install(
+                        std::mem::take(&mut universe),
+                        access.next_value()?,
+                    ));
                     continue;
                 }
                 let memo: Memo<C> = access.next_value()?;

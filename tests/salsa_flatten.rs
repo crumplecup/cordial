@@ -582,12 +582,15 @@ fn member<'db>(db: &'db dyn Database, group: Group, key: Key<'db>) -> usize {
     total(db, group) + key.n(db)
 }
 
-/// Cells in each group, and queries in each group.
+/// Cells each group reads, queries in each group, and how many of the cells both groups read.
 const CELLS: usize = 200;
 const MEMBERS: usize = 30;
+const COMMON: usize = 40;
 
 /// Two groups of cells and the key of each member: the members with an even key are of the first
-/// group, the odd of the second.
+/// group, the odd of the second. The first `COMMON` cells of each group are the same cells, then
+/// each group has cells of its own: the edges of the first group's set are numbered one after another,
+/// and the second's are the common ones and, after the first group's own, its own: a gap.
 struct Fixture {
     groups: [Group; 2],
     cells: [Vec<Cell>; 2],
@@ -598,9 +601,12 @@ impl Fixture {
         let _library = Library::builder(10)
             .durability(salsa::Durability::HIGH)
             .new(db);
+        let common: Vec<Cell> = (0..COMMON).map(|n| Cell::new(db, n)).collect();
         let cells = [0, 1].map(|group| {
-            (0..CELLS)
-                .map(|n| Cell::new(db, group * 1000 + n))
+            common
+                .iter()
+                .copied()
+                .chain((COMMON..CELLS).map(|n| Cell::new(db, group * 1000 + n)))
                 .collect::<Vec<_>>()
         });
         let groups = [0, 1].map(|group| Group::new(db, cells[group].clone()));
@@ -624,6 +630,8 @@ enum Change {
     InTheFirstGroup,
     /// A cell of the second group.
     InTheSecondGroup,
+    /// A cell both groups read: it is in both sets, as the start of one run in each.
+    InTheCommonCells,
     /// The library's input, which every query reaches through the watermark in its set.
     InTheLibrary,
     /// A cell no query reads.
@@ -636,7 +644,7 @@ impl Change {
         match self {
             Self::InTheFirstGroup => [MEMBERS, 0],
             Self::InTheSecondGroup => [0, MEMBERS],
-            Self::InTheLibrary => [MEMBERS, MEMBERS],
+            Self::InTheCommonCells | Self::InTheLibrary => [MEMBERS, MEMBERS],
             Self::NothingToSee => [0, 0],
         }
     }
@@ -648,6 +656,14 @@ enum Trips {
     Once,
     /// Saved again after being restored, as a run that reuses a state and saves it does.
     Twice,
+}
+
+/// What the state is written in: text, which a test can read, or the binary format runs save in,
+/// which counts the entries of a map before it reads them.
+#[derive(Clone, Copy, Debug)]
+enum Format {
+    Json,
+    MessagePack,
 }
 
 fn round_trip(db: &mut Db) -> (Db, String) {
@@ -662,6 +678,35 @@ fn round_trip(db: &mut Db) -> (Db, String) {
     (restored, saved)
 }
 
+/// Saved and restored in `format`: the restored database and the number of bytes.
+fn round_trip_in(db: &mut Db, format: Format) -> (Db, usize) {
+    match format {
+        Format::Json => {
+            let (restored, saved) = round_trip(db);
+            (restored, saved.len())
+        }
+        Format::MessagePack => {
+            let saved = rmp_serde::to_vec(&<dyn Database>::as_serialize(db))
+                .unwrap_or_else(|error| panic!("serializing: {error}"));
+            let mut restored = Db::default();
+            <dyn Database>::deserialize(
+                &mut restored,
+                &mut rmp_serde::Deserializer::from_read_ref(saved.as_slice()),
+            )
+            .unwrap_or_else(|error| panic!("deserializing: {error}"));
+            (restored, saved.len())
+        }
+    }
+}
+
+/// Every way of saving and restoring that a test runs its changes after.
+fn all_ways() -> Vec<(Format, Trips)> {
+    [Format::Json, Format::MessagePack]
+        .into_iter()
+        .flat_map(|format| [Trips::Once, Trips::Twice].map(|trips| (format, trips)))
+        .collect()
+}
+
 fn executions() -> [usize; 2] {
     [
         MEMBER_EXECUTIONS[0].load(Ordering::SeqCst),
@@ -671,21 +716,19 @@ fn executions() -> [usize; 2] {
 
 /// A restored database, after `trips`, given each of `changes` in turn and asked for every query
 /// after each: the queries of each group that computed again for each change, and the answers.
-fn after(trips: Trips, changes: &[Change]) -> (Vec<[usize; 2]>, Vec<[usize; 2]>) {
+fn after(format: Format, trips: Trips, changes: &[Change]) -> (Vec<[usize; 2]>, Vec<[usize; 2]>) {
     let mut db = Db::default();
     let fixture = Fixture::new(&db);
     let first = fixture.ask_all(&db);
-    let (mut restored, first_saved) = round_trip(&mut db);
+    let (mut restored, first_saved) = round_trip_in(&mut db, format);
     if let Trips::Twice = trips {
         // Asking for every query makes each one verified, so each is saved again.
         assert_eq!(fixture.ask_all(&restored), first);
-        let (again, second_saved) = round_trip(&mut restored);
+        let (again, second_saved) = round_trip_in(&mut restored, format);
         // What a restored memo is saved as is what it was restored as: the sets stay sets.
         assert!(
-            second_saved.len() <= first_saved.len() + first_saved.len() / 10,
-            "saved again, the state is {} bytes against {}",
-            second_saved.len(),
-            first_saved.len()
+            second_saved <= first_saved + first_saved / 10,
+            "{format:?}: saved again, the state is {second_saved} bytes against {first_saved}"
         );
         restored = again;
     }
@@ -703,6 +746,10 @@ fn after(trips: Trips, changes: &[Change]) -> (Vec<[usize; 2]>, Vec<[usize; 2]>)
             Change::InTheSecondGroup => {
                 let cell = fixture.cells[1][CELLS / 3];
                 cell.set_value(&mut restored).to(800_000 + step);
+            }
+            Change::InTheCommonCells => {
+                let cell = fixture.cells[0][COMMON / 2];
+                cell.set_value(&mut restored).to(600_000 + step);
             }
             Change::InTheLibrary => {
                 Library::get(&restored)
@@ -722,19 +769,20 @@ fn after(trips: Trips, changes: &[Change]) -> (Vec<[usize; 2]>, Vec<[usize; 2]>)
 
 #[test]
 fn what_a_change_reaches_through_a_shared_set_is_computed_again_and_nothing_else() {
-    for trips in [Trips::Once, Trips::Twice] {
+    for (format, trips) in all_ways() {
         for change in [
             Change::InTheFirstGroup,
             Change::InTheSecondGroup,
+            Change::InTheCommonCells,
             Change::InTheLibrary,
             Change::NothingToSee,
         ] {
-            let (computed, _) = after(trips, &[change]);
+            let (computed, _) = after(format, trips, &[change]);
             assert_eq!(
                 computed,
                 vec![change.reaches()],
-                "{trips:?}, {change:?}: the queries that read what changed computed again, and \
-                 only those"
+                "{format:?}, {trips:?}, {change:?}: the queries that read what changed computed \
+                 again, and only those"
             );
         }
     }
@@ -745,19 +793,20 @@ fn a_change_after_another_is_noticed_by_what_was_verified_in_between() {
     // The memos the first change did not reach are verified again at the revision it made; the
     // second change must still reach them, and must not reach what the first already recomputed
     // and the second does not touch.
-    for trips in [Trips::Once, Trips::Twice] {
+    for (format, trips) in all_ways() {
         let changes = [
             Change::InTheFirstGroup,
             Change::InTheSecondGroup,
             Change::NothingToSee,
             Change::InTheSecondGroup,
+            Change::InTheCommonCells,
             Change::InTheLibrary,
         ];
-        let (computed, answers) = after(trips, &changes);
+        let (computed, answers) = after(format, trips, &changes);
         let expected: Vec<[usize; 2]> = changes.iter().map(|change| change.reaches()).collect();
         assert_eq!(
             computed, expected,
-            "{trips:?}: each change reached what read it"
+            "{format:?}, {trips:?}: each change reached what read it"
         );
         // The answers moved exactly when something that was read did.
         for (step, change) in changes.iter().enumerate() {
@@ -830,5 +879,61 @@ fn a_set_is_checked_once_for_all_the_memos_that_share_it_in_a_revision() {
     assert!(
         (1..=4).contains(&checks),
         "{references} references to 2 sets checked the sets {checks} times"
+    );
+}
+
+/// Every ingredient's sets in a saved state, each as the runs it is saved as.
+fn saved_sets(saved: &str) -> Vec<Vec<(u64, u64)>> {
+    fn walk(value: &serde_json::Value, found: &mut Vec<Vec<(u64, u64)>>) {
+        match value {
+            serde_json::Value::Object(map) => {
+                if let Some(serde_json::Value::Array(sets)) = map.get("sets") {
+                    for set in sets {
+                        let runs = set
+                            .as_array()
+                            .map(|runs| {
+                                runs.iter()
+                                    .filter_map(|run| {
+                                        let run = run.as_array()?;
+                                        Some((run.first()?.as_u64()?, run.get(1)?.as_u64()?))
+                                    })
+                                    .collect()
+                            })
+                            .unwrap_or_default();
+                        found.push(runs);
+                    }
+                }
+                map.values().for_each(|value| walk(value, found));
+            }
+            serde_json::Value::Array(items) => items.iter().for_each(|value| walk(value, found)),
+            _ => {}
+        }
+    }
+    let mut found = Vec::new();
+    if let Ok(value) = serde_json::from_str::<serde_json::Value>(saved) {
+        walk(&value, &mut found);
+    }
+    found
+}
+
+#[test]
+fn what_the_memos_share_is_saved_as_runs_of_positions_not_as_edges() {
+    let mut db = Db::default();
+    let fixture = Fixture::new(&db);
+    fixture.ask_all(&db);
+    let (_, saved) = round_trip(&mut db);
+    let sets = saved_sets(&saved);
+    // The two groups' sets: the cells each reads, the first as one run and the second as two (the
+    // common cells, then its own after the first group's), however many cells that is.
+    let runs: Vec<usize> = sets.iter().map(Vec::len).collect();
+    assert_eq!(
+        runs,
+        vec![1, 2],
+        "the sets are saved as runs of positions: {sets:?}"
+    );
+    let edges: u64 = sets.iter().flatten().map(|(_, length)| length).sum();
+    assert!(
+        edges >= 2 * CELLS as u64,
+        "the runs stand for the cells each group reads, {edges} edges"
     );
 }
