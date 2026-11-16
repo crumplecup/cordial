@@ -1003,6 +1003,7 @@ mod persistence {
                     walked = stats.walked,
                     reused = stats.reused,
                     incomplete = stats.incomplete,
+                    widest = flattener.widest(6),
                     kinds = ?by_kind,
                     elapsed = ?elapsed,
                     "flattened the dependencies of the persisted memos"

@@ -492,6 +492,49 @@ their own; copies of their sets would have been tens of millions.
 To measure a restored run the run cache must be out of the way (`rm -r <store>/cache/run`), or the
 run reports the cached IR and restores nothing.
 
+## Cutoff-aware flattening: reuse after an edit
+
+Flattening replaces everything a memo read with the inputs it reached. A function that resolves
+one name reads its crate's definition map, which is made from every file, so every function of a
+crate depends on every file of it: one edit to a function's body makes the evidence of every
+function of the crate stale, though the definition map the edit makes is the one it had. In
+process, Salsa cuts that off, because the map's value is the same; the saved state loses it. A
+specimen (a crate of 6 files of 5 functions, nothing calling across files) computed evidence for
+all 30 functions, and one more, after one function's body changed.
+
+**The mechanism (done, in `vendor/salsa`).** `register_cutoff(query, fingerprint)` declares that
+the persisted query `fingerprint`, which takes the same argument as `query` and returns something
+that determines `query`'s value, stands for it. Where the flatten walk would pass through
+`query`, however it reaches it (read by a memo, or through a tracked struct the query made), a
+memo is saved as depending on `fingerprint` of the same argument instead. After an edit
+`fingerprint` is verified as any query is: it runs again, `query` is recomputed, and a value that
+is the same does not change, so what depended on it is still valid. The walk goes through `query`
+when the fingerprint has not been asked for the argument, and the fingerprint's own memo always
+goes through the query it fingerprints. The tests (`tests/salsa_flatten.rs`) choose each of
+registered or not, an edit that leaves the fingerprinted value or changes it, one save or two,
+JSON or MessagePack, a fingerprint asked for or not, a value read directly or through a tracked
+struct, and expect exactly the queries that read what changed to run again.
+
+**What it buys (measured with a crude fingerprint, not kept).** With the definition map
+fingerprinted, the same edit computed evidence for 6 of 30: the five functions of the edited file
+and the warm-up's own query. The functions of one file still all read the file's syntax, which is
+the next granularity: a function's body, not its file.
+
+**What is still to do: a fingerprint that is faithful.** The contract is that the fingerprint
+determines everything that anything can read of the value. rust-analyzer's own dump of a
+definition map names what is in each module and not where it is written (a callee moved to
+another file leaves the dump as it was, and every caller's saved evidence names the callee's
+file), how visible it is, or which impls there are, so a hash of the dump is not faithful and was
+removed. A faithful one hashes, for every module, every scope entry's name, namespace, visibility
+and a *stable* description of what it is (the place-based description cordial already has for
+functions, types, traits, consts and statics, a module path, a macro's name and place), the impls,
+the legacy macros, the prelude and `macro_use` prelude, the derive helpers in scope and the crate's
+data, with anything it cannot describe stably made to change with the process (safe, and no
+cutoff) and never left out. Other crate-wide queries that every function reads (the impl indexes)
+need their own. The soundness test for those is differential: for a battery of edits (a body, a
+signature, a visibility, an item moved between files, an impl added, a macro defined, a `cfg`
+flipped) the evidence of a restored and edited run must equal a cold run's on the edited sources.
+
 ## What is not persisted, and why
 
 - **The cfg contexts and the leaf pass are persisted** (see the next section).

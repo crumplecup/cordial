@@ -174,6 +174,9 @@ pub struct EdgeFlattener {
     /// The ingredient whose memos are being flattened, which a fingerprint's own dependencies do
     /// not stop short of the query it fingerprints for.
     pub(crate) owner: Option<crate::IngredientIndex>,
+    /// For each query the walk passed through, the most edges any of its sets reached: which
+    /// queries are the wide ones, that every memo reading them depends on a great deal through.
+    widest: FxHashMap<&'static str, u32>,
     /// Queries walked whose group is still open, with the order they were first reached in.
     open: FxHashMap<QueryEdge, usize>,
     /// The open queries, in the order they were first reached.
@@ -213,6 +216,7 @@ impl Default for EdgeFlattener {
             met_no_memo: false,
             carried: Closure::nothing(),
             owner: None,
+            widest: FxHashMap::default(),
             open: FxHashMap::default(),
             stack: Vec::new(),
             next: 0,
@@ -306,6 +310,17 @@ impl EdgeFlattener {
                 Some(self.edges[index * 64 + bit as usize])
             })
         })
+    }
+
+    /// The queries whose sets reached the most edges, widest first, as `name=edges`.
+    pub(crate) fn widest(&self, count: usize) -> String {
+        let mut all: Vec<_> = self.widest.iter().collect();
+        all.sort_by_key(|(name, size)| (std::cmp::Reverse(**size), **name));
+        all.into_iter()
+            .take(count)
+            .map(|(name, size)| format!("{name}={size}"))
+            .collect::<Vec<_>>()
+            .join(" ")
     }
 
     /// What this has done so far, and for how long.
@@ -453,6 +468,11 @@ pub(crate) unsafe fn leaves_of(
     }
 
     let result = flattener.intern(found);
+    {
+        let size: u32 = result.0.iter().map(|word| word.count_ones()).sum();
+        let widest = flattener.widest.entry(ingredient.debug_name()).or_default();
+        *widest = (*widest).max(size);
+    }
     if flattener.lowlink >= order {
         // The first query of its group: everything the group reaches has been found, and
         // each member reaches exactly what the others do. The group's closure is the members' own

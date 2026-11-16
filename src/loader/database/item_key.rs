@@ -798,12 +798,15 @@ fn places_in<'db>(db: &'db dyn SemanticDatabase, file: PlacedFile<'db>) -> Place
         return index_of(root, original).clone();
     }
     tracing::debug!(target: "cordial::semantic::identity", file = file_id.index(), "indexing the places of a file");
-    attach_db(root, || {
-        let sema = Semantics::new(root);
-        sema.attach_first_edition_opt(file_id)
-            .map(|editioned| PlaceIndex::of(sema.parse(editioned).syntax()))
-            .unwrap_or_default()
-    })
+    // The places in a file are in its text: its edition is the crate's input, and finding its
+    // module to learn the crate would make the index depend on the crate's definition map, and
+    // so on every file of the crate.
+    PlaceIndex::of(
+        super::edition::edition_of(root, file_id)
+            .parse(root)
+            .tree()
+            .syntax(),
+    )
 }
 
 /// The file `file` is a context's copy of, or `None` when it is not a copy.

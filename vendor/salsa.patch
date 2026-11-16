@@ -669,7 +669,7 @@
              }
 --- salsa-0.28.5/src/flatten.rs
 +++ salsa/src/flatten.rs
-@@ -0,0 +1,743 @@
+@@ -0,0 +1,763 @@
 +//! Flattening a query's dependencies down to what is persisted, once per query.
 +//!
 +//! A persisted memo's dependencies are rewritten before it is saved: the queries that
@@ -846,6 +846,9 @@
 +    /// The ingredient whose memos are being flattened, which a fingerprint's own dependencies do
 +    /// not stop short of the query it fingerprints for.
 +    pub(crate) owner: Option<crate::IngredientIndex>,
++    /// For each query the walk passed through, the most edges any of its sets reached: which
++    /// queries are the wide ones, that every memo reading them depends on a great deal through.
++    widest: FxHashMap<&'static str, u32>,
 +    /// Queries walked whose group is still open, with the order they were first reached in.
 +    open: FxHashMap<QueryEdge, usize>,
 +    /// The open queries, in the order they were first reached.
@@ -885,6 +888,7 @@
 +            met_no_memo: false,
 +            carried: Closure::nothing(),
 +            owner: None,
++            widest: FxHashMap::default(),
 +            open: FxHashMap::default(),
 +            stack: Vec::new(),
 +            next: 0,
@@ -978,6 +982,17 @@
 +                Some(self.edges[index * 64 + bit as usize])
 +            })
 +        })
++    }
++
++    /// The queries whose sets reached the most edges, widest first, as `name=edges`.
++    pub(crate) fn widest(&self, count: usize) -> String {
++        let mut all: Vec<_> = self.widest.iter().collect();
++        all.sort_by_key(|(name, size)| (std::cmp::Reverse(**size), **name));
++        all.into_iter()
++            .take(count)
++            .map(|(name, size)| format!("{name}={size}"))
++            .collect::<Vec<_>>()
++            .join(" ")
 +    }
 +
 +    /// What this has done so far, and for how long.
@@ -1125,6 +1140,11 @@
 +    }
 +
 +    let result = flattener.intern(found);
++    {
++        let size: u32 = result.0.iter().map(|word| word.count_ones()).sum();
++        let widest = flattener.widest.entry(ingredient.debug_name()).or_default();
++        *widest = (*widest).max(size);
++    }
 +    if flattener.lowlink >= order {
 +        // The first query of its group: everything the group reaches has been found, and
 +        // each member reaches exactly what the others do. The group's closure is the members' own
@@ -1817,7 +1837,7 @@
  
              for entry in <C::SalsaStruct<'_> as SalsaStructInDb>::entries(zalsa) {
                  let memo_ingredient_index = ingredient
-@@ -806,97 +866,302 @@
+@@ -806,97 +866,303 @@
                      memo_ingredient_index,
                  );
  
@@ -2006,6 +2026,7 @@
 +                    walked = stats.walked,
 +                    reused = stats.reused,
 +                    incomplete = stats.incomplete,
++                    widest = flattener.widest(6),
 +                    kinds = ?by_kind,
 +                    elapsed = ?elapsed,
 +                    "flattened the dependencies of the persisted memos"
@@ -2181,7 +2202,7 @@
      }
  
      pub struct DeserializeIngredient<'db, C>
-@@ -937,7 +1202,23 @@
+@@ -937,7 +1203,23 @@
          {
              let DeserializeIngredient { zalsa, ingredient } = self;
  
