@@ -76,7 +76,12 @@ impl SourceDatabase {
     /// Run `one` over `items` on worker threads, each item once.
     #[instrument(level = "debug", skip(self, functions, one))]
     #[hotpath::measure(impl_type = "SourceDatabase")]
-    fn prime<T: Sync>(&self, label: &str, functions: &[T], one: impl Fn(&RootDatabase, &T) + Sync) {
+    pub(in crate::loader::database) fn prime<T: Sync>(
+        &self,
+        label: &str,
+        functions: &[T],
+        one: impl Fn(&RootDatabase, &T) + Sync,
+    ) {
         let before = queries::evidence_executed();
         let workers = std::thread::available_parallelism()
             .map_or(1, usize::from)

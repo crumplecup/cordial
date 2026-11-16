@@ -13,7 +13,7 @@
 use super::spell;
 use crate::SemanticContextKey;
 use ra_ap_cfg::{CfgAtom, CfgExpr, CfgOptions};
-use ra_ap_hir::{Crate, Semantics, attach_db};
+use ra_ap_hir::{Crate, attach_db};
 use ra_ap_ide_db::RootDatabase;
 use ra_ap_ide_db::base_db::Crate as InputCrate;
 use ra_ap_syntax::{
@@ -132,22 +132,24 @@ pub(in crate::loader::database) fn asked(
     originals: &std::collections::HashMap<FileId, FileId>,
 ) -> Vec<SemanticContextKey> {
     attach_db(db, || {
-        let sema = Semantics::new(db);
         let mut active: BTreeMap<FileId, Vec<&CfgOptions>> = BTreeMap::new();
         for krate in Crate::all(db)
             .into_iter()
             .filter(|krate| krate.origin(db).is_local() && crates.contains(&krate.base()))
         {
-            let files: BTreeSet<_> = krate
-                .modules(db)
-                .into_iter()
-                .map(|module| {
-                    module
-                        .definition_source_file_id(db)
-                        .original_file_respecting_includes(db)
-                        .file_id(db)
-                })
-                .collect();
+            let files: BTreeSet<_> = match super::super::item_key::files_of(db, krate) {
+                Some(listed) => listed.into_iter().collect(),
+                None => krate
+                    .modules(db)
+                    .into_iter()
+                    .map(|module| {
+                        module
+                            .definition_source_file_id(db)
+                            .original_file_respecting_includes(db)
+                            .file_id(db)
+                    })
+                    .collect(),
+            };
             for file in files {
                 active.entry(file).or_default().push(krate.cfg(db));
             }
@@ -160,7 +162,7 @@ pub(in crate::loader::database) fn asked(
             if only.is_some_and(|only| !only.contains(&original)) {
                 continue;
             }
-            let tree = sema.parse(sema.attach_first_edition(file));
+            let tree = super::super::edition::edition_of(db, file).parse(db).tree();
             let hosts = tree
                 .syntax()
                 .descendants()

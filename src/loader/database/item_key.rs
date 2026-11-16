@@ -50,6 +50,126 @@ pub(super) fn crate_scope(db: &RootDatabase, krate: ra_ap_hir::Crate) -> Option<
     Some(ItemKey::new(db, format!("crate|{}", path.text)))
 }
 
+/// The files of the modules of the crate `scope` describes, as the paths the database holds them
+/// at: each file once, where it is a module of the crate or included in one. `None` for a scope that
+/// is not a crate of this database.
+///
+/// Saved with the database: asking the crate for its modules builds its definition map and those
+/// of everything it depends on, which are not saved, and the answer changes only with the sources.
+#[salsa::tracked(persist, returns(ref))]
+#[instrument(level = "debug", skip(db, scope))]
+#[hotpath::measure]
+fn module_files<'db>(
+    db: &'db dyn SemanticDatabase,
+    scope: ItemKey<'db>,
+) -> Option<Vec<(bool, String)>> {
+    let root = db.root_database();
+    attach_db(root, || {
+        let krate = crate_of(root, scope.descriptor(root))?;
+        let files: std::collections::BTreeSet<FileId> = krate
+            .modules(root)
+            .into_iter()
+            .map(|module| {
+                module
+                    .definition_source_file_id(root)
+                    .original_file_respecting_includes(root)
+                    .file_id(root)
+            })
+            .collect();
+        Some(
+            files
+                .into_iter()
+                .filter_map(|file| path_of(root, file))
+                .map(|path| (path.real, path.text))
+                .collect(),
+        )
+    })
+}
+
+/// The files of `krate`'s modules, found again from the saved list without building definition
+/// maps when nothing changed.
+#[instrument(level = "trace", skip(db))]
+pub(super) fn files_of(db: &RootDatabase, krate: ra_ap_hir::Crate) -> Option<Vec<FileId>> {
+    let scope = crate_scope(db, krate)?;
+    let semantic: &dyn SemanticDatabase = db;
+    let listed = module_files(semantic, scope).as_ref()?;
+    Some(
+        listed
+            .iter()
+            .filter_map(|(real, text)| {
+                file_at(
+                    db,
+                    &PathText {
+                        real: *real,
+                        text: text.clone(),
+                    },
+                )
+            })
+            .collect(),
+    )
+}
+
+/// The description of the scope "this file": where the database holds it.
+#[instrument(level = "trace", skip(db))]
+pub(super) fn file_scope(db: &RootDatabase, file: FileId) -> Option<ItemKey<'_>> {
+    let path = path_of(db, file)?;
+    let route = if path.real { "real" } else { "virtual" };
+    Some(ItemKey::new(db, format!("file|{route}|{}", path.text)))
+}
+
+/// The file `scope` describes, found again by its path.
+#[instrument(level = "trace", skip(db))]
+pub(super) fn file_of_scope(db: &RootDatabase, scope: &str) -> Option<FileId> {
+    let rest = scope.strip_prefix("file|")?;
+    let (route, text) = rest.split_once('|')?;
+    file_at(
+        db,
+        &PathText {
+            real: route == "real",
+            text: text.to_owned(),
+        },
+    )
+}
+
+/// What a context's copy of a definition stands for in the ordinary build: the description of the
+/// definition at the same place of the original file, when the ordinary build has one. `None` for
+/// a description that is not a copy's, or whose original is not there.
+///
+/// A copy's description is the original's with the copy's file named for the original's, and the
+/// crate named for the original's, so the original's is written down from the copy's alone. Saved
+/// with the database, so a restored run does not ask rust-analyzer to match them.
+#[salsa::tracked(persist, returns(ref))]
+#[instrument(level = "debug", skip(db, key))]
+#[hotpath::measure]
+fn canonical_description<'db>(db: &'db dyn SemanticDatabase, key: ItemKey<'db>) -> Option<String> {
+    let mut site = Site::parse(key.descriptor(db))?;
+    let original = super::context_crates::original_path(&site.path.vfs())?;
+    site.path = PathText {
+        real: true,
+        text: original.to_string_lossy().into_owned(),
+    };
+    if !site.krate.is_empty() {
+        let root = VfsPath::new_virtual_path(site.krate.clone());
+        site.krate = super::context_crates::original_path(&root)?
+            .to_string_lossy()
+            .into_owned();
+    }
+    let text = site.text();
+    resolve(db, ItemKey::new(db, text.clone()))?;
+    Some(text)
+}
+
+/// The identity facts about a context's copy of a definition are given, in place of its own: the
+/// ordinary build's definition at the same place when there is one.
+#[instrument(level = "trace", skip(db, id))]
+pub(super) fn canonical_id(db: &RootDatabase, id: SemanticItemId) -> SemanticItemId {
+    let semantic: &dyn SemanticDatabase = db;
+    match canonical_description(semantic, key_for(id)) {
+        Some(text) => SemanticItemId::new(ItemKey::new(db, text.clone()).as_id().as_bits()),
+        None => id,
+    }
+}
+
 /// The local crate `scope` describes, found again by its root file.
 #[instrument(level = "trace", skip(db))]
 pub(super) fn crate_of(db: &RootDatabase, scope: &str) -> Option<ra_ap_hir::Crate> {

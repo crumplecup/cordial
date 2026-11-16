@@ -5,9 +5,13 @@
 //! context once, reads each leaf function's calls, and restores the ordinary
 //! build. Nothing here adds a node to the library's graph.
 
+use super::copy_functions::copy_functions;
 use super::plan::{Covered, asked};
 use crate::loader::database::{
-    SourceDatabase, populate::expanded_definition, queries::evidence_of,
+    SourceDatabase,
+    item_key::ItemKey,
+    populate::expanded_definition,
+    queries::{evidence_of, persisted_evidence},
 };
 use crate::{CordialResult, CrateIr, FunctionLocation, LeafFunction, SemanticContextKey};
 use ra_ap_hir::{Semantics, attach_db};
@@ -145,6 +149,61 @@ impl SourceDatabase {
                 .map(|package| package.root().clone())
                 .collect();
             let locator = super::super::external::Locator::new(&self.db, roots);
+            // The functions of each copy as the last run saved them, when every one of them can
+            // be found again from its description: their evidence is the saved evidence, and
+            // nothing is asked of rust-analyzer.
+            let mut saved = Vec::new();
+            let mut every = true;
+            for path in files {
+                let Some(file) = context.copy_of(self.file_id(path)?) else {
+                    continue;
+                };
+                match copy_functions(&self.db, file) {
+                    Some(records) if records.iter().all(|record| *record.found()) => {
+                        saved.push((path, records));
+                    }
+                    _ => {
+                        every = false;
+                        break;
+                    }
+                }
+            }
+            if every {
+                let keys: Vec<String> = saved
+                    .iter()
+                    .flat_map(|(_, records)| records.iter().map(|record| record.key().clone()))
+                    .collect();
+                self.prime("leaf files", &keys, |db, text| {
+                    let _ = persisted_evidence(db, ItemKey::new(db, text.clone()));
+                });
+                for (path, records) in saved {
+                    for record in records {
+                        let key = ItemKey::new(&self.db, record.key().clone());
+                        let Some(facts) = persisted_evidence(&self.db, key).as_ref() else {
+                            continue;
+                        };
+                        let callees = facts
+                            .calls()
+                            .iter()
+                            .filter_map(|call| call.callee().clone())
+                            .collect();
+                        let called = facts
+                            .calls()
+                            .iter()
+                            .filter_map(|call| match call.target() {
+                                crate::SemanticCallTarget::Function(id) => locator.locate(*id),
+                                _ => None,
+                            })
+                            .collect();
+                        leaves.push(LeafFunction::new(
+                            FunctionLocation::new(path.clone(), *record.start()),
+                            callees,
+                            called,
+                        ));
+                    }
+                }
+                return Ok(());
+            }
             // Each context is a new cfg, so none of the results are computed yet:
             // evaluate the leaf functions together, then read them below.
             let mut definitions = Vec::new();

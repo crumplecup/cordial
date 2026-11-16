@@ -7,11 +7,17 @@
 //! into the IR.
 
 use super::LocalCfgs;
+use super::copy_functions::copy_functions;
 use super::flips::Flips;
 use super::merge::{Pending, declares_a_name_twice, group};
 use super::plan::{Covered, asked};
 use crate::loader::database::{
-    SourceDatabase, populate::expanded_definition, queries::evidence_of, types,
+    SourceDatabase,
+    edition::edition_of,
+    item_key::{self, ItemKey},
+    populate::expanded_definition,
+    queries::{evidence_of, persisted_evidence},
+    types,
 };
 use crate::{
     CfgPlanning, CordialResult, CrateIr, NodeId, SemanticContextFunction, SemanticContextKey,
@@ -20,6 +26,7 @@ use crate::{
 use ra_ap_cfg::CfgOptions;
 use ra_ap_hir::{Semantics, attach_db};
 use ra_ap_syntax::{AstNode, TextRange, ast};
+use salsa::plumbing::AsId;
 use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 use std::path::{Path, PathBuf};
 use tracing::instrument;
@@ -257,14 +264,8 @@ impl SourceDatabase {
             let locator = super::super::external::Locator::new(&self.db, roots);
             // An item of this context's copy is named as the ordinary build names it
             // when the ordinary build has it, so facts and lookups agree.
-            let canonical_id = |id: SemanticItemId| -> SemanticItemId {
-                match types::definition(&self.db, id)
-                    .and_then(|definition| files.context.counterpart(&self.db, definition))
-                {
-                    Some(ordinary) => types::identity(&self.db, ordinary),
-                    None => id,
-                }
-            };
+            let canonical_id =
+                |id: SemanticItemId| -> SemanticItemId { item_key::canonical_id(&self.db, id) };
             let mut definitions: HashMap<SemanticItemId, NodeId> = HashMap::new();
             let mut calls: Vec<(NodeId, SemanticItemId)> = Vec::new();
             let mut finished = true;
@@ -278,6 +279,65 @@ impl SourceDatabase {
                 let Some(file) = files.context.copy_of(original) else {
                     continue;
                 };
+                // The functions of the copy as the last run saved them, when every one of them can
+                // be found again from its description: nothing is asked of rust-analyzer.
+                if let Some(records) = copy_functions(&self.db, file)
+                    .filter(|records| records.iter().all(|record| *record.found()))
+                {
+                    let tree = edition_of(&self.db, file).parse(&self.db).tree();
+                    let flips = Flips::collect(&tree, pairs);
+                    let items: HashMap<TextRange, ast::Fn> = tree
+                        .syntax()
+                        .descendants()
+                        .filter_map(ast::Fn::cast)
+                        .map(|function| (function.syntax().text_range(), function))
+                        .collect();
+                    for record in records {
+                        let range =
+                            TextRange::new((*record.start()).into(), (*record.end()).into());
+                        let Some(node) = files.nodes.get(path, range) else {
+                            continue;
+                        };
+                        let key = ItemKey::new(&self.db, record.key().clone());
+                        let own = SemanticItemId::new(key.as_id().as_bits());
+                        definitions.insert(canonical_id(own), node);
+                        push_activity(graph, node, index)?;
+                        let new = crate::IrView::semantic_function(graph, node)?.is_none();
+                        if new {
+                            locator.record_trait_implementation(graph, own, node)?;
+                        }
+                        let relevant = new
+                            || flips.touches(range)
+                            || items
+                                .get(&range)
+                                .is_some_and(|function| flips.mentions(function.syntax()));
+                        if !relevant {
+                            continue;
+                        }
+                        let facts =
+                            persisted_evidence(&self.db, key).as_ref().ok_or_else(|| {
+                                crate::CordialError::workspace_source_facts_missing(
+                                    "semantic function source",
+                                )
+                            })?;
+                        let facts = match record.anchor() {
+                            Some(anchor) => facts.with_ranges_from(*anchor as usize),
+                            None => facts.clone(),
+                        }
+                        .map_identities(&mut |id| canonical_id(id));
+                        for call in facts.calls() {
+                            if let crate::SemanticCallTarget::Function(target) = call.target() {
+                                calls.push((node, *target));
+                            }
+                        }
+                        push_facts(
+                            graph,
+                            node,
+                            SemanticContextFunction::new(context.clone(), facts),
+                        )?;
+                    }
+                    continue;
+                }
                 let tree = sema.parse(sema.attach_first_edition(file));
                 let flips = Flips::collect(&tree, pairs);
                 for function in tree.syntax().descendants().filter_map(ast::Fn::cast) {

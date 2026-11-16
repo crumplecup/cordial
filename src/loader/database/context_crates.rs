@@ -73,9 +73,6 @@ pub struct ContextCrates {
     /// Each original file with its copy.
     #[getter(skip)]
     files: HashMap<FileId, FileId>,
-    /// The original of each copy file, to name where a copy's declaration is written.
-    #[getter(skip)]
-    copies: HashMap<FileId, FileId>,
     /// Whether this came from a saved state and has not been brought up to date with the
     /// sources of this run since: its copies and crates are the ones the last run made.
     #[getter(skip)]
@@ -125,10 +122,6 @@ impl ContextCrates {
         Some(Self {
             context: saved.context,
             crates,
-            copies: files
-                .iter()
-                .map(|(original, copy)| (*copy, *original))
-                .collect(),
             files,
             kept: true,
         })
@@ -149,21 +142,6 @@ impl ContextCrates {
     #[instrument(level = "trace", skip(self))]
     pub(super) fn copy_of(&self, original: FileId) -> Option<FileId> {
         self.files.get(&original).copied()
-    }
-
-    /// The ordinary build's declaration at the same place in the source as `definition`, a
-    /// declaration of this context's copy: the same file, the same kind of item, the same place
-    /// in it. Asked when the answer is needed, so a copy's declarations are not all listed.
-    #[instrument(level = "trace", skip(self, db))]
-    pub(super) fn counterpart(
-        &self,
-        db: &RootDatabase,
-        definition: ModuleDef,
-    ) -> Option<ModuleDef> {
-        let place = place_of(db, definition, &self.copies)?;
-        self.crates
-            .iter()
-            .find_map(|(ordinary, _)| places_declared_in(db, *ordinary).get(&place).copied())
     }
 
     /// The original of each copy.
@@ -294,10 +272,6 @@ impl SourceDatabase {
         Ok(ContextCrates {
             context: context.clone(),
             crates: shadows,
-            copies: files
-                .iter()
-                .map(|(original, copy)| (*copy, *original))
-                .collect(),
             files,
             kept: false,
         })
@@ -526,10 +500,6 @@ fn functions_of(db: &RootDatabase, krate: Crate) -> Vec<Function> {
     functions
 }
 
-/// The kind of item and the original place its name is written: the key two
-/// declarations share when one is the copy of the other.
-type Place = super::item_key::DefSite;
-
 /// Every declaration a crate makes that facts can name: its functions, types,
 /// traits and constants, including the associated items of impls and traits.
 #[instrument(level = "debug", skip(db))]
@@ -561,39 +531,4 @@ fn associated(item: AssocItem) -> ModuleDef {
         AssocItem::Const(constant) => ModuleDef::Const(constant),
         AssocItem::TypeAlias(alias) => ModuleDef::TypeAlias(alias),
     }
-}
-
-/// What the ordinary build's crate declares, by where it is written: the same for every context,
-/// so it is computed once and kept until something the crate's definitions depend on changes.
-#[salsa::tracked(returns(ref))]
-#[instrument(level = "debug", skip(db))]
-#[hotpath::measure]
-fn places_declared_in(
-    db: &dyn super::queries::SemanticDatabase,
-    krate: InputCrate,
-) -> HashMap<Place, ModuleDef> {
-    let root = db.root_database();
-    attach_db(root, || {
-        declared_in(root, Crate::from(krate))
-            .into_iter()
-            .filter_map(|definition| {
-                Some((place_of(root, definition, &HashMap::new())?, definition))
-            })
-            .collect()
-    })
-}
-
-/// Where `definition`'s name is written in the original source, with `originals`
-/// naming a copy's file by its original's.
-#[instrument(level = "trace", skip(db, definition, originals))]
-fn place_of(
-    db: &RootDatabase,
-    definition: ModuleDef,
-    originals: &HashMap<FileId, FileId>,
-) -> Option<Place> {
-    let mut site = super::item_key::site_of(db, definition)?;
-    site.file = originals.get(&site.file).copied().unwrap_or(site.file);
-    // Which crate a copy is in is what distinguishes it from its original.
-    site.krate.clear();
-    Some(site)
 }

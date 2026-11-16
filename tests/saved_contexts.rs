@@ -1244,3 +1244,41 @@ fn a_restored_run_does_not_enumerate_the_functions_of_a_workspace_nothing_change
     );
     Ok(())
 }
+
+/// A run of the three-crate workspace that plans its cfg contexts itself, as a run asked for
+/// nothing in particular does.
+fn run_planned(root: &Path, saved: &SavedState) -> Result<bool> {
+    let options = SemanticCargoOptions::default().with_cfg_planning(CfgPlanning::Automatic);
+    let mut session =
+        SourceDatabase::load_saved(root, &options, Some(saved.clone())).into_diagnostic()?;
+    let restored = session.restored();
+    session
+        .project(&CrateTarget::new("gated", root), &[root.join("src/lib.rs")])
+        .into_diagnostic()?;
+    Ok(restored)
+}
+
+/// The queries a restored run executed, by the step that asked, when it plans its own contexts.
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn a_restored_planned_run_builds_no_definition_maps() -> Result<()> {
+    cordial::init_tracing();
+    let executions = Executions::default();
+    let subscriber = tracing_subscriber::registry().with(executions.clone());
+    let _subscriber = tracing::subscriber::set_default(subscriber);
+    let root = chain_of_crates()?;
+    let state = tempfile::tempdir().into_diagnostic()?;
+    let saved = SavedState::at(state.path().join("analysis-state"));
+    assert!(!run_planned(root.path(), &saved)?);
+    executions.take();
+    assert!(run_planned(root.path(), &saved)?);
+    let mut by_step = std::collections::BTreeMap::<String, usize>::new();
+    for (name, count) in executions.take() {
+        *by_step
+            .entry(name.split(" > ").next().unwrap_or_default().to_owned())
+            .or_default() += count;
+    }
+    let total: usize = by_step.values().sum();
+    assert!(total < 40, "{total} queries executed: {by_step:?}");
+    Ok(())
+}

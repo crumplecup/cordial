@@ -266,18 +266,20 @@ fn the_queries_of_a_restored_run_by_the_macros_in_and_on_each_function() -> Resu
     let with_calls = per_function(0, 6)?;
     let one = per_function(1, 0)?;
     let three = per_function(3, 0)?;
-    // Measured: 1 query for a plain function and the same with six macro calls in its body (a
-    // body is not expanded to name a function), 6 with one attribute macro and 16 with three:
-    // about 5 for each attribute macro, which is expanded again in every process.
-    assert!(
-        with_calls <= plain + 2,
-        "macro calls in a body cost {with_calls} against {plain} per function"
-    );
-    let per_attribute = three.saturating_sub(plain) / 3;
-    assert!(
-        (3..=12).contains(&per_attribute) && one > plain,
-        "each attribute macro costs {per_attribute} queries per function (1: {one}, 3: {three})"
-    );
+    // Measured: nothing for any shape. A function's description, evidence and place are saved, so
+    // a restored run expands no macro to name it: not the attribute macros on it (about 5
+    // queries each when they were expanded again in every process), nor those in its body.
+    for (shape, cost) in [
+        ("a plain function", plain),
+        ("six macro calls in the body", with_calls),
+        ("one attribute macro", one),
+        ("three attribute macros", three),
+    ] {
+        assert!(
+            cost <= 1,
+            "{shape} costs {cost} queries per function in a restored run"
+        );
+    }
     Ok(())
 }
 

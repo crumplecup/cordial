@@ -8,6 +8,8 @@
 //! checked once it is entered, and one that declares a name twice is dissolved
 //! back into its members.
 
+use super::super::item_key::{self, ItemKey};
+use super::super::queries::SemanticDatabase;
 use crate::SemanticContextKey;
 use ra_ap_hir::{Crate, ModuleDef, attach_db};
 use ra_ap_ide_db::RootDatabase;
@@ -106,21 +108,42 @@ pub(super) fn declares_a_name_twice(
     crates: &BTreeSet<ra_ap_ide_db::base_db::Crate>,
 ) -> bool {
     attach_db(db, || {
+        let semantic: &dyn SemanticDatabase = db;
         Crate::all(db)
             .into_iter()
             .filter(|krate| krate.origin(db).is_local() && crates.contains(&krate.base()))
-            .flat_map(|krate| krate.modules(db))
-            .any(|module| {
-                let mut seen: BTreeSet<(Namespace, String)> = BTreeSet::new();
-                module.declarations(db).into_iter().any(|definition| {
-                    let (Some(namespace), Some(name)) =
-                        (namespace(&definition), definition.name(db))
-                    else {
-                        return false;
-                    };
-                    !seen.insert((namespace, name.as_str().to_owned()))
-                })
+            .any(|krate| match item_key::crate_scope(db, krate) {
+                Some(scope) => crate_declares_a_name_twice(semantic, scope),
+                None => crate_declares_a_name_twice_directly(db, krate),
             })
+    })
+}
+
+/// Whether the crate `scope` describes declares a name twice: see [`declares_a_name_twice`]. Saved
+/// with the database, so a restored run does not build the crate's definition map to ask again.
+#[salsa::tracked(persist, returns(copy))]
+#[instrument(level = "debug", skip(db, scope))]
+#[hotpath::measure]
+fn crate_declares_a_name_twice<'db>(db: &'db dyn SemanticDatabase, scope: ItemKey<'db>) -> bool {
+    let root = db.root_database();
+    attach_db(root, || {
+        item_key::crate_of(root, &item_key::key_text(root, scope))
+            .is_some_and(|krate| crate_declares_a_name_twice_directly(root, krate))
+    })
+}
+
+#[instrument(level = "debug", skip(db))]
+#[hotpath::measure]
+fn crate_declares_a_name_twice_directly(db: &RootDatabase, krate: Crate) -> bool {
+    krate.modules(db).into_iter().any(|module| {
+        let mut seen: BTreeSet<(Namespace, String)> = BTreeSet::new();
+        module.declarations(db).into_iter().any(|definition| {
+            let (Some(namespace), Some(name)) = (namespace(&definition), definition.name(db))
+            else {
+                return false;
+            };
+            !seen.insert((namespace, name.as_str().to_owned()))
+        })
     })
 }
 

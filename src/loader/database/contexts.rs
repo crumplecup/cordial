@@ -8,6 +8,7 @@
 //! Parse results, item trees, the sysroot and unchanged macro expansions are
 //! never recomputed, and only one variant is resident at a time.
 
+mod copy_functions;
 mod flips;
 #[cfg(feature = "tracing")]
 mod leaves;
