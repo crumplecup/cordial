@@ -937,3 +937,84 @@ fn what_the_memos_share_is_saved_as_runs_of_positions_not_as_edges() {
         "the runs stand for the cells each group reads, {edges} edges"
     );
 }
+
+/// What verifying the persisted memos before a save reported, from its event: how many memos,
+/// how many were already current, and how many were found unchanged and changed.
+#[derive(Default, Clone)]
+struct Verified(Arc<Mutex<Vec<[u64; 4]>>>);
+
+impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for Verified {
+    fn on_event(&self, event: &tracing::Event<'_>, _: tracing_subscriber::layer::Context<'_, S>) {
+        #[derive(Default)]
+        struct Fields {
+            member: bool,
+            counts: [u64; 4],
+        }
+        impl tracing::field::Visit for Fields {
+            fn record_u64(&mut self, field: &tracing::field::Field, value: u64) {
+                match field.name() {
+                    "memos" => self.counts[0] = value,
+                    "already_current" => self.counts[1] = value,
+                    "unchanged_after_walking" => self.counts[2] = value,
+                    "changed_and_run_again" => self.counts[3] = value,
+                    _ => {}
+                }
+            }
+            fn record_str(&mut self, field: &tracing::field::Field, value: &str) {
+                if field.name() == "ingredient" {
+                    self.member = value == "member";
+                }
+            }
+            fn record_debug(&mut self, _: &tracing::field::Field, _: &dyn std::fmt::Debug) {}
+        }
+        let mut fields = Fields::default();
+        event.record(&mut fields);
+        if fields.member
+            && let Ok(mut all) = self.0.lock()
+        {
+            all.push(fields.counts);
+        }
+    }
+}
+
+/// What verifying the memos of `member` reports after `change`.
+fn verified_after(change: Change) -> [u64; 4] {
+    let verified = Verified::default();
+    let subscriber = tracing_subscriber::registry().with(verified.clone());
+    let _guard = tracing::subscriber::set_default(subscriber);
+    let mut db = Db::default();
+    let fixture = Fixture::new(&db);
+    fixture.ask_all(&db);
+    match change {
+        Change::InTheFirstGroup => {
+            let cell = fixture.cells[0][CELLS / 2];
+            cell.set_value(&mut db).to(31_337);
+        }
+        Change::NothingToSee => {
+            Cell::new(&db, 7);
+        }
+        other => panic!("{other:?} is not one this test makes"),
+    }
+    <dyn Database>::verify_persisted_memos(&db);
+    verified
+        .0
+        .lock()
+        .ok()
+        .and_then(|all| all.last().copied())
+        .unwrap_or_default()
+}
+
+#[test]
+fn verifying_before_a_save_says_how_many_memos_it_found_current_unchanged_and_changed() {
+    // A change inside the first group's set: its memos are walked and found changed (and run
+    // again), the second group's are walked and found unchanged. Nothing changed: all are current
+    // or, a revision having passed, walked and found unchanged.
+    let [memos, current, unchanged, changed] = verified_after(Change::InTheFirstGroup);
+    assert_eq!((memos, current), (2 * MEMBERS as u64, 0));
+    assert_eq!((unchanged, changed), (MEMBERS as u64, MEMBERS as u64));
+
+    let [memos, _, unchanged, changed] = verified_after(Change::NothingToSee);
+    assert_eq!(memos, 2 * MEMBERS as u64);
+    assert_eq!(changed, 0, "nothing a memo reads changed");
+    assert!(unchanged <= memos);
+}

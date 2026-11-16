@@ -1412,7 +1412,7 @@
          }
      }
  
-@@ -548,6 +587,30 @@
+@@ -548,6 +587,52 @@
          C::PERSIST
      }
  
@@ -1421,6 +1421,8 @@
 +        if !C::PERSIST {
 +            return;
 +        }
++        let started = std::time::Instant::now();
++        let (mut memos, mut current, mut unchanged, mut changed) = (0u64, 0u64, 0u64, 0u64);
 +        for entry in <C::SalsaStruct<'_> as SalsaStructInDb>::entries(zalsa) {
 +            let memo_ingredient_index = self.memo_ingredient_indices.get(entry.ingredient_index());
 +            let Some(memo) =
@@ -1429,21 +1431,41 @@
 +                continue;
 +            };
 +            let verified_at = memo.header.verified_at.load();
-+            if !memo.should_serialize() || verified_at == zalsa.current_revision() {
++            if !memo.should_serialize() {
++                continue;
++            }
++            memos += 1;
++            if verified_at == zalsa.current_revision() {
++                current += 1;
 +                continue;
 +            }
 +            // SAFETY: The caller guarantees `db` is this ingredient's database.
 +            let db = unsafe { self.view_caster().downcast_unchecked(db) };
 +            // Verifying marks the memo verified now if nothing it depends on changed; if
 +            // something did, the query runs again and its memo is replaced.
-+            let _ = self.maybe_changed_after(db, entry.key_index(), verified_at);
++            match self.maybe_changed_after(db, entry.key_index(), verified_at) {
++                VerifyResult::Changed => changed += 1,
++                VerifyResult::Unchanged { .. } => unchanged += 1,
++            }
++        }
++        if memos > 0 {
++            ::tracing::info!(
++                target: "salsa::persistence",
++                ingredient = C::DEBUG_NAME,
++                memos,
++                already_current = current,
++                unchanged_after_walking = unchanged,
++                changed_and_run_again = changed,
++                elapsed = ?started.elapsed(),
++                "verified the persisted memos before they are saved"
++            );
 +        }
 +    }
 +
      fn should_serialize(&self, zalsa: &Zalsa) -> bool {
          if !C::PERSIST {
              return false;
-@@ -595,44 +658,6 @@
+@@ -595,44 +680,6 @@
      }
  }
  
@@ -1488,7 +1510,7 @@
  fn flatten_cycle_head_dependencies(
      ingredient: &dyn FunctionIngredient,
      zalsa: &Zalsa,
-@@ -744,7 +769,9 @@
+@@ -744,7 +791,9 @@
  #[cfg(feature = "persistence")]
  mod persistence {
      use super::{Configuration, IngredientImpl, Memo};
@@ -1499,7 +1521,7 @@
      use crate::plumbing::{MemoIngredientMap, SalsaStructInDb};
      use crate::zalsa::Zalsa;
      use crate::zalsa_local::persistence::PersistentQueryOrigin;
-@@ -764,6 +791,14 @@
+@@ -764,6 +813,14 @@
          pub ingredient: &'db IngredientImpl<C>,
      }
  
@@ -1514,7 +1536,7 @@
      impl<C> serde::Serialize for SerializeIngredient<'_, C>
      where
          C: Configuration,
-@@ -774,26 +809,8 @@
+@@ -774,26 +831,8 @@
          {
              let Self { ingredient, zalsa } = self;
  
@@ -1543,7 +1565,7 @@
  
              for entry in <C::SalsaStruct<'_> as SalsaStructInDb>::entries(zalsa) {
                  let memo_ingredient_index = ingredient
-@@ -806,97 +823,210 @@
+@@ -806,97 +845,210 @@
                      memo_ingredient_index,
                  );
  
@@ -1815,7 +1837,7 @@
      }
  
      pub struct DeserializeIngredient<'db, C>
-@@ -937,7 +1067,23 @@
+@@ -937,7 +1089,23 @@
          {
              let DeserializeIngredient { zalsa, ingredient } = self;
  

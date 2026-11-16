@@ -592,6 +592,8 @@ where
         if !C::PERSIST {
             return;
         }
+        let started = std::time::Instant::now();
+        let (mut memos, mut current, mut unchanged, mut changed) = (0u64, 0u64, 0u64, 0u64);
         for entry in <C::SalsaStruct<'_> as SalsaStructInDb>::entries(zalsa) {
             let memo_ingredient_index = self.memo_ingredient_indices.get(entry.ingredient_index());
             let Some(memo) =
@@ -600,14 +602,34 @@ where
                 continue;
             };
             let verified_at = memo.header.verified_at.load();
-            if !memo.should_serialize() || verified_at == zalsa.current_revision() {
+            if !memo.should_serialize() {
+                continue;
+            }
+            memos += 1;
+            if verified_at == zalsa.current_revision() {
+                current += 1;
                 continue;
             }
             // SAFETY: The caller guarantees `db` is this ingredient's database.
             let db = unsafe { self.view_caster().downcast_unchecked(db) };
             // Verifying marks the memo verified now if nothing it depends on changed; if
             // something did, the query runs again and its memo is replaced.
-            let _ = self.maybe_changed_after(db, entry.key_index(), verified_at);
+            match self.maybe_changed_after(db, entry.key_index(), verified_at) {
+                VerifyResult::Changed => changed += 1,
+                VerifyResult::Unchanged { .. } => unchanged += 1,
+            }
+        }
+        if memos > 0 {
+            ::tracing::info!(
+                target: "salsa::persistence",
+                ingredient = C::DEBUG_NAME,
+                memos,
+                already_current = current,
+                unchanged_after_walking = unchanged,
+                changed_and_run_again = changed,
+                elapsed = ?started.elapsed(),
+                "verified the persisted memos before they are saved"
+            );
         }
     }
 
