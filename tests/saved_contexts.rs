@@ -644,3 +644,80 @@ fn functions_that_look_alike_are_told_apart_and_found_again() -> Result<()> {
     );
     Ok(())
 }
+
+/// Each function's evidence as JSON, by label, with the source ranges of its calls removed.
+fn evidence_by_label(
+    graph: &CrateIr,
+    without_ranges: bool,
+) -> Result<std::collections::BTreeMap<String, serde_json::Value>> {
+    let query = cordial::QueryBuilder::new()
+        .has_attr(cordial::ATTR_SEMANTIC_FUNCTION)
+        .build();
+    let mut found = std::collections::BTreeMap::new();
+    for node in graph.nodes_matching(&query) {
+        if let Some(facts) = graph.semantic_function(node.id()).into_diagnostic()? {
+            let mut value = serde_json::to_value(&facts).into_diagnostic()?;
+            if without_ranges
+                && let Some(calls) = value
+                    .get_mut("calls")
+                    .and_then(|calls| calls.as_array_mut())
+            {
+                for call in calls {
+                    if let Some(call) = call.as_object_mut() {
+                        call.remove("range");
+                    }
+                }
+            }
+            found.insert(facts.label().clone(), value);
+        }
+    }
+    Ok(found)
+}
+
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn a_comment_above_a_function_changes_nothing_in_the_evidence_but_positions() -> Result<()> {
+    cordial::init_tracing();
+    let root = fixture()?;
+    let library = root.path().join("src/lib.rs");
+    let text = "pub fn ordinary() {}\npub fn caller() { ordinary(); ordinary(); }\n";
+    std::fs::write(&library, text).into_diagnostic()?;
+    let state = tempfile::tempdir().into_diagnostic()?;
+    let (_, before) = run(root.path(), &SavedState::at(state.path().join("one")))?;
+    let (before_all, before) = (
+        evidence_by_label(&before, false)?,
+        evidence_by_label(&before, true)?,
+    );
+
+    std::fs::write(&library, format!("// a comment above everything\n{text}")).into_diagnostic()?;
+    let (_, after) = run(root.path(), &SavedState::at(state.path().join("two")))?;
+    let (after_all, after) = (
+        evidence_by_label(&after, false)?,
+        evidence_by_label(&after, true)?,
+    );
+    assert_ne!(
+        before_all, after_all,
+        "the comment shifted the ranges, which is what this test is about"
+    );
+
+    assert_eq!(
+        before.keys().collect::<Vec<_>>(),
+        after.keys().collect::<Vec<_>>()
+    );
+    let mut moved = Vec::new();
+    for (label, evidence) in &before {
+        let (Some(old), Some(new)) = (evidence.as_object(), after[label].as_object()) else {
+            continue;
+        };
+        for (field, value) in old {
+            if new.get(field) != Some(value) {
+                moved.push(format!("{label}.{field}: {value} -> {}", new[field]));
+            }
+        }
+    }
+    assert!(
+        moved.is_empty(),
+        "a comment changed the evidence: {moved:#?}"
+    );
+    Ok(())
+}
