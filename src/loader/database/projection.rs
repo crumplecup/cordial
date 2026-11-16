@@ -75,8 +75,10 @@ impl SourceDatabase {
     ) -> CordialResult<CrateIr> {
         let context = self.projection_context()?;
         selection::validate_target(target, &context)?;
+        self.declare_cutoffs();
         if self.restored {
             self.warm_persisted_dependencies(paths);
+            self.warm_fingerprint();
         }
         #[cfg(feature = "cfg_hygiene")]
         let declarations = {

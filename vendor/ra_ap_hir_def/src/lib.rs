@@ -37,6 +37,7 @@ pub mod expr_store;
 pub mod hir;
 pub mod resolver;
 
+mod stable;
 pub mod nameres;
 
 pub mod src;
@@ -229,6 +230,17 @@ macro_rules! impl_intern {
     ($id:ident, $loc:ident) => {
         impl_intern_key!($id, $loc);
         impl_intern_lookup!($id, $loc);
+
+        // An id stands for where it is written and what is there, which is the same in every
+        // process, and not for the number it was given in this one.
+        impl hir_expand::stable::StableHash for $id {
+            fn stable_hash(&self, cx: &mut hir_expand::stable::StableCx<'_>) {
+                hir_expand::stable::StableHash::stable_hash(
+                    hir_expand::Lookup::lookup(self, cx.db),
+                    cx,
+                );
+            }
+        }
     };
 }
 

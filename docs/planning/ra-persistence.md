@@ -515,25 +515,39 @@ registered or not, an edit that leaves the fingerprinted value or changes it, on
 JSON or MessagePack, a fingerprint asked for or not, a value read directly or through a tracked
 struct, and expect exactly the queries that read what changed to run again.
 
-**What it buys (measured with a crude fingerprint, not kept).** With the definition map
-fingerprinted, the same edit computed evidence for 6 of 30: the five functions of the edited file
-and the warm-up's own query. The functions of one file still all read the file's syntax, which is
-the next granularity: a function's body, not its file.
+**The fingerprint (done, in `vendor/ra_ap_hir_def` and `vendor/ra_ap_hir_expand`, `stable` modules).**
+A hash of a crate's definition map and extern prelude that means the same in every process. A
+definition map is made of ids that a process numbers in the order it meets them, so a hash of its
+bytes says nothing across processes, and a type that holds an id is never hashed by its derived
+`Hash` (another process may give the same number to something else, and the hashes would be equal
+for things that are not). Each type has an impl that says what its ids stand for: an item by where
+it is written (its file's path and its place in the file) and what it is, a module by its crate, its
+block and its names, a macro call by its definition and call site. Every impl takes its type apart
+without `..`, so a field rust-analyzer adds later is a compile error until it is accounted for. Two
+things are left out, each named at the place it is: what a diagnostic says (nothing that computes a
+function reads it; which kind and where are hashed), and the arguments a macro was called with (what
+they expand to is in the items it makes, as names and places). What has no meaning that survives the
+process makes the hash volatile, which is safe (it differs in every process, so nothing is reused)
+and is counted, never absent.
 
-**What is still to do: a fingerprint that is faithful.** The contract is that the fingerprint
-determines everything that anything can read of the value. rust-analyzer's own dump of a
-definition map names what is in each module and not where it is written (a callee moved to
-another file leaves the dump as it was, and every caller's saved evidence names the callee's
-file), how visible it is, or which impls there are, so a hash of the dump is not faithful and was
-removed. A faithful one hashes, for every module, every scope entry's name, namespace, visibility
-and a *stable* description of what it is (the place-based description cordial already has for
-functions, types, traits, consts and statics, a module path, a macro's name and place), the impls,
-the legacy macros, the prelude and `macro_use` prelude, the derive helpers in scope and the crate's
-data, with anything it cannot describe stably made to change with the process (safe, and no
-cutoff) and never left out. Other crate-wide queries that every function reads (the impl indexes)
-need their own. The soundness test for those is differential: for a battery of edits (a body, a
-signature, a visibility, an item moved between files, an impl added, a macro defined, a `cfg`
-flipped) the evidence of a restored and edited run must equal a cold run's on the edited sources.
+**Why it can be trusted, and what keeps it so.** `tests/edit_reuse.rs` is a differential battery: for
+nine kinds of edit (a comment, a body, a return type, a function moved to another file and
+re-exported, a visibility narrowed, a rename, what a macro defines, a method's return type, a
+function gated off) a run restored from the state saved before the edit says what a run from
+nothing says on the edited sources, and the edits that must change what is said change it. The move
+is the case a hash of rust-analyzer's own dump of the map fails: the dump names what is in a module
+and not where it is written. The option `reuse_across_edits` (off by default) turns the cutoff on;
+it stays off until a run on real code has been clean.
+
+**What it buys.** In the independent-files specimen (6 files of 5 functions) an edit to one
+function's body computes the evidence of the functions of its file and the warm-up's query, 6 of 31;
+without it, all 31.
+
+**Still to do.** Other crate-wide queries that every function reads (the impl indexes) need their
+own fingerprints; the walk-width metric names them. Functions of one file still all read the file's
+syntax, so the next granularity is a function's body. The audit that recomputes a sample of reused
+functions and compares them, so that a construct the battery does not think of is caught in the
+field, is not written.
 
 ## What is not persisted, and why
 

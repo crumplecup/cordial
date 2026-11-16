@@ -336,6 +336,8 @@ pub(crate) trait ItemTreeNode: Clone {
 #[allow(type_alias_bounds)]
 pub(crate) type ItemTreeAstId<T: ItemTreeNode> = FileAstId<T::Source>;
 
+mod stable;
+
 /// Identifies a particular [`ItemTree`].
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct TreeId {

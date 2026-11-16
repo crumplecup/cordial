@@ -1,0 +1,452 @@
+//! A run after an edit reuses what the edit did not reach, and what it reuses is what a run from
+//! nothing would have computed.
+//!
+//! Evidence about a function is saved as depending on a fingerprint of its crate's definition map,
+//! not on the text of every file the map is made from. That is only sound if the fingerprint
+//! changes whenever anything a function can read of the map does, and the way to know is to
+//! compare. For each kind of edit, a run restored from the state saved before the edit must give
+//! what a run from nothing gives on the edited sources, and the edits that must change what is
+//! said must change it. An edit a fingerprint missed would leave the first run saying what it said
+//! before.
+
+mod support {
+    pub mod executions;
+}
+
+use cordial::{
+    BasicQuery, CfgPlanning, CrateIr, CrateTarget, IrView, SavedState, SemanticCargoOptions,
+    SourceDatabase,
+};
+use miette::{IntoDiagnostic, Result};
+use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
+use support::executions::Executions;
+use tracing_subscriber::prelude::*;
+
+/// What is written under `src/`: file name and text.
+type Sources = Vec<(&'static str, String)>;
+
+/// A crate of four files that call into one another, a macro that defines a function, and a type
+/// with a method, so that each kind of edit has something to reach.
+fn original() -> Sources {
+    vec![
+        ("lib.rs", "#[macro_use]\nmod macros;\npub mod a;\npub mod b;\npub mod c;\n".into()),
+        (
+            "macros.rs",
+            "macro_rules! make {\n    ($n:ident) => {\n        pub fn $n() -> u8 {\n            1\n        }\n    };\n}\n"
+                .into(),
+        ),
+        (
+            "a.rs",
+            "make!(made);\n\
+             pub fn a_leaf() {}\n\
+             pub fn a_top() {\n    a_leaf();\n}\n\
+             pub struct A;\n\
+             impl A {\n    pub fn m(&self) {}\n}\n"
+                .into(),
+        ),
+        (
+            "b.rs",
+            "pub fn b_top() {\n    crate::a::a_top();\n}\n\
+             pub fn b_leaf() {}\n"
+                .into(),
+        ),
+        (
+            "c.rs",
+            "pub fn c_top() {\n    crate::b::b_top();\n    crate::b::b_leaf();\n    crate::a::a_leaf();\n    crate::a::made();\n    let a = crate::a::A;\n    a.m();\n}\n"
+                .into(),
+        ),
+    ]
+}
+
+/// What an edit changes, and whether it must change what is said about the crate.
+struct Edit {
+    name: &'static str,
+    apply: fn(&mut Sources),
+    /// Whether what a run says about the crate is different after the edit.
+    changes_what_is_said: bool,
+}
+
+fn replace(sources: &mut Sources, file: &str, from: &str, to: &str) {
+    let entry = sources
+        .iter_mut()
+        .find(|(name, _)| *name == file)
+        .unwrap_or_else(|| panic!("{file} is in the specimen"));
+    assert!(entry.1.contains(from), "{file} has {from:?} to replace");
+    entry.1 = entry.1.replacen(from, to, 1);
+}
+
+fn edits() -> Vec<Edit> {
+    vec![
+        Edit {
+            name: "a comment above everything",
+            apply: |s| replace(s, "a.rs", "make!(made);", "// a comment\nmake!(made);"),
+            changes_what_is_said: false,
+        },
+        Edit {
+            name: "the body of a function nothing in another file calls",
+            apply: |s| {
+                replace(
+                    s,
+                    "b.rs",
+                    "pub fn b_leaf() {}",
+                    "pub fn b_leaf() {\n    let _ = 1;\n}",
+                )
+            },
+            changes_what_is_said: false,
+        },
+        Edit {
+            name: "the return type of a function others call",
+            apply: |s| {
+                replace(
+                    s,
+                    "a.rs",
+                    "pub fn a_leaf() {}",
+                    "pub fn a_leaf() -> u8 {\n    1\n}",
+                )
+            },
+            changes_what_is_said: true,
+        },
+        Edit {
+            name: "a function moved to another file and re-exported",
+            apply: |s| {
+                replace(s, "b.rs", "pub fn b_leaf() {}", "pub use crate::c::b_leaf;");
+                replace(
+                    s,
+                    "c.rs",
+                    "pub fn c_top() {",
+                    "pub fn b_leaf() {}\npub fn c_top() {",
+                );
+            },
+            changes_what_is_said: true,
+        },
+        Edit {
+            name: "a function made private that another file calls",
+            apply: |s| replace(s, "a.rs", "pub fn a_leaf() {}", "fn a_leaf() {}"),
+            changes_what_is_said: true,
+        },
+        Edit {
+            name: "a function renamed",
+            apply: |s| {
+                replace(s, "a.rs", "pub fn a_leaf() {}", "pub fn a_leaf2() {}");
+                replace(s, "a.rs", "    a_leaf();", "    a_leaf2();");
+            },
+            changes_what_is_said: true,
+        },
+        Edit {
+            name: "what a macro defines",
+            apply: |s| {
+                replace(
+                    s,
+                    "macros.rs",
+                    "pub fn $n() -> u8 {\n            1",
+                    "pub fn $n() -> u16 {\n            1",
+                )
+            },
+            changes_what_is_said: true,
+        },
+        Edit {
+            name: "the return type of a method",
+            apply: |s| {
+                replace(
+                    s,
+                    "a.rs",
+                    "pub fn m(&self) {}",
+                    "pub fn m(&self) -> u8 {\n        1\n    }",
+                )
+            },
+            changes_what_is_said: true,
+        },
+        Edit {
+            name: "a function gated off",
+            apply: |s| {
+                replace(
+                    s,
+                    "a.rs",
+                    "pub fn a_leaf() {}",
+                    "#[cfg(any())]\npub fn a_leaf() {}",
+                )
+            },
+            changes_what_is_said: true,
+        },
+    ]
+}
+
+fn write(root: &Path, sources: &Sources) -> Result<()> {
+    std::fs::create_dir_all(root.join("src")).into_diagnostic()?;
+    std::fs::write(
+        root.join("Cargo.toml"),
+        "[package]\nname='gated'\nversion='0.1.0'\nedition='2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
+    for (name, text) in sources {
+        std::fs::write(root.join("src").join(name), text).into_diagnostic()?;
+    }
+    Ok(())
+}
+
+fn sources_of(root: &Path) -> Vec<PathBuf> {
+    let mut found: Vec<PathBuf> = std::fs::read_dir(root.join("src"))
+        .into_iter()
+        .flatten()
+        .flatten()
+        .map(|entry| entry.path())
+        .collect();
+    found.sort();
+    found
+}
+
+/// Whether the reuse across edits is on, as a run is asked.
+#[derive(Clone, Copy, Debug)]
+enum Reuse {
+    On,
+    Off,
+}
+
+/// What a run says: all of it, with ids taken out (they are numbered as the run met them), and the
+/// facts about each function with where things are taken out too, so that an edit that only moves
+/// things is not taken for one that changes what they say.
+struct Said {
+    all: serde_json::Value,
+    facts: BTreeMap<String, serde_json::Value>,
+}
+
+/// The facts about each function by name, without ids or places.
+fn facts_of(graph: &CrateIr) -> Result<BTreeMap<String, serde_json::Value>> {
+    fn without_places(value: &mut serde_json::Value) {
+        match value {
+            serde_json::Value::Object(map) => {
+                map.retain(|key, _| {
+                    ![
+                        "range", "start", "end", "line", "column", "offset", "digest",
+                    ]
+                    .iter()
+                    .any(|place| key.contains(place))
+                });
+                map.values_mut().for_each(without_places);
+            }
+            serde_json::Value::Array(items) => items.iter_mut().for_each(without_places),
+            _ => {}
+        }
+    }
+    let mut found = BTreeMap::new();
+    for node in graph.nodes_matching(&BasicQuery::items()) {
+        let Some(name) = node.weight().name().clone() else {
+            continue;
+        };
+        let Some(facts) = graph.semantic_function(node.id()).into_diagnostic()? else {
+            continue;
+        };
+        let mut value = serde_json::to_value(facts).into_diagnostic()?;
+        without_ids(&mut value);
+        without_places(&mut value);
+        found.insert(name, value);
+    }
+    Ok(found)
+}
+
+/// What a run says about the crate, and how many functions' evidence it computed.
+fn run(root: &Path, saved: &SavedState, reuse: Reuse) -> Result<(Said, usize)> {
+    let executions = Executions::default();
+    let subscriber = tracing_subscriber::registry().with(executions.clone());
+    let _subscriber = tracing::subscriber::set_default(subscriber);
+    let options = SemanticCargoOptions::default()
+        .with_cfg_planning(CfgPlanning::Explicit)
+        .with_reuse_across_edits(matches!(reuse, Reuse::On));
+    let mut session =
+        SourceDatabase::load_saved(root, &options, Some(saved.clone())).into_diagnostic()?;
+    let graph = session
+        .project(&CrateTarget::new("gated", root), &sources_of(root))
+        .into_diagnostic()?;
+    let mut all = serde_json::to_value(graph.snapshot().into_diagnostic()?).into_diagnostic()?;
+    without_ids(&mut all);
+    let said = Said {
+        all,
+        facts: facts_of(&graph)?,
+    };
+    let computed = executions
+        .take()
+        .into_iter()
+        .filter(|(name, _)| name.ends_with("> persisted_evidence"))
+        .map(|(_, count)| count)
+        .sum();
+    Ok((said, computed))
+}
+
+fn without_ids(value: &mut serde_json::Value) {
+    match value {
+        serde_json::Value::Object(map) => {
+            map.remove("definition");
+            if let Some(serde_json::Value::Object(target)) = map.get_mut("target")
+                && let Some(id) = target.get_mut("Function")
+            {
+                *id = serde_json::Value::from(0);
+            }
+            map.values_mut().for_each(without_ids);
+        }
+        serde_json::Value::Array(items) => items.iter_mut().for_each(without_ids),
+        _ => {}
+    }
+}
+
+/// What a run says about the edited sources from nothing, from the state a run on the original
+/// sources saved, and how many functions each computed.
+struct Outcome {
+    before: Said,
+    cold: Said,
+    restored: Said,
+}
+
+fn after(edit: &Edit, reuse: Reuse) -> Result<Outcome> {
+    cordial::init_tracing();
+    let root = tempfile::tempdir().into_diagnostic()?;
+    write(root.path(), &original())?;
+    let state = tempfile::tempdir().into_diagnostic()?;
+    let saved = SavedState::at(state.path().join("analysis-state"));
+    let (before, _) = run(root.path(), &saved, reuse)?;
+    let mut sources = original();
+    (edit.apply)(&mut sources);
+    write(root.path(), &sources)?;
+    let (restored, _) = run(root.path(), &saved, reuse)?;
+    let nothing = tempfile::tempdir().into_diagnostic()?;
+    let (cold, _) = run(
+        root.path(),
+        &SavedState::at(nothing.path().join("analysis-state")),
+        reuse,
+    )?;
+    Ok(Outcome {
+        before,
+        cold,
+        restored,
+    })
+}
+
+/// A run restored from before `edit` says what a run from nothing says after it, and the edit
+/// changes the facts when it should.
+fn check(index: usize, reuse: Reuse) -> Result<()> {
+    let edit = &edits()[index];
+    let outcome = after(edit, reuse)?;
+    assert_eq!(
+        outcome.restored.all, outcome.cold.all,
+        "{reuse:?}, {}: a run restored from before the edit said something else than a run from \
+         nothing",
+        edit.name
+    );
+    assert_eq!(
+        outcome.restored.facts, outcome.cold.facts,
+        "{reuse:?}, {}: the facts a restored run gave are not the ones a run from nothing gave",
+        edit.name
+    );
+    assert_eq!(
+        outcome.cold.facts != outcome.before.facts,
+        edit.changes_what_is_said,
+        "{reuse:?}, {}: the facts {} by the edit",
+        edit.name,
+        if edit.changes_what_is_said {
+            "should change"
+        } else {
+            "should not move"
+        }
+    );
+    Ok(())
+}
+
+/// A test for each kind of edit with reuse across edits on, so that they run side by side.
+macro_rules! after_an_edit {
+    ($($name:ident => $index:expr),* $(,)?) => {
+        $(
+            #[test]
+            fn $name() -> Result<()> {
+                check($index, Reuse::On)
+            }
+        )*
+    };
+}
+
+after_an_edit! {
+    a_comment_above_everything => 0,
+    the_body_of_a_function_nothing_in_another_file_calls => 1,
+    the_return_type_of_a_function_others_call => 2,
+    a_function_moved_to_another_file_and_re_exported => 3,
+    a_function_made_private_that_another_file_calls => 4,
+    a_function_renamed => 5,
+    what_a_macro_defines => 6,
+    the_return_type_of_a_method => 7,
+    a_function_gated_off => 8,
+}
+
+/// The same checks with reuse off, which is the harness telling the two edits that matter most
+/// apart from nothing: if these passed with reuse on and failed here, the harness would be wrong.
+#[test]
+fn the_checks_hold_without_reuse_too() -> Result<()> {
+    check(2, Reuse::Off)?;
+    check(3, Reuse::Off)
+}
+
+/// A crate of `FILES` modules of `PER_FILE` functions, each calling the one before it in its own
+/// file: nothing calls into another file, and the last of each file has no caller.
+const FILES: usize = 6;
+const PER_FILE: usize = 5;
+
+fn independent_files() -> Result<tempfile::TempDir> {
+    let root = tempfile::tempdir().into_diagnostic()?;
+    let mut sources: Sources = Vec::new();
+    let mut library = String::new();
+    for file in 0..FILES {
+        library.push_str(&format!("pub mod file{file};\n"));
+        let mut text = String::new();
+        for function in 0..PER_FILE {
+            let call = match function {
+                0 => String::new(),
+                n => format!("    f{file}_{}();\n", n - 1),
+            };
+            text.push_str(&format!("pub fn f{file}_{function}() {{\n{call}}}\n"));
+        }
+        sources.push((Box::leak(format!("file{file}.rs").into_boxed_str()), text));
+    }
+    sources.push(("lib.rs", library));
+    write(root.path(), &sources)?;
+    Ok(root)
+}
+
+/// How many functions' evidence a restored run computed after the body of the last function of
+/// the third file changed, which nothing calls.
+fn computed_after_a_body_edit(reuse: Reuse) -> Result<usize> {
+    cordial::init_tracing();
+    let root = independent_files()?;
+    let state = tempfile::tempdir().into_diagnostic()?;
+    let saved = SavedState::at(state.path().join("analysis-state"));
+    run(root.path(), &saved, reuse)?;
+    let edited = root.path().join("src/file2.rs");
+    let text = std::fs::read_to_string(&edited).into_diagnostic()?;
+    std::fs::write(
+        &edited,
+        text.replace(
+            &format!("pub fn f2_{}() {{", PER_FILE - 1),
+            &format!("pub fn f2_{}() {{\n    let _ = 1;", PER_FILE - 1),
+        ),
+    )
+    .into_diagnostic()?;
+    Ok(run(root.path(), &saved, reuse)?.1)
+}
+
+/// With reuse across edits, an edit to a function's body makes a run compute the functions of the
+/// file it is in and not those of the crate: the definition map the edit makes is the one there was,
+/// and nothing else reads the file. (One more is the warm-up's own query, which every restored run
+/// computes.) Without it, every function of the crate is computed.
+#[test]
+fn an_edit_to_a_body_computes_the_functions_of_its_file_and_not_the_crate() -> Result<()> {
+    let everything = computed_after_a_body_edit(Reuse::Off)?;
+    let reused = computed_after_a_body_edit(Reuse::On)?;
+    assert!(
+        everything > FILES * PER_FILE,
+        "without reuse a run computed {everything} of {} functions",
+        FILES * PER_FILE
+    );
+    assert!(
+        reused <= PER_FILE + 1,
+        "with reuse a run computed {reused}: more than the {PER_FILE} functions of the file and \
+         the warm-up's query"
+    );
+    Ok(())
+}

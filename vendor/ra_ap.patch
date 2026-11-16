@@ -1,5 +1,5 @@
---- a/ra_ap_base_db-0.0.358/Cargo.toml	2026-11-15 13:43:21.421149732 -0800
-+++ b/ra_ap_base_db/Cargo.toml	2026-11-15 13:43:21.482497469 -0800
+--- a/ra_ap_base_db-0.0.358/Cargo.toml
++++ ra_ap_base_db/Cargo.toml
 @@ -65,6 +65,10 @@
  [dependencies.rustc-hash]
  version = "2.1.1"
@@ -28,8 +28,8 @@
  default-features = false
  
  [dependencies.vfs]
---- a/ra_ap_base_db-0.0.358/src/change.rs	2026-11-15 13:43:21.421331938 -0800
-+++ b/ra_ap_base_db/src/change.rs	2026-11-15 13:43:21.482609450 -0800
+--- a/ra_ap_base_db-0.0.358/src/change.rs
++++ ra_ap_base_db/src/change.rs
 @@ -69,8 +69,15 @@
  
                  db.set_source_root_with_durability(root_id, Arc::new(root), durability);
@@ -48,8 +48,8 @@
          }
  
          for (file_id, text) in self.files_changed {
---- a/ra_ap_base_db-0.0.358/src/input.rs	2026-11-15 13:43:21.433284942 -0800
-+++ b/ra_ap_base_db/src/input.rs	2026-11-15 13:43:21.482840479 -0800
+--- a/ra_ap_base_db-0.0.358/src/input.rs
++++ ra_ap_base_db/src/input.rs
 @@ -23,7 +23,7 @@
  use vfs::{AbsPathBuf, AnchoredPath, FileId, VfsPath, file_set::FileSet};
  
@@ -203,8 +203,8 @@
  
          // For some reason in some repositories we have duplicate crates, so we use a set and not `Vec`.
          // We use an `IndexSet` because the list needs to be topologically sorted.
---- a/ra_ap_base_db-0.0.358/src/lib.rs	2026-11-15 13:43:21.479285695 -0800
-+++ b/ra_ap_base_db/src/lib.rs	2026-11-15 13:43:21.482725381 -0800
+--- a/ra_ap_base_db-0.0.358/src/lib.rs
++++ ra_ap_base_db/src/lib.rs
 @@ -30,7 +30,8 @@
          BuiltCrateData, BuiltDependency, Crate, CrateBuilder, CrateBuilderId, CrateDataBuilder,
          CrateDisplayName, CrateGraphBuilder, CrateName, CrateOrigin, CratesIdMap, CratesMap,
@@ -506,8 +506,8 @@
          crates
              .iter()
              .copied()
---- a/ra_ap_base_db-0.0.358/src/target.rs	2026-11-15 13:43:21.480181758 -0800
-+++ b/ra_ap_base_db/src/target.rs	2026-11-15 13:43:21.482781872 -0800
+--- a/ra_ap_base_db-0.0.358/src/target.rs
++++ ra_ap_base_db/src/target.rs
 @@ -5,6 +5,7 @@
  use triomphe::Arc;
  
@@ -540,8 +540,8 @@
  impl fmt::Debug for TargetLoadError {
      fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
          fmt::Debug::fmt(&self.0, f)
---- a/ra_ap_cfg-0.0.358/Cargo.toml	2026-11-15 13:43:21.522286398 -0800
-+++ b/ra_ap_cfg/Cargo.toml	2026-11-15 13:43:21.547389541 -0800
+--- a/ra_ap_cfg-0.0.358/Cargo.toml
++++ ra_ap_cfg/Cargo.toml
 @@ -33,6 +33,10 @@
  syntax = ["dep:syntax"]
  tt = ["dep:tt"]
@@ -553,8 +553,8 @@
  [lib]
  name = "ra_ap_cfg"
  path = "src/lib.rs"
---- a/ra_ap_cfg-0.0.358/src/cfg_expr.rs	2026-11-15 13:43:21.527286480 -0800
-+++ b/ra_ap_cfg/src/cfg_expr.rs	2026-11-15 13:43:21.547481591 -0800
+--- a/ra_ap_cfg-0.0.358/src/cfg_expr.rs
++++ ra_ap_cfg/src/cfg_expr.rs
 @@ -8,6 +8,7 @@
  
  /// A simple configuration value passed in from the outside.
@@ -563,8 +563,8 @@
  pub enum CfgAtom {
      /// eg. `#[cfg(test)]`
      Flag(Symbol),
---- a/ra_ap_cfg-0.0.358/src/lib.rs	2026-11-15 13:43:21.535286611 -0800
-+++ b/ra_ap_cfg/src/lib.rs	2026-11-15 13:43:21.547653548 -0800
+--- a/ra_ap_cfg-0.0.358/src/lib.rs
++++ ra_ap_cfg/src/lib.rs
 @@ -30,6 +30,7 @@
  ///
  /// See: <https://doc.rust-lang.org/reference/conditional-compilation.html#set-configuration-options>
@@ -581,8 +581,8 @@
  pub struct HashableCfgOptions {
      _enabled: Box<[CfgAtom]>,
  }
---- a/ra_ap_edition-0.0.358/Cargo.toml	2026-11-15 13:43:21.551374507 -0800
-+++ b/ra_ap_edition/Cargo.toml	2026-11-15 13:43:21.553133472 -0800
+--- a/ra_ap_edition-0.0.358/Cargo.toml
++++ ra_ap_edition/Cargo.toml
 @@ -27,6 +27,10 @@
  repository = "https://github.com/rust-lang/rust-analyzer"
  resolver = "2"
@@ -594,8 +594,8 @@
  [lib]
  name = "ra_ap_edition"
  path = "src/lib.rs"
---- a/ra_ap_edition-0.0.358/src/lib.rs	2026-11-15 13:43:21.551534759 -0800
-+++ b/ra_ap_edition/src/lib.rs	2026-11-15 13:43:21.553222258 -0800
+--- a/ra_ap_edition-0.0.358/src/lib.rs
++++ ra_ap_edition/src/lib.rs
 @@ -2,6 +2,7 @@
  // This should live in a separate crate because we use it in both actual code and codegen.
  use std::fmt;
@@ -604,8 +604,8 @@
  #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
  #[repr(u8)]
  pub enum Edition {
---- a/ra_ap_hir_def-0.0.358/Cargo.toml	2026-11-15 13:43:21.574287249 -0800
-+++ b/ra_ap_hir_def/Cargo.toml	2026-11-15 13:43:22.110526889 -0800
+--- a/ra_ap_hir_def-0.0.358/Cargo.toml
++++ ra_ap_hir_def/Cargo.toml
 @@ -101,6 +101,10 @@
  [dependencies.rustc_apfloat]
  version = "0.2.3"
@@ -617,9 +617,249 @@
  [dependencies.salsa]
  version = "0.28.5"
  features = [
---- a/ra_ap_hir_def-0.0.358/src/lib.rs	2026-11-15 13:43:21.946293334 -0800
-+++ b/ra_ap_hir_def/src/lib.rs	2026-11-15 13:43:22.113219839 -0800
-@@ -103,7 +103,7 @@
+--- a/ra_ap_hir_def-0.0.358/src/item_scope.rs
++++ ra_ap_hir_def/src/item_scope.rs
+@@ -30,6 +30,8 @@
+     macros: FxHashSet<(ModuleId, Name)>,
+ }
+ 
++mod stable;
++
+ #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+ pub enum ImportOrExternCrate {
+     Glob(GlobId),
+--- a/ra_ap_hir_def-0.0.358/src/item_scope/stable.rs
++++ ra_ap_hir_def/src/item_scope/stable.rs
+@@ -0,0 +1,191 @@
++//! What an item scope says, hashed so that it means the same in every process. See
++//! `hir_expand::stable`.
++//!
++//! Every struct and enum here is taken apart without `..`: a field rust-analyzer adds to a scope is
++//! a compile error in this file until someone says what it adds to what a dependent can read.
++
++use hir_expand::stable::{StableCx, StableHash};
++
++use super::{
++    DeriveMacroInvocation, GlobId, ImportId, ImportOrDef, ImportOrExternCrate, ImportOrGlob,
++    ItemScope,
++};
++use crate::per_ns::Item;
++
++impl StableHash for ImportId {
++    fn stable_hash(&self, cx: &mut StableCx<'_>) {
++        let Self { use_, idx } = self;
++        use_.stable_hash(cx);
++        // Which `use` tree of the declaration: a position in it.
++        cx.write_plain(idx);
++    }
++}
++
++impl StableHash for GlobId {
++    fn stable_hash(&self, cx: &mut StableCx<'_>) {
++        let Self { use_, idx } = self;
++        use_.stable_hash(cx);
++        cx.write_plain(idx);
++    }
++}
++
++impl StableHash for ImportOrExternCrate {
++    fn stable_hash(&self, cx: &mut StableCx<'_>) {
++        match self {
++            ImportOrExternCrate::Glob(id) => {
++                cx.tag("glob");
++                id.stable_hash(cx);
++            }
++            ImportOrExternCrate::Import(id) => {
++                cx.tag("import");
++                id.stable_hash(cx);
++            }
++            ImportOrExternCrate::ExternCrate(id) => {
++                cx.tag("extern crate");
++                id.stable_hash(cx);
++            }
++        }
++    }
++}
++
++impl StableHash for ImportOrGlob {
++    fn stable_hash(&self, cx: &mut StableCx<'_>) {
++        match self {
++            ImportOrGlob::Glob(id) => {
++                cx.tag("glob");
++                id.stable_hash(cx);
++            }
++            ImportOrGlob::Import(id) => {
++                cx.tag("import");
++                id.stable_hash(cx);
++            }
++        }
++    }
++}
++
++impl StableHash for ImportOrDef {
++    fn stable_hash(&self, cx: &mut StableCx<'_>) {
++        match self {
++            ImportOrDef::Import(id) => {
++                cx.tag("import");
++                id.stable_hash(cx);
++            }
++            ImportOrDef::Glob(id) => {
++                cx.tag("glob");
++                id.stable_hash(cx);
++            }
++            ImportOrDef::ExternCrate(id) => {
++                cx.tag("extern crate");
++                id.stable_hash(cx);
++            }
++            ImportOrDef::Def(def) => {
++                cx.tag("definition");
++                def.stable_hash(cx);
++            }
++        }
++    }
++}
++
++impl<Def: StableHash, Import: StableHash> StableHash for Item<Def, Import> {
++    fn stable_hash(&self, cx: &mut StableCx<'_>) {
++        let Self { def, vis, import } = self;
++        def.stable_hash(cx);
++        vis.stable_hash(cx);
++        import.stable_hash(cx);
++    }
++}
++
++impl StableHash for DeriveMacroInvocation {
++    fn stable_hash(&self, cx: &mut StableCx<'_>) {
++        let Self { attr_id, attr_call_id, derive_call_ids } = self;
++        attr_id.stable_hash(cx);
++        attr_call_id.stable_hash(cx);
++        cx.write_u64(derive_call_ids.len() as u64);
++        for call in derive_call_ids.iter() {
++            call.stable_hash(cx);
++        }
++    }
++}
++
++impl StableHash for ItemScope {
++    fn stable_hash(&self, cx: &mut StableCx<'_>) {
++        let Self {
++            types,
++            values,
++            macros,
++            unresolved,
++            declarations,
++            impls,
++            builtin_derive_impls,
++            extern_blocks,
++            unnamed_consts,
++            unnamed_trait_imports,
++            use_imports_types,
++            use_imports_values,
++            use_imports_macros,
++            use_decls,
++            extern_crate_decls,
++            legacy_macros,
++            attr_macros,
++            macro_invocations,
++            derive_macros,
++        } = self;
++        cx.tag("item scope");
++        // The names in a namespace are a map: it does not matter what order they were found in.
++        cx.unordered(types.iter(), |cx, (name, item)| {
++            name.stable_hash(cx);
++            item.stable_hash(cx);
++        });
++        cx.unordered(values.iter(), |cx, (name, item)| {
++            name.stable_hash(cx);
++            item.stable_hash(cx);
++        });
++        cx.unordered(macros.iter(), |cx, (name, item)| {
++            name.stable_hash(cx);
++            item.stable_hash(cx);
++        });
++        cx.unordered(unresolved.iter(), |cx, name| name.stable_hash(cx));
++        declarations.stable_hash(cx);
++        impls.stable_hash(cx);
++        builtin_derive_impls.stable_hash(cx);
++        extern_blocks.stable_hash(cx);
++        unnamed_consts.stable_hash(cx);
++        unnamed_trait_imports.stable_hash(cx);
++        cx.unordered(use_imports_types.iter(), |cx, (import, resolved)| {
++            import.stable_hash(cx);
++            resolved.stable_hash(cx);
++        });
++        cx.unordered(use_imports_values.iter(), |cx, (import, resolved)| {
++            import.stable_hash(cx);
++            resolved.stable_hash(cx);
++        });
++        cx.unordered(use_imports_macros.iter(), |cx, (import, resolved)| {
++            import.stable_hash(cx);
++            resolved.stable_hash(cx);
++        });
++        use_decls.stable_hash(cx);
++        extern_crate_decls.stable_hash(cx);
++        cx.unordered(legacy_macros.iter(), |cx, (name, macros)| {
++            name.stable_hash(cx);
++            cx.write_u64(macros.len() as u64);
++            for id in macros {
++                id.stable_hash(cx);
++            }
++        });
++        cx.unordered(attr_macros.iter(), |cx, (item, call)| {
++            item.stable_hash(cx);
++            call.stable_hash(cx);
++        });
++        cx.unordered(macro_invocations.iter(), |cx, (call_site, call)| {
++            call_site.stable_hash(cx);
++            call.stable_hash(cx);
++        });
++        cx.unordered(derive_macros.iter(), |cx, (adt, invocations)| {
++            adt.stable_hash(cx);
++            cx.write_u64(invocations.len() as u64);
++            for invocation in invocations {
++                invocation.stable_hash(cx);
++            }
++        });
++    }
++}
+--- a/ra_ap_hir_def-0.0.358/src/item_tree.rs
++++ ra_ap_hir_def/src/item_tree.rs
+@@ -336,6 +336,8 @@
+ #[allow(type_alias_bounds)]
+ pub(crate) type ItemTreeAstId<T: ItemTreeNode> = FileAstId<T::Source>;
+ 
++mod stable;
++
+ /// Identifies a particular [`ItemTree`].
+ #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+ pub struct TreeId {
+--- a/ra_ap_hir_def-0.0.358/src/item_tree/stable.rs
++++ ra_ap_hir_def/src/item_tree/stable.rs
+@@ -0,0 +1,13 @@
++//! What a tree id says, hashed so that it means the same in every process.
++
++use hir_expand::stable::{StableCx, StableHash};
++
++use super::TreeId;
++
++impl StableHash for TreeId {
++    fn stable_hash(&self, cx: &mut StableCx<'_>) {
++        let Self { file, block } = self;
++        file.stable_hash(cx);
++        block.stable_hash(cx);
++    }
++}
+--- a/ra_ap_hir_def-0.0.358/src/lib.rs
++++ ra_ap_hir_def/src/lib.rs
+@@ -37,6 +37,7 @@
+ pub mod hir;
+ pub mod resolver;
+ 
++mod stable;
+ pub mod nameres;
+ 
+ pub mod src;
+@@ -103,7 +104,7 @@
  ///
  /// Note: this struct shouldn't be exposed to ide crates -- consider using
  /// [`set_expand_proc_attr_macros`] instead, if possible.
@@ -628,8 +868,517 @@
  pub(crate) struct ExpandProcAttrMacros {
      #[returns(copy)]
      pub(crate) enabled: bool,
---- a/ra_ap_hir_expand-0.0.358/Cargo.toml	2026-11-15 13:43:22.135953061 -0800
-+++ b/ra_ap_hir_expand/Cargo.toml	2026-11-15 13:43:22.334553743 -0800
+@@ -229,6 +230,17 @@
+     ($id:ident, $loc:ident) => {
+         impl_intern_key!($id, $loc);
+         impl_intern_lookup!($id, $loc);
++
++        // An id stands for where it is written and what is there, which is the same in every
++        // process, and not for the number it was given in this one.
++        impl hir_expand::stable::StableHash for $id {
++            fn stable_hash(&self, cx: &mut hir_expand::stable::StableCx<'_>) {
++                hir_expand::stable::StableHash::stable_hash(
++                    hir_expand::Lookup::lookup(self, cx.db),
++                    cx,
++                );
++            }
++        }
+     };
+ }
+ 
+--- a/ra_ap_hir_def-0.0.358/src/nameres.rs
++++ ra_ap_hir_def/src/nameres.rs
+@@ -54,6 +54,7 @@
+ mod mod_resolution;
+ mod path_resolution;
+ pub mod proc_macro;
++pub mod stable;
+ 
+ #[cfg(test)]
+ mod tests;
+--- a/ra_ap_hir_def-0.0.358/src/nameres/stable.rs
++++ ra_ap_hir_def/src/nameres/stable.rs
+@@ -0,0 +1,246 @@
++//! What a definition map says, hashed so that it means the same in every process.
++//! See `hir_expand::stable` for why, and for the two rules.
++//!
++//! A definition map is equal to another when everything in it is, with ids compared by what they
++//! stand for. This hashes exactly that: it takes the map apart without `..` at every level, so a
++//! field rust-analyzer adds later is a compile error here until someone says what it adds, and an
++//! omission is something written down at the place it is made, with its reason.
++
++use hir_expand::stable::{StableCx, StableFingerprint, StableHash};
++
++use super::{
++    BlockInfo, DefMap, DefMapCrateData, LocalDefMap, ModuleData, ModuleOrigin, ModulesMap,
++    diagnostics::{DefDiagnostic, DefDiagnosticKind},
++};
++use crate::unstable_features::UnstableFeatures;
++use base_db::Crate;
++
++impl StableHash for ModuleOrigin {
++    fn stable_hash(&self, cx: &mut StableCx<'_>) {
++        match self {
++            ModuleOrigin::CrateRoot { definition } => {
++                cx.tag("crate root");
++                definition.stable_hash(cx);
++            }
++            ModuleOrigin::File { is_mod_rs, declaration, declaration_tree_id, definition } => {
++                cx.tag("file");
++                is_mod_rs.stable_hash(cx);
++                declaration.stable_hash(cx);
++                declaration_tree_id.stable_hash(cx);
++                definition.stable_hash(cx);
++            }
++            ModuleOrigin::Inline { definition_tree_id, definition } => {
++                cx.tag("inline");
++                definition_tree_id.stable_hash(cx);
++                definition.stable_hash(cx);
++            }
++            ModuleOrigin::BlockExpr { id, block } => {
++                cx.tag("block expression");
++                id.stable_hash(cx);
++                block.stable_hash(cx);
++            }
++        }
++    }
++}
++
++impl StableHash for ModuleData {
++    fn stable_hash(&self, cx: &mut StableCx<'_>) {
++        let Self { origin, visibility, parent, children, scope } = self;
++        origin.stable_hash(cx);
++        visibility.stable_hash(cx);
++        parent.stable_hash(cx);
++        cx.unordered(children.iter(), |cx, (name, child)| {
++            name.stable_hash(cx);
++            child.stable_hash(cx);
++        });
++        scope.stable_hash(cx);
++    }
++}
++
++impl StableHash for ModulesMap {
++    fn stable_hash(&self, cx: &mut StableCx<'_>) {
++        let Self { inner } = self;
++        cx.unordered(inner.iter(), |cx, (id, data)| {
++            id.stable_hash(cx);
++            data.stable_hash(cx);
++        });
++    }
++}
++
++impl StableHash for BlockInfo {
++    fn stable_hash(&self, cx: &mut StableCx<'_>) {
++        let Self { block, parent } = self;
++        block.stable_hash(cx);
++        parent.stable_hash(cx);
++    }
++}
++
++impl StableHash for UnstableFeatures {
++    fn stable_hash(&self, cx: &mut StableCx<'_>) {
++        // Two sets of features are equal when the features named are (`==` compares nothing else).
++        cx.unordered(self.iter(), |cx, feature| cx.write_str(feature.as_str()));
++    }
++}
++
++impl StableHash for DefMapCrateData {
++    fn stable_hash(&self, cx: &mut StableCx<'_>) {
++        let Self {
++            exported_derives,
++            fn_proc_macro_mapping,
++            fn_proc_macro_mapping_back,
++            registered_tools,
++            unstable_features,
++            rustc_coherence_is_core,
++            no_core,
++            no_std,
++            edition,
++            recursion_limit,
++        } = self;
++        cx.unordered(exported_derives.iter(), |cx, (macro_id, helpers)| {
++            macro_id.stable_hash(cx);
++            cx.write_u64(helpers.len() as u64);
++            for helper in helpers.iter() {
++                helper.stable_hash(cx);
++            }
++        });
++        cx.unordered(fn_proc_macro_mapping.iter(), |cx, (function, proc_macro)| {
++            function.stable_hash(cx);
++            proc_macro.stable_hash(cx);
++        });
++        cx.unordered(fn_proc_macro_mapping_back.iter(), |cx, (proc_macro, function)| {
++            proc_macro.stable_hash(cx);
++            function.stable_hash(cx);
++        });
++        cx.write_u64(registered_tools.len() as u64);
++        for tool in registered_tools {
++            cx.write_str(tool.as_str());
++        }
++        unstable_features.stable_hash(cx);
++        rustc_coherence_is_core.stable_hash(cx);
++        no_core.stable_hash(cx);
++        no_std.stable_hash(cx);
++        cx.write_plain(edition);
++        cx.write_plain(recursion_limit);
++    }
++}
++
++impl StableHash for DefDiagnostic {
++    fn stable_hash(&self, cx: &mut StableCx<'_>) {
++        let Self { in_module, kind } = self;
++        in_module.stable_hash(cx);
++        // What a diagnostic says is for whoever shows diagnostics: nothing that computes what a
++        // function does reads it. Which kind it is and where it is are hashed, so a diagnostic
++        // appearing or going shows; the text, paths and configuration inside it are named here and
++        // left out, each at its own variant.
++        match kind {
++            DefDiagnosticKind::UnresolvedModule { ast, candidates: _candidates } => {
++                cx.tag("unresolved module");
++                ast.stable_hash(cx);
++            }
++            DefDiagnosticKind::UnresolvedExternCrate { ast } => {
++                cx.tag("unresolved extern crate");
++                ast.stable_hash(cx);
++            }
++            DefDiagnosticKind::UnresolvedImport { id, index } => {
++                cx.tag("unresolved import");
++                id.stable_hash(cx);
++                cx.write_plain(index);
++            }
++            DefDiagnosticKind::UnconfiguredCode { ast_id, cfg: _cfg, opts: _opts } => {
++                cx.tag("unconfigured code");
++                ast_id.stable_hash(cx);
++            }
++            DefDiagnosticKind::UnresolvedMacroCall { ast, path: _path } => {
++                cx.tag("unresolved macro call");
++                ast.stable_hash(cx);
++            }
++            DefDiagnosticKind::UnimplementedBuiltinMacro { ast } => {
++                cx.tag("unimplemented built-in macro");
++                ast.stable_hash(cx);
++            }
++            DefDiagnosticKind::InvalidDeriveTarget { ast, id } => {
++                cx.tag("invalid derive target");
++                ast.stable_hash(cx);
++                id.stable_hash(cx);
++            }
++            DefDiagnosticKind::MalformedDerive { ast, id } => {
++                cx.tag("malformed derive");
++                ast.stable_hash(cx);
++                id.stable_hash(cx);
++            }
++            DefDiagnosticKind::MacroDefError { ast, message: _message } => {
++                cx.tag("macro definition error");
++                ast.stable_hash(cx);
++            }
++            DefDiagnosticKind::MacroError { ast, path: _path, err: _err } => {
++                cx.tag("macro error");
++                ast.stable_hash(cx);
++            }
++        }
++    }
++}
++
++impl StableHash for DefMap {
++    fn stable_hash(&self, cx: &mut StableCx<'_>) {
++        let Self {
++            krate,
++            block,
++            root,
++            modules,
++            prelude,
++            macro_use_prelude,
++            derive_helpers_in_scope,
++            macro_def_to_macro_id,
++            diagnostics,
++            data,
++        } = self;
++        cx.tag("def map");
++        krate.stable_hash(cx);
++        block.stable_hash(cx);
++        root.stable_hash(cx);
++        modules.stable_hash(cx);
++        prelude.stable_hash(cx);
++        cx.unordered(macro_use_prelude.iter(), |cx, (name, (macro_id, extern_crate))| {
++            name.stable_hash(cx);
++            macro_id.stable_hash(cx);
++            extern_crate.stable_hash(cx);
++        });
++        cx.unordered(derive_helpers_in_scope.iter(), |cx, (item, helpers)| {
++            item.stable_hash(cx);
++            cx.write_u64(helpers.len() as u64);
++            for (name, macro_id, call) in helpers {
++                name.stable_hash(cx);
++                macro_id.stable_hash(cx);
++                call.stable_hash(cx);
++            }
++        });
++        cx.unordered(macro_def_to_macro_id.iter(), |cx, (definition, macro_id)| {
++            definition.stable_hash(cx);
++            macro_id.stable_hash(cx);
++        });
++        diagnostics.stable_hash(cx);
++        data.stable_hash(cx);
++    }
++}
++
++impl StableHash for LocalDefMap {
++    fn stable_hash(&self, cx: &mut StableCx<'_>) {
++        let Self { extern_prelude } = self;
++        cx.tag("local def map");
++        cx.unordered(extern_prelude.iter(), |cx, (name, (module, extern_crate))| {
++            name.stable_hash(cx);
++            module.stable_hash(cx);
++            extern_crate.stable_hash(cx);
++        });
++    }
++}
++
++/// A hash of the definition map of `krate` (and of its extern prelude) that means the same in
++/// every process, and how much of it could not be given a meaning that does.
++pub fn def_map_fingerprint(db: &dyn base_db::SourceDatabase, krate: Crate) -> StableFingerprint {
++    let pair = super::crate_local_def_map(db, krate);
++    let mut cx = StableCx::new(db);
++    pair.def_map(db).stable_hash(&mut cx);
++    pair.local(db).stable_hash(&mut cx);
++    cx.finish()
++}
+--- a/ra_ap_hir_def-0.0.358/src/stable.rs
++++ ra_ap_hir_def/src/stable.rs
+@@ -0,0 +1,229 @@
++//! What the ids of a definition map stand for, hashed so that it means the same in every process.
++//! See `hir_expand::stable` for why, and for the two rules.
++//!
++//! An id is hashed by its location: the container it is in and where it is written. Every impl
++//! destructures what it hashes without `..`, so a field rust-analyzer adds later is a compile
++//! error here until someone says what it adds.
++
++use hir_expand::stable::{StableCx, StableHash};
++
++use crate::{
++    AdtId, AssocItemLoc, BlockId, BuiltinDeriveImplId, BuiltinDeriveImplLoc, EnumVariantLoc,
++    ItemContainerId, ItemLoc, Macro2Loc, MacroId, MacroRulesLoc, ModuleDefId, ModuleId,
++    ProcMacroLoc, visibility::Visibility,
++};
++use span::AstIdNode;
++
++impl<N: AstIdNode> StableHash for ItemLoc<N> {
++    fn stable_hash(&self, cx: &mut StableCx<'_>) {
++        let Self { container, id } = self;
++        container.stable_hash(cx);
++        id.stable_hash(cx);
++    }
++}
++
++impl<N: AstIdNode> StableHash for AssocItemLoc<N> {
++    fn stable_hash(&self, cx: &mut StableCx<'_>) {
++        let Self { container, id } = self;
++        container.stable_hash(cx);
++        id.stable_hash(cx);
++    }
++}
++
++impl StableHash for EnumVariantLoc {
++    fn stable_hash(&self, cx: &mut StableCx<'_>) {
++        let Self { id, parent, name } = self;
++        id.stable_hash(cx);
++        parent.stable_hash(cx);
++        name.stable_hash(cx);
++    }
++}
++
++impl StableHash for Macro2Loc {
++    fn stable_hash(&self, cx: &mut StableCx<'_>) {
++        let Self { container, id, expander, allow_internal_unsafe, edition } = self;
++        container.stable_hash(cx);
++        id.stable_hash(cx);
++        cx.write_plain(expander);
++        allow_internal_unsafe.stable_hash(cx);
++        cx.write_plain(edition);
++    }
++}
++
++impl StableHash for MacroRulesLoc {
++    fn stable_hash(&self, cx: &mut StableCx<'_>) {
++        let Self { container, id, expander, flags, edition } = self;
++        container.stable_hash(cx);
++        id.stable_hash(cx);
++        cx.write_plain(expander);
++        cx.write_plain(&flags.bits());
++        cx.write_plain(edition);
++    }
++}
++
++impl StableHash for ProcMacroLoc {
++    fn stable_hash(&self, cx: &mut StableCx<'_>) {
++        let Self { container, id, expander, kind, edition } = self;
++        container.stable_hash(cx);
++        id.stable_hash(cx);
++        cx.write_plain(expander);
++        cx.write_plain(kind);
++        cx.write_plain(edition);
++    }
++}
++
++impl StableHash for BuiltinDeriveImplLoc {
++    fn stable_hash(&self, cx: &mut StableCx<'_>) {
++        let Self { adt, trait_, derive_attr_id, derive_index } = self;
++        adt.stable_hash(cx);
++        cx.write_plain(trait_);
++        derive_attr_id.stable_hash(cx);
++        derive_index.stable_hash(cx);
++    }
++}
++
++impl StableHash for BuiltinDeriveImplId {
++    fn stable_hash(&self, cx: &mut StableCx<'_>) {
++        self.loc(cx.db).stable_hash(cx);
++    }
++}
++
++impl StableHash for ModuleId {
++    fn stable_hash(&self, cx: &mut StableCx<'_>) {
++        // A module is its crate, the block it is in if it is in one, its name and where it is.
++        cx.tag("module");
++        self.krate(cx.db).stable_hash(cx);
++        // SAFETY: it is hashed while the query that made it is still running, and not kept.
++        self.block(cx.db).map(|block| unsafe { block.to_static() }).stable_hash(cx);
++        self.name_or_empty(cx.db).stable_hash(cx);
++        // SAFETY: it is hashed while the query that made it is still running, and not kept.
++        self.containing_module_inside_def_map(cx.db)
++            .map(|parent| unsafe { parent.to_static() })
++            .stable_hash(cx);
++    }
++}
++
++impl StableHash for BlockId {
++    fn stable_hash(&self, cx: &mut StableCx<'_>) {
++        cx.tag("block");
++        self.ast_id(cx.db).stable_hash(cx);
++        // SAFETY: as above.
++        unsafe { self.module(cx.db).to_static() }.stable_hash(cx);
++    }
++}
++
++impl StableHash for ItemContainerId {
++    fn stable_hash(&self, cx: &mut StableCx<'_>) {
++        match self {
++            ItemContainerId::ExternBlockId(id) => {
++                cx.tag("in an extern block");
++                id.stable_hash(cx);
++            }
++            ItemContainerId::ModuleId(id) => {
++                cx.tag("in a module");
++                id.stable_hash(cx);
++            }
++            ItemContainerId::ImplId(id) => {
++                cx.tag("in an impl");
++                id.stable_hash(cx);
++            }
++            ItemContainerId::TraitId(id) => {
++                cx.tag("in a trait");
++                id.stable_hash(cx);
++            }
++        }
++    }
++}
++
++impl StableHash for AdtId {
++    fn stable_hash(&self, cx: &mut StableCx<'_>) {
++        match self {
++            AdtId::StructId(id) => {
++                cx.tag("struct");
++                id.stable_hash(cx);
++            }
++            AdtId::UnionId(id) => {
++                cx.tag("union");
++                id.stable_hash(cx);
++            }
++            AdtId::EnumId(id) => {
++                cx.tag("enum");
++                id.stable_hash(cx);
++            }
++        }
++    }
++}
++
++impl StableHash for MacroId {
++    fn stable_hash(&self, cx: &mut StableCx<'_>) {
++        match self {
++            MacroId::Macro2Id(id) => {
++                cx.tag("macro 2.0");
++                id.stable_hash(cx);
++            }
++            MacroId::MacroRulesId(id) => {
++                cx.tag("macro_rules");
++                id.stable_hash(cx);
++            }
++            MacroId::ProcMacroId(id) => {
++                cx.tag("proc macro");
++                id.stable_hash(cx);
++            }
++        }
++    }
++}
++
++impl StableHash for ModuleDefId {
++    fn stable_hash(&self, cx: &mut StableCx<'_>) {
++        match self {
++            ModuleDefId::ModuleId(id) => id.stable_hash(cx),
++            ModuleDefId::FunctionId(id) => {
++                cx.tag("function");
++                id.stable_hash(cx);
++            }
++            ModuleDefId::AdtId(id) => id.stable_hash(cx),
++            ModuleDefId::EnumVariantId(id) => {
++                cx.tag("variant");
++                id.stable_hash(cx);
++            }
++            ModuleDefId::ConstId(id) => {
++                cx.tag("const");
++                id.stable_hash(cx);
++            }
++            ModuleDefId::StaticId(id) => {
++                cx.tag("static");
++                id.stable_hash(cx);
++            }
++            ModuleDefId::TraitId(id) => {
++                cx.tag("trait");
++                id.stable_hash(cx);
++            }
++            ModuleDefId::TypeAliasId(id) => {
++                cx.tag("type alias");
++                id.stable_hash(cx);
++            }
++            ModuleDefId::BuiltinType(builtin) => {
++                cx.tag("builtin type");
++                cx.write_plain(builtin);
++            }
++            ModuleDefId::MacroId(id) => id.stable_hash(cx),
++        }
++    }
++}
++
++impl StableHash for Visibility {
++    fn stable_hash(&self, cx: &mut StableCx<'_>) {
++        match self {
++            Visibility::Module(module, explicitness) => {
++                cx.tag("visible in a module");
++                module.stable_hash(cx);
++                cx.write_plain(explicitness);
++            }
++            Visibility::PubCrate(krate) => {
++                cx.tag("visible in a crate");
++                krate.stable_hash(cx);
++            }
++            Visibility::Public => cx.tag("public"),
++        }
++    }
++}
+--- a/ra_ap_hir_expand-0.0.358/Cargo.toml
++++ ra_ap_hir_expand/Cargo.toml
 @@ -71,6 +71,10 @@
  [dependencies.rustc-hash]
  version = "2.1.1"
@@ -641,8 +1390,18 @@
  [dependencies.salsa]
  version = "0.28.5"
  features = [
---- a/ra_ap_hir_expand-0.0.358/src/proc_macro.rs	2026-11-15 13:43:22.323299501 -0800
-+++ b/ra_ap_hir_expand/src/proc_macro.rs	2026-11-15 13:43:22.335938311 -0800
+--- a/ra_ap_hir_expand-0.0.358/src/lib.rs
++++ ra_ap_hir_expand/src/lib.rs
+@@ -21,6 +21,7 @@
+ pub mod name;
+ pub mod proc_macro;
+ pub mod span_map;
++pub mod stable;
+ 
+ mod cfg_process;
+ mod fixup;
+--- a/ra_ap_hir_expand-0.0.358/src/proc_macro.rs
++++ ra_ap_hir_expand/src/proc_macro.rs
 @@ -14,6 +14,7 @@
  use crate::{ExpandError, ExpandErrorKind, ExpandResult, tt};
  
@@ -862,8 +1621,442 @@
  pub struct ProcMacros {
      #[returns(ref)]
      pub by_crate: FxHashMap<Crate, Arc<CrateProcMacros>>,
---- a/ra_ap_ide_db-0.0.358/src/lib.rs	2026-11-15 13:43:22.487302184 -0800
-+++ b/ra_ap_ide_db/src/lib.rs	2026-11-15 13:43:22.730595785 -0800
+--- a/ra_ap_hir_expand-0.0.358/src/stable.rs
++++ ra_ap_hir_expand/src/stable.rs
+@@ -0,0 +1,431 @@
++//! A hash of what a definition map says that means the same in every process.
++//!
++//! A definition map is made of interned ids (of functions, modules, macro calls, files), numbered
++//! in the order a process happened to meet them, so the map of the same source in another process
++//! is not equal to it by `==`, and a hash of its bytes says nothing across processes. What a
++//! dependent can read of the map is what each id stands for: where the item is written (its file's
++//! path, and the item's place in the file) and what it is. This hashes that.
++//!
++//! Two rules keep it sound.
++//!
++//! * A type that holds an id is never hashed by its derived `Hash`: another process may give the
++//!   same number to something else, and the hashes would be equal for things that are not. Each
++//!   type has an impl here that says what its ids stand for, and the impls destructure their types
++//!   without `..`, so a field added later is a compile error until someone says what it adds.
++//! * What cannot be given a meaning that survives the process makes the hash volatile (different
++//!   in every process, and counted), never absent: a map hashed with something left out would be
++//!   equal to a map that has it.
++
++use std::hash::{Hash, Hasher};
++use std::sync::atomic::{AtomicU64, Ordering};
++
++use base_db::SourceDatabase;
++
++/// What is being hashed, and the database the ids are looked up in.
++pub struct StableCx<'db> {
++    pub db: &'db dyn SourceDatabase,
++    hasher: std::hash::DefaultHasher,
++    volatile: u32,
++}
++
++/// What a hash is, and how much of it could not be given a meaning that survives the process.
++#[derive(Debug, Clone, Copy, PartialEq, Eq)]
++pub struct StableFingerprint {
++    pub hash: u64,
++    /// How many things in it were hashed as volatile. When it is not zero, the hash is different
++    /// in every process: it is safe, and a cutoff made from it never applies.
++    pub volatile: u32,
++}
++
++static NONCE: AtomicU64 = AtomicU64::new(0);
++
++impl<'db> StableCx<'db> {
++    pub fn new(db: &'db dyn SourceDatabase) -> Self {
++        Self { db, hasher: std::hash::DefaultHasher::new(), volatile: 0 }
++    }
++
++    pub fn finish(self) -> StableFingerprint {
++        StableFingerprint { hash: self.hasher.finish(), volatile: self.volatile }
++    }
++
++    /// A word that says which kind of thing follows, so that two different things with the same
++    /// contents hash differently.
++    pub fn tag(&mut self, tag: &'static str) {
++        tag.hash(&mut self.hasher);
++    }
++
++    pub fn write_u32(&mut self, value: u32) {
++        value.hash(&mut self.hasher);
++    }
++
++    pub fn write_u64(&mut self, value: u64) {
++        value.hash(&mut self.hasher);
++    }
++
++    pub fn write_bool(&mut self, value: bool) {
++        value.hash(&mut self.hasher);
++    }
++
++    /// A value that holds no id and is the same in every process, by its derived `Hash`. Only for
++    /// such: a type with an id in it gets an impl that says what the id stands for.
++    pub fn write_plain<T: Hash>(&mut self, value: &T) {
++        value.hash(&mut self.hasher);
++    }
++
++    pub fn write_str(&mut self, value: &str) {
++        value.hash(&mut self.hasher);
++    }
++
++    /// Something with no meaning that survives the process: the hash is not equal to any other
++    /// process's.
++    pub fn volatile(&mut self, _what: &'static str) {
++        self.volatile += 1;
++        let process = u64::from(std::process::id());
++        let time = std::time::SystemTime::now()
++            .duration_since(std::time::UNIX_EPOCH)
++            .map_or(0, |since| since.as_nanos() as u64);
++        self.write_u64(process);
++        self.write_u64(time);
++        self.write_u64(NONCE.fetch_add(1, Ordering::Relaxed));
++    }
++
++    /// The entries of something whose order means nothing (a map, a set), as `==` takes it: each
++    /// is hashed on its own, and what they hash to is written in order.
++    pub fn unordered<T>(
++        &mut self,
++        entries: impl IntoIterator<Item = T>,
++        mut hash_entry: impl FnMut(&mut StableCx<'_>, T),
++    ) {
++        let mut parts: Vec<u64> = Vec::new();
++        for entry in entries {
++            let mut inner = StableCx { db: self.db, hasher: std::hash::DefaultHasher::new(), volatile: 0 };
++            hash_entry(&mut inner, entry);
++            self.volatile += inner.volatile;
++            parts.push(inner.hasher.finish());
++        }
++        parts.sort_unstable();
++        self.write_u64(parts.len() as u64);
++        for part in parts {
++            self.write_u64(part);
++        }
++    }
++
++    /// The path the database holds `file` at, or `None` for a file without one.
++    pub fn path_of(&self, file: span::FileId) -> Option<String> {
++        let root = self.db.file_source_root(file).source_root_id(self.db);
++        let source_root = self.db.source_root(root).source_root(self.db);
++        source_root.path_for_file(&file).map(ToString::to_string)
++    }
++}
++
++/// What a value is, said so that it means the same in every process.
++pub trait StableHash {
++    fn stable_hash(&self, cx: &mut StableCx<'_>);
++}
++
++impl<T: StableHash + ?Sized> StableHash for &T {
++    fn stable_hash(&self, cx: &mut StableCx<'_>) {
++        (**self).stable_hash(cx);
++    }
++}
++
++impl StableHash for () {
++    fn stable_hash(&self, cx: &mut StableCx<'_>) {
++        cx.tag("unit");
++    }
++}
++
++impl StableHash for bool {
++    fn stable_hash(&self, cx: &mut StableCx<'_>) {
++        cx.write_bool(*self);
++    }
++}
++
++impl StableHash for u32 {
++    fn stable_hash(&self, cx: &mut StableCx<'_>) {
++        cx.write_u32(*self);
++    }
++}
++
++impl StableHash for str {
++    fn stable_hash(&self, cx: &mut StableCx<'_>) {
++        cx.write_str(self);
++    }
++}
++
++impl StableHash for String {
++    fn stable_hash(&self, cx: &mut StableCx<'_>) {
++        cx.write_str(self);
++    }
++}
++
++impl<T: StableHash> StableHash for Option<T> {
++    fn stable_hash(&self, cx: &mut StableCx<'_>) {
++        match self {
++            None => cx.tag("none"),
++            Some(value) => {
++                cx.tag("some");
++                value.stable_hash(cx);
++            }
++        }
++    }
++}
++
++impl<T: StableHash> StableHash for [T] {
++    fn stable_hash(&self, cx: &mut StableCx<'_>) {
++        cx.write_u64(self.len() as u64);
++        for item in self {
++            item.stable_hash(cx);
++        }
++    }
++}
++
++impl<T: StableHash> StableHash for Vec<T> {
++    fn stable_hash(&self, cx: &mut StableCx<'_>) {
++        self.as_slice().stable_hash(cx);
++    }
++}
++
++impl<T: StableHash> StableHash for Box<[T]> {
++    fn stable_hash(&self, cx: &mut StableCx<'_>) {
++        (**self).stable_hash(cx);
++    }
++}
++
++impl<T: StableHash> StableHash for thin_vec::ThinVec<T> {
++    fn stable_hash(&self, cx: &mut StableCx<'_>) {
++        self.as_slice().stable_hash(cx);
++    }
++}
++
++impl<A: StableHash, B: StableHash> StableHash for (A, B) {
++    fn stable_hash(&self, cx: &mut StableCx<'_>) {
++        self.0.stable_hash(cx);
++        self.1.stable_hash(cx);
++    }
++}
++
++impl<A: StableHash, B: StableHash> StableHash for either::Either<A, B> {
++    fn stable_hash(&self, cx: &mut StableCx<'_>) {
++        match self {
++            either::Either::Left(value) => {
++                cx.tag("left");
++                value.stable_hash(cx);
++            }
++            either::Either::Right(value) => {
++                cx.tag("right");
++                value.stable_hash(cx);
++            }
++        }
++    }
++}
++
++// ---------------------------------------------------------------------------------------------
++// Files, names, ast ids and macros.
++// ---------------------------------------------------------------------------------------------
++
++use crate::{
++    EditionedFileId, HirFileId, MacroCallId, MacroCallKind, MacroCallLoc, MacroDefId, MacroDefKind,
++    Lookup,
++    attrs::AttrId,
++    files::InFileWrapper,
++    name::Name,
++};
++use base_db::Crate;
++use span::FileAstId;
++
++impl StableHash for Name {
++    fn stable_hash(&self, cx: &mut StableCx<'_>) {
++        cx.write_str(self.as_str());
++    }
++}
++
++impl StableHash for EditionedFileId {
++    fn stable_hash(&self, cx: &mut StableCx<'_>) {
++        let (file, edition) = self.unpack(cx.db);
++        match cx.path_of(file) {
++            Some(path) => {
++                cx.tag("file");
++                cx.write_str(&path);
++                cx.write_plain(&edition);
++            }
++            None => cx.volatile("a file with no path"),
++        }
++    }
++}
++
++impl StableHash for Crate {
++    fn stable_hash(&self, cx: &mut StableCx<'_>) {
++        // A crate is where its root file is, and with what edition.
++        cx.tag("crate");
++        self.root_file_id(cx.db).stable_hash(cx);
++    }
++}
++
++impl StableHash for HirFileId {
++    fn stable_hash(&self, cx: &mut StableCx<'_>) {
++        match self {
++            HirFileId::FileId(file) => {
++                cx.tag("real file");
++                file.stable_hash(cx);
++            }
++            HirFileId::MacroFile(call) => {
++                cx.tag("macro file");
++                call.stable_hash(cx);
++            }
++        }
++    }
++}
++
++impl StableHash for span::ErasedFileAstId {
++    fn stable_hash(&self, cx: &mut StableCx<'_>) {
++        // A number made from the item's kind and place in the file, the same in every process.
++        cx.write_plain(self);
++    }
++}
++
++impl<N> StableHash for FileAstId<N> {
++    fn stable_hash(&self, cx: &mut StableCx<'_>) {
++        // A number made from the item's kind and place in the file, the same in every process.
++        cx.write_plain(&self.erase());
++    }
++}
++
++impl<T: StableHash> StableHash for InFileWrapper<HirFileId, T> {
++    fn stable_hash(&self, cx: &mut StableCx<'_>) {
++        let Self { file_id, value } = self;
++        file_id.stable_hash(cx);
++        value.stable_hash(cx);
++    }
++}
++
++impl StableHash for AttrId {
++    fn stable_hash(&self, cx: &mut StableCx<'_>) {
++        // The index of an attribute among its item's.
++        cx.write_plain(self);
++    }
++}
++
++impl StableHash for MacroCallId {
++    fn stable_hash(&self, cx: &mut StableCx<'_>) {
++        self.lookup(cx.db).stable_hash(cx);
++    }
++}
++
++impl StableHash for MacroCallLoc {
++    fn stable_hash(&self, cx: &mut StableCx<'_>) {
++        let Self { def, krate, kind, ctxt, macro_depth } = self;
++        cx.tag("macro call");
++        def.stable_hash(cx);
++        krate.stable_hash(cx);
++        kind.stable_hash(cx);
++        // A call made from code a macro wrote has a hygiene context of its own, which is an id.
++        if ctxt.is_root() {
++            cx.tag("root context");
++        } else {
++            cx.volatile("a macro call in a hygiene context that is not the root");
++        }
++        macro_depth.stable_hash(cx);
++    }
++}
++
++impl StableHash for MacroDefId {
++    fn stable_hash(&self, cx: &mut StableCx<'_>) {
++        let Self { krate, edition, kind, local_inner, allow_internal_unsafe } = self;
++        cx.tag("macro def");
++        krate.stable_hash(cx);
++        cx.write_plain(edition);
++        kind.stable_hash(cx);
++        local_inner.stable_hash(cx);
++        allow_internal_unsafe.stable_hash(cx);
++    }
++}
++
++impl StableHash for MacroDefKind {
++    fn stable_hash(&self, cx: &mut StableCx<'_>) {
++        match self {
++            MacroDefKind::Declarative(ast, styles) => {
++                cx.tag("declarative");
++                ast.stable_hash(cx);
++                cx.write_plain(styles);
++            }
++            MacroDefKind::BuiltIn(ast, expander) => {
++                cx.tag("built-in");
++                ast.stable_hash(cx);
++                cx.write_plain(expander);
++            }
++            MacroDefKind::BuiltInAttr(ast, expander) => {
++                cx.tag("built-in attribute");
++                ast.stable_hash(cx);
++                cx.write_plain(expander);
++            }
++            MacroDefKind::BuiltInDerive(ast, expander) => {
++                cx.tag("built-in derive");
++                ast.stable_hash(cx);
++                cx.write_plain(expander);
++            }
++            MacroDefKind::BuiltInEager(ast, expander) => {
++                cx.tag("built-in eager");
++                ast.stable_hash(cx);
++                cx.write_plain(expander);
++            }
++            MacroDefKind::UnimplementedBuiltIn(ast) => {
++                cx.tag("unimplemented built-in");
++                ast.stable_hash(cx);
++            }
++            MacroDefKind::ProcMacro(ast, expander, kind) => {
++                cx.tag("proc macro");
++                ast.stable_hash(cx);
++                cx.write_plain(expander);
++                cx.write_plain(kind);
++            }
++        }
++    }
++}
++
++impl StableHash for MacroCallKind {
++    fn stable_hash(&self, cx: &mut StableCx<'_>) {
++        match self {
++            MacroCallKind::FnLike { ast_id, expand_to, eager } => {
++                cx.tag("function-like");
++                ast_id.stable_hash(cx);
++                cx.write_plain(expand_to);
++                // What an eager call expanded its argument to is in the items it makes; which call
++                // expanded it is what says this one is the same.
++                match eager {
++                    None => cx.tag("not eager"),
++                    Some(info) => {
++                        let crate::EagerCallInfo { arg: _arg, arg_id, error: _error, span: _span } =
++                            &**info;
++                        cx.tag("eager");
++                        arg_id.stable_hash(cx);
++                    }
++                }
++            }
++            MacroCallKind::Derive { ast_id, derive_attr_index, derive_index, derive_macro_id } => {
++                cx.tag("derive");
++                ast_id.stable_hash(cx);
++                derive_attr_index.stable_hash(cx);
++                derive_index.stable_hash(cx);
++                derive_macro_id.stable_hash(cx);
++            }
++            MacroCallKind::Attr { ast_id, attr_args: _attr_args, censored_attr_ids } => {
++                // The arguments of the attribute decide what it expands to, which is in the items
++                // it makes (names and places), and not in which call this is.
++                cx.tag("attribute");
++                ast_id.stable_hash(cx);
++                censored_attr_ids.stable_hash_attr_ids(cx);
++            }
++        }
++    }
++}
++
++impl crate::AttrMacroAttrIds {
++    fn stable_hash_attr_ids(&self, cx: &mut StableCx<'_>) {
++        let ids: &[AttrId] = self;
++        cx.write_u64(ids.len() as u64);
++        for id in ids {
++            id.stable_hash(cx);
++        }
++    }
++}
+--- a/ra_ap_ide_db-0.0.358/src/lib.rs
++++ ra_ap_ide_db/src/lib.rs
 @@ -190,6 +190,23 @@
  }
  
@@ -888,8 +2081,8 @@
      pub fn new(lru_capacity: Option<u16>) -> RootDatabase {
          let mut db = RootDatabase {
              storage: ManuallyDrop::new(salsa::Storage::default()),
---- a/ra_ap_intern-0.0.358/Cargo.toml	2026-11-15 13:43:22.757639215 -0800
-+++ b/ra_ap_intern/Cargo.toml	2026-11-15 13:43:22.816761437 -0800
+--- a/ra_ap_intern-0.0.358/Cargo.toml
++++ ra_ap_intern/Cargo.toml
 @@ -30,6 +30,10 @@
  [features]
  prevent-gc = []
@@ -901,8 +2094,8 @@
  [lib]
  name = "ra_ap_intern"
  path = "src/lib.rs"
---- a/ra_ap_intern-0.0.358/src/symbol.rs	2026-11-15 13:43:22.813307517 -0800
-+++ b/ra_ap_intern/src/symbol.rs	2026-11-15 13:43:22.817115049 -0800
+--- a/ra_ap_intern-0.0.358/src/symbol.rs
++++ ra_ap_intern/src/symbol.rs
 @@ -121,6 +121,19 @@
      repr: TaggedArcPtr,
  }
@@ -923,8 +2116,8 @@
  impl fmt::Debug for Symbol {
      fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
          self.as_str().fmt(f)
---- a/ra_ap_load-cargo-0.0.358/src/lib.rs	2026-11-15 13:43:22.868308417 -0800
-+++ b/ra_ap_load-cargo/src/lib.rs	2026-11-15 13:43:22.871822087 -0800
+--- a/ra_ap_load-cargo-0.0.358/src/lib.rs
++++ ra_ap_load-cargo/src/lib.rs
 @@ -8,7 +8,7 @@
  #[cfg(feature = "in-rust-tree")]
  extern crate rustc_driver as _;
@@ -1041,8 +2234,8 @@
 +        Err(_) => "unreadable".to_owned(),
 +    }
 +}
---- a/ra_ap_paths-0.0.358/Cargo.toml	2026-11-15 13:43:22.875050635 -0800
-+++ b/ra_ap_paths/Cargo.toml	2026-11-15 13:43:22.896991986 -0800
+--- a/ra_ap_paths-0.0.358/Cargo.toml
++++ ra_ap_paths/Cargo.toml
 @@ -30,6 +30,10 @@
  [features]
  serde1 = ["camino/serde1"]
@@ -1062,8 +2255,8 @@
  
  [lints.clippy]
  assigning_clones = "allow"
---- a/ra_ap_paths-0.0.358/src/lib.rs	2026-11-15 13:43:22.894308842 -0800
-+++ b/ra_ap_paths/src/lib.rs	2026-11-15 13:43:22.897101830 -0800
+--- a/ra_ap_paths-0.0.358/src/lib.rs
++++ ra_ap_paths/src/lib.rs
 @@ -12,6 +12,7 @@
  
  /// A [`Utf8PathBuf`] that is guaranteed to be absolute.
@@ -1072,8 +2265,8 @@
  pub struct AbsPathBuf(Utf8PathBuf);
  
  impl From<AbsPathBuf> for Utf8PathBuf {
---- a/ra_ap_span-0.0.358/Cargo.toml	2026-11-15 13:43:22.932957181 -0800
-+++ b/ra_ap_span/Cargo.toml	2026-11-15 13:43:22.969352133 -0800
+--- a/ra_ap_span-0.0.358/Cargo.toml
++++ ra_ap_span/Cargo.toml
 @@ -31,6 +31,10 @@
  default = ["salsa"]
  in-rust-tree = []
@@ -1085,8 +2278,8 @@
  [lib]
  name = "ra_ap_span"
  path = "src/lib.rs"
---- a/ra_ap_vfs-0.0.358/Cargo.toml	2026-11-15 13:43:22.978172905 -0800
-+++ b/ra_ap_vfs/Cargo.toml	2026-11-15 13:43:23.019902557 -0800
+--- a/ra_ap_vfs-0.0.358/Cargo.toml
++++ ra_ap_vfs/Cargo.toml
 @@ -27,6 +27,10 @@
  repository = "https://github.com/rust-lang/rust-analyzer"
  resolver = "2"
@@ -1098,8 +2291,8 @@
  [lib]
  name = "ra_ap_vfs"
  path = "src/lib.rs"
---- a/ra_ap_vfs-0.0.358/src/file_set.rs	2026-11-15 13:43:22.982310281 -0800
-+++ b/ra_ap_vfs/src/file_set.rs	2026-11-15 13:43:23.020072990 -0800
+--- a/ra_ap_vfs-0.0.358/src/file_set.rs
++++ ra_ap_vfs/src/file_set.rs
 @@ -12,6 +12,7 @@
  
  /// A set of [`VfsPath`]s identified by [`FileId`]s.
@@ -1108,8 +2301,8 @@
  pub struct FileSet {
      files: FxHashMap<VfsPath, FileId>,
      paths: IndexMap<FileId, VfsPath, FxBuildHasher>,
---- a/ra_ap_vfs-0.0.358/src/lib.rs	2026-11-15 13:43:22.994310478 -0800
-+++ b/ra_ap_vfs/src/lib.rs	2026-11-15 13:43:23.020204338 -0800
+--- a/ra_ap_vfs-0.0.358/src/lib.rs
++++ ra_ap_vfs/src/lib.rs
 @@ -63,6 +63,7 @@
  ///
  /// Most functions in rust-analyzer use this when they need to refer to a file.
@@ -1131,8 +2324,8 @@
      /// Returns an iterator over the stored ids and their corresponding paths.
      ///
      /// This will skip deleted files.
---- a/ra_ap_vfs-0.0.358/src/vfs_path.rs	2026-11-15 13:43:23.017310854 -0800
-+++ b/ra_ap_vfs/src/vfs_path.rs	2026-11-15 13:43:23.020365861 -0800
+--- a/ra_ap_vfs-0.0.358/src/vfs_path.rs
++++ ra_ap_vfs/src/vfs_path.rs
 @@ -10,6 +10,7 @@
  ///
  /// [`Vfs`]: crate::Vfs

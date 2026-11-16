@@ -40,6 +40,11 @@ pub struct SemanticCargoOptions {
     /// pass before planning stops with an incomplete plan. 1024 when unset; 0
     /// analyses no context at all.
     context_memory_budget_mib: Option<u64>,
+    /// Save what is computed for a function as depending on a fingerprint of its crate's
+    /// definition map, so that an edit that leaves the map as it was (a function's body) makes the
+    /// next run compute only what read the edited file, and not every function of the crate. Off
+    /// until it has run on enough code to be trusted (see `docs/planning/ra-persistence.md`).
+    reuse_across_edits: bool,
 }
 
 impl SemanticCargoOptions {

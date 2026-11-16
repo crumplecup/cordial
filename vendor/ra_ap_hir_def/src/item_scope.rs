@@ -30,6 +30,8 @@ pub struct PerNsGlobImports {
     macros: FxHashSet<(ModuleId, Name)>,
 }
 
+mod stable;
+
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum ImportOrExternCrate {
     Glob(GlobId),

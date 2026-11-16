@@ -268,6 +268,9 @@ impl super::SourceDatabase {
         // A memo is saved with what the queries it reads depend on now, so it must be valid as of
         // now: one a query it reads has run again under since was last verified before that, and
         // would be saved with dependencies it did not have then and be found out of date.
+        // What read a definition map is saved as depending on its fingerprint, which has to have been
+        // asked for.
+        self.ask_fingerprints();
         let verifying = std::time::Instant::now();
         self.verify_persisted_in_parallel();
         tracing::debug!(

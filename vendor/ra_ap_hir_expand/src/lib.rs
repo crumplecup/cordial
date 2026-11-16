@@ -21,6 +21,7 @@ pub mod mod_path;
 pub mod name;
 pub mod proc_macro;
 pub mod span_map;
+pub mod stable;
 
 mod cfg_process;
 mod fixup;
