@@ -218,6 +218,34 @@ persisted query has executed in the process since it began (`salsa::persisted_ex
 a function memo with `persist` executes): what it would write is what is there. It says so
 (`analysis state: nothing new to save`).
 
+## A function is described by where it is, not by its byte offset
+
+A description used to carry the byte offset of the item's name, so a comment added above a function
+changed the description of every item below it. It now carries a *place*: the labels of the enclosing
+modules, impls (trait and type), traits and functions, then the item's own (`fn new`, `impl Make for
+A`, `call my_macro`), outermost first, with `#n` after a label when `n` earlier siblings have the same
+one (two functions of one name under different `cfg`s). Items a macro generated are the place of the
+outermost call plus the offsets inside the expansions, which do not move with text above the call.
+`resolve` finds the item again by walking the file for the last label and comparing places.
+
+This does not by itself keep a function's saved evidence after an edit to its file: a restored memo's
+dependencies are flattened to the inputs underneath, among them the text of the crate's root file, and
+editing any file makes every function of the crate be evaluated again (measured: a comment in `lib.rs`
+evaluates the functions of `other.rs`). What would: evidence without absolute positions, edges kept to
+a few intermediate queries (the def map, a file's item tree) with a fingerprint of their output so a
+restored run can re-run them and stop at an unchanged one, and a cutoff in front of each function that
+reads only its own text and what it resolves through. See the staged plan below.
+
+### Staged plan toward per-function reuse within a file
+
+1. Place-based description (done): `a_comment_above_a_function_does_not_change_what_describes_it`.
+2. Evidence free of absolute positions (ranges relative to the function), so an edit that only shifts
+   positions leaves the evidence equal and stops downstream recomputation.
+3. Salsa: fingerprinted edges to selected unpersisted intermediates, verified by re-running them, and a
+   per-function cutoff query. Needs a check first that rust-analyzer's def map and item tree outputs
+   can be fingerprinted, and an in-process test that editing one function leaves another's evidence
+   unevaluated at all.
+
 ## A persisted memo is saved as of now
 
 A memo is saved with its dependencies flattened from what the queries it reads depend on *now*, and

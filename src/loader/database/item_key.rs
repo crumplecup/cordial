@@ -3,7 +3,7 @@
 //! A [`SemanticItemId`] used to be an index into a table the session interned
 //! definitions in, so it meant something only until the process ended. It is now the
 //! id of an interned *description* of the definition: where its name is written
-//! (the file's path, the offset, the kind). The same definition has the same
+//! (the file's path, the place in it, the kind). The same definition has the same
 //! description in every process, so a database saved by one and restored by the next
 //! gives it the same id, and a fact saved with ids can be read back.
 //!
@@ -18,7 +18,7 @@ use std::sync::OnceLock;
 use ra_ap_hir::{Adt, HasSource, InFile, ModuleDef, Semantics, attach_db};
 use ra_ap_ide_db::RootDatabase;
 use ra_ap_ide_db::base_db::{SourceDatabase as RaSourceDatabase, SourceRootId};
-use ra_ap_syntax::{AstNode, TextSize, ast, ast::HasName};
+use ra_ap_syntax::{AstNode, SyntaxKind, SyntaxNode, ast, ast::HasName};
 use ra_ap_vfs::{FileId, VfsPath};
 use salsa::plumbing::{AsId, FromId};
 use tracing::instrument;
@@ -116,7 +116,10 @@ fn resolve<'db>(db: &'db dyn SemanticDatabase, key: ItemKey<'db>) -> Option<Modu
         let candidates: Vec<ModuleDef> = match site.chain.len() {
             // A function synthesized for a derive is written nowhere: only the index has it.
             _ if site.member.is_some() => Vec::new(),
-            0 => written_in_file(&sema, &tree, &site).into_iter().collect(),
+            0 => node_at(&tree, &site.place)
+                .and_then(|owner| written_in_file(&sema, owner, site.kind))
+                .into_iter()
+                .collect(),
             // A function an attribute macro generated: the annotated function is
             // where the call is.
             1 if site.kind == KIND_FUNCTION => annotated_function(&sema, &tree, &site),
@@ -163,21 +166,14 @@ fn generated_in(
     })
 }
 
-/// The definition whose name is written at the site.
-#[instrument(level = "trace", skip(sema, tree, site))]
+/// The definition `owner`, an item written in the file, declares.
+#[instrument(level = "trace", skip(sema, owner))]
 fn written_in_file(
     sema: &Semantics<'_, RootDatabase>,
-    tree: &ast::SourceFile,
-    site: &Site,
+    owner: SyntaxNode,
+    kind: u8,
 ) -> Option<ModuleDef> {
-    let name = tree
-        .syntax()
-        .token_at_offset(TextSize::from(site.offset))
-        .right_biased()?
-        .parent_ancestors()
-        .find_map(ast::Name::cast)?;
-    let owner = name.syntax().parent()?;
-    match site.kind {
+    match kind {
         KIND_FUNCTION => {
             let function = ast::Fn::cast(owner)?;
             sema.to_def(&function)
@@ -205,20 +201,15 @@ fn written_in_file(
     }
 }
 
-/// What the function that starts at the site's offset could be: the definition its
-/// attribute macros expand to, or the function itself.
+/// What the function written at the site's place could be: the definition its attribute
+/// macros expand to, or the function itself.
 #[instrument(level = "trace", skip(sema, tree, site))]
 fn annotated_function(
     sema: &Semantics<'_, RootDatabase>,
     tree: &ast::SourceFile,
     site: &Site,
 ) -> Vec<ModuleDef> {
-    let Some(function) = tree
-        .syntax()
-        .descendants()
-        .filter_map(ast::Fn::cast)
-        .find(|function| u32::from(function.syntax().text_range().start()) == site.offset)
-    else {
+    let Some(function) = node_at(tree, &site.place).and_then(ast::Fn::cast) else {
         return Vec::new();
     };
     expanded_definition(sema, &function)
@@ -239,15 +230,15 @@ const KIND_STATIC: u8 = 8;
 
 /// Where a definition is written, as the database sees it.
 ///
-/// A definition written in a file has the offset of its name and an empty `chain`.
-/// One a macro generated has the offset of the outermost call that produced it in
-/// the real file, and the `chain` of offsets inside each expansion on the way
-/// there, so two invocations of one macro are two sites.
+/// A definition written in a file has its `place` in that file (see [`place_in_file`]) and an
+/// empty `chain`. One a macro generated has the place of the outermost call that produced it
+/// in the real file, and the `chain` of offsets inside each expansion on the way there, so two
+/// invocations of one macro are two sites.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(super) struct DefSite {
     pub(super) kind: u8,
     pub(super) file: FileId,
-    pub(super) offset: u32,
+    pub(super) place: String,
     pub(super) chain: Vec<u32>,
     /// For a function the compiler synthesizes for a derive: the trait and method, written
     /// beside the site of the type it is for.
@@ -259,7 +250,7 @@ pub(super) struct DefSite {
 struct Site {
     kind: u8,
     path: PathText,
-    offset: u32,
+    place: String,
     chain: Vec<u32>,
     member: Option<String>,
 }
@@ -307,7 +298,7 @@ impl Site {
             "virtual" => false,
             _ => return None,
         };
-        let offset = parts.next()?.parse().ok()?;
+        let place = parts.next()?.to_owned();
         let chain = parts.next()?;
         let chain = if chain.is_empty() {
             Vec::new()
@@ -327,7 +318,7 @@ impl Site {
                 real,
                 text: parts.next()?.to_owned(),
             },
-            offset,
+            place,
             chain,
             member,
         })
@@ -345,7 +336,7 @@ impl Site {
         format!(
             "{}|{route}|{}|{chain}|{}|{}",
             self.kind,
-            self.offset,
+            self.place,
             self.member.as_deref().unwrap_or(""),
             self.path.text
         )
@@ -411,22 +402,112 @@ fn site_in<N: AstNode + HasName>(
 ) -> Option<DefSite> {
     let name = source.value.name()?;
     let mut file_id = source.file_id;
+    let mut node = name.syntax().parent()?;
     let mut offset = u32::from(name.syntax().text_range().start());
     let mut chain = Vec::new();
     while file_id.is_macro() {
         chain.push(offset);
         let call = file_id.call_node(db)?;
         offset = u32::from(call.value.text_range().start());
+        node = call.value;
         file_id = call.file_id;
     }
     let file = file_id.original_file_respecting_includes(db).file_id(db);
     Some(DefSite {
         kind,
         file,
-        offset,
+        place: place_in_file(&node),
         chain,
         member: None,
     })
+}
+
+/// What names `node` among the items of its file, if it is one that can be named: the kind of
+/// item and its name, an impl's trait and type, a macro call's path.
+#[instrument(level = "trace", skip(node))]
+fn label(node: &SyntaxNode) -> Option<String> {
+    fn named<N: AstNode + HasName>(tag: &str, node: &SyntaxNode) -> Option<String> {
+        Some(format!("{tag} {}", N::cast(node.clone())?.name()?.text()))
+    }
+    fn squeezed(node: Option<impl AstNode>) -> String {
+        node.map(|node| {
+            node.syntax()
+                .text()
+                .to_string()
+                .split_whitespace()
+                .collect()
+        })
+        .unwrap_or_default()
+    }
+    let text = match node.kind() {
+        SyntaxKind::FN => named::<ast::Fn>("fn", node)?,
+        SyntaxKind::STRUCT => named::<ast::Struct>("struct", node)?,
+        SyntaxKind::ENUM => named::<ast::Enum>("enum", node)?,
+        SyntaxKind::UNION => named::<ast::Union>("union", node)?,
+        SyntaxKind::TRAIT => named::<ast::Trait>("trait", node)?,
+        SyntaxKind::TYPE_ALIAS => named::<ast::TypeAlias>("type", node)?,
+        SyntaxKind::CONST => named::<ast::Const>("const", node)?,
+        SyntaxKind::STATIC => named::<ast::Static>("static", node)?,
+        SyntaxKind::MODULE => named::<ast::Module>("mod", node)?,
+        SyntaxKind::MACRO_RULES => named::<ast::MacroRules>("macro_rules", node)?,
+        SyntaxKind::IMPL => {
+            let implementation = ast::Impl::cast(node.clone())?;
+            format!(
+                "impl {} for {}",
+                squeezed(implementation.trait_()),
+                squeezed(implementation.self_ty())
+            )
+        }
+        SyntaxKind::MACRO_CALL => {
+            format!(
+                "call {}",
+                squeezed(ast::MacroCall::cast(node.clone())?.path())
+            )
+        }
+        _ => return None,
+    };
+    // `|` separates a description's fields and `/` a place's segments.
+    Some(
+        text.replace('%', "%25")
+            .replace('|', "%7C")
+            .replace('/', "%2F"),
+    )
+}
+
+/// Where `node` is in its file, by name and not by position: the labels of the modules, impls,
+/// traits and functions around it and of the item itself, outermost first, each followed by
+/// `#n` when `n` earlier siblings have the same label (two functions of one name under
+/// different `cfg`s). Adding text above or between items changes nothing about it.
+#[instrument(level = "trace", skip(node))]
+pub(super) fn place_in_file(node: &SyntaxNode) -> String {
+    let mut segments: Vec<String> = node
+        .ancestors()
+        .filter_map(|item| {
+            let label = label(&item)?;
+            let earlier = std::iter::successors(item.prev_sibling(), SyntaxNode::prev_sibling)
+                .filter(|sibling| {
+                    sibling.kind() == item.kind() && self::label(sibling).as_ref() == Some(&label)
+                })
+                .count();
+            Some(match earlier {
+                0 => label,
+                n => format!("{label}#{n}"),
+            })
+        })
+        .collect();
+    segments.reverse();
+    segments.join("/")
+}
+
+/// The item of `tree` at `place`, found by looking at the items that carry its last label.
+#[instrument(level = "trace", skip(tree))]
+fn node_at(tree: &ast::SourceFile, place: &str) -> Option<SyntaxNode> {
+    let last = place.rsplit('/').next()?;
+    let label = last.split_once('#').map_or(last, |(label, _)| label);
+    tree.syntax()
+        .descendants()
+        .filter(|node| self::label(node).as_deref() == Some(label))
+        .find(|node| place_in_file(node) == place)
 }
 
 /// The path the database holds `file` at.
@@ -464,7 +545,7 @@ fn describe(db: &RootDatabase, definition: ModuleDef) -> String {
                 Site {
                     kind: site.kind,
                     path: path_of(db, site.file)?,
-                    offset: site.offset,
+                    place: site.place,
                     chain: site.chain,
                     member: site.member,
                 }

@@ -549,3 +549,98 @@ fn a_restored_run_executes_few_rust_analyzer_queries() -> Result<()> {
     );
     Ok(())
 }
+
+/// The descriptions of the functions a run asked evidence for, from its `cordial::keys` events.
+fn described_functions(run_it: impl FnOnce() -> Result<()>) -> Result<Vec<String>> {
+    let events = SaveEvents::default();
+    let subscriber = tracing_subscriber::registry().with(events.clone());
+    let guard = tracing::subscriber::set_default(subscriber);
+    run_it()?;
+    drop(guard);
+    let mut described: Vec<String> = events
+        .described
+        .lock()
+        .map(|described| described.values().cloned().collect())
+        .unwrap_or_default();
+    described.sort();
+    Ok(described)
+}
+
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn a_comment_above_a_function_does_not_change_what_describes_it() -> Result<()> {
+    cordial::init_tracing();
+    let root = fixture()?;
+    let library = root.path().join("src/lib.rs");
+    let state = tempfile::tempdir().into_diagnostic()?;
+    let before = described_functions(|| {
+        run(root.path(), &SavedState::at(state.path().join("one"))).map(|_| ())
+    })?;
+    assert!(
+        !before.is_empty(),
+        "the run described the functions it evaluated"
+    );
+
+    let text = std::fs::read_to_string(&library).into_diagnostic()?;
+    std::fs::write(&library, format!("// a comment above everything\n{text}")).into_diagnostic()?;
+    let after = described_functions(|| {
+        run(root.path(), &SavedState::at(state.path().join("two"))).map(|_| ())
+    })?;
+    assert_eq!(
+        before, after,
+        "a comment moved what describes the functions below it"
+    );
+    Ok(())
+}
+
+const LOOK_ALIKES: &str = "\
+pub struct A;
+pub struct B;
+impl A { pub fn new() -> A { A } }
+impl B { pub fn new() -> B { B } }
+pub mod inner { pub fn new() {} }
+pub trait Make { fn new() -> Self; }
+impl Make for A { fn new() -> A { A } }
+#[cfg(kani)]
+pub fn twin() {}
+#[cfg(not(kani))]
+pub fn twin() {}
+pub fn outer() { fn new() {} new(); }
+";
+
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn functions_that_look_alike_are_told_apart_and_found_again() -> Result<()> {
+    cordial::init_tracing();
+    let root = fixture()?;
+    let library = root.path().join("src/lib.rs");
+    std::fs::write(&library, LOOK_ALIKES).into_diagnostic()?;
+    let state = tempfile::tempdir().into_diagnostic()?;
+    let saved = SavedState::at(state.path().join("analysis-state"));
+
+    let described = described_functions(|| run(root.path(), &saved).map(|_| ()))?;
+    let (cold, total) =
+        workspace_evidence().ok_or_else(|| miette::miette!("the cold run logs its evidence"))?;
+    assert_eq!(cold, total);
+    let real: Vec<_> = described
+        .iter()
+        .filter(|text| text.contains("|real|"))
+        .collect();
+    let distinct: std::collections::BTreeSet<_> = real.iter().collect();
+    assert_eq!(
+        real.len(),
+        distinct.len(),
+        "two functions share a description: {real:#?}"
+    );
+    assert!(real.len() >= 8, "every function was described: {real:#?}");
+
+    let (restored, _) = run(root.path(), &saved)?;
+    assert!(restored);
+    let (again, total) = workspace_evidence()
+        .ok_or_else(|| miette::miette!("the restored run logs its evidence"))?;
+    assert_eq!(
+        again, 0,
+        "{again} of {total} look-alike functions were evaluated again"
+    );
+    Ok(())
+}
