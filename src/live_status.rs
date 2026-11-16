@@ -21,6 +21,9 @@ const EXECUTION_TARGET: &str = "salsa::function::execute";
 /// lock per event would cost more than the count it sits beside.
 const NAME_EVERY: u64 = 256;
 
+/// How many queries a phase's report names.
+const PHASE_TOP: usize = 12;
+
 /// Counts of a run so far.
 #[derive(Debug)]
 pub struct LiveStatus {
@@ -28,6 +31,8 @@ pub struct LiveStatus {
     executed: AtomicU64,
     latest: Mutex<String>,
     phase: Mutex<String>,
+    /// The queries executed since the phase began, by name.
+    in_phase: Mutex<std::collections::HashMap<String, u64>>,
 }
 
 impl LiveStatus {
@@ -41,15 +46,52 @@ impl LiveStatus {
             executed: AtomicU64::new(0),
             latest: Mutex::new(String::new()),
             phase: Mutex::new(String::new()),
+            in_phase: Mutex::new(std::collections::HashMap::new()),
         })
     }
 
     /// Say what the run is doing now, in the words of its progress display.
     #[instrument(level = "trace", skip(self, phase))]
     pub fn set_phase(&self, phase: &str) {
-        if let Ok(mut current) = self.phase.lock() {
-            phase.clone_into(&mut current);
+        let Ok(mut current) = self.phase.lock() else {
+            return;
+        };
+        if *current == phase {
+            return;
         }
+        let ended = std::mem::replace(&mut *current, phase.to_owned());
+        drop(current);
+        self.report_phase(&ended);
+    }
+
+    /// Say which queries the phase that ended executed, most first: where a run's time went,
+    /// by the name of the work and not only its count.
+    #[instrument(level = "trace", skip(self))]
+    fn report_phase(&self, ended: &str) {
+        let Ok(mut names) = self.in_phase.lock() else {
+            return;
+        };
+        let mut counts: Vec<(String, u64)> = names.drain().collect();
+        drop(names);
+        if counts.is_empty() {
+            return;
+        }
+        counts.sort_by_key(|(name, count)| (std::cmp::Reverse(*count), name.clone()));
+        let queries: u64 = counts.iter().map(|(_, count)| count).sum();
+        let top = counts
+            .iter()
+            .take(PHASE_TOP)
+            .map(|(name, count)| format!("{name}={count}"))
+            .collect::<Vec<_>>()
+            .join(" ");
+        tracing::info!(
+            target: "cordial::phase_queries",
+            phase = ended,
+            queries,
+            kinds = counts.len(),
+            top = %top,
+            "queries executed in the phase"
+        );
     }
 
     /// What the run was last said to be doing.
@@ -95,6 +137,11 @@ impl LiveStatus {
     #[instrument(level = "trace", skip(self, message))]
     fn executing(&self, message: &str) {
         let before = self.executed.fetch_add(1, Ordering::Relaxed);
+        if let Some(name) = message.split('(').next()
+            && let Ok(mut names) = self.in_phase.lock()
+        {
+            *names.entry(name.to_owned()).or_default() += 1;
+        }
         if before.is_multiple_of(NAME_EVERY)
             && let Some(name) = message.split('(').next()
             && let Ok(mut latest) = self.latest.lock()

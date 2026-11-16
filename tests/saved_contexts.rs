@@ -788,3 +788,61 @@ fn an_edit_evaluates_only_the_functions_it_changes_in_the_process_that_made_it()
     );
     Ok(())
 }
+
+/// A crate that depends on `count` crates of one function each.
+fn crate_with_dependencies(count: usize) -> Result<tempfile::TempDir> {
+    let root = tempfile::tempdir().into_diagnostic()?;
+    std::fs::create_dir_all(root.path().join("src")).into_diagnostic()?;
+    let mut manifest =
+        String::from("[package]\nname='gated'\nversion='0.1.0'\nedition='2024'\n[dependencies]\n");
+    let mut library = String::from("pub fn top() {\n");
+    for n in 0..count {
+        let directory = root.path().join(format!("dep{n}"));
+        std::fs::create_dir_all(directory.join("src")).into_diagnostic()?;
+        std::fs::write(
+            directory.join("Cargo.toml"),
+            format!("[package]\nname='dep{n}'\nversion='0.1.0'\nedition='2024'\n"),
+        )
+        .into_diagnostic()?;
+        std::fs::write(directory.join("src/lib.rs"), "pub fn leaf() {}\n").into_diagnostic()?;
+        manifest.push_str(&format!("dep{n} = {{ path = \"dep{n}\" }}\n"));
+        library.push_str(&format!("    dep{n}::leaf();\n"));
+    }
+    manifest.push_str("[workspace]\n");
+    library.push_str("}\n");
+    std::fs::write(root.path().join("Cargo.toml"), manifest).into_diagnostic()?;
+    std::fs::write(root.path().join("src/lib.rs"), library).into_diagnostic()?;
+    Ok(root)
+}
+
+/// The queries a cold and then a restored run executed over a crate with `count` dependencies.
+fn executions_over(count: usize) -> Result<(usize, usize)> {
+    use tracing_subscriber::prelude::*;
+    let executions = Executions::default();
+    let subscriber = tracing_subscriber::registry().with(executions.clone());
+    let _subscriber = tracing::subscriber::set_default(subscriber);
+    let root = crate_with_dependencies(count)?;
+    let state = tempfile::tempdir().into_diagnostic()?;
+    let saved = SavedState::at(state.path().join("analysis-state"));
+    run(root.path(), &saved)?;
+    let cold = executions.take().values().sum();
+    run(root.path(), &saved)?;
+    Ok((cold, executions.take().values().sum()))
+}
+
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn the_queries_a_run_executes_grow_with_the_crates_in_it() -> Result<()> {
+    cordial::init_tracing();
+    let (_, few) = executions_over(2)?;
+    let (_, many) = executions_over(32)?;
+    // Measured: about 14 queries for each crate added, over a fixed cost of the sysroot that
+    // does not depend on the workspace (about 27,000). A run that did work for each crate in
+    // proportion to its size would be well above this.
+    let per_crate = many.saturating_sub(few) / 30;
+    assert!(
+        per_crate < 100,
+        "a restored run executes {per_crate} queries for each crate added ({few} for 2, {many} for 32)"
+    );
+    Ok(())
+}
