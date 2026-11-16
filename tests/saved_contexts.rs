@@ -904,9 +904,10 @@ impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for SpanCount {
 }
 
 /// The ordinary build's declarations are the same for every context, so they are listed once for
-/// each crate and each context lists only its own copies: three crates and three contexts is
-/// 3 + 3 x 3 listings and the two the index of generated definitions asks for, where listing the
-/// originals again for each context was 20.
+/// each crate, and a context's copies are not listed at all: a copy's counterpart is found from
+/// its own place when it is asked for. Three crates and three contexts is 3 listings and the two
+/// the index of generated definitions asks for, where listing every copy again for each context
+/// was 3 + 3 x 3.
 #[test]
 #[tracing::instrument(level = "debug", err(level = "warn"))]
 fn the_ordinary_builds_declarations_are_listed_once_for_all_the_contexts() -> Result<()> {
@@ -921,7 +922,7 @@ fn the_ordinary_builds_declarations_are_listed_once_for_all_the_contexts() -> Re
     let listed = count.0.load(std::sync::atomic::Ordering::Relaxed);
     let (crates, contexts, others) = (3, 3, 2);
     assert!(
-        listed <= crates * (1 + contexts) + others,
+        listed <= crates + others,
         "{listed} listings of what a crate declares for {crates} crates and {contexts} contexts"
     );
     Ok(())
