@@ -34,12 +34,15 @@ fn original() -> Sources {
         ("lib.rs", "#[macro_use]\nmod macros;\npub mod a;\npub mod b;\npub mod c;\n".into()),
         (
             "macros.rs",
-            "macro_rules! make {\n    ($n:ident) => {\n        pub fn $n() -> u8 {\n            1\n        }\n    };\n}\n"
+            "macro_rules! make {\n    ($n:ident) => {\n        pub fn $n() -> u8 {\n            1\n        }\n    };\n}\n\
+             macro_rules! inner {\n    ($n:ident) => {\n        pub fn $n() -> u8 {\n            3\n        }\n    };\n}\n\
+             macro_rules! outer {\n    ($n:ident) => {\n        inner!($n);\n    };\n}\n"
                 .into(),
         ),
         (
             "a.rs",
             "make!(made);\n\
+             outer!(nested);\n\
              pub fn a_leaf() {}\n\
              pub fn a_top() {\n    a_leaf();\n}\n\
              pub struct A;\n\
@@ -54,7 +57,7 @@ fn original() -> Sources {
         ),
         (
             "c.rs",
-            "pub fn c_top() {\n    crate::b::b_top();\n    crate::b::b_leaf();\n    crate::a::a_leaf();\n    crate::a::made();\n    let a = crate::a::A;\n    a.m();\n}\n"
+            "pub fn c_top() {\n    crate::b::b_top();\n    crate::b::b_leaf();\n    crate::a::a_leaf();\n    crate::a::made();\n    crate::a::nested();\n    let a = crate::a::A;\n    a.m();\n}\n"
                 .into(),
         ),
     ]
@@ -142,6 +145,18 @@ fn edits() -> Vec<Edit> {
                     "macros.rs",
                     "pub fn $n() -> u8 {\n            1",
                     "pub fn $n() -> u16 {\n            1",
+                )
+            },
+            changes_what_is_said: true,
+        },
+        Edit {
+            name: "what a macro that another macro calls defines",
+            apply: |s| {
+                replace(
+                    s,
+                    "macros.rs",
+                    "pub fn $n() -> u8 {\n            3",
+                    "pub fn $n() -> u32 {\n            3",
                 )
             },
             changes_what_is_said: true,
@@ -429,8 +444,9 @@ after_an_edit! {
     a_function_made_private_that_another_file_calls => 4,
     a_function_renamed => 5,
     what_a_macro_defines => 6,
-    the_return_type_of_a_method => 7,
-    a_function_gated_off => 8,
+    what_a_macro_that_another_macro_calls_defines => 7,
+    the_return_type_of_a_method => 8,
+    a_function_gated_off => 9,
 }
 
 /// The same checks with reuse off, which is the harness telling the two edits that matter most
@@ -518,6 +534,55 @@ fn an_edit_to_a_body_computes_the_functions_of_its_file_and_not_the_crate() -> R
         reused <= PER_FILE + 1,
         "with reuse a run computed {reused}: more than the {PER_FILE} functions of the file and \
          the warm-up's query"
+    );
+    Ok(())
+}
+
+/// How many definition maps a run found to have things in them with no meaning that survives the
+/// process, from the events it says so in.
+#[derive(Default, Clone)]
+struct VolatileMaps(Arc<Mutex<Vec<u64>>>);
+
+impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for VolatileMaps {
+    fn on_event(&self, event: &tracing::Event<'_>, _: tracing_subscriber::layer::Context<'_, S>) {
+        struct Count(Option<u64>);
+        impl tracing::field::Visit for Count {
+            fn record_u64(&mut self, field: &tracing::field::Field, value: u64) {
+                if field.name() == "volatile" {
+                    self.0 = Some(value);
+                }
+            }
+            fn record_debug(&mut self, _: &tracing::field::Field, _: &dyn std::fmt::Debug) {}
+        }
+        let mut count = Count(None);
+        event.record(&mut count);
+        if let Some(volatile) = count.0
+            && event.metadata().target() == "cordial::cache"
+            && let Ok(mut all) = self.0.lock()
+        {
+            all.push(volatile);
+        }
+    }
+}
+
+/// Everything in the specimen's definition maps, including what macros that call macros make, has a
+/// meaning that survives the process, so nothing about the crate is volatile and an edit that
+/// leaves the map as it was reuses what read it.
+#[test]
+fn the_specimens_definition_maps_mean_the_same_in_every_process() -> Result<()> {
+    cordial::init_tracing();
+    let volatile = VolatileMaps::default();
+    let subscriber = tracing_subscriber::registry().with(volatile.clone());
+    let _subscriber = tracing::subscriber::set_default(subscriber);
+    let root = tempfile::tempdir().into_diagnostic()?;
+    write(root.path(), &original())?;
+    let state = tempfile::tempdir().into_diagnostic()?;
+    let saved = SavedState::at(state.path().join("analysis-state"));
+    run(root.path(), &saved, Reuse::On)?;
+    let found = volatile.0.lock().map(|all| all.clone()).unwrap_or_default();
+    assert!(
+        found.is_empty(),
+        "definition maps with volatile things in them: {found:?}"
     );
     Ok(())
 }

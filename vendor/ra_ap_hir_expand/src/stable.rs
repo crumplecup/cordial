@@ -337,12 +337,7 @@ impl StableHash for MacroCallLoc {
         def.stable_hash(cx);
         krate.stable_hash(cx);
         kind.stable_hash(cx);
-        // A call made from code a macro wrote has a hygiene context of its own, which is an id.
-        if ctxt.is_root() {
-            cx.tag("root context");
-        } else {
-            cx.volatile("a macro call in a hygiene context that is not the root");
-        }
+        ctxt.stable_hash(cx);
         macro_depth.stable_hash(cx);
     }
 }
@@ -445,5 +440,24 @@ impl crate::AttrMacroAttrIds {
         for id in ids {
             id.stable_hash(cx);
         }
+    }
+}
+
+impl StableHash for span::SyntaxContext {
+    fn stable_hash(&self, cx: &mut StableCx<'_>) {
+        // The root is one per edition, a fixed number. Any other is made by a macro call, and is
+        // that call, how transparent it made it, the edition, and the context it was made in: the
+        // two contexts it also keeps (with the transparent or semi-transparent marks taken away)
+        // are worked out from those, and add nothing.
+        if self.is_root() {
+            cx.tag("root context");
+            cx.write_plain(&self.edition(cx.db));
+            return;
+        }
+        cx.tag("hygiene context");
+        self.outer_expn(cx.db).map(MacroCallId::from).stable_hash(cx);
+        cx.write_plain(&self.outer_transparency(cx.db));
+        cx.write_plain(&self.edition(cx.db));
+        self.parent(cx.db).stable_hash(cx);
     }
 }
