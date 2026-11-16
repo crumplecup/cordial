@@ -33,6 +33,8 @@ pub struct LiveStatus {
     phase: Mutex<String>,
     /// The queries executed since the phase began, by name.
     in_phase: Mutex<std::collections::HashMap<String, u64>>,
+    /// The memos deep-verified and the dependencies checked, as of the last phase's end.
+    verified: Mutex<(u64, u64)>,
 }
 
 impl LiveStatus {
@@ -47,6 +49,7 @@ impl LiveStatus {
             latest: Mutex::new(String::new()),
             phase: Mutex::new(String::new()),
             in_phase: Mutex::new(std::collections::HashMap::new()),
+            verified: Mutex::new((0, 0)),
         })
     }
 
@@ -73,7 +76,18 @@ impl LiveStatus {
         };
         let mut counts: Vec<(String, u64)> = names.drain().collect();
         drop(names);
-        if counts.is_empty() {
+        // Memos re-validated in the phase: time spent that no executed query accounts for.
+        let now = salsa::deep_verifications();
+        let (memos, edges) = self
+            .verified
+            .lock()
+            .map(|mut before| {
+                let spent = (now.0 - before.0, now.1 - before.1);
+                *before = now;
+                spent
+            })
+            .unwrap_or_default();
+        if counts.is_empty() && memos == 0 {
             return;
         }
         counts.sort_by_key(|(name, count)| (std::cmp::Reverse(*count), name.clone()));
@@ -89,6 +103,8 @@ impl LiveStatus {
             phase = ended,
             queries,
             kinds = counts.len(),
+            verified = memos,
+            edges_checked = edges,
             top = %top,
             "queries executed in the phase"
         );

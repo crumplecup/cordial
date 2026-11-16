@@ -507,6 +507,7 @@ impl MemoHeader {
                 }
 
                 let verified_at = self.verified_at.load();
+                crate::flatten::note_deep_verification(edges.len());
 
                 let result = deep_verify_edges(
                     db,

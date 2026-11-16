@@ -601,7 +601,7 @@
              }
 --- salsa-0.28.5/src/flatten.rs
 +++ salsa/src/flatten.rs
-@@ -0,0 +1,398 @@
+@@ -0,0 +1,417 @@
 +//! Flattening a query's dependencies down to what is persisted, once per query.
 +//!
 +//! A persisted memo's dependencies are rewritten before it is saved: the queries that
@@ -643,6 +643,25 @@
 +/// what was restored.
 +pub(crate) fn note_persisted_execution() {
 +    PERSISTED_EXECUTIONS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
++}
++
++static DEEP_VERIFICATIONS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
++static EDGES_CHECKED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
++
++/// Record that a memo was deep-verified, with the number of dependencies it has to check.
++pub(crate) fn note_deep_verification(edges: usize) {
++    DEEP_VERIFICATIONS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
++    EDGES_CHECKED.fetch_add(edges as u64, std::sync::atomic::Ordering::Relaxed);
++}
++
++/// How many memos this process has deep-verified (found out of date or not by walking their
++/// dependencies) and how many dependencies those had: the time a restored run spends
++/// re-validating what was saved, which no executed query accounts for.
++pub fn deep_verifications() -> (u64, u64) {
++    (
++        DEEP_VERIFICATIONS.load(std::sync::atomic::Ordering::Relaxed),
++        EDGES_CHECKED.load(std::sync::atomic::Ordering::Relaxed),
++    )
 +}
 +
 +/// How many persisted queries this process has executed (not restored, not reused), so that a
@@ -1014,7 +1033,15 @@
              Event::new(EventKind::WillExecute {
 --- salsa-0.28.5/src/function/maybe_changed_after.rs
 +++ salsa/src/function/maybe_changed_after.rs
-@@ -595,6 +595,17 @@
+@@ -507,6 +507,7 @@
+                 }
+ 
+                 let verified_at = self.verified_at.load();
++                crate::flatten::note_deep_verification(edges.len());
+ 
+                 let result = deep_verify_edges(
+                     db,
+@@ -595,6 +596,17 @@
      // valid, then some later input I1 might never have executed at all, so verifying
      // it is still up to date is meaningless.
      for edge in edges {
@@ -1032,7 +1059,7 @@
          match edge.kind() {
              QueryEdgeKind::Input => {
                  let dependency_index = edge.key();
-@@ -602,6 +613,7 @@
+@@ -602,6 +614,7 @@
  
                  match input_result {
                      VerifyResult::Changed => {
@@ -1733,7 +1760,7 @@
  mod durability;
  mod event;
 +mod flatten;
-+pub use flatten::persisted_executions;
++pub use flatten::{deep_verifications, persisted_executions};
  mod function;
  mod hash;
  mod id;
@@ -1794,7 +1821,15 @@
      const fn id(self) -> Id {
          // SAFETY: `index` came from a valid `Id` in `QueryEdge::input`.
          unsafe { Id::from_index(self.index) }.with_generation(self.generation)
-@@ -2088,6 +2107,10 @@
+@@ -1786,7 +1805,6 @@
+         }
+     }
+ 
+-    #[cfg(feature = "accumulator")]
+     pub(crate) const fn len(self) -> usize {
+         match self.data {
+             QueryEdgesData::Packed(edges) => edges.len(),
+@@ -2088,6 +2106,10 @@
                  PersistentQueryOrigin::DerivedUntracked(edges) => {
                      Self::derived_untracked(edges.iter().copied(), extra)
                  }
@@ -1805,7 +1840,7 @@
              }
          }
      }
-@@ -2139,27 +2162,36 @@
+@@ -2139,27 +2161,36 @@
          Assigned(DatabaseKeyIndex),
          Derived(Box<[QueryEdge]>),
          DerivedUntracked(Box<[QueryEdge]>),
@@ -1856,7 +1891,7 @@
          }
  
          #[cfg(test)]
-@@ -2231,7 +2263,7 @@
+@@ -2231,7 +2262,7 @@
              Ok(QueryRevisions {
                  changed_at: revisions.changed_at,
                  durability: revisions.durability,

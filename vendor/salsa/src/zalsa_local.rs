@@ -1805,7 +1805,6 @@ impl<'a> QueryEdges<'a> {
         }
     }
 
-    #[cfg(feature = "accumulator")]
     pub(crate) const fn len(self) -> usize {
         match self.data {
             QueryEdgesData::Packed(edges) => edges.len(),

@@ -41,6 +41,25 @@ pub(crate) fn note_persisted_execution() {
     PERSISTED_EXECUTIONS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 }
 
+static DEEP_VERIFICATIONS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+static EDGES_CHECKED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Record that a memo was deep-verified, with the number of dependencies it has to check.
+pub(crate) fn note_deep_verification(edges: usize) {
+    DEEP_VERIFICATIONS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    EDGES_CHECKED.fetch_add(edges as u64, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// How many memos this process has deep-verified (found out of date or not by walking their
+/// dependencies) and how many dependencies those had: the time a restored run spends
+/// re-validating what was saved, which no executed query accounts for.
+pub fn deep_verifications() -> (u64, u64) {
+    (
+        DEEP_VERIFICATIONS.load(std::sync::atomic::Ordering::Relaxed),
+        EDGES_CHECKED.load(std::sync::atomic::Ordering::Relaxed),
+    )
+}
+
 /// How many persisted queries this process has executed (not restored, not reused), so that a
 /// caller can tell whether anything has been computed that a saved state does not hold.
 pub fn persisted_executions() -> u64 {

@@ -1131,3 +1131,59 @@ fn decoding_the_saved_memos_costs_the_same_for_each_function() -> Result<()> {
     );
     Ok(())
 }
+
+/// A restored run of the workspace asking for the package's sources, as selecting a target does:
+/// what rust-analyzer computed under `package_sources`, by query.
+fn package_sources_executions(count: usize) -> Result<std::collections::BTreeMap<String, usize>> {
+    let executions = Executions::default();
+    let subscriber = tracing_subscriber::registry().with(executions.clone());
+    let _subscriber = tracing::subscriber::set_default(subscriber);
+    let root = fixture()?;
+    let mut text = String::from("pub struct S;\n");
+    for n in 0..count {
+        text.push_str(&format!(
+            "impl S {{ pub fn m{n}(&self) -> usize {{ {n} }} }}\n"
+        ));
+    }
+    std::fs::write(root.path().join("src/lib.rs"), text).into_diagnostic()?;
+    let state = tempfile::tempdir().into_diagnostic()?;
+    let saved = SavedState::at(state.path().join("analysis-state"));
+    let options = SemanticCargoOptions::default()
+        .with_cfg_contexts(vec![SemanticContextKey::enabling(["kani"])])
+        .with_cfg_planning(CfgPlanning::Explicit);
+    for _ in 0..2 {
+        executions.take();
+        let mut session = SourceDatabase::load_saved(root.path(), &options, Some(saved.clone()))
+            .into_diagnostic()?;
+        session
+            .project_target(&CrateTarget::new("gated", root.path()))
+            .into_diagnostic()?;
+    }
+    Ok(executions
+        .take()
+        .into_iter()
+        .filter(|(name, _)| name.starts_with("package_sources >"))
+        .collect())
+}
+
+/// What asking for a package's sources makes a restored run compute does not grow with the
+/// package: it is the definition maps of the crates it depends on.
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn the_modules_package_sources_asks_for_cost_the_same_whatever_the_package_holds() -> Result<()> {
+    cordial::init_tracing();
+    let small = package_sources_executions(100)?;
+    let large = package_sources_executions(1000)?;
+    // Asking for a package's modules makes rust-analyzer build the definition maps of the crates
+    // the package depends on, sysroot first: the same work whatever the package holds, because
+    // definition maps are not saved. It is the first step of a run to ask, and pays for the rest.
+    assert!(!small.is_empty(), "package_sources makes definition maps");
+    for (query, count) in &large {
+        let before = small.get(query).copied().unwrap_or(0);
+        assert!(
+            *count <= before + before / 5 + 10,
+            "{query}: {before} for 100 functions, {count} for 1,000"
+        );
+    }
+    Ok(())
+}
