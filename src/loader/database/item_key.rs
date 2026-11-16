@@ -45,6 +45,7 @@ pub(super) fn identity(db: &RootDatabase, definition: ModuleDef) -> SemanticItem
 /// where the same crate is found again in another process. `None` for a crate whose root file has no
 /// path of its own.
 #[instrument(level = "trace", skip(db))]
+#[hotpath::measure]
 pub(super) fn crate_scope(db: &RootDatabase, krate: ra_ap_hir::Crate) -> Option<ItemKey<'_>> {
     let path = path_of(db, krate.root_file(db))?;
     Some(ItemKey::new(db, format!("crate|{}", path.text)))
@@ -101,12 +102,14 @@ fn crate_files<'db>(db: &'db dyn SemanticDatabase, scope: ItemKey<'db>) -> Optio
 /// The files of `krate`'s modules, found again from the saved list without building definition
 /// maps when nothing changed.
 #[instrument(level = "trace", skip(db))]
+#[hotpath::measure]
 pub(super) fn files_of(db: &RootDatabase, krate: ra_ap_hir::Crate) -> Option<Vec<FileId>> {
     Some(files_in(db, &saved_files(db, krate)?.modules))
 }
 
 /// The files `include!` brings into `krate`, from the same saved list.
 #[instrument(level = "trace", skip(db))]
+#[hotpath::measure]
 pub(super) fn included_files_of(db: &RootDatabase, krate: ra_ap_hir::Crate) -> Option<Vec<FileId>> {
     Some(files_in(db, &saved_files(db, krate)?.included))
 }
@@ -119,6 +122,7 @@ fn saved_files(db: &RootDatabase, krate: ra_ap_hir::Crate) -> Option<&CrateFiles
 }
 
 #[instrument(level = "trace", skip(db, listed))]
+#[hotpath::measure]
 fn files_in(db: &RootDatabase, listed: &[(bool, String)]) -> Vec<FileId> {
     listed
         .iter()
@@ -136,6 +140,7 @@ fn files_in(db: &RootDatabase, listed: &[(bool, String)]) -> Vec<FileId> {
 
 /// The description of the scope "this file": where the database holds it.
 #[instrument(level = "trace", skip(db))]
+#[hotpath::measure]
 pub(super) fn file_scope(db: &RootDatabase, file: FileId) -> Option<ItemKey<'_>> {
     let path = path_of(db, file)?;
     let route = if path.real { "real" } else { "virtual" };
@@ -144,6 +149,7 @@ pub(super) fn file_scope(db: &RootDatabase, file: FileId) -> Option<ItemKey<'_>>
 
 /// The file `scope` describes, found again by its path.
 #[instrument(level = "trace", skip(db))]
+#[hotpath::measure]
 pub(super) fn file_of_scope(db: &RootDatabase, scope: &str) -> Option<FileId> {
     let rest = scope.strip_prefix("file|")?;
     let (route, text) = rest.split_once('|')?;
@@ -187,6 +193,7 @@ fn canonical_description<'db>(db: &'db dyn SemanticDatabase, key: ItemKey<'db>) 
 /// The identity facts about a context's copy of a definition are given, in place of its own: the
 /// ordinary build's definition at the same place when there is one.
 #[instrument(level = "trace", skip(db, id))]
+#[hotpath::measure]
 pub(super) fn canonical_id(db: &RootDatabase, id: SemanticItemId) -> SemanticItemId {
     let semantic: &dyn SemanticDatabase = db;
     match canonical_description(semantic, key_for(id)) {
@@ -197,6 +204,7 @@ pub(super) fn canonical_id(db: &RootDatabase, id: SemanticItemId) -> SemanticIte
 
 /// The crate `scope` describes, found again by its root file.
 #[instrument(level = "trace", skip(db))]
+#[hotpath::measure]
 pub(super) fn crate_of(db: &RootDatabase, scope: &str) -> Option<ra_ap_hir::Crate> {
     let wanted = scope.strip_prefix("crate|")?;
     ra_ap_hir::Crate::all(db)
@@ -800,6 +808,7 @@ fn places_in<'db>(db: &'db dyn SemanticDatabase, file: PlacedFile<'db>) -> Place
 
 /// The file `file` is a context's copy of, or `None` when it is not a copy.
 #[instrument(level = "trace", skip(db))]
+#[hotpath::measure]
 fn original_of_copy(db: &RootDatabase, file: FileId) -> Option<FileId> {
     let path = path_of(db, file)?;
     let real = super::context_crates::original_path(&path.vfs())?;
@@ -868,6 +877,7 @@ pub(super) fn vfs_path_of(db: &RootDatabase, file: FileId) -> Option<VfsPath> {
 
 /// The file the database holds at `path`.
 #[instrument(level = "trace", skip(db))]
+#[hotpath::measure]
 fn file_at(db: &RootDatabase, path: &PathText) -> Option<FileId> {
     let wanted = path.vfs();
     // A context's copy is in that context's source root and nowhere else, and any other file

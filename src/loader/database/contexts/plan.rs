@@ -139,16 +139,23 @@ pub(in crate::loader::database) fn asked(
         {
             let files: BTreeSet<_> = match super::super::item_key::files_of(db, krate) {
                 Some(listed) => listed.into_iter().collect(),
-                None => krate
-                    .modules(db)
-                    .into_iter()
-                    .map(|module| {
-                        module
-                            .definition_source_file_id(db)
-                            .original_file_respecting_includes(db)
-                            .file_id(db)
-                    })
-                    .collect(),
+                None => {
+                    tracing::info!(
+                        target: "cordial::semantic::fallback",
+                        step = "asked",
+                        "a crate's modules are listed through rust-analyzer: no saved list answers"
+                    );
+                    krate
+                        .modules(db)
+                        .into_iter()
+                        .map(|module| {
+                            module
+                                .definition_source_file_id(db)
+                                .original_file_respecting_includes(db)
+                                .file_id(db)
+                        })
+                        .collect()
+                }
             };
             for file in files {
                 active.entry(file).or_default().push(krate.cfg(db));

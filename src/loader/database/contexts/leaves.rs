@@ -204,6 +204,11 @@ impl SourceDatabase {
                 }
                 return Ok(());
             }
+            tracing::info!(
+                target: "cordial::semantic::fallback",
+                step = "leaves",
+                "a context's copy has a function a description cannot find again: its functions are read through rust-analyzer"
+            );
             // Each context is a new cfg, so none of the results are computed yet:
             // evaluate the leaf functions together, then read them below.
             let mut definitions = Vec::new();

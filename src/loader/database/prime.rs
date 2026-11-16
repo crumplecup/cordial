@@ -33,10 +33,23 @@ impl SourceDatabase {
         let complete = attach_db(&self.db, || {
             for krate in self.ordinary_crates() {
                 let Some(scope) = item_key::crate_scope(&self.db, Crate::from(krate)) else {
+                    tracing::info!(
+                        target: "cordial::semantic::fallback",
+                        step = "prime",
+                        "a crate has no scope of its own: its functions are enumerated through rust-analyzer"
+                    );
                     return false;
                 };
                 let index = crate_functions(&self.db, scope);
                 if index.unfound > 0 {
+                    tracing::info!(
+                        target: "cordial::semantic::fallback",
+                        step = "prime",
+                        crate_scope = %item_key::key_text(&self.db, scope),
+                        unfound = index.unfound,
+                        found = index.found.len(),
+                        "functions a description cannot find again: every function is enumerated through rust-analyzer"
+                    );
                     return false;
                 }
                 described.extend(index.found.iter().cloned());

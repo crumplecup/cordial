@@ -47,6 +47,11 @@ pub(super) fn collect(
             .zip(item_key::included_files_of(db, krate))
             .map(|(modules, included)| modules.into_iter().chain(included).collect::<Vec<_>>());
         let files = listed.unwrap_or_else(|| {
+            tracing::info!(
+                target: "cordial::semantic::fallback",
+                step = "compiled",
+                "a crate's files are listed through rust-analyzer: no saved list answers"
+            );
             let modules = krate.modules(db).into_iter().map(|module| {
                 module
                     .definition_source_file_id(db)

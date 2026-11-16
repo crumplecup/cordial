@@ -269,6 +269,7 @@ impl SourceDatabase {
             let mut definitions: HashMap<SemanticItemId, NodeId> = HashMap::new();
             let mut calls: Vec<(NodeId, SemanticItemId)> = Vec::new();
             let mut finished = true;
+            let (mut saved_files, mut rust_analyzer_files) = (0usize, 0usize);
             for path in files.paths {
                 if budget.exceeded() {
                     finished = false;
@@ -281,9 +282,11 @@ impl SourceDatabase {
                 };
                 // The functions of the copy as the last run saved them, when every one of them can
                 // be found again from its description: nothing is asked of rust-analyzer.
-                if let Some(records) = copy_functions(&self.db, file)
-                    .filter(|records| records.iter().all(|record| *record.found()))
+                let listed = copy_functions(&self.db, file);
+                if let Some(records) =
+                    listed.filter(|records| records.iter().all(|record| *record.found()))
                 {
+                    saved_files += 1;
                     let tree = edition_of(&self.db, file).parse(&self.db).tree();
                     let flips = Flips::collect(&tree, pairs);
                     let items: HashMap<TextRange, ast::Fn> = tree
@@ -338,6 +341,16 @@ impl SourceDatabase {
                     }
                     continue;
                 }
+                tracing::info!(
+                    target: "cordial::semantic::fallback",
+                    step = "harvest",
+                    %context,
+                    file = %path.display(),
+                    listed = listed.is_some(),
+                    unfound = listed.map_or(0, |records| records.iter().filter(|record| !*record.found()).count()),
+                    "a copy's functions are read through rust-analyzer"
+                );
+                rust_analyzer_files += 1;
                 let tree = sema.parse(sema.attach_first_edition(file));
                 let flips = Flips::collect(&tree, pairs);
                 for function in tree.syntax().descendants().filter_map(ast::Fn::cast) {
@@ -386,6 +399,13 @@ impl SourceDatabase {
                     )?;
                 }
             }
+            tracing::info!(
+                target: "cordial::semantic::contexts",
+                %context,
+                saved_files,
+                rust_analyzer_files,
+                "the files of a context's copy: read from saved lists, and through rust-analyzer"
+            );
             let mut edges: BTreeSet<(NodeId, NodeId)> = BTreeSet::new();
             let mut external: BTreeMap<NodeId, BTreeSet<crate::FunctionLocation>> = BTreeMap::new();
             for (caller, target) in calls {

@@ -1328,9 +1328,13 @@ fn run_planned(root: &Path, saved: &SavedState) -> Result<bool> {
 /// `between`.
 fn restored_planned_executions(
     between: Between,
-) -> Result<std::collections::BTreeMap<String, usize>> {
+) -> Result<(std::collections::BTreeMap<String, usize>, usize)> {
     let executions = Executions::default();
-    let subscriber = tracing_subscriber::registry().with(executions.clone());
+    let fallbacks = FallbackEvents::default();
+    let subscriber = tracing_subscriber::registry()
+        .with(executions.clone())
+        .with(fallbacks.clone())
+        .with(cordial::tracing_fmt_layer());
     let _subscriber = tracing::subscriber::set_default(subscriber);
     let root = chain_of_crates()?;
     let state = tempfile::tempdir().into_diagnostic()?;
@@ -1342,6 +1346,7 @@ fn restored_planned_executions(
         std::fs::write(&library, format!("{text}\npub fn added() {{}}\n")).into_diagnostic()?;
     }
     executions.take();
+    fallbacks.0.store(0, std::sync::atomic::Ordering::Relaxed);
     assert!(run_planned(root.path(), &saved)?);
     let mut by_step = std::collections::BTreeMap::<String, usize>::new();
     for (name, count) in executions.take() {
@@ -1349,7 +1354,22 @@ fn restored_planned_executions(
             .entry(name.split(" > ").next().unwrap_or_default().to_owned())
             .or_default() += count;
     }
-    Ok(by_step)
+    Ok((
+        by_step,
+        fallbacks.0.load(std::sync::atomic::Ordering::Relaxed),
+    ))
+}
+
+/// How many events a run made that say it fell back to asking rust-analyzer.
+#[derive(Default, Clone)]
+struct FallbackEvents(std::sync::Arc<std::sync::atomic::AtomicUsize>);
+
+impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for FallbackEvents {
+    fn on_event(&self, event: &tracing::Event<'_>, _: tracing_subscriber::layer::Context<'_, S>) {
+        if event.metadata().target() == "cordial::semantic::fallback" {
+            self.0.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        }
+    }
 }
 
 /// A restored run that plans its own contexts builds no definition map when nothing changed: it
@@ -1360,8 +1380,12 @@ fn restored_planned_executions(
 #[tracing::instrument(level = "debug", err(level = "warn"))]
 fn a_restored_planned_run_builds_no_definition_maps() -> Result<()> {
     cordial::init_tracing();
-    let unchanged = restored_planned_executions(Between::NothingToSee)?;
-    let edited = restored_planned_executions(Between::SomethingToCatch)?;
+    let (unchanged, fallbacks) = restored_planned_executions(Between::NothingToSee)?;
+    let (edited, _) = restored_planned_executions(Between::SomethingToCatch)?;
+    assert_eq!(
+        fallbacks, 0,
+        "a run nothing changed in fell back to rust-analyzer {fallbacks} times"
+    );
     let (unchanged_total, edited_total): (usize, usize) =
         (unchanged.values().sum(), edited.values().sum());
     assert!(

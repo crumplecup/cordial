@@ -73,6 +73,7 @@ fn functions_in_copy<'db>(
 
 /// The functions of `file`, a context's copy, from the saved list; `None` when it cannot be made.
 #[instrument(level = "trace", skip(db))]
+#[hotpath::measure]
 pub(super) fn copy_functions(db: &RootDatabase, file: FileId) -> Option<&Vec<CopyFunction>> {
     let semantic: &dyn SemanticDatabase = db;
     functions_in_copy(semantic, item_key::file_scope(db, file)?).as_ref()

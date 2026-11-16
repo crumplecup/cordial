@@ -86,6 +86,11 @@ impl SourceDatabase {
                 }
                 let modules =
                     super::super::item_key::files_of(&self.db, krate).unwrap_or_else(|| {
+                        tracing::info!(
+                            target: "cordial::semantic::fallback",
+                            step = "package_sources",
+                            "a crate's modules are listed through rust-analyzer: no saved list answers"
+                        );
                         krate
                             .modules(&self.db)
                             .into_iter()

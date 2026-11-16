@@ -14,6 +14,7 @@ use tracing::instrument;
 /// `file` with the edition of the first crate that has it, or the current edition for a file no
 /// crate has.
 #[instrument(level = "trace", skip(db))]
+#[hotpath::measure]
 pub(super) fn edition_of(db: &RootDatabase, file: FileId) -> EditionedFileId {
     match relevant_crates(db, file).first() {
         Some(krate) => EditionedFileId::new(db, file, krate.data(db).edition),
