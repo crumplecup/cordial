@@ -380,8 +380,16 @@ mod persistence {
                 // to the ingredient as well as the database.
                 let mut ingredient = zalsa.take_ingredient(index);
 
-                // Deserialize the ingredient.
+                // Deserialize the ingredient, and say how long it took: which ingredient a restore
+                // waits for is not otherwise visible.
+                let started = std::time::Instant::now();
                 access.next_value_seed(DeserializeIngredient(&mut *ingredient, zalsa))?;
+                crate::tracing::event!(
+                    DEBUG,
+                    ingredient = ingredient.debug_name(),
+                    micros = u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX),
+                    "deserialized an ingredient"
+                );
 
                 zalsa.replace_ingredient(index, ingredient);
             }

@@ -121,27 +121,18 @@ impl SavedState {
         if key != crate::run_cache::executable_fingerprint() {
             return Err("saved by another build of cordial".to_owned());
         }
-        let read = |name: &str| {
-            std::fs::read(self.dir.join(name))
-                .map_err(|error| format!("{name} unreadable ({error})"))
-        };
         let (salsa, files, crates, paths, contexts) = (
-            read(SALSA)?,
-            read(FILES)?,
-            read(CRATES)?,
-            read(PATHS)?,
-            read(CONTEXTS)?,
+            self.read_part(SALSA)?,
+            self.read_part(FILES)?,
+            self.read_part(CRATES)?,
+            self.read_part(PATHS)?,
+            self.read_part(CONTEXTS)?,
         );
         // Salsa asserts on state it does not expect; whatever happens in there, the run
         // goes on without it.
         catch_unwind(AssertUnwindSafe(|| {
             let mut database = RootDatabase::empty();
-            let target: &mut dyn salsa::Database = &mut database;
-            target
-                .deserialize(&mut rmp_serde::Deserializer::from_read_ref(
-                    salsa.as_slice(),
-                ))
-                .map_err(|error| format!("salsa state unreadable ({error})"))?;
+            Self::decode_salsa(&mut database, &salsa)?;
             database.files().restore(
                 rmp_serde::from_slice(&files)
                     .map_err(|error| format!("files unreadable ({error})"))?,
@@ -167,6 +158,42 @@ impl SavedState {
             })
         }))
         .unwrap_or_else(|_| Err("restoring it panicked".to_owned()))
+    }
+
+    /// One part of the saved state, as bytes. The event says how fast the disk gave it up.
+    #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure(impl_type = "SavedState")]
+    fn read_part(&self, name: &str) -> Result<Vec<u8>, String> {
+        let started = std::time::Instant::now();
+        let bytes = std::fs::read(self.dir.join(name))
+            .map_err(|error| format!("{name} unreadable ({error})"))?;
+        tracing::debug!(
+            target: "cordial::cache",
+            part = name,
+            bytes = bytes.len(),
+            micros = u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX),
+            "read a part of the saved state"
+        );
+        Ok(bytes)
+    }
+
+    /// Rebuild the Salsa memos from their saved bytes. The event gives the bytes and the time,
+    /// so the rate shows whether decoding or something else is what a restore waits for.
+    #[instrument(level = "debug", skip_all)]
+    #[hotpath::measure(impl_type = "SavedState")]
+    fn decode_salsa(database: &mut RootDatabase, salsa: &[u8]) -> Result<(), String> {
+        let started = std::time::Instant::now();
+        let target: &mut dyn salsa::Database = database;
+        target
+            .deserialize(&mut rmp_serde::Deserializer::from_read_ref(salsa))
+            .map_err(|error| format!("salsa state unreadable ({error})"))?;
+        tracing::debug!(
+            target: "cordial::cache",
+            bytes = salsa.len(),
+            micros = u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX),
+            "decoded the saved Salsa memos"
+        );
+        Ok(())
     }
 
     /// Remove what a save that never finished left beside the slot: a directory written

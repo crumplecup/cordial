@@ -1047,3 +1047,87 @@ fn a_files_copies_are_not_walked_again_for_their_places() -> Result<()> {
     assert_eq!(with, alone, "the contexts' copies were walked again");
     Ok(())
 }
+
+/// The bytes and microseconds of the saved Salsa memos' decoding, from the loader's own event.
+#[derive(Default, Clone)]
+struct DecodeRate(std::sync::Arc<std::sync::Mutex<Vec<(u64, u64)>>>);
+
+impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for DecodeRate {
+    fn on_event(&self, event: &tracing::Event<'_>, _: tracing_subscriber::layer::Context<'_, S>) {
+        #[derive(Default)]
+        struct Fields {
+            decoded: bool,
+            bytes: u64,
+            micros: u64,
+        }
+        impl tracing::field::Visit for Fields {
+            fn record_u64(&mut self, field: &tracing::field::Field, value: u64) {
+                match field.name() {
+                    "bytes" => self.bytes = value,
+                    "micros" => self.micros = value,
+                    _ => {}
+                }
+            }
+            fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
+                if field.name() == "message" {
+                    self.decoded = format!("{value:?}") == "decoded the saved Salsa memos";
+                }
+            }
+        }
+        let mut fields = Fields::default();
+        event.record(&mut fields);
+        if fields.decoded
+            && let Ok(mut all) = self.0.lock()
+        {
+            all.push((fields.bytes, fields.micros));
+        }
+    }
+}
+
+/// Microseconds the restored run took to decode its saved memos, for a file of `count` impls.
+fn decode_micros(count: usize) -> Result<u64> {
+    let rate = DecodeRate::default();
+    let subscriber = tracing_subscriber::registry().with(rate.clone());
+    let _subscriber = tracing::subscriber::set_default(subscriber);
+    let root = fixture()?;
+    let mut text = String::from("pub struct S;\n");
+    for n in 0..count {
+        text.push_str(&format!(
+            "impl S {{ pub fn m{n}(&self) -> usize {{ {n} }} }}\n"
+        ));
+    }
+    std::fs::write(root.path().join("src/lib.rs"), text).into_diagnostic()?;
+    let state = tempfile::tempdir().into_diagnostic()?;
+    let saved = SavedState::at(state.path().join("analysis-state"));
+    run(root.path(), &saved)?;
+    run(root.path(), &saved)?;
+    let all = rate.0.lock().map_err(|_| miette::miette!("poisoned"))?;
+    all.last()
+        .map(|(_, micros)| *micros)
+        .ok_or_else(|| miette::miette!("the restored run decoded nothing"))
+}
+
+/// What decoding the saved memos costs for each function grows with neither the functions nor
+/// the state: twice the functions take about twice as long, not four times, and a function costs
+/// well under a millisecond (in the unoptimised build the tests run in).
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn decoding_the_saved_memos_costs_the_same_for_each_function() -> Result<()> {
+    cordial::init_tracing();
+    let (base, half, whole) = (
+        decode_micros(0)?,
+        decode_micros(1000)?,
+        decode_micros(2000)?,
+    );
+    let (half, whole) = (half.saturating_sub(base), whole.saturating_sub(base));
+    assert!(
+        whole < half * 5 / 2 + 50_000,
+        "{half} us for 1,000 functions and {whole} us for 2,000 above the {base} us base"
+    );
+    assert!(
+        whole / 2000 < 1000,
+        "{} us to decode each function's memos",
+        whole / 2000
+    );
+    Ok(())
+}
