@@ -316,6 +316,12 @@ pub(super) fn persisted_evidence<'db>(
     db: &'db dyn SemanticDatabase,
     key: super::item_key::ItemKey<'db>,
 ) -> Option<SemanticFunction> {
+    tracing::debug!(
+        target: "cordial::keys",
+        key = super::item_key::key_bits(key),
+        description = %super::item_key::key_text(db.root_database(), key),
+        "persisted evidence computed"
+    );
     let function = super::item_key::function_of(db, key)?;
     function_evidence(db, FunctionKey::new(db, function)).clone()
 }

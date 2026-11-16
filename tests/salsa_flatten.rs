@@ -378,3 +378,103 @@ fn a_memo_behind_a_stale_interned_key_can_be_saved_whether_or_not_there_is_one()
         assert_eq!(save_and_restore(scenario), 8, "{scenario:?}");
     }
 }
+
+#[salsa::input(persist, singleton)]
+struct Switch {
+    #[returns(copy)]
+    value: usize,
+}
+
+#[salsa::input(persist, singleton)]
+struct SideA {
+    #[returns(copy)]
+    value: usize,
+}
+
+#[salsa::input(persist, singleton)]
+struct SideB {
+    #[returns(copy)]
+    value: usize,
+}
+
+/// Not persisted; which input it reads depends on the switch, and its answer is the same either way.
+#[salsa::tracked(returns(copy))]
+fn middle(db: &dyn Database) -> usize {
+    if Switch::get(db).value(db) == 0 {
+        SideA::get(db).value(db)
+    } else {
+        SideB::get(db).value(db)
+    }
+}
+
+static EXECUTED_OUTER: AtomicUsize = AtomicUsize::new(0);
+
+#[salsa::tracked(returns(copy), persist)]
+fn outer(db: &dyn Database) -> usize {
+    EXECUTED_OUTER.fetch_add(1, Ordering::SeqCst);
+    middle(db) + 1
+}
+
+/// What is done between the rerun of `middle` and the save.
+#[derive(Clone, Copy, Debug)]
+enum BeforeSaving {
+    /// Nothing: `outer` was last verified before `middle` ran again.
+    SomethingToCatch,
+    /// `outer` is asked for, which verifies it.
+    AskedOuter,
+    /// Every persisted memo is verified, as cordial does before it saves.
+    VerifiedPersisted,
+}
+
+/// Whether `outer` ran again in a database restored from one saved after the switch was flipped
+/// and `middle` (not `outer`) was asked, and then `before` was done.
+fn outer_runs_again(before: BeforeSaving) -> bool {
+    let mut db = Db::default();
+    Switch::new(&db, 0);
+    SideA::new(&db, 1);
+    SideB::new(&db, 1);
+    assert_eq!(outer(&db), 2);
+
+    // The switch flips; `middle` is asked on its own and now depends on the other side. Its
+    // answer is the same, so `outer` is as valid as it was, but nothing has verified it since.
+    Switch::get(&db).set_value(&mut db).to(1);
+    assert_eq!(middle(&db), 1);
+    match before {
+        BeforeSaving::SomethingToCatch => {}
+        BeforeSaving::AskedOuter => assert_eq!(outer(&db), 2),
+        BeforeSaving::VerifiedPersisted => <dyn Database>::verify_persisted_memos(&db),
+    }
+
+    let saved = serde_json::to_string(&<dyn Database>::as_serialize(&mut db))
+        .unwrap_or_else(|error| panic!("serializing {before:?}: {error}"));
+    let mut restored = Db::default();
+    <dyn Database>::deserialize(
+        &mut restored,
+        &mut serde_json::Deserializer::from_str(&saved),
+    )
+    .unwrap_or_else(|error| panic!("deserializing {before:?}: {error}"));
+
+    let executed = EXECUTED_OUTER.load(Ordering::SeqCst);
+    assert_eq!(outer(&restored), 2, "{before:?}");
+    EXECUTED_OUTER.load(Ordering::SeqCst) != executed
+}
+
+/// A persisted query is saved with what its dependencies are now, and with the revision it was
+/// last verified at. If a query between them has run again since, onto inputs that did not exist
+/// when it was verified, a restored database finds the persisted query out of date though nothing
+/// it depends on changed, unless it was verified before the save.
+#[test]
+fn a_persisted_query_is_valid_when_restored_if_it_was_verified_before_the_save() {
+    assert!(
+        outer_runs_again(BeforeSaving::SomethingToCatch),
+        "without verifying, a restored `outer` is out of date: this is what the others prevent"
+    );
+    assert!(
+        !outer_runs_again(BeforeSaving::AskedOuter),
+        "asked before saving, it was verified at the revision it is saved with"
+    );
+    assert!(
+        !outer_runs_again(BeforeSaving::VerifiedPersisted),
+        "every persisted memo verified before the save is valid when restored"
+    );
+}

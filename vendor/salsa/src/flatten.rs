@@ -47,70 +47,23 @@ pub fn persisted_executions() -> u64 {
     PERSISTED_EXECUTIONS.load(std::sync::atomic::Ordering::Relaxed)
 }
 
-/// How many memos each kind of input made out of date, with the numbers of a few of the inputs.
-type Stale = std::collections::BTreeMap<String, (u64, Vec<u64>)>;
-
-static STALE: std::sync::Mutex<Stale> = std::sync::Mutex::new(std::collections::BTreeMap::new());
-
-/// How many memos of each query were found out of date.
-static STALE_QUERIES: std::sync::Mutex<std::collections::BTreeMap<String, u64>> =
-    std::sync::Mutex::new(std::collections::BTreeMap::new());
-
-/// Which queries had memos found out of date when they were verified, with how many each.
-pub fn stale_queries() -> Vec<(String, u64)> {
-    STALE_QUERIES
-        .lock()
-        .map(|stale| stale.iter().map(|(name, count)| (name.clone(), *count)).collect())
-        .unwrap_or_default()
-}
-
-/// How many inputs of each kind are kept as examples.
-const STALE_EXAMPLES: usize = 6;
-
-/// Record that a memo was found out of date because of the dependency `edge`.
-pub(crate) fn note_stale(
-    zalsa: &Zalsa,
-    edge: QueryEdge,
-    memo: crate::key::DatabaseKeyIndex,
-) {
-    if let Ok(mut by_query) = STALE_QUERIES.lock() {
-        let query = zalsa
-            .lookup_ingredient(memo.ingredient_index())
-            .debug_name()
-            .to_owned();
-        *by_query.entry(query).or_default() += 1;
-    }
-    let name = if edge.is_watermark() {
-        "<watermark>".to_owned()
-    } else {
-        zalsa
-            .lookup_ingredient(edge.key().ingredient_index())
-            .debug_name()
-            .to_owned()
-    };
-    if let Ok(mut stale) = STALE.lock() {
-        let (count, examples) = stale.entry(name).or_default();
-        *count += 1;
-        let input = edge.key().key_index().as_bits();
-        if examples.len() < STALE_EXAMPLES && !examples.contains(&input) {
-            examples.push(input);
-        }
-    }
-}
-
-/// Which dependencies made memos out of date when they were verified, with how many memos each
-/// did and the numbers of a few of the inputs (an input's number is the id of its struct). The
-/// first dependency found to have changed is the one counted.
-pub fn stale_report() -> Vec<(String, u64, Vec<u64>)> {
-    STALE
-        .lock()
-        .map(|stale| {
-            stale
-                .iter()
-                .map(|(name, (count, examples))| (name.clone(), *count, examples.clone()))
-                .collect()
-        })
-        .unwrap_or_default()
+/// Say, as an event, that a memo was found out of date because of the dependency `edge`: the
+/// memo's query and key, and the input's field and key. One event for each memo, at the place it
+/// is found, so that a log holds the answer to whatever is asked of it afterwards (the keys are
+/// those of the structs, to be joined with a table of what they are).
+pub(crate) fn stale_event(zalsa: &Zalsa, edge: QueryEdge, memo: crate::key::DatabaseKeyIndex) {
+    ::tracing::debug!(
+        target: "salsa::stale",
+        memo = zalsa.lookup_ingredient(memo.ingredient_index()).debug_name(),
+        memo_key = memo.key_index().as_bits(),
+        changed = if edge.is_watermark() {
+            "<watermark>"
+        } else {
+            zalsa.lookup_ingredient(edge.key().ingredient_index()).debug_name()
+        },
+        changed_key = edge.key().key_index().as_bits(),
+        "a memo is out of date"
+    );
 }
 
 /// A set of persisted edges, as the bits of the edges' numbers in one [`EdgeFlattener`].
@@ -385,4 +338,61 @@ pub(crate) fn expand_saved(sets: &[u32], edges: &[QueryEdge]) -> Box<[QueryEdge]
         all.extend(edges.iter().copied());
         all.into_iter().collect()
     })
+}
+
+
+/// Whether `edge` is a crate's `data` that survived flattening: not the watermark, so an input
+/// of the lowest durability. Crates the loader made are written at a higher one, so these are
+/// the ones a tool added.
+pub(crate) fn is_low_crate_data(zalsa: &Zalsa, edge: QueryEdge) -> bool {
+    if edge.is_watermark() {
+        return false;
+    }
+    let ingredient = zalsa.lookup_ingredient(edge.key().ingredient_index());
+    ingredient.debug_name() == "data" && !ingredient.watermarked(zalsa, edge.key().key_index())
+}
+
+/// The chain of queries from the memo whose edges are `edges` down to the first crate `data`
+/// input of the lowest durability it depends on, as text for an event.
+///
+/// # Safety
+///
+/// The caller must prevent database writes throughout the traversal.
+pub(crate) unsafe fn explain_low_crate_data(
+    zalsa: &Zalsa,
+    edges: crate::zalsa_local::QueryEdges<'_>,
+) -> Option<String> {
+    fn walk(
+        zalsa: &Zalsa,
+        edges: crate::zalsa_local::QueryEdges<'_>,
+        seen: &mut std::collections::HashSet<QueryEdge>,
+        path: &mut Vec<String>,
+    ) -> bool {
+        for edge in edges {
+            if edge.is_watermark() || !seen.insert(edge) {
+                continue;
+            }
+            let ingredient = zalsa.lookup_ingredient(edge.key().ingredient_index());
+            let id = edge.key().key_index();
+            if is_low_crate_data(zalsa, edge) {
+                path.push(format!("{}(#{})", ingredient.debug_name(), id.as_bits()));
+                return true;
+            }
+            let Some(function) = ingredient.as_function() else {
+                continue;
+            };
+            // SAFETY: The caller prevents database writes.
+            let Some(memo) = (unsafe { function.memo_unchecked(zalsa, id) }) else {
+                continue;
+            };
+            path.push(format!("{}(#{})", ingredient.debug_name(), id.as_bits()));
+            if walk(zalsa, memo.header().origin().edges(), seen, path) {
+                return true;
+            }
+            path.pop();
+        }
+        false
+    }
+    let mut path = Vec::new();
+    walk(zalsa, edges, &mut std::collections::HashSet::new(), &mut path).then(|| path.join(" -> "))
 }

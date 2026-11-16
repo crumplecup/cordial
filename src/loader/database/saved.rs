@@ -230,6 +230,18 @@ impl super::SourceDatabase {
             crate::host::event("analysis state: nothing new to save".to_owned());
             return;
         }
+        // A memo is saved with what the queries it reads depend on now, so it must be valid as of
+        // now: one a query it reads has run again under since was last verified before that, and
+        // would be saved with dependencies it did not have then and be found out of date.
+        let verifying = std::time::Instant::now();
+        ra_ap_hir::attach_db(&self.db, || {
+            <dyn salsa::Database>::verify_persisted_memos(&self.db);
+        });
+        tracing::debug!(
+            target: "cordial::cache",
+            elapsed = ?verifying.elapsed(),
+            "persisted memos verified before the save"
+        );
         self.reporter.say("Saving the analysis state");
         let started = std::time::Instant::now();
         match saved.save(&mut self.db, &self.vfs, &self.context_crates) {
@@ -244,60 +256,36 @@ impl super::SourceDatabase {
         }
     }
 
-    /// Which inputs made restored memos out of date, with a few examples named: the files by path
-    /// and the crates by name (a crate a context added is marked).
+    /// Say, as events, what the numbers in the database's events are: each file text's number and
+    /// path, each crate's number and root file (a context's copies marked). Without it an id in
+    /// a `salsa::stale` or `salsa::write` event is only a number.
     #[instrument(level = "debug", skip(self))]
     #[hotpath::measure(impl_type = "SourceDatabase")]
-    pub(super) fn describe_stale(&self) -> String {
+    pub(super) fn log_tables(&self) {
         use salsa::plumbing::AsId;
-        let report = salsa::stale_report();
-        let files: std::collections::HashMap<u64, ra_ap_vfs::FileId> = self
-            .db
-            .files()
-            .dump()
-            .texts()
-            .map(|(file, bits)| (bits, file))
-            .collect();
+        if !tracing::enabled!(target: "cordial::tables", tracing::Level::DEBUG) {
+            return;
+        }
+        for (file, key) in self.db.files().dump().texts() {
+            tracing::debug!(
+                target: "cordial::tables",
+                table = "file_text",
+                key,
+                path = %self.vfs.file_path(file),
+                "an input"
+            );
+        }
         let shadows = self.shadow_crates();
-        let crates: std::collections::HashMap<u64, ra_ap_ide_db::base_db::Crate> =
-            ra_ap_ide_db::base_db::all_crates(&self.db)
-                .iter()
-                .map(|krate| (krate.as_id().as_bits(), *krate))
-                .collect();
-        let by_query = salsa::stale_queries()
-            .into_iter()
-            .map(|(name, count)| format!("{name}: {count}"))
-            .collect::<Vec<_>>()
-            .join(", ");
-        let inputs = report
-            .into_iter()
-            .map(|(name, count, examples)| {
-                let named: Vec<String> = examples
-                    .iter()
-                    .map(|bits| match name.as_str() {
-                        "text" | "source_root_id" => files.get(bits).map_or_else(
-                            || format!("#{bits}"),
-                            |file| self.vfs.file_path(*file).to_string(),
-                        ),
-                        _ => crates.get(bits).map_or_else(
-                            || format!("#{bits}"),
-                            |krate| {
-                                let root = krate.data(&self.db).root_file_id;
-                                let shadow = if shadows.contains(krate) {
-                                    " (context copy)"
-                                } else {
-                                    ""
-                                };
-                                format!("{}{shadow}", self.vfs.file_path(root))
-                            },
-                        ),
-                    })
-                    .collect();
-                format!("{name}: {count} (e.g. {})", named.join(", "))
-            })
-            .collect::<Vec<_>>()
-            .join("; ");
-        format!("{inputs}. The memos were of: {by_query}")
+        for krate in ra_ap_ide_db::base_db::all_crates(&self.db).iter() {
+            tracing::debug!(
+                target: "cordial::tables",
+                table = "crate",
+                key = krate.as_id().as_bits(),
+                root = %self.vfs.file_path(krate.data(&self.db).root_file_id),
+                context_copy = shadows.contains(krate),
+                "an input"
+            );
+        }
     }
 
     /// Whether this session's database was restored from a saved state.

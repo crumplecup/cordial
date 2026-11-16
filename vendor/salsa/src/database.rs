@@ -175,6 +175,17 @@ mod persistence {
     use serde::ser::SerializeMap;
 
     impl dyn Database {
+        /// Verify every persisted memo at the current revision, running again the queries whose
+        /// dependencies changed. Call it before [`Self::as_serialize`]: a memo is saved with the
+        /// dependencies of the queries it reads as they are now, and so must be valid as of now.
+        pub fn verify_persisted_memos(&self) {
+            let zalsa = self.zalsa();
+            for ingredient in zalsa.ingredients().filter(|ingredient| ingredient.is_persistable()) {
+                // SAFETY: `self` is the database the ingredient was created with.
+                unsafe { ingredient.verify_persisted(zalsa, crate::database::RawDatabase::from(self)) };
+            }
+        }
+
         /// Returns a type implementing [`serde::Serialize`], that can be used to serialize the
         /// current state of the database.
         ///

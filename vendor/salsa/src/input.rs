@@ -196,6 +196,15 @@ impl<C: Configuration> IngredientImpl<C> {
         // Also, we don't access any other data from the table while `r` is active.
         let data = unsafe { &mut *data_raw };
 
+        ::tracing::debug!(
+            target: "salsa::write",
+            input = C::DEBUG_NAME,
+            field = C::FIELD_DEBUG_NAMES[field_index],
+            key = id.as_bits(),
+            durability = ?data.durabilities[field_index],
+            "an input is written"
+        );
+
         assert_ne!(
             data.durabilities[field_index],
             Durability::NEVER_CHANGE,

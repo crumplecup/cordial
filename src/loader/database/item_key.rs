@@ -66,6 +66,12 @@ pub(super) fn function_of(
     }
 }
 
+/// The number of `key`, as it appears in events.
+#[instrument(level = "trace", skip(key))]
+pub(super) fn key_bits(key: ItemKey<'_>) -> u64 {
+    key.as_id().as_bits()
+}
+
 /// What `key` describes, as text.
 #[instrument(level = "trace", skip(db, key))]
 pub(super) fn key_text(db: &RootDatabase, key: ItemKey<'_>) -> String {

@@ -191,6 +191,18 @@ pub trait Ingredient: Any + fmt::Debug + Send + Sync {
         false
     }
 
+    /// Verify, at the current revision, every persisted memo of this ingredient that was last
+    /// verified at an earlier one, so that what is saved of it (its dependencies as they are now)
+    /// goes with the revision they are valid at. A query a memo reads may have run again since the
+    /// memo was verified, onto inputs that did not exist then: the memo is still valid, but
+    /// saved with those inputs and its old revision it would be found out of date.
+    ///
+    /// # Safety
+    ///
+    /// The database must be the one the ingredient was created with.
+    #[cfg(feature = "persistence")]
+    unsafe fn verify_persisted(&self, _zalsa: &Zalsa, _db: RawDatabase<'_>) {}
+
     /// Whether a persisted memo's dependency on `input` is saved as the watermark edge instead:
     /// the input is of the durability that rarely changes, and the memo is out of date whenever
     /// any such input has changed, without saying which.

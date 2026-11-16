@@ -587,6 +587,30 @@ where
         C::PERSIST
     }
 
+    #[cfg(feature = "persistence")]
+    unsafe fn verify_persisted(&self, zalsa: &Zalsa, db: RawDatabase<'_>) {
+        if !C::PERSIST {
+            return;
+        }
+        for entry in <C::SalsaStruct<'_> as SalsaStructInDb>::entries(zalsa) {
+            let memo_ingredient_index = self.memo_ingredient_indices.get(entry.ingredient_index());
+            let Some(memo) =
+                self.get_memo_from_table_for(zalsa, entry.key_index(), memo_ingredient_index)
+            else {
+                continue;
+            };
+            let verified_at = memo.header.verified_at.load();
+            if !memo.should_serialize() || verified_at == zalsa.current_revision() {
+                continue;
+            }
+            // SAFETY: The caller guarantees `db` is this ingredient's database.
+            let db = unsafe { self.view_caster().downcast_unchecked(db) };
+            // Verifying marks the memo verified now if nothing it depends on changed; if
+            // something did, the query runs again and its memo is replaced.
+            let _ = self.maybe_changed_after(db, entry.key_index(), verified_at);
+        }
+    }
+
     fn should_serialize(&self, zalsa: &Zalsa) -> bool {
         if !C::PERSIST {
             return false;
@@ -834,6 +858,42 @@ mod persistence {
                     entry.key_index().as_bits()
                 );
                 pending.push((key, memo, flat));
+            }
+
+            // Asked for by the `salsa::explain` target: for the first few memos that depend on a
+            // crate the tool added, the chain of queries that leads there. The memos of the lowest
+            // keys are the ones made first.
+            if ::tracing::enabled!(target: "salsa::explain", ::tracing::Level::DEBUG) {
+                let mut shown = 0;
+                for (key, memo, flat) in &pending {
+                    let (Flat::Derived(sets, own) | Flat::DerivedUntracked(sets, own)) = flat
+                    else {
+                        continue;
+                    };
+                    let reaches = sets
+                        .iter()
+                        .flat_map(|set| flattener.edges_of(set))
+                        .chain(own.iter().copied())
+                        .any(|edge| crate::flatten::is_low_crate_data(zalsa, edge));
+                    // SAFETY: Serialization's exclusive storage access prevents database writes.
+                    if reaches
+                        && let Some(path) = unsafe {
+                            crate::flatten::explain_low_crate_data(zalsa, memo.header.origin().edges())
+                        }
+                    {
+                        ::tracing::debug!(
+                            target: "salsa::explain",
+                            ingredient = C::DEBUG_NAME,
+                            memo = key.as_str(),
+                            path = path.as_str(),
+                            "a memo depends on a crate the tool added through"
+                        );
+                        shown += 1;
+                        if shown >= 5 {
+                            break;
+                        }
+                    }
+                }
             }
 
             // Each distinct set the memos refer to, once.

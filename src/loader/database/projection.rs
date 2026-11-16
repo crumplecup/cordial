@@ -103,25 +103,10 @@ impl SourceDatabase {
         })?;
         drop(ordinary_watch);
         crate::process_memory::log("ordinary projection done");
-        if self.restored {
-            // Which dependency of a restored memo had changed when it was verified, so that a
-            // restore that reuses little says why.
-            let stale = self.describe_stale();
-            crate::host::event(format!(
-                "analysis state: restored memos found out of date, by first changed input: {}",
-                if stale.is_empty() { "none" } else { &stale }
-            ));
-        }
+        self.log_tables();
         // Gated code is analysed by changing the database's cfg input, which
         // needs the exclusive borrow the ordinary pass does not have.
         let rest = self.project_after_ordinary(paths, &outline, &mut graph);
-        if self.restored {
-            // The same, now that the contexts have been verified too.
-            crate::host::event(format!(
-                "analysis state: restored memos found out of date by the end of the run, by first changed input: {}",
-                self.describe_stale()
-            ));
-        }
         // A run that fails in the contexts still leaves what it computed.
         self.save_state();
         rest?;

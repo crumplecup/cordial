@@ -218,6 +218,23 @@ persisted query has executed in the process since it began (`salsa::persisted_ex
 a function memo with `persist` executes): what it would write is what is there. It says so
 (`analysis state: nothing new to save`).
 
+## A persisted memo is saved as of now
+
+A memo is saved with its dependencies flattened from what the queries it reads depend on *now*, and
+with the revision it was last verified at. If a query it reads has run again since (asked on its own,
+or because the slot of a reusable interned key was given to a new value, the way a `FunctionKey` is
+when the contexts intern their functions), the memo is still valid in the process but its saved
+dependencies are the other query's current ones, and the next process finds it out of date. On cordial
+this was about 8,000 ordinary functions of the vendored crates, "stale" because of inputs of the
+contexts' copies, which did not exist when the functions were computed.
+
+`dyn Database::verify_persisted_memos` verifies every persisted memo at the current revision, running
+again the queries whose dependencies changed; cordial calls it before it saves. The cause was found
+with events at the source (`salsa::stale`, `salsa::write`, `salsa::explain`, with `cordial::tables` and
+`cordial::keys` to say what the numbers are) and `tests/salsa_flatten.rs` holds the minimal case:
+`outer` (persisted) reads `middle` (not), `middle` runs again onto another input, and the restored
+`outer` runs again unless it was verified before the save.
+
 ## Functions macros generate
 
 A description is the site of a definition's name: the file's path, the offset, and, for a generated
