@@ -977,11 +977,14 @@ impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for Verified {
     }
 }
 
-/// What verifying the memos of `member` reports after `change`.
-fn verified_after(change: Change) -> [u64; 4] {
+/// What verifying the memos of `member` in `parts` parts, each on a thread of its own, reports
+/// after `change` (the counts of every part added up), and how many queries then computed again
+/// when every one was asked for.
+fn verified_after(change: Change, parts: usize) -> ([u64; 4], usize) {
     let verified = Verified::default();
     let subscriber = tracing_subscriber::registry().with(verified.clone());
-    let _guard = tracing::subscriber::set_default(subscriber);
+    let dispatch = tracing::Dispatch::new(subscriber);
+    let _guard = tracing::dispatcher::set_default(&dispatch);
     let mut db = Db::default();
     let fixture = Fixture::new(&db);
     fixture.ask_all(&db);
@@ -995,26 +998,67 @@ fn verified_after(change: Change) -> [u64; 4] {
         }
         other => panic!("{other:?} is not one this test makes"),
     }
-    <dyn Database>::verify_persisted_memos(&db);
-    verified
+    let before = executions();
+    let handles: Vec<Db> = (0..parts).map(|_| db.clone()).collect();
+    std::thread::scope(|scope| {
+        for (part, handle) in handles.into_iter().enumerate() {
+            let dispatch = dispatch.clone();
+            scope.spawn(move || {
+                tracing::dispatcher::with_default(&dispatch, || {
+                    <dyn Database>::verify_persisted_memos_part(&handle, part, parts);
+                });
+            });
+        }
+    });
+    fixture.ask_all(&db);
+    let now = executions();
+    let computed = (now[0] - before[0]) + (now[1] - before[1]);
+    let total = verified
         .0
         .lock()
-        .ok()
-        .and_then(|all| all.last().copied())
-        .unwrap_or_default()
+        .map(|all| {
+            all.iter().fold([0u64; 4], |sum, counts| {
+                [
+                    sum[0] + counts[0],
+                    sum[1] + counts[1],
+                    sum[2] + counts[2],
+                    sum[3] + counts[3],
+                ]
+            })
+        })
+        .unwrap_or_default();
+    (total, computed)
 }
 
+/// Verifying in parts, on several threads, finds what verifying all at once does: the same memos
+/// current, unchanged and changed, and the same queries computed again, whichever the change, so a
+/// part that walks through what another has already walked is no more and no less sound.
 #[test]
-fn verifying_before_a_save_says_how_many_memos_it_found_current_unchanged_and_changed() {
-    // A change inside the first group's set: its memos are walked and found changed (and run
-    // again), the second group's are walked and found unchanged. Nothing changed: all are current
-    // or, a revision having passed, walked and found unchanged.
-    let [memos, current, unchanged, changed] = verified_after(Change::InTheFirstGroup);
-    assert_eq!((memos, current), (2 * MEMBERS as u64, 0));
-    assert_eq!((unchanged, changed), (MEMBERS as u64, MEMBERS as u64));
-
-    let [memos, _, unchanged, changed] = verified_after(Change::NothingToSee);
-    assert_eq!(memos, 2 * MEMBERS as u64);
-    assert_eq!(changed, 0, "nothing a memo reads changed");
-    assert!(unchanged <= memos);
+fn verifying_before_a_save_in_parts_finds_what_verifying_at_once_does() {
+    let members = 2 * MEMBERS as u64;
+    for change in [Change::InTheFirstGroup, Change::NothingToSee] {
+        let (whole, whole_computed) = verified_after(change, 1);
+        assert_eq!(whole[0], members, "{change:?}: every memo is verified once");
+        for parts in [2, 4, 7] {
+            let (found, computed) = verified_after(change, parts);
+            assert_eq!(
+                found, whole,
+                "{change:?}: in {parts} parts the memos were found {found:?}, at once {whole:?}"
+            );
+            assert_eq!(
+                computed, whole_computed,
+                "{change:?}: in {parts} parts {computed} queries computed again, at once {whole_computed}"
+            );
+        }
+        // And what the change reaches, and only that, is what was found changed and computed again.
+        let reached: usize = change.reaches().iter().sum();
+        assert_eq!(
+            whole[3] as usize, reached,
+            "{change:?}: the memos found changed"
+        );
+        assert_eq!(
+            whole_computed, reached,
+            "{change:?}: the queries computed again"
+        );
+    }
 }

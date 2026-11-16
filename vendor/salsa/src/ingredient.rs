@@ -201,7 +201,14 @@ pub trait Ingredient: Any + fmt::Debug + Send + Sync {
     ///
     /// The database must be the one the ingredient was created with.
     #[cfg(feature = "persistence")]
-    unsafe fn verify_persisted(&self, _zalsa: &Zalsa, _db: RawDatabase<'_>) {}
+    unsafe fn verify_persisted(
+        &self,
+        _zalsa: &Zalsa,
+        _db: RawDatabase<'_>,
+        _part: usize,
+        _parts: usize,
+    ) {
+    }
 
     /// Whether a persisted memo's dependency on `input` is saved as the watermark edge instead:
     /// the input is of the durability that rarely changes, and the memo is out of date whenever

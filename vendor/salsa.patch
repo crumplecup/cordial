@@ -563,7 +563,7 @@
      }
 --- salsa-0.28.5/src/database.rs
 +++ salsa/src/database.rs
-@@ -175,6 +175,17 @@
+@@ -175,6 +175,32 @@
      use serde::ser::SerializeMap;
  
      impl dyn Database {
@@ -571,17 +571,32 @@
 +        /// dependencies changed. Call it before [`Self::as_serialize`]: a memo is saved with the
 +        /// dependencies of the queries it reads as they are now, and so must be valid as of now.
 +        pub fn verify_persisted_memos(&self) {
++            self.verify_persisted_memos_part(0, 1);
++        }
++
++        /// The memos of one part of `parts` of every persisted ingredient: part `part` takes every
++        /// `parts`th memo. Calling it for each part, each from a handle of its own on its own
++        /// thread, verifies every memo as [`Self::verify_persisted_memos`] does, with the walks
++        /// through what the memos read shared between the threads as queries are.
++        pub fn verify_persisted_memos_part(&self, part: usize, parts: usize) {
 +            let zalsa = self.zalsa();
 +            for ingredient in zalsa.ingredients().filter(|ingredient| ingredient.is_persistable()) {
 +                // SAFETY: `self` is the database the ingredient was created with.
-+                unsafe { ingredient.verify_persisted(zalsa, crate::database::RawDatabase::from(self)) };
++                unsafe {
++                    ingredient.verify_persisted(
++                        zalsa,
++                        crate::database::RawDatabase::from(self),
++                        part,
++                        parts,
++                    )
++                };
 +            }
 +        }
 +
          /// Returns a type implementing [`serde::Serialize`], that can be used to serialize the
          /// current state of the database.
          ///
-@@ -369,8 +380,16 @@
+@@ -369,8 +395,16 @@
                  // to the ingredient as well as the database.
                  let mut ingredient = zalsa.take_ingredient(index);
  
@@ -1412,17 +1427,24 @@
          }
      }
  
-@@ -548,6 +587,52 @@
+@@ -548,6 +587,66 @@
          C::PERSIST
      }
  
 +    #[cfg(feature = "persistence")]
-+    unsafe fn verify_persisted(&self, zalsa: &Zalsa, db: RawDatabase<'_>) {
++    unsafe fn verify_persisted(
++        &self,
++        zalsa: &Zalsa,
++        db: RawDatabase<'_>,
++        part: usize,
++        parts: usize,
++    ) {
 +        if !C::PERSIST {
 +            return;
 +        }
 +        let started = std::time::Instant::now();
 +        let (mut memos, mut current, mut unchanged, mut changed) = (0u64, 0u64, 0u64, 0u64);
++        let mut seen = 0usize;
 +        for entry in <C::SalsaStruct<'_> as SalsaStructInDb>::entries(zalsa) {
 +            let memo_ingredient_index = self.memo_ingredient_indices.get(entry.ingredient_index());
 +            let Some(memo) =
@@ -1432,6 +1454,11 @@
 +            };
 +            let verified_at = memo.header.verified_at.load();
 +            if !memo.should_serialize() {
++                continue;
++            }
++            // This part's memos are every `parts`th one, in the order the ingredient lists them.
++            seen += 1;
++            if (seen - 1) % parts.max(1) != part {
 +                continue;
 +            }
 +            memos += 1;
@@ -1452,6 +1479,8 @@
 +            ::tracing::info!(
 +                target: "salsa::persistence",
 +                ingredient = C::DEBUG_NAME,
++                part,
++                parts,
 +                memos,
 +                already_current = current,
 +                unchanged_after_walking = unchanged,
@@ -1465,7 +1494,7 @@
      fn should_serialize(&self, zalsa: &Zalsa) -> bool {
          if !C::PERSIST {
              return false;
-@@ -595,44 +680,6 @@
+@@ -595,44 +694,6 @@
      }
  }
  
@@ -1510,7 +1539,7 @@
  fn flatten_cycle_head_dependencies(
      ingredient: &dyn FunctionIngredient,
      zalsa: &Zalsa,
-@@ -744,7 +791,9 @@
+@@ -744,7 +805,9 @@
  #[cfg(feature = "persistence")]
  mod persistence {
      use super::{Configuration, IngredientImpl, Memo};
@@ -1521,7 +1550,7 @@
      use crate::plumbing::{MemoIngredientMap, SalsaStructInDb};
      use crate::zalsa::Zalsa;
      use crate::zalsa_local::persistence::PersistentQueryOrigin;
-@@ -764,6 +813,14 @@
+@@ -764,6 +827,14 @@
          pub ingredient: &'db IngredientImpl<C>,
      }
  
@@ -1536,7 +1565,7 @@
      impl<C> serde::Serialize for SerializeIngredient<'_, C>
      where
          C: Configuration,
-@@ -774,26 +831,8 @@
+@@ -774,26 +845,8 @@
          {
              let Self { ingredient, zalsa } = self;
  
@@ -1565,7 +1594,7 @@
  
              for entry in <C::SalsaStruct<'_> as SalsaStructInDb>::entries(zalsa) {
                  let memo_ingredient_index = ingredient
-@@ -806,97 +845,210 @@
+@@ -806,97 +859,210 @@
                      memo_ingredient_index,
                  );
  
@@ -1837,7 +1866,7 @@
      }
  
      pub struct DeserializeIngredient<'db, C>
-@@ -937,7 +1089,23 @@
+@@ -937,7 +1103,23 @@
          {
              let DeserializeIngredient { zalsa, ingredient } = self;
  
@@ -1883,7 +1912,7 @@
      );
  
      /// Returns the function-specific interface for this ingredient, if any.
-@@ -191,6 +191,25 @@
+@@ -191,6 +191,32 @@
          false
      }
  
@@ -1897,7 +1926,14 @@
 +    ///
 +    /// The database must be the one the ingredient was created with.
 +    #[cfg(feature = "persistence")]
-+    unsafe fn verify_persisted(&self, _zalsa: &Zalsa, _db: RawDatabase<'_>) {}
++    unsafe fn verify_persisted(
++        &self,
++        _zalsa: &Zalsa,
++        _db: RawDatabase<'_>,
++        _part: usize,
++        _parts: usize,
++    ) {
++    }
 +
 +    /// Whether a persisted memo's dependency on `input` is saved as the watermark edge instead:
 +    /// the input is of the durability that rarely changes, and the memo is out of date whenever

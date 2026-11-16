@@ -179,10 +179,25 @@ mod persistence {
         /// dependencies changed. Call it before [`Self::as_serialize`]: a memo is saved with the
         /// dependencies of the queries it reads as they are now, and so must be valid as of now.
         pub fn verify_persisted_memos(&self) {
+            self.verify_persisted_memos_part(0, 1);
+        }
+
+        /// The memos of one part of `parts` of every persisted ingredient: part `part` takes every
+        /// `parts`th memo. Calling it for each part, each from a handle of its own on its own
+        /// thread, verifies every memo as [`Self::verify_persisted_memos`] does, with the walks
+        /// through what the memos read shared between the threads as queries are.
+        pub fn verify_persisted_memos_part(&self, part: usize, parts: usize) {
             let zalsa = self.zalsa();
             for ingredient in zalsa.ingredients().filter(|ingredient| ingredient.is_persistable()) {
                 // SAFETY: `self` is the database the ingredient was created with.
-                unsafe { ingredient.verify_persisted(zalsa, crate::database::RawDatabase::from(self)) };
+                unsafe {
+                    ingredient.verify_persisted(
+                        zalsa,
+                        crate::database::RawDatabase::from(self),
+                        part,
+                        parts,
+                    )
+                };
             }
         }
 

@@ -240,6 +240,12 @@ impl SavedState {
     }
 }
 
+/// How many parts each thread's share of the persisted memos is cut into.
+const PARTS_PER_THREAD: usize = 8;
+
+/// Stack for a verifying thread, as a priming worker has.
+const VERIFY_STACK_BYTES: usize = 64 * 1024 * 1024;
+
 impl super::SourceDatabase {
     /// Save this session's database as the next run's starting point: once per session, at the
     /// end of the first projection, with the contexts' crates and file copies, which the next
@@ -263,9 +269,7 @@ impl super::SourceDatabase {
         // now: one a query it reads has run again under since was last verified before that, and
         // would be saved with dependencies it did not have then and be found out of date.
         let verifying = std::time::Instant::now();
-        ra_ap_hir::attach_db(&self.db, || {
-            <dyn salsa::Database>::verify_persisted_memos(&self.db);
-        });
+        self.verify_persisted_in_parallel();
         tracing::debug!(
             target: "cordial::cache",
             elapsed = ?verifying.elapsed(),
@@ -315,6 +319,44 @@ impl super::SourceDatabase {
                 "an input"
             );
         }
+    }
+
+    /// Verify every persisted memo at the current revision, a part of them on each of several
+    /// threads. Verifying one is a walk through what it reads, which the memos share a great deal of
+    /// and which a thread only reads, so the parts go as queries do on several handles of one
+    /// database. More parts than threads, so a thread that finishes early takes another: some
+    /// parts walk through far more than others.
+    #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure(impl_type = "SourceDatabase")]
+    fn verify_persisted_in_parallel(&self) {
+        use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
+        let threads = std::thread::available_parallelism().map_or(1, usize::from);
+        let parts = threads * PARTS_PER_THREAD;
+        // Inferring a body recurses deeply, as it does for a priming worker.
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(threads)
+            .stack_size(VERIFY_STACK_BYTES)
+            .thread_name(|index| format!("cordial-verify-{index}"))
+            .build();
+        let Ok(pool) = pool else {
+            tracing::warn!("could not start the verifying threads: verifying on this one");
+            ra_ap_hir::attach_db(&self.db, || {
+                <dyn salsa::Database>::verify_persisted_memos(&self.db);
+            });
+            return;
+        };
+        // A handle of its own for each part, and the subscriber of this thread for the others.
+        let handles: Vec<_> = (0..parts).map(|_| self.db.clone()).collect();
+        let dispatch = tracing::dispatcher::get_default(Clone::clone);
+        pool.install(|| {
+            handles.into_par_iter().enumerate().for_each(|(part, db)| {
+                tracing::dispatcher::with_default(&dispatch, || {
+                    ra_ap_hir::attach_db(&db, || {
+                        <dyn salsa::Database>::verify_persisted_memos_part(&db, part, parts);
+                    });
+                });
+            });
+        });
     }
 
     /// Whether this session's database was restored from a saved state.

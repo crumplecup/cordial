@@ -516,7 +516,7 @@ fn a_restored_run_executes_few_rust_analyzer_queries() -> Result<()> {
     // What a restored run still asks rust-analyzer for is what it takes to name each function
     // (parse, item trees, attributes, macro expansion) so its saved evidence can be found: the
     // steps below. Anything else asking for analysis in a restored run is new work to account for.
-    const NAMING: [&str; 20] = [
+    const NAMING: [&str; 21] = [
         "local_functions",
         "derived_site",
         "inner_",
@@ -544,6 +544,9 @@ fn a_restored_run_executes_few_rust_analyzer_queries() -> Result<()> {
         "project_panics",
         // The gates of a file, read from its text once for the original and every copy of it.
         "gates_in",
+        // The line index of one file: the first step to read a file's text computes it, which was
+        // `captured_source` while the antipatterns of a restored run were read the direct way.
+        "error_source",
     ];
     let others: Vec<_> = by_step
         .keys()

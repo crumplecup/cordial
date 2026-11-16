@@ -588,12 +588,19 @@ where
     }
 
     #[cfg(feature = "persistence")]
-    unsafe fn verify_persisted(&self, zalsa: &Zalsa, db: RawDatabase<'_>) {
+    unsafe fn verify_persisted(
+        &self,
+        zalsa: &Zalsa,
+        db: RawDatabase<'_>,
+        part: usize,
+        parts: usize,
+    ) {
         if !C::PERSIST {
             return;
         }
         let started = std::time::Instant::now();
         let (mut memos, mut current, mut unchanged, mut changed) = (0u64, 0u64, 0u64, 0u64);
+        let mut seen = 0usize;
         for entry in <C::SalsaStruct<'_> as SalsaStructInDb>::entries(zalsa) {
             let memo_ingredient_index = self.memo_ingredient_indices.get(entry.ingredient_index());
             let Some(memo) =
@@ -603,6 +610,11 @@ where
             };
             let verified_at = memo.header.verified_at.load();
             if !memo.should_serialize() {
+                continue;
+            }
+            // This part's memos are every `parts`th one, in the order the ingredient lists them.
+            seen += 1;
+            if (seen - 1) % parts.max(1) != part {
                 continue;
             }
             memos += 1;
@@ -623,6 +635,8 @@ where
             ::tracing::info!(
                 target: "salsa::persistence",
                 ingredient = C::DEBUG_NAME,
+                part,
+                parts,
                 memos,
                 already_current = current,
                 unchanged_after_walking = unchanged,
