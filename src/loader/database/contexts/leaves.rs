@@ -144,7 +144,7 @@ impl SourceDatabase {
                 .iter()
                 .map(|package| package.root().clone())
                 .collect();
-            let locator = super::super::external::Locator::new(&self.db, &self.vfs, roots);
+            let locator = super::super::external::Locator::new(&self.db, roots);
             // Each context is a new cfg, so none of the results are computed yet:
             // evaluate the leaf functions together, then read them below.
             let mut definitions = Vec::new();

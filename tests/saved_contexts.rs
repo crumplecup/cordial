@@ -516,7 +516,7 @@ fn a_restored_run_executes_few_rust_analyzer_queries() -> Result<()> {
     // What a restored run still asks rust-analyzer for is what it takes to name each function
     // (parse, item trees, attributes, macro expansion) so its saved evidence can be found: the
     // steps below. Anything else asking for analysis in a restored run is new work to account for.
-    const NAMING: [&str; 18] = [
+    const NAMING: [&str; 19] = [
         "local_functions",
         "derived_site",
         "inner_",
@@ -538,18 +538,29 @@ fn a_restored_run_executes_few_rust_analyzer_queries() -> Result<()> {
         "panic_reachable",
         "persisted_evidence",
         "signature_index",
-        // The first step to need rust-analyzer now that naming the workspace's functions does
-        // not: its joins are rebuilt from the saved parts and read the definitions.
+        // A file's edition, and the one file the panic projection parses: one query each. Neither
+        // builds a definition map, as asking a file's module for its crate did.
+        "edition_of",
         "project_panics",
     ];
     let others: Vec<_> = by_step
         .keys()
         .filter(|step| !NAMING.contains(step))
         .collect();
+    let mut biggest: Vec<_> = restored
+        .iter()
+        .filter(|(name, _)| {
+            others
+                .iter()
+                .any(|step| name.starts_with(&format!("{step} > ")))
+        })
+        .collect();
+    biggest.sort_by_key(|(_, count)| std::cmp::Reverse(**count));
+    biggest.truncate(8);
     assert!(
         others.is_empty(),
-        "a restored run executed queries under steps that do not name functions: {others:?}, of all \
-         the steps it executed queries under: {by_step:?}"
+        "a restored run executed queries under steps that do not name functions: {others:?}; \
+         the most: {biggest:?}; all the steps it executed queries under: {by_step:?}"
     );
     assert!(
         restored.values().sum::<usize>() < cold.values().sum::<usize>(),

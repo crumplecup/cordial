@@ -20,9 +20,8 @@ impl SourceDatabase {
         #[cfg(feature = "verus_ir")] verus: &crate::VerusCrateIr,
     ) -> CordialResult<SourcePanics> {
         let paths = self.panic_inputs(root)?;
-        let sema = Semantics::new(&self.db);
         for (_, path) in &paths {
-            let edition = sema.attach_first_edition(self.file_id(path)?);
+            let edition = super::super::edition::edition_of(&self.db, self.file_id(path)?);
             if let Some(error) = edition.parse(&self.db).errors().first() {
                 return Err(anyhow::Error::new(error.clone()).into());
             }
@@ -120,7 +119,7 @@ impl SourceDatabase {
         let mut files = Vec::new();
         for (tree, path) in &paths {
             let file = self.file_id(path)?;
-            let edition = sema.attach_first_edition(file);
+            let edition = super::super::edition::edition_of(&self.db, file);
             if let Some(error) = edition.parse(&self.db).errors().first() {
                 return Err(anyhow::Error::new(error.clone()).into());
             }

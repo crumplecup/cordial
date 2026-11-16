@@ -45,7 +45,7 @@ impl SourceDatabase {
     ) -> CordialResult<crate::ir::ObservabilityFile> {
         let sema = Semantics::new(&self.db);
         let file = self.file_id(path)?;
-        let edition = sema.attach_first_edition(file);
+        let edition = super::super::edition::edition_of(&self.db, file);
         if let Some(error) = edition.parse(&self.db).errors().first() {
             if crate::loader::path_has_fixtures(path, root) {
                 return Ok(SourceObservability::invalid_file(

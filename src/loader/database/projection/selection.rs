@@ -196,7 +196,7 @@ impl SourceDatabase {
     ) -> CordialResult<crate::loader::DatabaseSource<'a>> {
         use ra_ap_ide_db::base_db::SourceDatabase as RaSourceDatabase;
         let file = self.file_id(path)?;
-        let edition = sema.attach_first_edition(file);
+        let edition = super::super::edition::edition_of(&self.db, file);
         if let Some(error) = edition.parse(&self.db).errors().first() {
             return Err(anyhow::Error::new(error.clone()).into());
         }

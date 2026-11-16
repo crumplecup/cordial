@@ -15,6 +15,7 @@ mod contexts;
     feature = "derives"
 ))]
 mod crate_files;
+mod edition;
 mod external;
 mod identity;
 #[cfg(feature = "tracing")]

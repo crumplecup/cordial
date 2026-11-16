@@ -97,6 +97,12 @@ pub(super) fn key_text(db: &RootDatabase, key: ItemKey<'_>) -> String {
     key.descriptor(db).clone()
 }
 
+/// The key `id` is the number of.
+#[instrument(level = "trace", skip(id))]
+pub(super) fn key_for<'db>(id: SemanticItemId) -> ItemKey<'db> {
+    ItemKey::from_id(salsa::Id::from_bits(id.bits()))
+}
+
 /// What `id` describes, as text.
 #[instrument(level = "trace", skip(db, id))]
 pub(super) fn description(db: &RootDatabase, id: SemanticItemId) -> String {
@@ -708,6 +714,12 @@ fn path_of(db: &RootDatabase, file: FileId) -> Option<PathText> {
     let root: SourceRootId = db.file_source_root(file).source_root_id(db);
     let source_root = db.source_root(root).source_root(db);
     PathText::of(source_root.path_for_file(&file)?)
+}
+
+/// The path the database holds `file` at, as the virtual file system names it.
+#[instrument(level = "trace", skip(db))]
+pub(super) fn vfs_path_of(db: &RootDatabase, file: FileId) -> Option<VfsPath> {
+    path_of(db, file).map(|path| path.vfs())
 }
 
 /// The file the database holds at `path`.

@@ -254,7 +254,7 @@ impl SourceDatabase {
                 .iter()
                 .map(|package| package.root().clone())
                 .collect();
-            let locator = super::super::external::Locator::new(&self.db, &self.vfs, roots);
+            let locator = super::super::external::Locator::new(&self.db, roots);
             // An item of this context's copy is named as the ordinary build names it
             // when the ordinary build has it, so facts and lookups agree.
             let canonical_id = |id: SemanticItemId| -> SemanticItemId {

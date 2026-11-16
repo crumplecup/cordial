@@ -2,7 +2,7 @@
 
 use std::path::Path;
 
-use ra_ap_hir::{Semantics, attach_db};
+use ra_ap_hir::attach_db;
 use ra_ap_ide_db::base_db::{EditionedFileId, SourceDatabase as RaSourceDatabase};
 
 use crate::{CordialError, CordialResult, loader::DatabaseSource};
@@ -48,7 +48,7 @@ impl SourceDatabase {
     fn captured_source<'a>(&'a self, path: &'a Path) -> CordialResult<DatabaseSource<'a>> {
         let file = self.file_id(path)?;
         let edition = if self.workspace.is_some() {
-            Semantics::new(&self.db).attach_first_edition(file)
+            super::super::edition::edition_of(&self.db, file)
         } else {
             EditionedFileId::current_edition(&self.db, file)
         };

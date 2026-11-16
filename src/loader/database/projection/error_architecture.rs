@@ -70,7 +70,7 @@ impl SourceDatabase {
     ) -> CordialResult<DatabaseSource<'db>> {
         let sema = Semantics::new(&self.db);
         let file = self.file_id(path)?;
-        let edition = sema.attach_first_edition(file);
+        let edition = super::super::edition::edition_of(&self.db, file);
         if let Some(error) = edition.parse(&self.db).errors().first() {
             return Err(anyhow::Error::new(error.clone()).into());
         }

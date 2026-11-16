@@ -68,7 +68,7 @@ impl SourceDatabase {
             .iter()
             .map(|package| package.root().clone())
             .collect();
-        let locator = super::super::external::Locator::new(&self.db, &self.vfs, roots);
+        let locator = super::super::external::Locator::new(&self.db, roots);
         let connected = projection.connect(graph, &locator)?;
         let outline = Outline {
             functions: connected.functions,
@@ -168,7 +168,7 @@ pub(in crate::loader::database) fn source_of<'a>(
     path: &'a Path,
 ) -> CordialResult<DatabaseSource<'a>> {
     let text = db.file_text(file).text(db);
-    let edition = sema.attach_first_edition(file);
+    let edition = super::super::edition::edition_of(db, file);
     // Semantics consults this same memoized parse. Recovery cannot
     // authorize a complete declaration or edit inventory.
     if let Some(error) = edition.parse(db).errors().first() {
