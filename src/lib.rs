@@ -319,7 +319,9 @@ pub use plugins::{
     all_etiquettes_from_plugins, all_plugins, coverage_only_plugins, coverage_plugins,
     quality_only_plugins, quality_plugins,
 };
-pub use tracing_init::{init_cli_tracing, init_tracing, tracing_fmt_layer};
+pub use tracing_init::{
+    LOG_SPANS_VARIABLE, init_cli_tracing, init_tracing, span_events, tracing_fmt_layer,
+};
 // `homecoming_std` re-exports live in one block (see docs/planning/cfg-scatter-etiquette.md)
 // even though they source from several internal modules.
 #[cfg(all(feature = "rustdoc", feature = "shadow"))]

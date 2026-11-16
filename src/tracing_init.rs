@@ -4,6 +4,23 @@ use tracing_subscriber::EnvFilter;
 
 mod profile;
 
+/// The variable that makes the log show each span when it ends, with the time it took.
+pub const LOG_SPANS_VARIABLE: &str = "CORDIAL_LOG_SPANS";
+
+/// Which span events the log shows for a setting of [`LOG_SPANS_VARIABLE`]: `close` shows each
+/// span as it ends with `time.busy` (the time it ran) and `time.idle`, `all` shows it entering and
+/// leaving too, and anything else shows none. Which spans exist is still `RUST_LOG`'s to say, so a
+/// run can ask for the timings of one module at `debug` and not drown in the rest.
+#[tracing::instrument(level = "trace")]
+pub fn span_events(setting: Option<&str>) -> tracing_subscriber::fmt::format::FmtSpan {
+    use tracing_subscriber::fmt::format::FmtSpan;
+    match setting {
+        Some("close") => FmtSpan::CLOSE,
+        Some("all") => FmtSpan::FULL,
+        _ => FmtSpan::NONE,
+    }
+}
+
 /// Cordial's own events at `info`; dependencies only at `warn`.
 const TEST_DEFAULT_FILTER: &str = "warn,cordial=info";
 
@@ -43,6 +60,9 @@ pub fn init_cli_tracing() {
         .with(
             tracing_subscriber::fmt::layer()
                 .with_writer(crate::host::stderr)
+                .with_span_events(span_events(
+                    std::env::var(LOG_SPANS_VARIABLE).ok().as_deref(),
+                ))
                 .with_filter(filter),
         )
         .with(crate::LiveLayer.with_filter(crate::live_filter()))
