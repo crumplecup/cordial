@@ -246,6 +246,14 @@ reads only its own text and what it resolves through. See the staged plan below.
    was not evaluated again while `caller` was; now neither is
    (`an_edit_evaluates_only_the_functions_it_changes_in_the_process_that_made_it`). This holds in the
    process that made the edit; after a restore the flattened dependencies still reach the file's text.
+   Measured limit: `evaluated` counts `collect_reachable` only. `direct_facts` (the part that reads the
+   function's syntax and resolves through `sema`) still runs again for every function of an edited
+   file, in the live process too, because it reads the file's whole syntax tree. Avoiding that needs
+   a dependency that is the function's own text and what it resolves through and not the file's tree;
+   Salsa records every read, so it takes either a body-level walk over rust-analyzer's `Body` and
+   inference (which have cutoff in-process) or a primitive that runs the heavy part with dependency
+   recording suspended behind a fingerprint, which is sound only if the fingerprint covers
+   everything the part resolves (callee signatures, imports, the impl's header).
 3. Salsa: fingerprinted edges to selected unpersisted intermediates, verified by re-running them, and a
    per-function cutoff query. Needs a check first that rust-analyzer's def map and item tree outputs
    can be fingerprinted, and an in-process test that editing one function leaves another's evidence
