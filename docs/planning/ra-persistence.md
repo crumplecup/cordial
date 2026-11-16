@@ -281,6 +281,27 @@ in context 1. The 190 functions it could not find again had two causes of ours:
   only through the crate's index, which lists no item declared inside a function body. The direct route
   runs first again and keeps a candidate only when its own description, which names the crate, matches.
 
+### Where a restored cordial run's time goes (hotpath report, spans on the low-volume modules)
+
+Measured with `--features full,hotpath`, `RUST_LOG` at debug for `contexts`, `context_crates`, `prime`,
+`saved`, `session` and `projection` only, and `CORDIAL_LOG_SPANS=close`, 235 s in all:
+
+- `add_context_crates` (6 calls, one per context and leaf pass): 104 s, 44%, all of it `counterparts_of`.
+  The leaf passes themselves (`read_leaves`, 5 calls) are 4 s; their 20 s each was this. Inside it
+  `declared_in` (3,965 calls) is 34 s and `place_in_file` through the place index (684,000 lookups) is
+  70 s, so building an index for each copy of a file dominated.
+- `SavedState::restore`: 74 s, 32%, one call.
+- `package_sources`: 21 s, once. `local_functions`: 7 s. Evidence priming: 15 s.
+
+Debug spans of the hot modules (`item_key`, `queries`) must not be logged: they were 75 MB/s and inflated
+the run from 235 s to 451 s. The per-span counts are in the hotpath report instead.
+
+The index labelled every attribute; only `derive` is a call, so only it has a place now, and the index
+builder is measured. `counterparts_of` itself matches every definition of every context copy to the
+ordinary build's by place. The place is in the description, so the counterpart of a copy's item is
+the same description with the original's path: it could be computed per item when asked, and checked
+to exist, instead of by listing every definition of every copy.
+
 ### Staged plan toward per-function reuse within a file
 
 1. Place-based description (done): `a_comment_above_a_function_does_not_change_what_describes_it`.

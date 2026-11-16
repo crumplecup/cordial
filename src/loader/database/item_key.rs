@@ -495,20 +495,31 @@ fn label(node: &SyntaxNode) -> Option<String> {
                 squeezed(ast::MacroCall::cast(node.clone())?.path())
             )
         }
-        // The call a derive macro is expanded from is the attribute, not the type.
-        SyntaxKind::ATTR => format!("attr {}", squeezed(ast::Attr::cast(node.clone())?.path())),
+        // The call a derive macro is expanded from is the attribute, not the type. No other
+        // attribute is a call (an attribute macro's is the item it is on), and a file has far
+        // more of them than items, so only `derive` is given a place.
+        SyntaxKind::ATTR => {
+            let path = squeezed(ast::Attr::cast(node.clone())?.path());
+            if path != "derive" {
+                return None;
+            }
+            format!("attr {path}")
+        }
         // What a derive is expanded from, in the newer syntax trees: the `derive(...)` inside the
         // attribute. Its path, not the list of derives, names it.
-        SyntaxKind::TOKEN_TREE_META => format!(
-            "meta {}",
-            node.text()
-                .to_string()
+        SyntaxKind::TOKEN_TREE_META => {
+            let text = node.text().to_string();
+            let path: String = text
                 .split('(')
                 .next()
                 .unwrap_or_default()
                 .split_whitespace()
-                .collect::<String>()
-        ),
+                .collect();
+            if path != "derive" {
+                return None;
+            }
+            format!("meta {path}")
+        }
         _ => return None,
     };
     // `|` separates a description's fields and `/` a place's segments.
@@ -543,6 +554,7 @@ struct Parent {
 
 impl PlaceIndex {
     #[instrument(level = "trace", skip(root))]
+    #[hotpath::measure(impl_type = "PlaceIndex")]
     fn of(root: &SyntaxNode) -> Self {
         use ra_ap_syntax::WalkEvent;
         let mut index = Self::default();
