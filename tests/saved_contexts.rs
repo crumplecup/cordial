@@ -134,6 +134,57 @@ fn an_edit_between_runs_reaches_the_taken_up_contexts() -> Result<()> {
     Ok(())
 }
 
+/// The node of the function named `name`, which is the only one.
+fn node_named(graph: &CrateIr, name: &str) -> Result<cordial::NodeId> {
+    let mut found = graph
+        .nodes_matching(&cordial::BasicQuery::items())
+        .into_iter()
+        .filter(|node| node.weight().name().as_deref() == Some(name))
+        .map(|node| node.id());
+    match (found.next(), found.next()) {
+        (Some(id), None) => Ok(id),
+        other => Err(miette::miette!("{name}: {other:?}")),
+    }
+}
+
+/// A function a context's copy declares is the ordinary build's function as far as facts go, in a
+/// run that took the context up from a saved state as in the run that made it: what it calls is
+/// named as the ordinary build names it, not by the copy's identity nothing else knows.
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn a_restored_contexts_facts_name_the_ordinary_functions_they_call() -> Result<()> {
+    cordial::init_tracing();
+    let root = fixture()?;
+    let state = tempfile::tempdir().into_diagnostic()?;
+    let saved = SavedState::at(state.path().join("analysis-state"));
+    run(root.path(), &saved)?;
+    // The edit makes the restored run harvest the context again.
+    std::fs::write(
+        root.path().join("src/lib.rs"),
+        format!("{LIBRARY}\n#[cfg(kani)]\npub fn second_harness() {{ ordinary(); }}\n"),
+    )
+    .into_diagnostic()?;
+    let (restored, graph) = run(root.path(), &saved)?;
+    assert!(restored);
+    let ordinary = graph
+        .semantic_function(node_named(&graph, "ordinary")?)
+        .into_diagnostic()?
+        .ok_or_else(|| miette::miette!("ordinary has facts"))?;
+    let entries = graph
+        .semantic_context_functions(node_named(&graph, "second_harness")?)
+        .into_diagnostic()?;
+    let call = entries
+        .first()
+        .and_then(|entry| entry.function().calls().first())
+        .ok_or_else(|| miette::miette!("the new harness calls ordinary"))?;
+    assert_eq!(
+        call.target(),
+        &cordial::SemanticCallTarget::Function(*ordinary.definition()),
+        "the restored context's call names the copy's identity, which nothing else knows"
+    );
+    Ok(())
+}
+
 /// A workspace of two local crates, one depending on the other, each with code gated on cfg.
 fn two_crates() -> Result<tempfile::TempDir> {
     let root = tempfile::tempdir().into_diagnostic()?;
