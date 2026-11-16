@@ -8,6 +8,8 @@
 //! evaluated when the projection asks for it, as before: priming changes when a
 //! result is computed, never what it is.
 
+use super::item_key::{self, ItemKey};
+use super::queries::SemanticDatabase;
 use super::{SourceDatabase, queries};
 use ra_ap_hir::{AssocItem, Crate, Function, ModuleDef, attach_db};
 use ra_ap_ide_db::RootDatabase;
@@ -24,6 +26,34 @@ impl SourceDatabase {
     #[instrument(level = "debug", skip(self))]
     #[hotpath::measure(impl_type = "SourceDatabase")]
     pub(super) fn prime_function_evidence(&self) {
+        // The functions of each ordinary crate, by description, as the last run saved them. A crate
+        // all of whose functions a description finds again is primed from them without asking
+        // rust-analyzer which functions it has; any other is enumerated.
+        let mut described: Vec<String> = Vec::new();
+        let complete = attach_db(&self.db, || {
+            for krate in self.ordinary_crates() {
+                let Some(scope) = item_key::crate_scope(&self.db, Crate::from(krate)) else {
+                    return false;
+                };
+                let index = crate_functions(&self.db, scope);
+                if index.unfound > 0 {
+                    return false;
+                }
+                described.extend(index.found.iter().cloned());
+            }
+            true
+        });
+        if complete {
+            tracing::debug!(
+                target: "cordial::semantic::priming",
+                functions = described.len(),
+                "priming from the saved descriptions of the workspace's functions"
+            );
+            self.prime("workspace", &described, |db, text| {
+                let _ = queries::persisted_evidence(db, ItemKey::new(db, text.clone()));
+            });
+            return;
+        }
         let excluded = self.shadow_crates();
         let functions = attach_db(&self.db, || local_functions(&self.db, &excluded));
         self.prime_functions("workspace", &functions);
@@ -38,6 +68,15 @@ impl SourceDatabase {
     #[instrument(level = "debug", skip(self, functions))]
     #[hotpath::measure(impl_type = "SourceDatabase")]
     pub(in crate::loader::database) fn prime_functions(&self, label: &str, functions: &[Function]) {
+        self.prime(label, functions, |db, function| {
+            let _ = queries::evidence_of(db, *function);
+        });
+    }
+
+    /// Run `one` over `items` on worker threads, each item once.
+    #[instrument(level = "debug", skip(self, functions, one))]
+    #[hotpath::measure(impl_type = "SourceDatabase")]
+    fn prime<T: Sync>(&self, label: &str, functions: &[T], one: impl Fn(&RootDatabase, &T) + Sync) {
         let before = queries::evidence_executed();
         let workers = std::thread::available_parallelism()
             .map_or(1, usize::from)
@@ -54,13 +93,13 @@ impl SourceDatabase {
         std::thread::scope(|scope| {
             for index in 0..workers {
                 let db = self.db.clone();
-                let (functions, next, dispatch) = (functions, &next, dispatch.clone());
+                let (functions, next, dispatch, one) = (functions, &next, dispatch.clone(), &one);
                 let spawned = std::thread::Builder::new()
                     .name(format!("cordial-prime-{index}"))
                     .stack_size(WORKER_STACK_BYTES)
                     .spawn_scoped(scope, move || {
                         tracing::dispatcher::with_default(&dispatch, || {
-                            evaluate(&db, functions, next);
+                            evaluate(&db, functions, next, one);
                         });
                     });
                 if let Err(error) = spawned {
@@ -79,12 +118,17 @@ impl SourceDatabase {
 }
 
 /// Take functions from the shared counter until none are left.
-#[instrument(level = "debug", skip(db, functions, next))]
+#[instrument(level = "debug", skip(db, functions, next, one))]
 #[hotpath::measure]
-fn evaluate(db: &RootDatabase, functions: &[Function], next: &AtomicUsize) {
+fn evaluate<T>(
+    db: &RootDatabase,
+    functions: &[T],
+    next: &AtomicUsize,
+    one: &impl Fn(&RootDatabase, &T),
+) {
     attach_db(db, || {
         while let Some(function) = functions.get(next.fetch_add(1, Ordering::Relaxed)) {
-            let _ = queries::evidence_of(db, *function);
+            one(db, function);
         }
     });
 }
@@ -102,22 +146,74 @@ fn local_functions(
         if !krate.origin(db).is_local() || excluded.contains(&krate.base()) {
             continue;
         }
-        for module in krate.modules(db) {
-            for declaration in module.declarations(db) {
-                match declaration {
-                    ModuleDef::Function(function) => functions.push(function),
-                    ModuleDef::Trait(declared) => {
-                        functions.extend(declared.items(db).into_iter().filter_map(function_of));
-                    }
-                    _ => {}
+        functions.extend(functions_in(db, krate));
+    }
+    functions
+}
+
+/// The functions `krate` declares.
+#[instrument(level = "debug", skip(db))]
+#[hotpath::measure]
+fn functions_in(db: &RootDatabase, krate: Crate) -> Vec<Function> {
+    let mut functions = Vec::new();
+    for module in krate.modules(db) {
+        for declaration in module.declarations(db) {
+            match declaration {
+                ModuleDef::Function(function) => functions.push(function),
+                ModuleDef::Trait(declared) => {
+                    functions.extend(declared.items(db).into_iter().filter_map(function_of));
                 }
+                _ => {}
             }
-            for implementation in module.impl_defs(db) {
-                functions.extend(implementation.items(db).into_iter().filter_map(function_of));
-            }
+        }
+        for implementation in module.impl_defs(db) {
+            functions.extend(implementation.items(db).into_iter().filter_map(function_of));
         }
     }
     functions
+}
+
+/// The descriptions of the functions of one crate, and how many it declares that a description
+/// cannot find again.
+///
+/// Saved with the database, so a run that changed nothing the crate's definitions read knows which
+/// functions the crate has without asking rust-analyzer: that would build the definition maps,
+/// which are not saved. Each function's evidence is found by its description alone.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub(super) struct CrateFunctions {
+    found: Vec<String>,
+    unfound: usize,
+}
+
+/// The functions of the crate `scope` describes: see [`CrateFunctions`].
+#[salsa::tracked(persist, returns(ref))]
+#[instrument(level = "debug", skip(db, scope))]
+#[hotpath::measure]
+pub(super) fn crate_functions<'db>(
+    db: &'db dyn SemanticDatabase,
+    scope: ItemKey<'db>,
+) -> CrateFunctions {
+    let root = db.root_database();
+    attach_db(root, || {
+        let mut index = CrateFunctions {
+            found: Vec::new(),
+            unfound: 0,
+        };
+        let Some(krate) = item_key::crate_of(root, &item_key::key_text(root, scope)) else {
+            index.unfound = 1;
+            return index;
+        };
+        for function in functions_in(root, krate) {
+            let definition = ModuleDef::Function(function);
+            let key = item_key::key_of(root, definition);
+            if item_key::finds(db, key, definition) {
+                index.found.push(item_key::key_text(root, key));
+            } else {
+                index.unfound += 1;
+            }
+        }
+        index
+    })
 }
 
 #[instrument(level = "trace")]

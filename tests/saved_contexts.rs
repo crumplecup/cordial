@@ -516,7 +516,7 @@ fn a_restored_run_executes_few_rust_analyzer_queries() -> Result<()> {
     // What a restored run still asks rust-analyzer for is what it takes to name each function
     // (parse, item trees, attributes, macro expansion) so its saved evidence can be found: the
     // steps below. Anything else asking for analysis in a restored run is new work to account for.
-    const NAMING: [&str; 17] = [
+    const NAMING: [&str; 18] = [
         "local_functions",
         "derived_site",
         "inner_",
@@ -538,6 +538,9 @@ fn a_restored_run_executes_few_rust_analyzer_queries() -> Result<()> {
         "panic_reachable",
         "persisted_evidence",
         "signature_index",
+        // The first step to need rust-analyzer now that naming the workspace's functions does
+        // not: its joins are rebuilt from the saved parts and read the definitions.
+        "project_panics",
     ];
     let others: Vec<_> = by_step
         .keys()
@@ -545,7 +548,8 @@ fn a_restored_run_executes_few_rust_analyzer_queries() -> Result<()> {
         .collect();
     assert!(
         others.is_empty(),
-        "a restored run executed queries under steps that do not name functions: {others:?}"
+        "a restored run executed queries under steps that do not name functions: {others:?}, of all \
+         the steps it executed queries under: {by_step:?}"
     );
     assert!(
         restored.values().sum::<usize>() < cold.values().sum::<usize>(),
@@ -1185,5 +1189,47 @@ fn the_modules_package_sources_asks_for_cost_the_same_whatever_the_package_holds
             "{query}: {before} for 100 functions, {count} for 1,000"
         );
     }
+    Ok(())
+}
+
+/// A restored run of a workspace nothing changed in does not ask rust-analyzer which functions the
+/// workspace has: their descriptions were saved, and each one's evidence is found by its
+/// description alone. Enumerating them builds the definition maps, which costs the same whatever
+/// is saved. Other steps still need rust-analyzer (the context passes, the panic joins), so the
+/// cost is not gone until they stop: the guard above lists them.
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn a_restored_run_does_not_enumerate_the_functions_of_a_workspace_nothing_changed_in() -> Result<()>
+{
+    cordial::init_tracing();
+    let executions = Executions::default();
+    let subscriber = tracing_subscriber::registry()
+        .with(executions.clone())
+        .with(cordial::tracing_fmt_layer());
+    let _subscriber = tracing::subscriber::set_default(subscriber);
+    let root = chain_of_crates()?;
+    let state = tempfile::tempdir().into_diagnostic()?;
+    let saved = SavedState::at(state.path().join("analysis-state"));
+    run_many(root.path(), &saved)?;
+    let cold = executions.take();
+    assert!(
+        cold.keys()
+            .any(|name| name.starts_with("crate_functions >")),
+        "a cold run enumerates the functions"
+    );
+    run_many(root.path(), &saved)?;
+    let enumerated: std::collections::BTreeMap<_, _> = executions
+        .take()
+        .into_iter()
+        .filter(|(name, _)| {
+            ["crate_functions >", "local_functions >"]
+                .iter()
+                .any(|step| name.starts_with(step))
+        })
+        .collect();
+    assert!(
+        enumerated.is_empty(),
+        "a restored run enumerated the functions again: {enumerated:#?}"
+    );
     Ok(())
 }

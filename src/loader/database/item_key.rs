@@ -41,6 +41,25 @@ pub(super) fn identity(db: &RootDatabase, definition: ModuleDef) -> SemanticItem
     SemanticItemId::new(ItemKey::new(db, describe(db, definition)).as_id().as_bits())
 }
 
+/// The description of the scope "all the functions of this crate": the crate's root file, which is
+/// where the same crate is found again in another process. `None` for a crate whose root file has no
+/// path of its own.
+#[instrument(level = "trace", skip(db))]
+pub(super) fn crate_scope(db: &RootDatabase, krate: ra_ap_hir::Crate) -> Option<ItemKey<'_>> {
+    let path = path_of(db, krate.root_file(db))?;
+    Some(ItemKey::new(db, format!("crate|{}", path.text)))
+}
+
+/// The local crate `scope` describes, found again by its root file.
+#[instrument(level = "trace", skip(db))]
+pub(super) fn crate_of(db: &RootDatabase, scope: &str) -> Option<ra_ap_hir::Crate> {
+    let wanted = scope.strip_prefix("crate|")?;
+    ra_ap_hir::Crate::all(db).into_iter().find(|krate| {
+        krate.origin(db).is_local()
+            && path_of(db, krate.root_file(db)).is_some_and(|path| path.text == wanted)
+    })
+}
+
 /// The interned description of `definition`.
 #[instrument(level = "trace", skip(db, definition))]
 pub(super) fn key_of(db: &RootDatabase, definition: ModuleDef) -> ItemKey<'_> {
@@ -712,7 +731,7 @@ fn file_at(db: &RootDatabase, path: &PathText) -> Option<FileId> {
 /// The description of `definition`: its site, or a nonce of this process.
 #[instrument(level = "trace", skip(db, definition))]
 fn describe(db: &RootDatabase, definition: ModuleDef) -> String {
-    site_of(db, definition)
+    let text = site_of(db, definition)
         .and_then(|site| {
             Some(
                 Site {
@@ -726,7 +745,14 @@ fn describe(db: &RootDatabase, definition: ModuleDef) -> String {
                 .text(),
             )
         })
-        .unwrap_or_else(|| format!("volatile|{}|{definition:?}", process_nonce()))
+        .unwrap_or_else(|| format!("volatile|{}|{definition:?}", process_nonce()));
+    // The spans this runs under say who asked: in a restored run nothing should need to.
+    tracing::debug!(
+        target: "cordial::semantic::identity",
+        description = %text,
+        "described a definition"
+    );
+    text
 }
 
 /// Text that is different in every process.
