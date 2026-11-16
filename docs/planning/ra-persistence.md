@@ -469,6 +469,29 @@ Three findings from the restored run's profile, each with a guard in `tests/`:
 Measured with `salsa::edges_expanded()` and the `decoded the saved Salsa memos` event (its `edges`
 and `micros`), and `salsa::database=debug` for each ingredient's decode time.
 
+### Measured on cordial (2026-11-16, release build with hotpath)
+
+A restored run of `cordial open --stop-after source_ir`, nothing changed since the cold run:
+
+| | before | after |
+|---|---|---|
+| wall time | 235 s | 31.9 s |
+| `SavedState::restore` | 74 s | 12.2 s (read 0.15 s, decode 12.0 s) |
+| queries executed loading the workspace | 237,976 | 2,563 |
+| functions evaluated (workspace and leaf passes) | 0 | 0 |
+| fallbacks to rust-analyzer | not counted | 0 |
+| peak memory | 12.3 GB | 7.8 GB |
+
+The cold run took 387 s and saved an 800 MB state (`save_state` 101 s, 26 s of it the write). What
+the state holds is mostly sets: `persisted_evidence` is 29,362 memos over 8,422 distinct sets of
+about 3,300 edges each (27.9 million), and the other ingredients add about 22 million. Decoding
+them is the restored run's largest remaining cost: `persisted_evidence` 4.7 s, `file_items` 1.8 s,
+`functions_in_copy` 1.1 s, `crate_files` 0.8 s. Restored memos were given 6.3 million edges of
+their own; copies of their sets would have been tens of millions.
+
+To measure a restored run the run cache must be out of the way (`rm -r <store>/cache/run`), or the
+run reports the cached IR and restores nothing.
+
 ## What is not persisted, and why
 
 - **The cfg contexts and the leaf pass are persisted** (see the next section).
