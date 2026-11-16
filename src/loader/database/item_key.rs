@@ -538,7 +538,7 @@ fn label(node: &SyntaxNode) -> Option<String> {
 /// changes nothing about it. Counting the earlier siblings of each item one by one, as a place is
 /// worded, takes time in proportion to the square of the items a file has (thousands of impls
 /// with one label), so the file is walked once and each parent keeps its own counts.
-#[derive(Debug, Default, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub(super) struct PlaceIndex {
     by_node: std::collections::HashMap<(SyntaxKind, u32), String>,
     by_place: std::collections::HashMap<String, (SyntaxKind, u32)>,
@@ -553,7 +553,7 @@ struct Parent {
 }
 
 impl PlaceIndex {
-    #[instrument(level = "trace", skip(root))]
+    #[instrument(name = "place_index", level = "debug", skip(root))]
     #[hotpath::measure(impl_type = "PlaceIndex")]
     fn of(root: &SyntaxNode) -> Self {
         use ra_ap_syntax::WalkEvent;
@@ -609,16 +609,38 @@ struct PlacedFile<'db> {
 
 /// The places of `file`'s items, kept until the file's text changes.
 #[salsa::tracked(returns(ref))]
-#[instrument(level = "debug", skip(db))]
+#[instrument(level = "debug", skip(db), fields(file = *file.index(db)))]
 #[hotpath::measure]
 fn places_in<'db>(db: &'db dyn SemanticDatabase, file: PlacedFile<'db>) -> PlaceIndex {
-    // Only the file's text is read, so the index is kept until that text changes. Asking the
-    // database for the file's parse would also read which crate the file is in, and every
-    // registration of a context's crates would make each file's index stale.
     let root = db.root_database();
-    let text = root.file_text(FileId::from_raw(*file.index(db)));
-    let parse = ra_ap_syntax::SourceFile::parse(text.text(root), ra_ap_syntax::Edition::CURRENT);
-    PlaceIndex::of(parse.tree().syntax())
+    let file_id = FileId::from_raw(*file.index(db));
+    // A context's copy of a file has the text of its original, so it has its places: the index is
+    // the original's, and the copy is not parsed and walked again for each context.
+    if let Some(original) = original_of_copy(root, file_id) {
+        tracing::debug!(target: "cordial::semantic::identity", file = file_id.index(), original = original.index(), "a copy takes its original's places");
+        return index_of(root, original).clone();
+    }
+    tracing::debug!(target: "cordial::semantic::identity", file = file_id.index(), "indexing the places of a file");
+    attach_db(root, || {
+        let sema = Semantics::new(root);
+        sema.attach_first_edition_opt(file_id)
+            .map(|editioned| PlaceIndex::of(sema.parse(editioned).syntax()))
+            .unwrap_or_default()
+    })
+}
+
+/// The file `file` is a context's copy of, or `None` when it is not a copy.
+#[instrument(level = "trace", skip(db))]
+fn original_of_copy(db: &RootDatabase, file: FileId) -> Option<FileId> {
+    let path = path_of(db, file)?;
+    let real = super::context_crates::original_path(&path.vfs())?;
+    file_at(
+        db,
+        &PathText {
+            real: true,
+            text: real.to_string_lossy().into_owned(),
+        },
+    )
 }
 
 /// The index of `file`'s places.

@@ -1006,3 +1006,44 @@ fn a_files_places_are_indexed_once_for_all_the_items_that_ask() -> Result<()> {
     );
     Ok(())
 }
+
+/// The files walked for their places in a run of the workspace over `contexts`.
+fn walks_over(contexts: Vec<SemanticContextKey>) -> Result<usize> {
+    let count = SpanCount(Default::default(), "place_index");
+    let subscriber = tracing_subscriber::registry().with(count.clone());
+    let _subscriber = tracing::subscriber::set_default(subscriber);
+    let root = chain_of_crates()?;
+    let state = tempfile::tempdir().into_diagnostic()?;
+    let saved = SavedState::at(state.path().join("analysis-state"));
+    let options = SemanticCargoOptions::default()
+        .with_cfg_contexts(contexts)
+        .with_cfg_planning(CfgPlanning::Explicit);
+    let mut session =
+        SourceDatabase::load_saved(root.path(), &options, Some(saved)).into_diagnostic()?;
+    session
+        .project(
+            &CrateTarget::new("gated", root.path()),
+            &[root.path().join("src/lib.rs")],
+        )
+        .into_diagnostic()?;
+    Ok(count.0.load(std::sync::atomic::Ordering::Relaxed))
+}
+
+/// A context's copy of a file has the text of its original, so the file is parsed and walked for
+/// its places once, not once more for each context that copies it: three contexts walk what none
+/// does.
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn a_files_copies_are_not_walked_again_for_their_places() -> Result<()> {
+    cordial::init_tracing();
+    let alone = walks_over(Vec::new())?;
+    let contexts = vec![
+        SemanticContextKey::enabling(["kani"]),
+        SemanticContextKey::enabling(["creusot"]),
+        SemanticContextKey::enabling(["kani", "creusot"]),
+    ];
+    let with = walks_over(contexts)?;
+    assert!(alone > 0, "the workspace's own files are walked");
+    assert_eq!(with, alone, "the contexts' copies were walked again");
+    Ok(())
+}
