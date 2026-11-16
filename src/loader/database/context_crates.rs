@@ -73,10 +73,9 @@ pub struct ContextCrates {
     /// Each original file with its copy.
     #[getter(skip)]
     files: HashMap<FileId, FileId>,
-    /// Each declaration in the copy with the ordinary build's declaration at the
-    /// same place in the source, so facts about the copy can speak of the original.
+    /// The original of each copy file, to name where a copy's declaration is written.
     #[getter(skip)]
-    counterparts: HashMap<ModuleDef, ModuleDef>,
+    copies: HashMap<FileId, FileId>,
     /// Whether this came from a saved state and has not been brought up to date with the
     /// sources of this run since: its copies and crates are the ones the last run made.
     #[getter(skip)]
@@ -122,11 +121,15 @@ impl ContextCrates {
             .into_iter()
             .map(|(original, copy)| Some((*order.get(original)?, *order.get(copy)?)))
             .collect::<Option<Vec<_>>>()?;
+        let files: HashMap<FileId, FileId> = saved.files.into_iter().collect();
         Some(Self {
             context: saved.context,
             crates,
-            files: saved.files.into_iter().collect(),
-            counterparts: HashMap::new(),
+            copies: files
+                .iter()
+                .map(|(original, copy)| (*copy, *original))
+                .collect(),
+            files,
             kept: true,
         })
     }
@@ -148,10 +151,19 @@ impl ContextCrates {
         self.files.get(&original).copied()
     }
 
-    /// The ordinary build's declaration of what `definition` declares in the copy.
-    #[instrument(level = "trace", skip(self))]
-    pub(super) fn counterpart(&self, definition: ModuleDef) -> Option<ModuleDef> {
-        self.counterparts.get(&definition).copied()
+    /// The ordinary build's declaration at the same place in the source as `definition`, a
+    /// declaration of this context's copy: the same file, the same kind of item, the same place
+    /// in it. Asked when the answer is needed, so a copy's declarations are not all listed.
+    #[instrument(level = "trace", skip(self, db))]
+    pub(super) fn counterpart(
+        &self,
+        db: &RootDatabase,
+        definition: ModuleDef,
+    ) -> Option<ModuleDef> {
+        let place = place_of(db, definition, &self.copies)?;
+        self.crates
+            .iter()
+            .find_map(|(ordinary, _)| places_declared_in(db, *ordinary).get(&place).copied())
     }
 
     /// The original of each copy.
@@ -269,7 +281,6 @@ impl SourceDatabase {
             shadows.push((*krate, copy));
         }
         self.register_shadows(index, &shadows);
-        let counterparts = self.counterparts_of(&shadows, &files);
         let bytes: usize = files
             .values()
             .map(|copy| self.db.file_text(*copy).text(&self.db).len())
@@ -283,8 +294,11 @@ impl SourceDatabase {
         Ok(ContextCrates {
             context: context.clone(),
             crates: shadows,
+            copies: files
+                .iter()
+                .map(|(original, copy)| (*copy, *original))
+                .collect(),
             files,
-            counterparts,
             kept: false,
         })
     }
@@ -376,35 +390,6 @@ impl SourceDatabase {
             );
         }
         Ok(copies)
-    }
-
-    /// Pair each declaration in a copy with the ordinary build's at the same place
-    /// in the source: the same file, the same name token, the same kind of item.
-    #[instrument(level = "debug", skip(self, pairs, files))]
-    #[hotpath::measure(impl_type = "SourceDatabase")]
-    fn counterparts_of(
-        &self,
-        pairs: &[(InputCrate, InputCrate)],
-        files: &HashMap<FileId, FileId>,
-    ) -> HashMap<ModuleDef, ModuleDef> {
-        let originals: HashMap<FileId, FileId> = files
-            .iter()
-            .map(|(original, copy)| (*copy, *original))
-            .collect();
-        attach_db(&self.db, || {
-            let mut found = HashMap::new();
-            for (ordinary, copy) in pairs {
-                let at = places_declared_in(&self.db, *ordinary);
-                for definition in declared_in(&self.db, Crate::from(*copy)) {
-                    if let Some(place) = place_of(&self.db, definition, &originals)
-                        && let Some(ordinary) = at.get(&place)
-                    {
-                        found.insert(definition, *ordinary);
-                    }
-                }
-            }
-            found
-        })
     }
 
     /// Bring every context's copy of `original` up to date with `text`.

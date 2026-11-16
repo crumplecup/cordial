@@ -259,7 +259,7 @@ impl SourceDatabase {
             // when the ordinary build has it, so facts and lookups agree.
             let canonical_id = |id: SemanticItemId| -> SemanticItemId {
                 match types::definition(&self.db, id)
-                    .and_then(|definition| files.context.counterpart(definition))
+                    .and_then(|definition| files.context.counterpart(&self.db, definition))
                 {
                     Some(ordinary) => types::identity(&self.db, ordinary),
                     None => id,
