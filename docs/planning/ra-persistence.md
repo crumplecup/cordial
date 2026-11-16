@@ -239,8 +239,13 @@ reads only its own text and what it resolves through. See the staged plan below.
 ### Staged plan toward per-function reuse within a file
 
 1. Place-based description (done): `a_comment_above_a_function_does_not_change_what_describes_it`.
-2. Evidence free of absolute positions (ranges relative to the function), so an edit that only shifts
-   positions leaves the evidence equal and stops downstream recomputation.
+2. Evidence free of absolute positions (done): a call's range is kept relative to where its function
+   starts (or its outermost macro call, for a generated one) and made a file coordinate again where the
+   evidence enters the graph (`queries::in_file`), so the consumers are unchanged. Measured first: a
+   comment above a function moved only `calls[*].range`, and in a live process `ordinary` (no calls)
+   was not evaluated again while `caller` was; now neither is
+   (`an_edit_evaluates_only_the_functions_it_changes_in_the_process_that_made_it`). This holds in the
+   process that made the edit; after a restore the flattened dependencies still reach the file's text.
 3. Salsa: fingerprinted edges to selected unpersisted intermediates, verified by re-running them, and a
    per-function cutoff query. Needs a check first that rust-analyzer's def map and item tree outputs
    can be fingerprinted, and an in-process test that editing one function leaves another's evidence

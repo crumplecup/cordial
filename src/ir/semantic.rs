@@ -180,6 +180,36 @@ pub struct SemanticFunction {
     incomplete: bool,
 }
 
+impl SemanticCall {
+    /// This call with its range moved forward by `anchor`; a call whose range is no coordinate
+    /// of any file (see `EXPANSION_RANGE`) is returned as it is.
+    #[tracing::instrument(level = "trace", skip(self))]
+    pub(crate) fn moved_by(&self, anchor: usize) -> Self {
+        if self.range.start() == usize::MAX {
+            return self.clone();
+        }
+        Self {
+            range: (self.range.start() + anchor..self.range.end() + anchor).into(),
+            ..self.clone()
+        }
+    }
+}
+
+impl SemanticFunction {
+    /// This evidence with the range of every call moved forward by `anchor`: the evidence is
+    /// kept with each range relative to where its function starts, so that text written above
+    /// the function does not change it, and is given its place in the file when it is used.
+    #[tracing::instrument(level = "trace", skip(self))]
+    pub(crate) fn with_ranges_from(&self, anchor: usize) -> Self {
+        let calls = self
+            .calls
+            .iter()
+            .map(|call| call.moved_by(anchor))
+            .collect();
+        self.clone().with_calls(calls)
+    }
+}
+
 impl SemanticType {
     /// This type with each identity in it replaced by `map`'s answer.
     #[tracing::instrument(level = "trace", skip(self, map))]

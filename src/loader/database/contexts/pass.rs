@@ -307,14 +307,12 @@ impl SourceDatabase {
                     if !(new || flips.touches(range) || flips.mentions(function.syntax())) {
                         continue;
                     }
-                    let facts = evidence_of(&self.db, definition)
-                        .as_ref()
-                        .ok_or_else(|| {
-                            crate::CordialError::workspace_source_facts_missing(
-                                "semantic function source",
-                            )
-                        })?
-                        .clone()
+                    let facts = evidence_of(&self.db, definition).as_ref().ok_or_else(|| {
+                        crate::CordialError::workspace_source_facts_missing(
+                            "semantic function source",
+                        )
+                    })?;
+                    let facts = super::super::queries::in_file(&self.db, definition, facts)
                         .map_identities(&mut |id| canonical_id(id));
                     for call in facts.calls() {
                         if let crate::SemanticCallTarget::Function(target) = call.target() {

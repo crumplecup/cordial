@@ -645,7 +645,26 @@ fn functions_that_look_alike_are_told_apart_and_found_again() -> Result<()> {
     Ok(())
 }
 
-/// Each function's evidence as JSON, by label, with the source ranges of its calls removed.
+/// The interned ids in `value` (a function's `definition` and the function a call's `target`
+/// names) follow the order a database happened to evaluate in, and mean nothing across two.
+fn without_ids(value: &mut serde_json::Value) {
+    match value {
+        serde_json::Value::Object(map) => {
+            map.remove("definition");
+            if let Some(serde_json::Value::Object(target)) = map.get_mut("target")
+                && let Some(id) = target.get_mut("Function")
+            {
+                *id = serde_json::Value::from(0);
+            }
+            map.values_mut().for_each(without_ids);
+        }
+        serde_json::Value::Array(items) => items.iter_mut().for_each(without_ids),
+        _ => {}
+    }
+}
+
+/// Each function's evidence as JSON, by label, without ids and optionally without the source
+/// ranges of its calls.
 fn evidence_by_label(
     graph: &CrateIr,
     without_ranges: bool,
@@ -657,6 +676,7 @@ fn evidence_by_label(
     for node in graph.nodes_matching(&query) {
         if let Some(facts) = graph.semantic_function(node.id()).into_diagnostic()? {
             let mut value = serde_json::to_value(&facts).into_diagnostic()?;
+            without_ids(&mut value);
             if without_ranges
                 && let Some(calls) = value
                     .get_mut("calls")
@@ -718,6 +738,53 @@ fn a_comment_above_a_function_changes_nothing_in_the_evidence_but_positions() ->
     assert!(
         moved.is_empty(),
         "a comment changed the evidence: {moved:#?}"
+    );
+    Ok(())
+}
+
+/// Two functions in one file; an edit to the text above them, in a process that has already
+/// evaluated them. Returns how many functions were evaluated again.
+fn evaluated_after_editing(edit: impl FnOnce(&str) -> String) -> Result<usize> {
+    let root = fixture()?;
+    let library = root.path().join("src/lib.rs");
+    let text = "pub fn ordinary() {}\npub fn caller() { ordinary(); }\n";
+    std::fs::write(&library, text).into_diagnostic()?;
+    let mut session = SourceDatabase::load(root.path()).into_diagnostic()?;
+    let target = CrateTarget::new("gated", root.path());
+    session
+        .project(&target, std::slice::from_ref(&library))
+        .into_diagnostic()?;
+    workspace_evidence()
+        .ok_or_else(|| miette::miette!("the first projection logs its evidence"))?;
+
+    session
+        .change_file(&library, edit(text))
+        .into_diagnostic()?;
+    session.project(&target, &[library]).into_diagnostic()?;
+    let (evaluated, _) = workspace_evidence()
+        .ok_or_else(|| miette::miette!("the second projection logs its evidence"))?;
+    Ok(evaluated)
+}
+
+/// The same edit, a comment above both functions, with its result asserted both ways: a comment
+/// leaves what each function says unchanged (the ranges aside), so it should evaluate nothing;
+/// a change to a function's body must evaluate that function.
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn an_edit_evaluates_only_the_functions_it_changes_in_the_process_that_made_it() -> Result<()> {
+    cordial::init_tracing();
+    let body = evaluated_after_editing(|text| {
+        text.replace("{ ordinary(); }", "{ ordinary(); ordinary(); }")
+    })?;
+    assert!(
+        body >= 1,
+        "an edit to a body evaluates that function ({body})"
+    );
+
+    let comment = evaluated_after_editing(|text| format!("// a comment\n{text}"))?;
+    assert_eq!(
+        comment, 0,
+        "a comment evaluated {comment} functions again in the same process"
     );
     Ok(())
 }

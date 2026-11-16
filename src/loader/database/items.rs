@@ -501,6 +501,7 @@ fn collect_function(
     let facts = queries::evidence_of(db, definition)
         .as_ref()
         .ok_or_else(|| CordialError::workspace_source_facts_missing("semantic function source"))?;
+    let facts = &queries::in_file(db, definition, facts);
     weight.set_attr(crate::ATTR_SEMANTIC_FUNCTION, serde_json::to_value(facts)?);
     let targets = facts
         .calls()

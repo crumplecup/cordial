@@ -143,6 +143,7 @@ fn collect_direct(db: &RootDatabase, function: Function) -> Option<DirectFacts> 
             targets: &mut source_targets,
             incomplete: &mut incomplete,
             expansion: expanded,
+            anchor: usize::from(source.value.syntax().text_range().start()),
         };
         walk.node(body.syntax(), None);
     }
@@ -169,6 +170,9 @@ struct BodyWalk<'a, 'db> {
     incomplete: &'a mut bool,
     /// The body is a macro's expansion, so no range in it is a file coordinate.
     expansion: bool,
+    /// Where the function starts in its file: the ranges are recorded relative to it, so text
+    /// written above the function leaves them (and the function's evidence) as they were.
+    anchor: usize,
 }
 
 /// The range of a call inside a macro-generated function. It is no coordinate of
@@ -189,7 +193,10 @@ impl BodyWalk<'_, '_> {
             return (EXPANSION_RANGE, EXPANSION_RANGE);
         }
         let range = invocation.unwrap_or(own);
-        (usize::from(range.start()), usize::from(range.end()))
+        (
+            usize::from(range.start()).saturating_sub(self.anchor),
+            usize::from(range.end()).saturating_sub(self.anchor),
+        )
     }
 
     /// Walk `root` for calls. `invocation` is the source range of the macro call
@@ -324,6 +331,22 @@ pub(super) fn persisted_evidence<'db>(
     );
     let function = super::item_key::function_of(db, key)?;
     function_evidence(db, FunctionKey::new(db, function)).clone()
+}
+
+/// `facts`, the evidence of `function`, with the ranges of its calls as coordinates of its file.
+/// The evidence is kept with them relative to where the function starts.
+#[instrument(level = "trace", skip(db, facts))]
+pub(super) fn in_file(
+    db: &RootDatabase,
+    function: Function,
+    facts: &SemanticFunction,
+) -> SemanticFunction {
+    match Semantics::new(db).source(function) {
+        Some(source) if !source.file_id.is_macro() => {
+            facts.with_ranges_from(usize::from(source.value.syntax().text_range().start()))
+        }
+        _ => facts.clone(),
+    }
 }
 
 /// The evidence of `function`. From the persisted query when its description finds this

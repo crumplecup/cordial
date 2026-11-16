@@ -49,7 +49,10 @@ pub(super) fn tracing_inventory_file<'db>(
                 continue;
             };
             if let Some(found) = queries::evidence_of(db, definition).as_ref() {
-                semantics.insert(function.syntax().text_range(), found.clone());
+                semantics.insert(
+                    function.syntax().text_range(),
+                    queries::in_file(db.root_database(), definition, found),
+                );
             }
         }
         SourceTracingInventory::collect(&source, facts.attributes(), &semantics).ok()
