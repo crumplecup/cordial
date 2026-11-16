@@ -607,6 +607,18 @@ fn deep_verify_edges(
             continue;
         }
 
+        // A restored memo's dependencies that other memos share are one edge, checked once for all
+        // of them: it is out of date if any edge of the set has changed since the memo was verified.
+        if edge.is_set() {
+            if let Some(changed) =
+                crate::flatten::set_changed_after(db, zalsa, edge.set_number(), old_verified_at)
+            {
+                crate::flatten::stale_event(zalsa, changed, database_key_index);
+                return VerifyResult::changed();
+            }
+            continue;
+        }
+
         match edge.kind() {
             QueryEdgeKind::Input => {
                 let dependency_index = edge.key();

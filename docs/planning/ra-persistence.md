@@ -434,6 +434,41 @@ as two offsets). In a restored run on an unchanged tree none of them executes
   The proper fix is in Salsa (initialise every function ingredient's view caster on
   deserialize), and belongs in the upstream conversation.
 
+## A restored run builds no definition map, and its memos share their sets
+
+Three findings from the restored run's profile, each with a guard in `tests/`:
+
+- **Naming a function needs no rust-analyzer when nothing changed.** What asked rust-analyzer for
+  definitions in a restored run, and so built the definition maps of the crate and the sysroot
+  under it (about 28,000 queries, 5,661 macro expansions), was the enumeration of the workspace's
+  functions, a file's edition (`attach_first_edition` finds its module), the planning scan and the
+  merge check, the files of a crate's modules (`package_sources`, `compiled::collect`), a
+  function's external location and trait, and each context's walk of its copy of every file. Each
+  is now a saved query keyed by a description that means the same in every process:
+  `crate_functions`, `crate_files`, `functions_in_copy`, `canonical_description`, `start_of`,
+  `implemented_declaration`, `crate_declares_a_name_twice`, and `edition_of` reads the crate's
+  input instead. A restored run over the specimens executes under 40 queries, from about 52,000.
+  After an edit the crate that changed still builds its maps and the sysroot's, which is the
+  remaining fixed cost, and sharing them across processes would need rust-analyzer's definition
+  maps to be serializable.
+- **A context's copy of a file has its original's places** (`PlaceIndex` is built once for both),
+  and a copy's counterpart in the ordinary build is found from its description, not by listing
+  every definition of every copy.
+- **Restored memos refer to the sets they share and do not copy them.** The saved state already
+  held each set of edges once, but decoding copied the whole set into every memo that refers to it:
+  a memo in a crate of `n` files was given `n` edges, so the edges, the decode time and the memory
+  grew with functions times files (187,673 edges for 400 files, 969 ms, from 72 for none). A
+  restored memo now holds one edge that names the set (`QueryEdge::set`, beside the watermark
+  edge). Verifying it checks the set's edges once for all the memos that share it, for each
+  revision and each revision the memo was verified at, and keeps the answer only until the database
+  next changes. Saving a restored memo again saves it as referring to the same set, so a state
+  saved again is no larger than the one restored (it was three times as large). The tests choose
+  what changes (a cell of a set, of another set, the library input, nothing, in turn, after one
+  save and restore or two) and expect exactly the queries that read it to compute again.
+
+Measured with `salsa::edges_expanded()` and the `decoded the saved Salsa memos` event (its `edges`
+and `micros`), and `salsa::database=debug` for each ingredient's decode time.
+
 ## What is not persisted, and why
 
 - **The cfg contexts and the leaf pass are persisted** (see the next section).

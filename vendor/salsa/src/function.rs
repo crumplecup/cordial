@@ -985,6 +985,14 @@ mod persistence {
                 own.insert(edge);
                 continue;
             }
+            // And the sets it refers to, which are saved as the sets they were.
+            if edge.is_set() {
+                let set = flattener.restored_set(edge.set_number());
+                if !sets.iter().any(|known| Arc::ptr_eq(known, &set)) {
+                    sets.push(set);
+                }
+                continue;
+            }
 
             let dependency = zalsa.lookup_ingredient(edge.key().ingredient_index());
 

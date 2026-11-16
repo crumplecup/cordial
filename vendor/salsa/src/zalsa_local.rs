@@ -879,8 +879,8 @@ impl<'a> QueryOriginRef<'a> {
     #[inline]
     pub(crate) fn inputs(self) -> impl DoubleEndedIterator<Item = DatabaseKeyIndex> + use<'a> {
         self.edges().iter().filter_map(|edge| match edge.kind() {
-            // The watermark stands for inputs, not for a query.
-            QueryEdgeKind::Input if edge.is_watermark() => None,
+            // The watermark and a set stand for inputs, not for a query.
+            QueryEdgeKind::Input if edge.is_summary() => None,
             QueryEdgeKind::Input => Some(edge.key()),
             QueryEdgeKind::Output => None,
         })
@@ -1695,6 +1695,33 @@ impl QueryEdge {
         self.ingredient.as_u32() == IngredientIndex::MAX_INDEX
     }
 
+    /// The edge a restored memo has in place of a set of edges it shares with other memos: the
+    /// number of the set among those restored (see `flatten::shared_set`). It stands for every
+    /// edge of the set, and is out of date once any of them is. Like the watermark it belongs to
+    /// no ingredient (the index below the watermark's) and is checked where edges are verified.
+    pub(crate) const fn set(number: u32) -> QueryEdge {
+        QueryEdge {
+            index: number,
+            generation: 0,
+            ingredient: unsafe { IngredientIndex::new_unchecked(IngredientIndex::MAX_INDEX - 1) },
+        }
+    }
+
+    /// Whether this is a [`Self::set`].
+    pub(crate) const fn is_set(self) -> bool {
+        self.ingredient.as_u32() == IngredientIndex::MAX_INDEX - 1
+    }
+
+    /// The number of the set this edge stands for.
+    pub(crate) const fn set_number(self) -> u32 {
+        self.index
+    }
+
+    /// Whether this edge stands for inputs, not for a query: the watermark or a set.
+    pub(crate) const fn is_summary(self) -> bool {
+        self.is_watermark() || self.is_set()
+    }
+
     const fn id(self) -> Id {
         // SAFETY: `index` came from a valid `Id` in `QueryEdge::input`.
         unsafe { Id::from_index(self.index) }.with_generation(self.generation)
@@ -2184,10 +2211,10 @@ pub(crate) mod persistence {
         fn expanded(self) -> Self {
             match self {
                 Self::SharedDerived(sets, edges) => {
-                    Self::Derived(crate::flatten::expand_saved(&sets, &edges))
+                    Self::Derived(crate::flatten::refer_to_saved(&sets, &edges))
                 }
                 Self::SharedDerivedUntracked(sets, edges) => {
-                    Self::DerivedUntracked(crate::flatten::expand_saved(&sets, &edges))
+                    Self::DerivedUntracked(crate::flatten::refer_to_saved(&sets, &edges))
                 }
                 other => other,
             }

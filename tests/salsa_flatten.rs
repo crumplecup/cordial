@@ -546,3 +546,248 @@ fn restored_memos_over_many_inputs_are_verified_quickly() {
         "verifying {executed} restored memos over many inputs took {elapsed:?}"
     );
 }
+
+// ---------------------------------------------------------------------------------------------
+// Memos that share what their dependencies flatten to keep sharing it once restored.
+// ---------------------------------------------------------------------------------------------
+
+/// One input a group of queries reads.
+#[salsa::input(persist)]
+struct Cell {
+    #[returns(copy)]
+    value: usize,
+}
+
+/// The inputs a group of queries all read, through a query that is not persisted.
+#[salsa::input(persist)]
+struct Group {
+    #[returns(ref)]
+    cells: Vec<Cell>,
+}
+
+/// Not persisted: everything a persisted query of the group reaches goes through here, so the
+/// group's queries all flatten to the same set of edges, one for each cell and the library.
+#[salsa::tracked(returns(copy))]
+fn total(db: &dyn Database, group: Group) -> usize {
+    let cells: usize = group.cells(db).iter().map(|cell| cell.value(db)).sum();
+    cells + Library::get(db).value(db)
+}
+
+static MEMBER_EXECUTIONS: [AtomicUsize; 2] = [AtomicUsize::new(0), AtomicUsize::new(0)];
+
+/// Persisted, and reads its group's cells (through `total`) and its own number.
+#[salsa::tracked(returns(copy), persist)]
+fn member<'db>(db: &'db dyn Database, group: Group, key: Key<'db>) -> usize {
+    MEMBER_EXECUTIONS[*key.n(db) % 2].fetch_add(1, Ordering::SeqCst);
+    total(db, group) + key.n(db)
+}
+
+/// Cells in each group, and queries in each group.
+const CELLS: usize = 200;
+const MEMBERS: usize = 30;
+
+/// Two groups of cells and the key of each member: the members with an even key are of the first
+/// group, the odd of the second.
+struct Fixture {
+    groups: [Group; 2],
+    cells: [Vec<Cell>; 2],
+}
+
+impl Fixture {
+    fn new(db: &Db) -> Self {
+        Library::builder(10)
+            .durability(salsa::Durability::HIGH)
+            .new(db);
+        let cells = [0, 1].map(|group| {
+            (0..CELLS)
+                .map(|n| Cell::new(db, group * 1000 + n))
+                .collect::<Vec<_>>()
+        });
+        let groups = [0, 1].map(|group| Group::new(db, cells[group].clone()));
+        Self { groups, cells }
+    }
+
+    /// Ask for every member of both groups, summing what each group answers.
+    fn ask_all(&self, db: &Db) -> [usize; 2] {
+        let mut answers = [0, 0];
+        for n in 0..MEMBERS * 2 {
+            answers[n % 2] += member(db, self.groups[n % 2], Key::new(db, n));
+        }
+        answers
+    }
+}
+
+/// What a restored database is asked to change before its queries are asked for again.
+#[derive(Clone, Copy, Debug)]
+enum Change {
+    /// A cell of the first group: every query of that group reaches it through the set.
+    InTheFirstGroup,
+    /// A cell of the second group.
+    InTheSecondGroup,
+    /// The library's input, which every query reaches through the watermark in its set.
+    InTheLibrary,
+    /// A cell no query reads.
+    NothingToSee,
+}
+
+impl Change {
+    /// The queries of each group this change makes compute again.
+    fn reaches(self) -> [usize; 2] {
+        match self {
+            Self::InTheFirstGroup => [MEMBERS, 0],
+            Self::InTheSecondGroup => [0, MEMBERS],
+            Self::InTheLibrary => [MEMBERS, MEMBERS],
+            Self::NothingToSee => [0, 0],
+        }
+    }
+}
+
+/// How many times the database is saved and restored before the changes.
+#[derive(Clone, Copy, Debug)]
+enum Trips {
+    Once,
+    /// Saved again after being restored, as a run that reuses a state and saves it does.
+    Twice,
+}
+
+fn round_trip(db: &mut Db) -> (Db, String) {
+    let saved = serde_json::to_string(&<dyn Database>::as_serialize(db))
+        .unwrap_or_else(|error| panic!("serializing: {error}"));
+    let mut restored = Db::default();
+    <dyn Database>::deserialize(
+        &mut restored,
+        &mut serde_json::Deserializer::from_str(&saved),
+    )
+    .unwrap_or_else(|error| panic!("deserializing: {error}"));
+    (restored, saved)
+}
+
+fn executions() -> [usize; 2] {
+    [
+        MEMBER_EXECUTIONS[0].load(Ordering::SeqCst),
+        MEMBER_EXECUTIONS[1].load(Ordering::SeqCst),
+    ]
+}
+
+/// A restored database, after `trips`, given each of `changes` in turn and asked for every query
+/// after each: the queries of each group that computed again for each change, and the answers.
+fn after(trips: Trips, changes: &[Change]) -> (Vec<[usize; 2]>, Vec<[usize; 2]>) {
+    let mut db = Db::default();
+    let fixture = Fixture::new(&db);
+    let first = fixture.ask_all(&db);
+    let (mut restored, first_saved) = round_trip(&mut db);
+    if let Trips::Twice = trips {
+        // Asking for every query makes each one verified, so each is saved again.
+        assert_eq!(fixture.ask_all(&restored), first);
+        let (again, second_saved) = round_trip(&mut restored);
+        // What a restored memo is saved as is what it was restored as: the sets stay sets.
+        assert!(
+            second_saved.len() <= first_saved.len() + first_saved.len() / 10,
+            "saved again, the state is {} bytes against {}",
+            second_saved.len(),
+            first_saved.len()
+        );
+        restored = again;
+    }
+    // Asking before any change settles what is verified in this revision, which a later change
+    // must not be hidden behind.
+    assert_eq!(fixture.ask_all(&restored), first);
+    let (mut computed, mut answers) = (Vec::new(), Vec::new());
+    for (step, change) in changes.iter().enumerate() {
+        let before = executions();
+        match change {
+            Change::InTheFirstGroup => {
+                let cell = fixture.cells[0][CELLS / 2];
+                cell.set_value(&mut restored).to(900_000 + step);
+            }
+            Change::InTheSecondGroup => {
+                let cell = fixture.cells[1][CELLS / 3];
+                cell.set_value(&mut restored).to(800_000 + step);
+            }
+            Change::InTheLibrary => {
+                Library::get(&restored)
+                    .set_value(&mut restored)
+                    .to(700_000 + step);
+            }
+            Change::NothingToSee => {
+                Cell::new(&restored, 7);
+            }
+        }
+        answers.push(fixture.ask_all(&restored));
+        let now = executions();
+        computed.push([now[0] - before[0], now[1] - before[1]]);
+    }
+    (computed, answers)
+}
+
+#[test]
+fn what_a_change_reaches_through_a_shared_set_is_computed_again_and_nothing_else() {
+    for trips in [Trips::Once, Trips::Twice] {
+        for change in [
+            Change::InTheFirstGroup,
+            Change::InTheSecondGroup,
+            Change::InTheLibrary,
+            Change::NothingToSee,
+        ] {
+            let (computed, _) = after(trips, &[change]);
+            assert_eq!(
+                computed,
+                vec![change.reaches()],
+                "{trips:?}, {change:?}: the queries that read what changed computed again, and \
+                 only those"
+            );
+        }
+    }
+}
+
+#[test]
+fn a_change_after_another_is_noticed_by_what_was_verified_in_between() {
+    // The memos the first change did not reach are verified again at the revision it made; the
+    // second change must still reach them, and must not reach what the first already recomputed
+    // and the second does not touch.
+    for trips in [Trips::Once, Trips::Twice] {
+        let changes = [
+            Change::InTheFirstGroup,
+            Change::InTheSecondGroup,
+            Change::NothingToSee,
+            Change::InTheSecondGroup,
+            Change::InTheLibrary,
+        ];
+        let (computed, answers) = after(trips, &changes);
+        let expected: Vec<[usize; 2]> = changes.iter().map(|change| change.reaches()).collect();
+        assert_eq!(
+            computed, expected,
+            "{trips:?}: each change reached what read it"
+        );
+        // The answers moved exactly when something that was read did.
+        for (step, change) in changes.iter().enumerate() {
+            if step > 0 {
+                let moved = answers[step] != answers[step - 1];
+                assert_eq!(
+                    moved,
+                    !matches!(change, Change::NothingToSee),
+                    "{trips:?}, step {step} ({change:?}): the answers {} when they should {}",
+                    if moved { "moved" } else { "stood" },
+                    if moved { "stand" } else { "move" }
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn memos_that_read_the_same_cells_do_not_each_take_a_copy_of_them() {
+    let mut db = Db::default();
+    let fixture = Fixture::new(&db);
+    fixture.ask_all(&db);
+    let before = salsa::edges_expanded();
+    let _restored = round_trip(&mut db);
+    let given = salsa::edges_expanded() - before;
+    // A memo is given a reference to its group's set, and what it reads itself: not a copy of
+    // the set's CELLS edges. Copies would be CELLS for each of the 2 x MEMBERS queries.
+    let copies = (2 * MEMBERS * CELLS) as u64;
+    assert!(
+        given < copies / 10,
+        "restoring gave memos {given} edges, where copies of their sets are {copies}"
+    );
+}

@@ -18,7 +18,6 @@
 //! the group's first query collects what it reaches. Without that, a group of K queries that
 //! all call each other is walked along every path through it, K! times.
 
-use std::cell::RefCell;
 use std::collections::HashSet;
 use std::time::Instant;
 
@@ -146,6 +145,8 @@ pub struct EdgeFlattener {
     lowlink: usize,
     /// Edges a hook adds, taken to be put in a set.
     scratch: FxIndexSet<QueryEdge>,
+    /// The set of each restored set a memo refers to, made once.
+    restored: FxHashMap<u32, LeafSet>,
     started: Instant,
     stats: FlattenStats,
 }
@@ -175,6 +176,7 @@ impl Default for EdgeFlattener {
             next: 0,
             lowlink: usize::MAX,
             scratch: FxIndexSet::default(),
+            restored: FxHashMap::default(),
             started: Instant::now(),
             stats: FlattenStats::default(),
         }
@@ -205,6 +207,22 @@ impl EdgeFlattener {
         self.stats.sets += 1;
         let set = Arc::new(bits);
         self.interned.insert(Arc::clone(&set));
+        set
+    }
+
+    /// The set of the edges of the restored set `number`: the set a memo that refers to it is saved
+    /// as referring to, so a state saved again shares what the state restored shared.
+    pub(crate) fn restored_set(&mut self, number: u32) -> LeafSet {
+        if let Some(set) = self.restored.get(&number) {
+            return Arc::clone(set);
+        }
+        let mut builder = Builder::default();
+        for edge in shared_set(number).iter().copied() {
+            let bit = self.number(edge);
+            builder.set(bit);
+        }
+        let set = self.intern(builder);
+        self.restored.insert(number, Arc::clone(&set));
         set
     }
 
@@ -271,6 +289,14 @@ pub(crate) unsafe fn leaves_of(
 
     let mut found = Builder::default();
     for dependency_edge in memo.header().origin().edges() {
+        if dependency_edge.is_set() {
+            // The members of a restored set, as the edges they are.
+            for member in shared_set(dependency_edge.set_number()).iter() {
+                let number = flattener.number(*member);
+                found.set(number);
+            }
+            continue;
+        }
         if dependency_edge.is_watermark() {
             let number = flattener.number(dependency_edge);
             found.set(number);
@@ -329,8 +355,27 @@ pub(crate) unsafe fn leaves_of(
 }
 
 thread_local! {
-    /// The sets the ingredient being deserialized saved, for the memos that refer to them.
-    static SAVED_SETS: RefCell<Vec<Box<[QueryEdge]>>> = const { RefCell::new(Vec::new()) };
+    /// The number the first of the sets the ingredient being deserialized saved was given among
+    /// all those restored: the set `n` of the ingredient is the restored set `base + n`.
+    static SAVED_BASE: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+}
+
+/// The sets restored memos refer to, by number: every ingredient's, in the order restored.
+///
+/// A set is shared by every memo that reaches the same edges (in a crate of a thousand files, the
+/// thousand file texts that every function of it depends on through its definition map). A
+/// restored memo does not copy the set into an edge list of its own: it holds one edge that
+/// refers to the set, so restoring costs a memo what it reads itself, and the set is checked once
+/// for all of them (see [`set_changed_after`]).
+static SHARED_SETS: std::sync::RwLock<Vec<Arc<[QueryEdge]>>> = std::sync::RwLock::new(Vec::new());
+
+/// The edges of the restored set `number`.
+pub(crate) fn shared_set(number: u32) -> Arc<[QueryEdge]> {
+    let sets = SHARED_SETS.read().unwrap_or_else(|poisoned| poisoned.into_inner());
+    Arc::clone(
+        sets.get(number as usize)
+            .unwrap_or_else(|| panic!("a memo refers to restored set {number}, which there is not")),
+    )
 }
 
 /// Hold the sets a saved ingredient listed while its memos are deserialized.
@@ -340,42 +385,98 @@ pub(crate) struct SavedSets;
 #[cfg(feature = "persistence")]
 impl SavedSets {
     pub(crate) fn install(sets: Vec<Box<[QueryEdge]>>) -> Self {
-        SAVED_SETS.with(|saved| *saved.borrow_mut() = sets);
+        let mut shared = SHARED_SETS.write().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let base = u32::try_from(shared.len()).expect("fewer than 2^32 restored sets");
+        shared.extend(sets.into_iter().map(Arc::from));
+        SAVED_BASE.with(|saved| saved.set(base));
         Self
     }
 }
 
+/// The edges a restored memo has: one for each saved set it refers to, and its own.
 #[cfg(feature = "persistence")]
-impl Drop for SavedSets {
-    fn drop(&mut self) {
-        SAVED_SETS.with(|saved| saved.borrow_mut().clear());
-    }
+pub(crate) fn refer_to_saved(sets: &[u32], edges: &[QueryEdge]) -> Box<[QueryEdge]> {
+    let base = SAVED_BASE.with(std::cell::Cell::get);
+    let all: Box<[QueryEdge]> = sets
+        .iter()
+        .map(|set| QueryEdge::set(base + set))
+        .chain(edges.iter().copied())
+        .collect();
+    EDGES_EXPANDED.fetch_add(all.len() as u64, std::sync::atomic::Ordering::Relaxed);
+    all
 }
 
-/// The edges of the saved sets `sets` and `edges`, each once, in that order.
-#[cfg(feature = "persistence")]
-pub(crate) fn expand_saved(sets: &[u32], edges: &[QueryEdge]) -> Box<[QueryEdge]> {
-    SAVED_SETS.with(|saved| {
-        let saved = saved.borrow();
-        let mut all = FxIndexSet::default();
-        for set in sets {
-            let set = saved
-                .get(*set as usize)
-                .unwrap_or_else(|| panic!("a memo refers to set {set}, which was not saved"));
-            all.extend(set.iter().copied());
+/// The answers [`set_changed_after`] has given in one revision of one database.
+#[derive(Default)]
+struct SetAnswers {
+    database: usize,
+    revision: Option<crate::Revision>,
+    /// For each set and revision a memo was verified at: the edge that changed after it, if one did.
+    answers: FxHashMap<(u32, crate::Revision), Option<QueryEdge>>,
+}
+
+static SET_ANSWERS: std::sync::Mutex<Option<SetAnswers>> = std::sync::Mutex::new(None);
+
+/// The edge of the restored set `number` that changed after `since`, if one did.
+///
+/// Every memo of a crate refers to the same set, and was verified at the same revision, so the
+/// answer is worked out once for all of them and kept until the database changes. Nothing is
+/// kept across a change: the answer is a fact about the inputs as they are in one revision.
+pub(crate) fn set_changed_after(
+    db: crate::database::RawDatabase<'_>,
+    zalsa: &Zalsa,
+    number: u32,
+    since: crate::Revision,
+) -> Option<QueryEdge> {
+    let database = std::ptr::from_ref(zalsa) as usize;
+    let revision = zalsa.current_revision();
+    {
+        let mut kept = SET_ANSWERS.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let answers = kept.get_or_insert_with(SetAnswers::default);
+        if answers.database != database || answers.revision != Some(revision) {
+            *answers = SetAnswers {
+                database,
+                revision: Some(revision),
+                answers: FxHashMap::default(),
+            };
+        } else if let Some(answer) = answers.answers.get(&(number, since)) {
+            return *answer;
         }
-        all.extend(edges.iter().copied());
-        EDGES_EXPANDED.fetch_add(all.len() as u64, std::sync::atomic::Ordering::Relaxed);
-        all.into_iter().collect()
-    })
+    }
+    let mut changed = None;
+    for edge in shared_set(number).iter().copied() {
+        if edge.is_watermark() {
+            if zalsa.last_changed_revision(WATERMARK_DURABILITY) > since {
+                changed = Some(edge);
+                break;
+            }
+            continue;
+        }
+        if edge.kind() == crate::zalsa_local::QueryEdgeKind::Input
+            && matches!(
+                edge.key().maybe_changed_after(db, zalsa, since),
+                crate::function::VerifyResult::Changed
+            )
+        {
+            changed = Some(edge);
+            break;
+        }
+    }
+    let mut kept = SET_ANSWERS.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    if let Some(answers) = kept.as_mut()
+        && answers.database == database
+        && answers.revision == Some(revision)
+    {
+        answers.answers.insert((number, since), changed);
+    }
+    changed
 }
-
 
 /// Whether `edge` is a crate's `data` that survived flattening: not the watermark, so an input
 /// of the lowest durability. Crates the loader made are written at a higher one, so these are
 /// the ones a tool added.
 pub(crate) fn is_low_crate_data(zalsa: &Zalsa, edge: QueryEdge) -> bool {
-    if edge.is_watermark() {
+    if edge.is_summary() {
         return false;
     }
     let ingredient = zalsa.lookup_ingredient(edge.key().ingredient_index());
@@ -399,7 +500,7 @@ pub(crate) unsafe fn explain_low_crate_data(
         path: &mut Vec<String>,
     ) -> bool {
         for edge in edges {
-            if edge.is_watermark() || !seen.insert(edge) {
+            if edge.is_summary() || !seen.insert(edge) {
                 continue;
             }
             let ingredient = zalsa.lookup_ingredient(edge.key().ingredient_index());

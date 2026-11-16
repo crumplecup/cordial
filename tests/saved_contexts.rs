@@ -1124,6 +1124,53 @@ fn decode_micros(count: usize) -> Result<u64> {
         .ok_or_else(|| miette::miette!("the restored run decoded nothing"))
 }
 
+/// Microseconds and edges the restored run took to decode its saved memos, for a crate of `files`
+/// modules of a function each.
+fn decode_over_files(files: usize) -> Result<(u64, u64)> {
+    let rate = DecodeRate::default();
+    let subscriber = tracing_subscriber::registry().with(rate.clone());
+    let _subscriber = tracing::subscriber::set_default(subscriber);
+    let root = fixture()?;
+    let mut library = String::new();
+    for n in 0..files {
+        library.push_str(&format!("pub mod m{n};\n"));
+        std::fs::write(
+            root.path().join(format!("src/m{n}.rs")),
+            format!("pub fn f{n}() -> usize {{ {n} }}\n"),
+        )
+        .into_diagnostic()?;
+    }
+    std::fs::write(root.path().join("src/lib.rs"), library).into_diagnostic()?;
+    let state = tempfile::tempdir().into_diagnostic()?;
+    let saved = SavedState::at(state.path().join("analysis-state"));
+    run(root.path(), &saved)?;
+    run(root.path(), &saved)?;
+    let all = rate.0.lock().map_err(|_| miette::miette!("poisoned"))?;
+    all.last()
+        .map(|(_, micros, edges)| (*micros, *edges))
+        .ok_or_else(|| miette::miette!("the restored run decoded nothing"))
+}
+
+/// A memo of a crate depends on every file of it, through the crate's definition map, so a crate
+/// of `n` files has memos with `n` edges each if each is given a copy: the edges restoring gives
+/// memos grow with the square of the files, and so does the time. A memo is given a reference to
+/// the set it shares instead, so they grow with the files.
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn restoring_gives_memos_edges_in_proportion_to_the_files_of_the_crate() -> Result<()> {
+    cordial::init_tracing();
+    let (_, base) = decode_over_files(0)?;
+    let (_, half) = decode_over_files(100)?;
+    let (_, whole) = decode_over_files(200)?;
+    let (half, whole) = (half.saturating_sub(base), whole.saturating_sub(base));
+    // Twice the files: twice the edges, not four times as many (copies were 3.2 times as many).
+    assert!(
+        whole < half * 5 / 2 + 200,
+        "{half} edges for 100 files and {whole} for 200 above the {base} of none"
+    );
+    Ok(())
+}
+
 /// What decoding the saved memos costs for each function grows with neither the functions nor
 /// the state: twice the functions take about twice as long, not four times, and a function costs
 /// well under a millisecond (in the unoptimised build the tests run in).
