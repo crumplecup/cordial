@@ -26,26 +26,40 @@ pub struct StableCx<'db> {
     pub db: &'db dyn SourceDatabase,
     hasher: std::hash::DefaultHasher,
     volatile: u32,
+    /// What made it volatile, and how many times.
+    reasons: std::collections::BTreeMap<&'static str, u32>,
 }
 
 /// What a hash is, and how much of it could not be given a meaning that survives the process.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StableFingerprint {
     pub hash: u64,
     /// How many things in it were hashed as volatile. When it is not zero, the hash is different
     /// in every process: it is safe, and a cutoff made from it never applies.
     pub volatile: u32,
+    /// What made it volatile, and how many times each: which constructs a cutoff cannot see
+    /// through.
+    pub reasons: Vec<(&'static str, u32)>,
 }
 
 static NONCE: AtomicU64 = AtomicU64::new(0);
 
 impl<'db> StableCx<'db> {
     pub fn new(db: &'db dyn SourceDatabase) -> Self {
-        Self { db, hasher: std::hash::DefaultHasher::new(), volatile: 0 }
+        Self {
+            db,
+            hasher: std::hash::DefaultHasher::new(),
+            volatile: 0,
+            reasons: std::collections::BTreeMap::new(),
+        }
     }
 
     pub fn finish(self) -> StableFingerprint {
-        StableFingerprint { hash: self.hasher.finish(), volatile: self.volatile }
+        StableFingerprint {
+            hash: self.hasher.finish(),
+            volatile: self.volatile,
+            reasons: self.reasons.into_iter().collect(),
+        }
     }
 
     /// A word that says which kind of thing follows, so that two different things with the same
@@ -78,8 +92,9 @@ impl<'db> StableCx<'db> {
 
     /// Something with no meaning that survives the process: the hash is not equal to any other
     /// process's.
-    pub fn volatile(&mut self, _what: &'static str) {
+    pub fn volatile(&mut self, what: &'static str) {
         self.volatile += 1;
+        *self.reasons.entry(what).or_default() += 1;
         let process = u64::from(std::process::id());
         let time = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -98,9 +113,12 @@ impl<'db> StableCx<'db> {
     ) {
         let mut parts: Vec<u64> = Vec::new();
         for entry in entries {
-            let mut inner = StableCx { db: self.db, hasher: std::hash::DefaultHasher::new(), volatile: 0 };
+            let mut inner = StableCx::new(self.db);
             hash_entry(&mut inner, entry);
             self.volatile += inner.volatile;
+            for (what, count) in &inner.reasons {
+                *self.reasons.entry(what).or_default() += count;
+            }
             parts.push(inner.hasher.finish());
         }
         parts.sort_unstable();

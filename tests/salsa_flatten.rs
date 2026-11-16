@@ -1418,3 +1418,59 @@ fn a_query_read_through_a_tracked_struct_it_made_has_its_fingerprint_depended_on
         }
     }
 }
+
+/// What is done to a restored database before its memos are verified.
+#[derive(Clone, Copy, Debug)]
+enum Setup {
+    /// Nothing: no query has been called in this process.
+    Nothing,
+    /// The tracked functions are set up from the registered views, without calling any.
+    InitViewCasters,
+}
+
+/// How many `sized` queries ran after an edit to a database restored with `setup`, and `None` when
+/// verifying them panicked: they depend on `shape_fingerprint`, which nothing has called.
+fn sized_after_a_restore_with(setup: Setup) -> Option<usize> {
+    let mut db = Db::default();
+    let fixture = Fixture::new(&db);
+    ask_sizes(&db, &fixture);
+    ask_fingerprints(&db, &fixture);
+    assert!(<dyn Database>::register_cutoff(
+        &db,
+        "shape",
+        "shape_fingerprint"
+    ));
+    let (mut restored, _) = round_trip_in(&mut db, Format::MessagePack);
+    assert!(<dyn Database>::register_cutoff(
+        &restored,
+        "shape",
+        "shape_fingerprint"
+    ));
+    if let Setup::InitViewCasters = setup {
+        <dyn Database>::init_view_casters(&restored);
+    }
+    let before = SIZED_EXECUTIONS.load(Ordering::SeqCst);
+    let cell = fixture.cells[0][CELLS / 2];
+    cell.set_value(&mut restored).to(7);
+    let verified = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        ask_sizes(&restored, &fixture);
+    }));
+    verified
+        .ok()
+        .map(|()| SIZED_EXECUTIONS.load(Ordering::SeqCst) - before)
+}
+
+#[test]
+fn a_restored_memo_that_depends_on_a_query_nothing_has_called_is_verified_once_it_is_set_up() {
+    assert_eq!(
+        sized_after_a_restore_with(Setup::InitViewCasters),
+        Some(0),
+        "set up from the registered views, verifying finds the fingerprint as it was"
+    );
+    assert_eq!(
+        sized_after_a_restore_with(Setup::Nothing),
+        None,
+        "a tracked function that nothing has called cannot be verified through, which is what \
+         setting them up is for"
+    );
+}

@@ -221,6 +221,11 @@ pub trait Ingredient: Any + fmt::Debug + Send + Sync {
     #[cfg(feature = "persistence")]
     unsafe fn verify_persisted_by_closure(&self, _zalsa: &Zalsa, _db: RawDatabase<'_>) {}
 
+    /// Set up a tracked function from the views the database has registered, so that a memo that
+    /// depends on it can be verified before anything has called it. Does nothing for the others,
+    /// and for a function whose view has not been registered.
+    fn init_view_caster(&self, _zalsa: &Zalsa) {}
+
     /// Whether a persisted memo's dependency on `input` is saved as the watermark edge instead:
     /// the input is of the durability that rarely changes, and the memo is out of date whenever
     /// any such input has changed, without saying which.

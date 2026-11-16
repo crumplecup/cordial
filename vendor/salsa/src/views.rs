@@ -136,6 +136,19 @@ impl Views {
         unsafe { &*(&raw const self.view_casters[idx]).cast::<DatabaseDownCaster<DbView>>() }
     }
 
+    /// The downcaster to `dyn DbView` if one has been registered, and `None` if not.
+    pub fn try_downcaster_for<DbView: ?Sized + Any>(&self) -> Option<&DatabaseDownCaster<DbView>> {
+        let view_type_id = TypeId::of::<DbView>();
+        self.view_casters
+            .iter()
+            .find(|(_, view)| view.target_type_id == view_type_id)
+            // SAFETY: We are unerasing the type erased function pointer having made sure the
+            // TypeId matches.
+            .map(|(_, view)| unsafe {
+                &*((view as *const ViewCaster).cast::<DatabaseDownCaster<DbView>>())
+            })
+    }
+
     /// Retrieve an downcaster function to `dyn DbView`.
     ///
     /// # Panics

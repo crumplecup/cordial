@@ -32,6 +32,7 @@ pub(super) fn def_map_fingerprint(db: &dyn SemanticDatabase, krate: InputCrate) 
             tracing::debug!(
                 target: "cordial::cache",
                 volatile = fingerprint.volatile,
+                reasons = ?fingerprint.reasons,
                 "a definition map has things in it with no meaning that survives the process: \
                  what read it is not reused across an edit"
             );

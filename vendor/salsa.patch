@@ -563,7 +563,7 @@
      }
 --- salsa-0.28.5/src/database.rs
 +++ salsa/src/database.rs
-@@ -175,6 +175,85 @@
+@@ -175,6 +175,97 @@
      use serde::ser::SerializeMap;
  
      impl dyn Database {
@@ -616,6 +616,18 @@
 +            }
 +        }
 +
++        /// Set up every tracked function whose database view has been registered, without calling
++        /// any. A tracked function is otherwise set up the first time it is called, and a restored
++        /// memo that depends on one is verified before anything has called it: call this after
++        /// the views are registered (`zalsa_register_downcaster` of each trait) and a state is
++        /// restored.
++        pub fn init_view_casters(&self) {
++            let zalsa = self.zalsa();
++            for ingredient in zalsa.ingredients() {
++                ingredient.init_view_caster(zalsa);
++            }
++        }
++
 +        /// Say that the persisted tracked function `fingerprint` stands for the tracked function
 +        /// `query`, both called by the names they are declared with, and taking the same salsa
 +        /// struct as their only argument.
@@ -649,7 +661,7 @@
          /// Returns a type implementing [`serde::Serialize`], that can be used to serialize the
          /// current state of the database.
          ///
-@@ -369,8 +448,16 @@
+@@ -369,8 +460,16 @@
                  // to the ingredient as well as the database.
                  let mut ingredient = zalsa.take_ingredient(index);
  
@@ -1664,11 +1676,17 @@
          }
      }
  
-@@ -548,6 +588,71 @@
+@@ -548,6 +588,77 @@
          C::PERSIST
      }
  
 +    #[cfg(feature = "persistence")]
++    fn init_view_caster(&self, zalsa: &Zalsa) {
++        if let Some(caster) = zalsa.views().try_downcaster_for::<C::DbView>() {
++            self.view_caster.get_or_init(|| *caster);
++        }
++    }
++
 +    unsafe fn verify_persisted_by_closure(&self, zalsa: &Zalsa, db: RawDatabase<'_>) {
 +        // SAFETY: The caller keeps queries from running, and `db` is this ingredient's database.
 +        unsafe { persistence::verify_by_closure(self, zalsa, db) };
@@ -1718,7 +1736,7 @@
 +            }
 +        }
 +        if memos > 0 {
-+            ::tracing::info!(
++            ::tracing::debug!(
 +                target: "salsa::persistence",
 +                ingredient = C::DEBUG_NAME,
 +                part,
@@ -1736,7 +1754,7 @@
      fn should_serialize(&self, zalsa: &Zalsa) -> bool {
          if !C::PERSIST {
              return false;
-@@ -595,44 +700,6 @@
+@@ -595,44 +706,6 @@
      }
  }
  
@@ -1781,7 +1799,7 @@
  fn flatten_cycle_head_dependencies(
      ingredient: &dyn FunctionIngredient,
      zalsa: &Zalsa,
-@@ -744,7 +811,9 @@
+@@ -744,7 +817,9 @@
  #[cfg(feature = "persistence")]
  mod persistence {
      use super::{Configuration, IngredientImpl, Memo};
@@ -1792,7 +1810,7 @@
      use crate::plumbing::{MemoIngredientMap, SalsaStructInDb};
      use crate::zalsa::Zalsa;
      use crate::zalsa_local::persistence::PersistentQueryOrigin;
-@@ -764,6 +833,14 @@
+@@ -764,6 +839,14 @@
          pub ingredient: &'db IngredientImpl<C>,
      }
  
@@ -1807,7 +1825,7 @@
      impl<C> serde::Serialize for SerializeIngredient<'_, C>
      where
          C: Configuration,
-@@ -774,26 +851,9 @@
+@@ -774,26 +857,9 @@
          {
              let Self { ingredient, zalsa } = self;
  
@@ -1837,7 +1855,7 @@
  
              for entry in <C::SalsaStruct<'_> as SalsaStructInDb>::entries(zalsa) {
                  let memo_ingredient_index = ingredient
-@@ -806,97 +866,303 @@
+@@ -806,97 +872,303 @@
                      memo_ingredient_index,
                  );
  
@@ -2202,7 +2220,7 @@
      }
  
      pub struct DeserializeIngredient<'db, C>
-@@ -937,7 +1203,23 @@
+@@ -937,7 +1209,23 @@
          {
              let DeserializeIngredient { zalsa, ingredient } = self;
  
@@ -2248,7 +2266,7 @@
      );
  
      /// Returns the function-specific interface for this ingredient, if any.
-@@ -191,6 +191,43 @@
+@@ -191,6 +191,48 @@
          false
      }
  
@@ -2281,6 +2299,11 @@
 +    /// or run a query that could replace a memo while this runs.
 +    #[cfg(feature = "persistence")]
 +    unsafe fn verify_persisted_by_closure(&self, _zalsa: &Zalsa, _db: RawDatabase<'_>) {}
++
++    /// Set up a tracked function from the views the database has registered, so that a memo that
++    /// depends on it can be verified before anything has called it. Does nothing for the others,
++    /// and for a function whose view has not been registered.
++    fn init_view_caster(&self, _zalsa: &Zalsa) {}
 +
 +    /// Whether a persisted memo's dependency on `input` is saved as the watermark edge instead:
 +    /// the input is of the durability that rarely changes, and the memo is out of date whenever

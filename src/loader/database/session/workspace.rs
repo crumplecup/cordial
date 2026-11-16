@@ -230,7 +230,13 @@ fn load_database(
             for path in restored.paths {
                 vfs.set_file_contents(path, None);
             }
-            (restored.database, vfs, Some(restored.contexts))
+            // A restored memo can depend on a persisted query that nothing has called yet in this
+            // process (a definition map's fingerprint), and verifying it needs the query set up.
+            let database = restored.database;
+            let semantic: &dyn super::super::queries::SemanticDatabase = &database;
+            let _ = super::super::queries::SemanticDatabase::zalsa_register_downcaster(semantic);
+            <dyn salsa::Database>::init_view_casters(&database);
+            (database, vfs, Some(restored.contexts))
         }
         Some(Err(reason)) => {
             crate::host::event(format!("analysis state: not used ({reason}); loading cold"));

@@ -589,6 +589,12 @@ where
     }
 
     #[cfg(feature = "persistence")]
+    fn init_view_caster(&self, zalsa: &Zalsa) {
+        if let Some(caster) = zalsa.views().try_downcaster_for::<C::DbView>() {
+            self.view_caster.get_or_init(|| *caster);
+        }
+    }
+
     unsafe fn verify_persisted_by_closure(&self, zalsa: &Zalsa, db: RawDatabase<'_>) {
         // SAFETY: The caller keeps queries from running, and `db` is this ingredient's database.
         unsafe { persistence::verify_by_closure(self, zalsa, db) };
@@ -638,7 +644,7 @@ where
             }
         }
         if memos > 0 {
-            ::tracing::info!(
+            ::tracing::debug!(
                 target: "salsa::persistence",
                 ingredient = C::DEBUG_NAME,
                 part,

@@ -224,6 +224,18 @@ mod persistence {
             }
         }
 
+        /// Set up every tracked function whose database view has been registered, without calling
+        /// any. A tracked function is otherwise set up the first time it is called, and a restored
+        /// memo that depends on one is verified before anything has called it: call this after
+        /// the views are registered (`zalsa_register_downcaster` of each trait) and a state is
+        /// restored.
+        pub fn init_view_casters(&self) {
+            let zalsa = self.zalsa();
+            for ingredient in zalsa.ingredients() {
+                ingredient.init_view_caster(zalsa);
+            }
+        }
+
         /// Say that the persisted tracked function `fingerprint` stands for the tracked function
         /// `query`, both called by the names they are declared with, and taking the same salsa
         /// struct as their only argument.
