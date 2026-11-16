@@ -345,9 +345,27 @@ impl super::SourceDatabase {
             });
             return;
         };
-        // A handle of its own for each part, and the subscriber of this thread for the others.
-        let handles: Vec<_> = (0..parts).map(|_| self.db.clone()).collect();
         let dispatch = tracing::dispatcher::get_default(Clone::clone);
+        // First what flattening a memo's dependencies is enough to verify, a share of the
+        // ingredients on each thread: it runs no query, so the threads only read.
+        let by_closure: Vec<_> = (0..threads).map(|_| self.db.clone()).collect();
+        pool.install(|| {
+            by_closure
+                .into_par_iter()
+                .enumerate()
+                .for_each(|(part, db)| {
+                    tracing::dispatcher::with_default(&dispatch, || {
+                        ra_ap_hir::attach_db(&db, || {
+                            <dyn salsa::Database>::verify_persisted_memos_by_closure_part(
+                                &db, part, threads,
+                            );
+                        });
+                    });
+                });
+        });
+        // Then the rest, a part of the memos on each thread, by walking what they read. A handle
+        // of its own for each part, and the subscriber of this thread for the others.
+        let handles: Vec<_> = (0..parts).map(|_| self.db.clone()).collect();
         pool.install(|| {
             handles.into_par_iter().enumerate().for_each(|(part, db)| {
                 tracing::dispatcher::with_default(&dispatch, || {

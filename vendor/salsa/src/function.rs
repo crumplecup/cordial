@@ -488,8 +488,9 @@ where
         flattener: &mut EdgeFlattener,
     ) {
         // SAFETY: The caller prevents database writes throughout the traversal.
-        if let Some(set) = unsafe { crate::flatten::leaves_of(zalsa, edge, flattener) } {
+        if let Some((set, closure)) = unsafe { crate::flatten::leaves_of(zalsa, edge, flattener) } {
             serialized_edges.extend(flattener.edges_of(&set));
+            flattener.carried.merge(closure);
         }
     }
 
@@ -588,6 +589,11 @@ where
     }
 
     #[cfg(feature = "persistence")]
+    unsafe fn verify_persisted_by_closure(&self, zalsa: &Zalsa, db: RawDatabase<'_>) {
+        // SAFETY: The caller keeps queries from running, and `db` is this ingredient's database.
+        unsafe { persistence::verify_by_closure(self, zalsa, db) };
+    }
+
     unsafe fn verify_persisted(
         &self,
         zalsa: &Zalsa,
@@ -867,12 +873,12 @@ mod persistence {
                 let flat = match memo.header.origin() {
                     QueryOriginRef::Derived(edges) => {
                         // SAFETY: Serialization's exclusive storage access prevents database writes.
-                        let (sets, own) = unsafe { flatten_memo(zalsa, edges, &mut flattener) };
+                        let (sets, own, _) = unsafe { flatten_memo(zalsa, edges, &mut flattener) };
                         Flat::Derived(sets, own)
                     }
                     QueryOriginRef::DerivedUntracked(edges) => {
                         // SAFETY: Serialization's exclusive storage access prevents database writes.
-                        let (sets, own) = unsafe { flatten_memo(zalsa, edges, &mut flattener) };
+                        let (sets, own, _) = unsafe { flatten_memo(zalsa, edges, &mut flattener) };
                         Flat::DerivedUntracked(sets, own)
                     }
                     QueryOriginRef::Assigned(key) => {
@@ -1017,9 +1023,12 @@ mod persistence {
         zalsa: &Zalsa,
         edges: crate::zalsa_local::QueryEdges<'_>,
         flattener: &mut EdgeFlattener,
-    ) -> (Vec<LeafSet>, Box<[QueryEdge]>) {
+    ) -> (Vec<LeafSet>, Box<[QueryEdge]>, crate::flatten::Closure) {
         let mut sets: Vec<LeafSet> = Vec::new();
         let mut own = FxIndexSet::default();
+        let mut closure = crate::flatten::Closure::nothing();
+        flattener.met_no_memo = false;
+        flattener.carried = crate::flatten::Closure::nothing();
 
         for edge in edges {
             // A memo restored and saved again still has its watermark.
@@ -1048,10 +1057,13 @@ mod persistence {
                 });
             } else if dependency.as_function().is_some() {
                 // SAFETY: The caller prevents database writes throughout the traversal.
-                if let Some(set) = unsafe { crate::flatten::leaves_of(zalsa, edge, flattener) }
-                    && !sets.iter().any(|known| Arc::ptr_eq(known, &set))
+                if let Some((set, below)) =
+                    unsafe { crate::flatten::leaves_of(zalsa, edge, flattener) }
                 {
-                    sets.push(set);
+                    closure.merge(below);
+                    if !sets.iter().any(|known| Arc::ptr_eq(known, &set)) {
+                        sets.push(set);
+                    }
                 }
             } else {
                 // Otherwise, serialize the minimum edges necessary to cover the dependency.
@@ -1062,7 +1074,92 @@ mod persistence {
             }
         }
 
-        (sets, own.into_iter().collect())
+        closure.merge(std::mem::replace(
+            &mut flattener.carried,
+            crate::flatten::Closure::nothing(),
+        ));
+        if std::mem::take(&mut flattener.met_no_memo) {
+            closure.trusted = false;
+        }
+        (sets, own.into_iter().collect(), closure)
+    }
+
+    /// Verify the persisted memos of `ingredient` that what flattening them sees is enough to
+    /// verify: none of the inputs in their sets, and none of the queries between, changed after
+    /// they were verified, and what they read could all be seen. It is the walk the save does to
+    /// flatten, once, in place of a walk through everything each memo reads for every memo.
+    ///
+    /// # Safety
+    ///
+    /// `db` is the database of `ingredient`, and nothing writes to it or runs a query meanwhile.
+    pub(super) unsafe fn verify_by_closure<C: Configuration>(
+        ingredient: &IngredientImpl<C>,
+        zalsa: &Zalsa,
+        db: crate::database::RawDatabase<'_>,
+    ) {
+        if !C::PERSIST {
+            return;
+        }
+        let started = std::time::Instant::now();
+        let current = zalsa.current_revision();
+        let mut flattener = EdgeFlattener::default();
+        // Whether each set has an edge that may have changed after a revision: found once for all
+        // the memos that share the set.
+        let mut unchanged: FxHashMap<(*const Bits, crate::Revision), bool> = FxHashMap::default();
+        let (mut memos, mut by_closure) = (0u64, 0u64);
+        for entry in <C::SalsaStruct<'_> as SalsaStructInDb>::entries(zalsa) {
+            let memo_ingredient_index = ingredient
+                .memo_ingredient_indices
+                .get(entry.ingredient_index());
+            let Some(memo) =
+                ingredient.get_memo_from_table_for(zalsa, entry.key_index(), memo_ingredient_index)
+            else {
+                continue;
+            };
+            let verified_at = memo.header.verified_at.load();
+            if !memo.should_serialize() || verified_at == current {
+                continue;
+            }
+            memos += 1;
+            let QueryOriginRef::Derived(edges) = memo.header.origin() else {
+                continue;
+            };
+            // SAFETY: The caller prevents database writes and queries running.
+            let (sets, own, closure) = unsafe { flatten_memo(zalsa, edges, &mut flattener) };
+            if !closure.trusted || closure.changed > verified_at {
+                continue;
+            }
+            if !own
+                .iter()
+                .all(|edge| crate::flatten::edge_unchanged(db, zalsa, *edge, verified_at))
+            {
+                continue;
+            }
+            let sets_unchanged = sets.iter().all(|set| {
+                *unchanged
+                    .entry((Arc::as_ptr(set), verified_at))
+                    .or_insert_with(|| {
+                        flattener.edges_of(set).all(|edge| {
+                            crate::flatten::edge_unchanged(db, zalsa, edge, verified_at)
+                        })
+                    })
+            });
+            if sets_unchanged {
+                memo.header.mark_verified_now(zalsa);
+                by_closure += 1;
+            }
+        }
+        if memos > 0 {
+            ::tracing::info!(
+                target: "salsa::persistence",
+                ingredient = C::DEBUG_NAME,
+                memos,
+                verified_from_the_flatten = by_closure,
+                left_for_walking = memos - by_closure,
+                elapsed = ?started.elapsed(),
+                "verified the persisted memos that flattening them was enough for"
+            );
+        }
     }
 
     pub struct DeserializeIngredient<'db, C>

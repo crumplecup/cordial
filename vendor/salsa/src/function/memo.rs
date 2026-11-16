@@ -207,6 +207,21 @@ impl MemoHeader {
         self.revisions.origin()
     }
 
+    /// What this memo's own query says about a closure that passes through it: when it last
+    /// changed, and whether it is a plain derived one (see [`crate::flatten::Closure`]).
+    pub(crate) fn closure(&self) -> crate::flatten::Closure {
+        crate::flatten::Closure {
+            changed: self.revisions.changed_at,
+            trusted: matches!(self.origin(), QueryOriginRef::Derived(_)),
+        }
+    }
+
+    /// Say the memo is valid at the current revision, which something other than walking what it
+    /// reads has shown (see [`crate::flatten::Closure`]).
+    pub(crate) fn mark_verified_now(&self, zalsa: &Zalsa) {
+        self.verified_at.store(zalsa.current_revision());
+    }
+
     fn can_evict_value(&self) -> bool {
         // Careful: Cannot evict memos whose values were
         // assigned as output of another query

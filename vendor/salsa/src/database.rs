@@ -182,6 +182,29 @@ mod persistence {
             self.verify_persisted_memos_part(0, 1);
         }
 
+        /// Verify the persisted memos that flattening what they read is enough to verify, for the
+        /// ingredients of one part of `parts`: part `part` takes every `parts`th ingredient. It runs
+        /// no query, so the parts may run at once; call it for every part before
+        /// [`Self::verify_persisted_memos_part`], which verifies the rest.
+        pub fn verify_persisted_memos_by_closure_part(&self, part: usize, parts: usize) {
+            let zalsa = self.zalsa();
+            for (index, ingredient) in zalsa
+                .ingredients()
+                .filter(|ingredient| ingredient.is_persistable())
+                .enumerate()
+            {
+                if index % parts.max(1) != part {
+                    continue;
+                }
+                // SAFETY: `self` is the database the ingredient was created with, and the caller
+                // runs no query while the parts run.
+                unsafe {
+                    ingredient
+                        .verify_persisted_by_closure(zalsa, crate::database::RawDatabase::from(self))
+                };
+            }
+        }
+
         /// The memos of one part of `parts` of every persisted ingredient: part `part` takes every
         /// `parts`th memo. Calling it for each part, each from a handle of its own on its own
         /// thread, verifies every memo as [`Self::verify_persisted_memos`] does, with the walks

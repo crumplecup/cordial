@@ -563,7 +563,7 @@
      }
 --- salsa-0.28.5/src/database.rs
 +++ salsa/src/database.rs
-@@ -175,6 +175,32 @@
+@@ -175,6 +175,55 @@
      use serde::ser::SerializeMap;
  
      impl dyn Database {
@@ -572,6 +572,29 @@
 +        /// dependencies of the queries it reads as they are now, and so must be valid as of now.
 +        pub fn verify_persisted_memos(&self) {
 +            self.verify_persisted_memos_part(0, 1);
++        }
++
++        /// Verify the persisted memos that flattening what they read is enough to verify, for the
++        /// ingredients of one part of `parts`: part `part` takes every `parts`th ingredient. It runs
++        /// no query, so the parts may run at once; call it for every part before
++        /// [`Self::verify_persisted_memos_part`], which verifies the rest.
++        pub fn verify_persisted_memos_by_closure_part(&self, part: usize, parts: usize) {
++            let zalsa = self.zalsa();
++            for (index, ingredient) in zalsa
++                .ingredients()
++                .filter(|ingredient| ingredient.is_persistable())
++                .enumerate()
++            {
++                if index % parts.max(1) != part {
++                    continue;
++                }
++                // SAFETY: `self` is the database the ingredient was created with, and the caller
++                // runs no query while the parts run.
++                unsafe {
++                    ingredient
++                        .verify_persisted_by_closure(zalsa, crate::database::RawDatabase::from(self))
++                };
++            }
 +        }
 +
 +        /// The memos of one part of `parts` of every persisted ingredient: part `part` takes every
@@ -596,7 +619,7 @@
          /// Returns a type implementing [`serde::Serialize`], that can be used to serialize the
          /// current state of the database.
          ///
-@@ -369,8 +395,16 @@
+@@ -369,8 +418,16 @@
                  // to the ingredient as well as the database.
                  let mut ingredient = zalsa.take_ingredient(index);
  
@@ -616,7 +639,7 @@
              }
 --- salsa-0.28.5/src/flatten.rs
 +++ salsa/src/flatten.rs
-@@ -0,0 +1,598 @@
+@@ -0,0 +1,698 @@
 +//! Flattening a query's dependencies down to what is persisted, once per query.
 +//!
 +//! A persisted memo's dependencies are rewritten before it is saved: the queries that
@@ -720,6 +743,37 @@
 +/// A set shared by every query that reaches exactly these edges.
 +pub(crate) type LeafSet = Arc<Bits>;
 +
++/// What the queries a walk passes through say about the set it found: the latest revision any of
++/// them changed at, and whether the walk can be trusted to have seen everything they read.
++///
++/// A persisted memo verified at revision `r` is still valid when none of this has changed since:
++/// no input in its set (checked once for all the memos that share the set) and none of the queries
++/// between it and the inputs (`changed` is not after `r`). A query between that is out of date
++/// has an input in the set that changed, so it is not missed. A walk that met a query it cannot
++/// read as a plain derived one (an untracked read, a value assigned by another query, no memo at
++/// all where one was read) is not trusted, and the memo is verified by walking what it reads.
++#[derive(Clone, Copy, Debug)]
++pub(crate) struct Closure {
++    pub(crate) changed: crate::Revision,
++    pub(crate) trusted: bool,
++}
++
++impl Closure {
++    /// The closure of nothing: it has changed at no revision and has met nothing wrong.
++    pub(crate) fn nothing() -> Self {
++        Self {
++            changed: crate::Revision::start(),
++            trusted: true,
++        }
++    }
++
++    pub(crate) fn merge(&mut self, other: Self) {
++        self.changed = self.changed.max(other.changed);
++        self.trusted &= other.trusted;
++    }
++
++}
++
 +/// A set being built.
 +#[derive(Default)]
 +pub(crate) struct Builder(Vec<u64>);
@@ -752,8 +806,13 @@
 +    edges: Vec<QueryEdge>,
 +    /// Every distinct set, so that equal sets are the same set.
 +    interned: HashSet<LeafSet>,
-+    /// The finished result for a query: exact, whoever asked.
-+    done: FxHashMap<QueryEdge, LeafSet>,
++    /// The finished result for a query: exact, whoever asked, with what its closure says.
++    done: FxHashMap<QueryEdge, (LeafSet, Closure)>,
++    /// Whether a walk has met a query it expected a memo for and found none.
++    pub(crate) met_no_memo: bool,
++    /// What the queries reached through a dependency on a tracked struct say, until the memo or
++    /// query that depended on it takes them into its own closure.
++    pub(crate) carried: Closure,
 +    /// Queries walked whose group is still open, with the order they were first reached in.
 +    open: FxHashMap<QueryEdge, usize>,
 +    /// The open queries, in the order they were first reached.
@@ -790,6 +849,8 @@
 +            edges: Vec::new(),
 +            interned: HashSet::new(),
 +            done: FxHashMap::default(),
++            met_no_memo: false,
++            carried: Closure::nothing(),
 +            open: FxHashMap::default(),
 +            stack: Vec::new(),
 +            next: 0,
@@ -902,11 +963,11 @@
 +    zalsa: &Zalsa,
 +    edge: QueryEdge,
 +    flattener: &mut EdgeFlattener,
-+) -> Option<LeafSet> {
++) -> Option<(LeafSet, Closure)> {
 +    // What this query reaches does not depend on who asks: it is worked out once.
-+    if let Some(result) = flattener.done.get(&edge) {
++    if let Some((result, closure)) = flattener.done.get(&edge) {
 +        flattener.stats.reused += 1;
-+        return Some(Arc::clone(result));
++        return Some((Arc::clone(result), *closure));
 +    }
 +
 +    // A query whose group is still open: its group's first query collects the rest.
@@ -922,7 +983,13 @@
 +        ingredient
 +            .as_function()?
 +            .memo_unchecked(zalsa, edge.key().key_index())
-+    }?;
++    };
++    let Some(memo) = memo else {
++        // A query read that has no memo now: the slot was reused, or the value dropped. What it
++        // read cannot be seen, so a memo that reached it is not verified from what is seen.
++        flattener.met_no_memo = true;
++        return None;
++    };
 +
 +    let order = flattener.next;
 +    flattener.next += 1;
@@ -932,6 +999,7 @@
 +    let outer = std::mem::replace(&mut flattener.lowlink, usize::MAX);
 +
 +    let mut found = Builder::default();
++    let mut closure = memo.header().closure();
 +    for dependency_edge in memo.header().origin().edges() {
 +        if dependency_edge.is_set() {
 +            // The members of a restored set, as the edges they are.
@@ -954,8 +1022,11 @@
 +                // it (its own dependencies are covered by its own memo).
 +                let number = flattener.number(dependency_edge);
 +                found.set(number);
-+            } else if let Some(set) = unsafe { leaves_of(zalsa, dependency_edge, flattener) } {
++            } else if let Some((set, below)) =
++                unsafe { leaves_of(zalsa, dependency_edge, flattener) }
++            {
 +                found.or(&set);
++                closure.merge(below);
 +            }
 +            continue;
 +        }
@@ -975,15 +1046,39 @@
 +            found.set(number);
 +        }
 +        flattener.scratch = added;
++        closure.merge(std::mem::replace(&mut flattener.carried, Closure::nothing()));
 +    }
 +
 +    let result = flattener.intern(found);
 +    if flattener.lowlink >= order {
 +        // The first query of its group: everything the group reaches has been found, and
-+        // each member reaches exactly what the others do.
++        // each member reaches exactly what the others do. The group's closure is the members' own
++        // together with what they reached (a member's own query is in it too).
++        let members: Vec<QueryEdge> = {
++            let from = flattener
++                .stack
++                .iter()
++                .rposition(|member| *member == edge)
++                .unwrap_or(0);
++            flattener.stack[from..].to_vec()
++        };
++        for member in members.iter().filter(|member| **member != edge) {
++            let ingredient = zalsa.lookup_ingredient(member.key().ingredient_index());
++            // SAFETY: The caller prevents database writes throughout the traversal.
++            let own = ingredient
++                .as_function()
++                .and_then(|function| unsafe {
++                    function.memo_unchecked(zalsa, member.key().key_index())
++                })
++                .map(|memo| memo.header().closure());
++            match own {
++                Some(own) => closure.merge(own),
++                None => closure.trusted = false,
++            }
++        }
 +        while let Some(member) = flattener.stack.pop() {
 +            flattener.open.remove(&member);
-+            flattener.done.insert(member, Arc::clone(&result));
++            flattener.done.insert(member, (Arc::clone(&result), closure));
 +            if member == edge {
 +                break;
 +            }
@@ -995,7 +1090,7 @@
 +        flattener.stats.incomplete += 1;
 +        flattener.lowlink = outer.min(flattener.lowlink);
 +    }
-+    Some(result)
++    Some((result, closure))
 +}
 +
 +thread_local! {
@@ -1099,6 +1194,34 @@
 +        SET_CHECKS.load(std::sync::atomic::Ordering::Relaxed),
 +        SET_COMPUTED.load(std::sync::atomic::Ordering::Relaxed),
 +        SET_MEMBERS_CHECKED.load(std::sync::atomic::Ordering::Relaxed),
++    )
++}
++
++/// Whether the leaf `edge` of a set is known not to have changed after `since`, from the input it
++/// is, with no query run and no query walked. A leaf that is a persisted query is not known so
++/// here: that is for walking what it reads.
++pub(crate) fn edge_unchanged(
++    db: crate::database::RawDatabase<'_>,
++    zalsa: &Zalsa,
++    edge: QueryEdge,
++    since: crate::Revision,
++) -> bool {
++    if edge.is_watermark() {
++        return zalsa.last_changed_revision(WATERMARK_DURABILITY) <= since;
++    }
++    if edge.is_set() || edge.kind() != crate::zalsa_local::QueryEdgeKind::Input {
++        return false;
++    }
++    if zalsa
++        .lookup_ingredient(edge.key().ingredient_index())
++        .as_function()
++        .is_some()
++    {
++        return false;
++    }
++    matches!(
++        edge.key().maybe_changed_after(db, zalsa, since),
++        crate::function::VerifyResult::Unchanged { .. }
 +    )
 +}
 +
@@ -1324,7 +1447,7 @@
      /// Last revision when this memo was verified; this begins
      /// as the current revision.
      pub(super) verified_at: AtomicRevision,
-@@ -225,7 +203,7 @@
+@@ -225,10 +203,25 @@
      }
  
      #[inline]
@@ -1333,6 +1456,24 @@
          self.revisions.origin()
      }
  
++    /// What this memo's own query says about a closure that passes through it: when it last
++    /// changed, and whether it is a plain derived one (see [`crate::flatten::Closure`]).
++    pub(crate) fn closure(&self) -> crate::flatten::Closure {
++        crate::flatten::Closure {
++            changed: self.revisions.changed_at,
++            trusted: matches!(self.origin(), QueryOriginRef::Derived(_)),
++        }
++    }
++
++    /// Say the memo is valid at the current revision, which something other than walking what it
++    /// reads has shown (see [`crate::flatten::Closure`]).
++    pub(crate) fn mark_verified_now(&self, zalsa: &Zalsa) {
++        self.verified_at.store(zalsa.current_revision());
++    }
++
+     fn can_evict_value(&self) -> bool {
+         // Careful: Cannot evict memos whose values were
+         // assigned as output of another query
 --- salsa-0.28.5/src/function.rs
 +++ salsa/src/function.rs
 @@ -10,6 +10,7 @@
@@ -1407,7 +1548,7 @@
      fn sync_table(&self) -> &SyncTable {
          &self.sync_table
      }
-@@ -441,16 +485,11 @@
+@@ -441,16 +485,12 @@
          zalsa: &Zalsa,
          edge: QueryEdge,
          serialized_edges: &mut FxIndexSet<QueryEdge>,
@@ -1422,16 +1563,22 @@
 -        // SAFETY: The caller prevents database writes throughout the traversal.
 -        unsafe {
 -            collect_minimum_serialized_edges(memo, zalsa, edge, serialized_edges, visited_edges);
-+        if let Some(set) = unsafe { crate::flatten::leaves_of(zalsa, edge, flattener) } {
++        if let Some((set, closure)) = unsafe { crate::flatten::leaves_of(zalsa, edge, flattener) } {
 +            serialized_edges.extend(flattener.edges_of(&set));
++            flattener.carried.merge(closure);
          }
      }
  
-@@ -548,6 +587,66 @@
+@@ -548,6 +588,71 @@
          C::PERSIST
      }
  
 +    #[cfg(feature = "persistence")]
++    unsafe fn verify_persisted_by_closure(&self, zalsa: &Zalsa, db: RawDatabase<'_>) {
++        // SAFETY: The caller keeps queries from running, and `db` is this ingredient's database.
++        unsafe { persistence::verify_by_closure(self, zalsa, db) };
++    }
++
 +    unsafe fn verify_persisted(
 +        &self,
 +        zalsa: &Zalsa,
@@ -1494,7 +1641,7 @@
      fn should_serialize(&self, zalsa: &Zalsa) -> bool {
          if !C::PERSIST {
              return false;
-@@ -595,44 +694,6 @@
+@@ -595,44 +700,6 @@
      }
  }
  
@@ -1539,7 +1686,7 @@
  fn flatten_cycle_head_dependencies(
      ingredient: &dyn FunctionIngredient,
      zalsa: &Zalsa,
-@@ -744,7 +805,9 @@
+@@ -744,7 +811,9 @@
  #[cfg(feature = "persistence")]
  mod persistence {
      use super::{Configuration, IngredientImpl, Memo};
@@ -1550,7 +1697,7 @@
      use crate::plumbing::{MemoIngredientMap, SalsaStructInDb};
      use crate::zalsa::Zalsa;
      use crate::zalsa_local::persistence::PersistentQueryOrigin;
-@@ -764,6 +827,14 @@
+@@ -764,6 +833,14 @@
          pub ingredient: &'db IngredientImpl<C>,
      }
  
@@ -1565,7 +1712,7 @@
      impl<C> serde::Serialize for SerializeIngredient<'_, C>
      where
          C: Configuration,
-@@ -774,26 +845,8 @@
+@@ -774,26 +851,8 @@
          {
              let Self { ingredient, zalsa } = self;
  
@@ -1594,7 +1741,7 @@
  
              for entry in <C::SalsaStruct<'_> as SalsaStructInDb>::entries(zalsa) {
                  let memo_ingredient_index = ingredient
-@@ -806,97 +859,210 @@
+@@ -806,97 +865,301 @@
                      memo_ingredient_index,
                  );
  
@@ -1632,12 +1779,12 @@
 +                let flat = match memo.header.origin() {
 +                    QueryOriginRef::Derived(edges) => {
 +                        // SAFETY: Serialization's exclusive storage access prevents database writes.
-+                        let (sets, own) = unsafe { flatten_memo(zalsa, edges, &mut flattener) };
++                        let (sets, own, _) = unsafe { flatten_memo(zalsa, edges, &mut flattener) };
 +                        Flat::Derived(sets, own)
 +                    }
 +                    QueryOriginRef::DerivedUntracked(edges) => {
 +                        // SAFETY: Serialization's exclusive storage access prevents database writes.
-+                        let (sets, own) = unsafe { flatten_memo(zalsa, edges, &mut flattener) };
++                        let (sets, own, _) = unsafe { flatten_memo(zalsa, edges, &mut flattener) };
 +                        Flat::DerivedUntracked(sets, own)
 +                    }
 +                    QueryOriginRef::Assigned(key) => {
@@ -1809,9 +1956,12 @@
 -        flattened_edges: &mut FxIndexSet<QueryEdge>,
 -    ) {
 +        flattener: &mut EdgeFlattener,
-+    ) -> (Vec<LeafSet>, Box<[QueryEdge]>) {
++    ) -> (Vec<LeafSet>, Box<[QueryEdge]>, crate::flatten::Closure) {
 +        let mut sets: Vec<LeafSet> = Vec::new();
 +        let mut own = FxIndexSet::default();
++        let mut closure = crate::flatten::Closure::nothing();
++        flattener.met_no_memo = false;
++        flattener.carried = crate::flatten::Closure::nothing();
 +
          for edge in edges {
 +            // A memo restored and saved again still has its watermark.
@@ -1842,10 +1992,13 @@
 +                });
 +            } else if dependency.as_function().is_some() {
 +                // SAFETY: The caller prevents database writes throughout the traversal.
-+                if let Some(set) = unsafe { crate::flatten::leaves_of(zalsa, edge, flattener) }
-+                    && !sets.iter().any(|known| Arc::ptr_eq(known, &set))
++                if let Some((set, below)) =
++                    unsafe { crate::flatten::leaves_of(zalsa, edge, flattener) }
 +                {
-+                    sets.push(set);
++                    closure.merge(below);
++                    if !sets.iter().any(|known| Arc::ptr_eq(known, &set)) {
++                        sets.push(set);
++                    }
 +                }
              } else {
                  // Otherwise, serialize the minimum edges necessary to cover the dependency.
@@ -1862,11 +2015,96 @@
              }
          }
 +
-+        (sets, own.into_iter().collect())
++        closure.merge(std::mem::replace(
++            &mut flattener.carried,
++            crate::flatten::Closure::nothing(),
++        ));
++        if std::mem::take(&mut flattener.met_no_memo) {
++            closure.trusted = false;
++        }
++        (sets, own.into_iter().collect(), closure)
++    }
++
++    /// Verify the persisted memos of `ingredient` that what flattening them sees is enough to
++    /// verify: none of the inputs in their sets, and none of the queries between, changed after
++    /// they were verified, and what they read could all be seen. It is the walk the save does to
++    /// flatten, once, in place of a walk through everything each memo reads for every memo.
++    ///
++    /// # Safety
++    ///
++    /// `db` is the database of `ingredient`, and nothing writes to it or runs a query meanwhile.
++    pub(super) unsafe fn verify_by_closure<C: Configuration>(
++        ingredient: &IngredientImpl<C>,
++        zalsa: &Zalsa,
++        db: crate::database::RawDatabase<'_>,
++    ) {
++        if !C::PERSIST {
++            return;
++        }
++        let started = std::time::Instant::now();
++        let current = zalsa.current_revision();
++        let mut flattener = EdgeFlattener::default();
++        // Whether each set has an edge that may have changed after a revision: found once for all
++        // the memos that share the set.
++        let mut unchanged: FxHashMap<(*const Bits, crate::Revision), bool> = FxHashMap::default();
++        let (mut memos, mut by_closure) = (0u64, 0u64);
++        for entry in <C::SalsaStruct<'_> as SalsaStructInDb>::entries(zalsa) {
++            let memo_ingredient_index = ingredient
++                .memo_ingredient_indices
++                .get(entry.ingredient_index());
++            let Some(memo) =
++                ingredient.get_memo_from_table_for(zalsa, entry.key_index(), memo_ingredient_index)
++            else {
++                continue;
++            };
++            let verified_at = memo.header.verified_at.load();
++            if !memo.should_serialize() || verified_at == current {
++                continue;
++            }
++            memos += 1;
++            let QueryOriginRef::Derived(edges) = memo.header.origin() else {
++                continue;
++            };
++            // SAFETY: The caller prevents database writes and queries running.
++            let (sets, own, closure) = unsafe { flatten_memo(zalsa, edges, &mut flattener) };
++            if !closure.trusted || closure.changed > verified_at {
++                continue;
++            }
++            if !own
++                .iter()
++                .all(|edge| crate::flatten::edge_unchanged(db, zalsa, *edge, verified_at))
++            {
++                continue;
++            }
++            let sets_unchanged = sets.iter().all(|set| {
++                *unchanged
++                    .entry((Arc::as_ptr(set), verified_at))
++                    .or_insert_with(|| {
++                        flattener.edges_of(set).all(|edge| {
++                            crate::flatten::edge_unchanged(db, zalsa, edge, verified_at)
++                        })
++                    })
++            });
++            if sets_unchanged {
++                memo.header.mark_verified_now(zalsa);
++                by_closure += 1;
++            }
++        }
++        if memos > 0 {
++            ::tracing::info!(
++                target: "salsa::persistence",
++                ingredient = C::DEBUG_NAME,
++                memos,
++                verified_from_the_flatten = by_closure,
++                left_for_walking = memos - by_closure,
++                elapsed = ?started.elapsed(),
++                "verified the persisted memos that flattening them was enough for"
++            );
++        }
      }
  
      pub struct DeserializeIngredient<'db, C>
-@@ -937,7 +1103,23 @@
+@@ -937,7 +1200,23 @@
          {
              let DeserializeIngredient { zalsa, ingredient } = self;
  
@@ -1912,7 +2150,7 @@
      );
  
      /// Returns the function-specific interface for this ingredient, if any.
-@@ -191,6 +191,32 @@
+@@ -191,6 +191,43 @@
          false
      }
  
@@ -1934,6 +2172,17 @@
 +        _parts: usize,
 +    ) {
 +    }
++
++    /// Verify the persisted memos that what flattening them sees is enough to verify (see
++    /// `flatten::Closure`), at the current revision. It runs no query, so ingredients can do it
++    /// on several threads at once; the rest are verified by `verify_persisted`.
++    ///
++    /// # Safety
++    ///
++    /// The database must be the one the ingredient was created with, and nothing may write to it
++    /// or run a query that could replace a memo while this runs.
++    #[cfg(feature = "persistence")]
++    unsafe fn verify_persisted_by_closure(&self, _zalsa: &Zalsa, _db: RawDatabase<'_>) {}
 +
 +    /// Whether a persisted memo's dependency on `input` is saved as the watermark edge instead:
 +    /// the input is of the durability that rarely changes, and the memo is out of date whenever

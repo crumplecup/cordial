@@ -210,6 +210,17 @@ pub trait Ingredient: Any + fmt::Debug + Send + Sync {
     ) {
     }
 
+    /// Verify the persisted memos that what flattening them sees is enough to verify (see
+    /// `flatten::Closure`), at the current revision. It runs no query, so ingredients can do it
+    /// on several threads at once; the rest are verified by `verify_persisted`.
+    ///
+    /// # Safety
+    ///
+    /// The database must be the one the ingredient was created with, and nothing may write to it
+    /// or run a query that could replace a memo while this runs.
+    #[cfg(feature = "persistence")]
+    unsafe fn verify_persisted_by_closure(&self, _zalsa: &Zalsa, _db: RawDatabase<'_>) {}
+
     /// Whether a persisted memo's dependency on `input` is saved as the watermark edge instead:
     /// the input is of the durability that rarely changes, and the memo is out of date whenever
     /// any such input has changed, without saying which.

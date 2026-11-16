@@ -101,6 +101,37 @@ pub(crate) struct Bits(Box<[u64]>);
 /// A set shared by every query that reaches exactly these edges.
 pub(crate) type LeafSet = Arc<Bits>;
 
+/// What the queries a walk passes through say about the set it found: the latest revision any of
+/// them changed at, and whether the walk can be trusted to have seen everything they read.
+///
+/// A persisted memo verified at revision `r` is still valid when none of this has changed since:
+/// no input in its set (checked once for all the memos that share the set) and none of the queries
+/// between it and the inputs (`changed` is not after `r`). A query between that is out of date
+/// has an input in the set that changed, so it is not missed. A walk that met a query it cannot
+/// read as a plain derived one (an untracked read, a value assigned by another query, no memo at
+/// all where one was read) is not trusted, and the memo is verified by walking what it reads.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Closure {
+    pub(crate) changed: crate::Revision,
+    pub(crate) trusted: bool,
+}
+
+impl Closure {
+    /// The closure of nothing: it has changed at no revision and has met nothing wrong.
+    pub(crate) fn nothing() -> Self {
+        Self {
+            changed: crate::Revision::start(),
+            trusted: true,
+        }
+    }
+
+    pub(crate) fn merge(&mut self, other: Self) {
+        self.changed = self.changed.max(other.changed);
+        self.trusted &= other.trusted;
+    }
+
+}
+
 /// A set being built.
 #[derive(Default)]
 pub(crate) struct Builder(Vec<u64>);
@@ -133,8 +164,13 @@ pub struct EdgeFlattener {
     edges: Vec<QueryEdge>,
     /// Every distinct set, so that equal sets are the same set.
     interned: HashSet<LeafSet>,
-    /// The finished result for a query: exact, whoever asked.
-    done: FxHashMap<QueryEdge, LeafSet>,
+    /// The finished result for a query: exact, whoever asked, with what its closure says.
+    done: FxHashMap<QueryEdge, (LeafSet, Closure)>,
+    /// Whether a walk has met a query it expected a memo for and found none.
+    pub(crate) met_no_memo: bool,
+    /// What the queries reached through a dependency on a tracked struct say, until the memo or
+    /// query that depended on it takes them into its own closure.
+    pub(crate) carried: Closure,
     /// Queries walked whose group is still open, with the order they were first reached in.
     open: FxHashMap<QueryEdge, usize>,
     /// The open queries, in the order they were first reached.
@@ -171,6 +207,8 @@ impl Default for EdgeFlattener {
             edges: Vec::new(),
             interned: HashSet::new(),
             done: FxHashMap::default(),
+            met_no_memo: false,
+            carried: Closure::nothing(),
             open: FxHashMap::default(),
             stack: Vec::new(),
             next: 0,
@@ -283,11 +321,11 @@ pub(crate) unsafe fn leaves_of(
     zalsa: &Zalsa,
     edge: QueryEdge,
     flattener: &mut EdgeFlattener,
-) -> Option<LeafSet> {
+) -> Option<(LeafSet, Closure)> {
     // What this query reaches does not depend on who asks: it is worked out once.
-    if let Some(result) = flattener.done.get(&edge) {
+    if let Some((result, closure)) = flattener.done.get(&edge) {
         flattener.stats.reused += 1;
-        return Some(Arc::clone(result));
+        return Some((Arc::clone(result), *closure));
     }
 
     // A query whose group is still open: its group's first query collects the rest.
@@ -303,7 +341,13 @@ pub(crate) unsafe fn leaves_of(
         ingredient
             .as_function()?
             .memo_unchecked(zalsa, edge.key().key_index())
-    }?;
+    };
+    let Some(memo) = memo else {
+        // A query read that has no memo now: the slot was reused, or the value dropped. What it
+        // read cannot be seen, so a memo that reached it is not verified from what is seen.
+        flattener.met_no_memo = true;
+        return None;
+    };
 
     let order = flattener.next;
     flattener.next += 1;
@@ -313,6 +357,7 @@ pub(crate) unsafe fn leaves_of(
     let outer = std::mem::replace(&mut flattener.lowlink, usize::MAX);
 
     let mut found = Builder::default();
+    let mut closure = memo.header().closure();
     for dependency_edge in memo.header().origin().edges() {
         if dependency_edge.is_set() {
             // The members of a restored set, as the edges they are.
@@ -335,8 +380,11 @@ pub(crate) unsafe fn leaves_of(
                 // it (its own dependencies are covered by its own memo).
                 let number = flattener.number(dependency_edge);
                 found.set(number);
-            } else if let Some(set) = unsafe { leaves_of(zalsa, dependency_edge, flattener) } {
+            } else if let Some((set, below)) =
+                unsafe { leaves_of(zalsa, dependency_edge, flattener) }
+            {
                 found.or(&set);
+                closure.merge(below);
             }
             continue;
         }
@@ -356,15 +404,39 @@ pub(crate) unsafe fn leaves_of(
             found.set(number);
         }
         flattener.scratch = added;
+        closure.merge(std::mem::replace(&mut flattener.carried, Closure::nothing()));
     }
 
     let result = flattener.intern(found);
     if flattener.lowlink >= order {
         // The first query of its group: everything the group reaches has been found, and
-        // each member reaches exactly what the others do.
+        // each member reaches exactly what the others do. The group's closure is the members' own
+        // together with what they reached (a member's own query is in it too).
+        let members: Vec<QueryEdge> = {
+            let from = flattener
+                .stack
+                .iter()
+                .rposition(|member| *member == edge)
+                .unwrap_or(0);
+            flattener.stack[from..].to_vec()
+        };
+        for member in members.iter().filter(|member| **member != edge) {
+            let ingredient = zalsa.lookup_ingredient(member.key().ingredient_index());
+            // SAFETY: The caller prevents database writes throughout the traversal.
+            let own = ingredient
+                .as_function()
+                .and_then(|function| unsafe {
+                    function.memo_unchecked(zalsa, member.key().key_index())
+                })
+                .map(|memo| memo.header().closure());
+            match own {
+                Some(own) => closure.merge(own),
+                None => closure.trusted = false,
+            }
+        }
         while let Some(member) = flattener.stack.pop() {
             flattener.open.remove(&member);
-            flattener.done.insert(member, Arc::clone(&result));
+            flattener.done.insert(member, (Arc::clone(&result), closure));
             if member == edge {
                 break;
             }
@@ -376,7 +448,7 @@ pub(crate) unsafe fn leaves_of(
         flattener.stats.incomplete += 1;
         flattener.lowlink = outer.min(flattener.lowlink);
     }
-    Some(result)
+    Some((result, closure))
 }
 
 thread_local! {
@@ -480,6 +552,34 @@ pub fn set_verifications() -> (u64, u64, u64) {
         SET_CHECKS.load(std::sync::atomic::Ordering::Relaxed),
         SET_COMPUTED.load(std::sync::atomic::Ordering::Relaxed),
         SET_MEMBERS_CHECKED.load(std::sync::atomic::Ordering::Relaxed),
+    )
+}
+
+/// Whether the leaf `edge` of a set is known not to have changed after `since`, from the input it
+/// is, with no query run and no query walked. A leaf that is a persisted query is not known so
+/// here: that is for walking what it reads.
+pub(crate) fn edge_unchanged(
+    db: crate::database::RawDatabase<'_>,
+    zalsa: &Zalsa,
+    edge: QueryEdge,
+    since: crate::Revision,
+) -> bool {
+    if edge.is_watermark() {
+        return zalsa.last_changed_revision(WATERMARK_DURABILITY) <= since;
+    }
+    if edge.is_set() || edge.kind() != crate::zalsa_local::QueryEdgeKind::Input {
+        return false;
+    }
+    if zalsa
+        .lookup_ingredient(edge.key().ingredient_index())
+        .as_function()
+        .is_some()
+    {
+        return false;
+    }
+    matches!(
+        edge.key().maybe_changed_after(db, zalsa, since),
+        crate::function::VerifyResult::Unchanged { .. }
     )
 }
 

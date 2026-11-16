@@ -594,6 +594,8 @@ const COMMON: usize = 40;
 struct Fixture {
     groups: [Group; 2],
     cells: [Vec<Cell>; 2],
+    /// A cell no query reads.
+    unread: Cell,
 }
 
 impl Fixture {
@@ -610,7 +612,11 @@ impl Fixture {
                 .collect::<Vec<_>>()
         });
         let groups = [0, 1].map(|group| Group::new(db, cells[group].clone()));
-        Self { groups, cells }
+        Self {
+            groups,
+            cells,
+            unread: Cell::new(db, 5),
+        }
     }
 
     /// Ask for every member of both groups, summing what each group answers.
@@ -634,8 +640,11 @@ enum Change {
     InTheCommonCells,
     /// The library's input, which every query reaches through the watermark in its set.
     InTheLibrary,
-    /// A cell no query reads.
+    /// A cell no query reads, made: no new revision, so no memo has anything to verify.
     NothingToSee,
+    /// A cell no query reads, written: a new revision, so every memo has to be verified, and none
+    /// finds anything it reads changed.
+    InAnUnreadCell,
 }
 
 impl Change {
@@ -645,7 +654,7 @@ impl Change {
             Self::InTheFirstGroup => [MEMBERS, 0],
             Self::InTheSecondGroup => [0, MEMBERS],
             Self::InTheCommonCells | Self::InTheLibrary => [MEMBERS, MEMBERS],
-            Self::NothingToSee => [0, 0],
+            Self::NothingToSee | Self::InAnUnreadCell => [0, 0],
         }
     }
 }
@@ -759,6 +768,9 @@ fn after(format: Format, trips: Trips, changes: &[Change]) -> (Vec<[usize; 2]>, 
             Change::NothingToSee => {
                 Cell::new(&restored, 7);
             }
+            Change::InAnUnreadCell => {
+                fixture.unread.set_value(&mut restored).to(8_000 + step);
+            }
         }
         answers.push(fixture.ask_all(&restored));
         let now = executions();
@@ -776,6 +788,7 @@ fn what_a_change_reaches_through_a_shared_set_is_computed_again_and_nothing_else
             Change::InTheCommonCells,
             Change::InTheLibrary,
             Change::NothingToSee,
+            Change::InAnUnreadCell,
         ] {
             let (computed, _) = after(format, trips, &[change]);
             assert_eq!(
@@ -799,6 +812,7 @@ fn a_change_after_another_is_noticed_by_what_was_verified_in_between() {
             Change::InTheSecondGroup,
             Change::NothingToSee,
             Change::InTheSecondGroup,
+            Change::InAnUnreadCell,
             Change::InTheCommonCells,
             Change::InTheLibrary,
         ];
@@ -814,7 +828,7 @@ fn a_change_after_another_is_noticed_by_what_was_verified_in_between() {
                 let moved = answers[step] != answers[step - 1];
                 assert_eq!(
                     moved,
-                    !matches!(change, Change::NothingToSee),
+                    !matches!(change, Change::NothingToSee | Change::InAnUnreadCell),
                     "{trips:?}, step {step} ({change:?}): the answers {} when they should {}",
                     if moved { "moved" } else { "stood" },
                     if moved { "stand" } else { "move" }
@@ -938,17 +952,19 @@ fn what_the_memos_share_is_saved_as_runs_of_positions_not_as_edges() {
     );
 }
 
-/// What verifying the persisted memos before a save reported, from its event: how many memos,
-/// how many were already current, and how many were found unchanged and changed.
+/// What verifying the persisted memos before a save reported, from its events: how many memos,
+/// how many were already current, and how many were found unchanged and changed by walking what
+/// they read, and how many were verified from the flatten.
 #[derive(Default, Clone)]
-struct Verified(Arc<Mutex<Vec<[u64; 4]>>>);
+struct Verified(Arc<Mutex<Vec<[u64; 5]>>>);
 
 impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for Verified {
     fn on_event(&self, event: &tracing::Event<'_>, _: tracing_subscriber::layer::Context<'_, S>) {
         #[derive(Default)]
         struct Fields {
             member: bool,
-            counts: [u64; 4],
+            from_the_flatten: bool,
+            counts: [u64; 5],
         }
         impl tracing::field::Visit for Fields {
             fn record_u64(&mut self, field: &tracing::field::Field, value: u64) {
@@ -957,6 +973,10 @@ impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for Verified {
                     "already_current" => self.counts[1] = value,
                     "unchanged_after_walking" => self.counts[2] = value,
                     "changed_and_run_again" => self.counts[3] = value,
+                    "verified_from_the_flatten" => {
+                        self.counts[4] = value;
+                        self.from_the_flatten = true;
+                    }
                     _ => {}
                 }
             }
@@ -969,6 +989,10 @@ impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for Verified {
         }
         let mut fields = Fields::default();
         event.record(&mut fields);
+        // The memos the flatten looked at are not the memos walking verified: count them once.
+        if fields.from_the_flatten {
+            fields.counts[0] = 0;
+        }
         if fields.member
             && let Ok(mut all) = self.0.lock()
         {
@@ -977,10 +1001,19 @@ impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for Verified {
     }
 }
 
+/// How the memos are verified.
+#[derive(Clone, Copy, Debug)]
+enum How {
+    /// By walking what each reads, as every memo was.
+    ByWalkingOnly,
+    /// By what flattening their dependencies shows first, and by walking for the rest.
+    FlattenFirst,
+}
+
 /// What verifying the memos of `member` in `parts` parts, each on a thread of its own, reports
 /// after `change` (the counts of every part added up), and how many queries then computed again
 /// when every one was asked for.
-fn verified_after(change: Change, parts: usize) -> ([u64; 4], usize) {
+fn verified_after(change: Change, parts: usize, how: How) -> ([u64; 5], usize) {
     let verified = Verified::default();
     let subscriber = tracing_subscriber::registry().with(verified.clone());
     let dispatch = tracing::Dispatch::new(subscriber);
@@ -996,9 +1029,15 @@ fn verified_after(change: Change, parts: usize) -> ([u64; 4], usize) {
         Change::NothingToSee => {
             Cell::new(&db, 7);
         }
+        Change::InAnUnreadCell => {
+            fixture.unread.set_value(&mut db).to(31_338);
+        }
         other => panic!("{other:?} is not one this test makes"),
     }
     let before = executions();
+    if let How::FlattenFirst = how {
+        <dyn Database>::verify_persisted_memos_by_closure_part(&db, 0, 1);
+    }
     let handles: Vec<Db> = (0..parts).map(|_| db.clone()).collect();
     std::thread::scope(|scope| {
         for (part, handle) in handles.into_iter().enumerate() {
@@ -1017,12 +1056,13 @@ fn verified_after(change: Change, parts: usize) -> ([u64; 4], usize) {
         .0
         .lock()
         .map(|all| {
-            all.iter().fold([0u64; 4], |sum, counts| {
+            all.iter().fold([0u64; 5], |sum, counts| {
                 [
                     sum[0] + counts[0],
                     sum[1] + counts[1],
                     sum[2] + counts[2],
                     sum[3] + counts[3],
+                    sum[4] + counts[4],
                 ]
             })
         })
@@ -1036,11 +1076,11 @@ fn verified_after(change: Change, parts: usize) -> ([u64; 4], usize) {
 #[test]
 fn verifying_before_a_save_in_parts_finds_what_verifying_at_once_does() {
     let members = 2 * MEMBERS as u64;
-    for change in [Change::InTheFirstGroup, Change::NothingToSee] {
-        let (whole, whole_computed) = verified_after(change, 1);
+    for change in [Change::InTheFirstGroup, Change::InAnUnreadCell] {
+        let (whole, whole_computed) = verified_after(change, 1, How::ByWalkingOnly);
         assert_eq!(whole[0], members, "{change:?}: every memo is verified once");
         for parts in [2, 4, 7] {
-            let (found, computed) = verified_after(change, parts);
+            let (found, computed) = verified_after(change, parts, How::ByWalkingOnly);
             assert_eq!(
                 found, whole,
                 "{change:?}: in {parts} parts the memos were found {found:?}, at once {whole:?}"
@@ -1060,5 +1100,42 @@ fn verifying_before_a_save_in_parts_finds_what_verifying_at_once_does() {
             whole_computed, reached,
             "{change:?}: the queries computed again"
         );
+    }
+}
+
+/// What flattening a memo's dependencies shows is enough to verify it when nothing it covers
+/// changed, and is not when something did: the memos of a group whose set has a changed cell are
+/// left to be walked, found changed and computed again, as they are when only walked, and the
+/// others are verified without a walk. Whichever the change and however the walk is split, the
+/// memos found current, changed, and the queries computed again are those of walking alone.
+#[test]
+fn what_flattening_shows_verifies_a_memo_only_when_nothing_it_covers_changed() {
+    let members = 2 * MEMBERS as u64;
+    for change in [Change::InTheFirstGroup, Change::InAnUnreadCell] {
+        let (walked, walked_computed) = verified_after(change, 1, How::ByWalkingOnly);
+        for parts in [1, 3] {
+            let (flattened, computed) = verified_after(change, parts, How::FlattenFirst);
+            // Verified from the flatten: every memo no change reached.
+            let reached = change.reaches().iter().sum::<usize>() as u64;
+            assert_eq!(
+                flattened[4],
+                members - reached,
+                "{change:?}: the memos no change reached are verified from the flatten"
+            );
+            // And the same memos are changed, and the same queries computed again.
+            assert_eq!(
+                flattened[3], walked[3],
+                "{change:?}: the memos found changed"
+            );
+            assert_eq!(
+                computed, walked_computed,
+                "{change:?}: the queries computed again"
+            );
+            // What the flatten verified, walking finds already current.
+            assert_eq!(
+                flattened[1], flattened[4],
+                "{change:?}: what the flatten verified is current when walking comes to it"
+            );
+        }
     }
 }
