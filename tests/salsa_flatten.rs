@@ -595,7 +595,7 @@ struct Fixture {
 
 impl Fixture {
     fn new(db: &Db) -> Self {
-        Library::builder(10)
+        let _library = Library::builder(10)
             .durability(salsa::Durability::HIGH)
             .new(db);
         let cells = [0, 1].map(|group| {
