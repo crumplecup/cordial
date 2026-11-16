@@ -593,5 +593,7 @@ fn place_of(
 ) -> Option<Place> {
     let mut site = super::item_key::site_of(db, definition)?;
     site.file = originals.get(&site.file).copied().unwrap_or(site.file);
+    // Which crate a copy is in is what distinguishes it from its original.
+    site.krate.clear();
     Some(site)
 }

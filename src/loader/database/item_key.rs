@@ -116,6 +116,9 @@ fn resolve<'db>(db: &'db dyn SemanticDatabase, key: ItemKey<'db>) -> Option<Modu
         let candidates: Vec<ModuleDef> = match site.chain.len() {
             // A function synthesized for a derive is written nowhere: only the index has it.
             _ if site.member.is_some() => Vec::new(),
+            // A file in several crates holds one definition for each; the file's own module
+            // is the first crate's, so which one this is only the crate's index can say.
+            _ if !site.krate.is_empty() => Vec::new(),
             0 => node_at(&tree, &site.place)
                 .and_then(|owner| written_in_file(&sema, owner, site.kind))
                 .into_iter()
@@ -134,7 +137,7 @@ fn resolve<'db>(db: &'db dyn SemanticDatabase, key: ItemKey<'db>) -> Option<Modu
     // what a `macro_rules!` call defined) has no text to read the definition from: it is in
     // the crate's index of what was generated.
     direct.or_else(|| {
-        if site.chain.is_empty() && site.member.is_none() {
+        if site.chain.is_empty() && site.member.is_none() && site.krate.is_empty() {
             return None;
         }
         ra_ap_ide_db::base_db::relevant_crates(root, file)
@@ -158,8 +161,9 @@ fn generated_in(
         super::context_crates::declared_in(root, ra_ap_hir::Crate::from(krate))
             .into_iter()
             .filter(|definition| {
-                site_of(root, *definition)
-                    .is_some_and(|site| !site.chain.is_empty() || site.member.is_some())
+                site_of(root, *definition).is_some_and(|site| {
+                    !site.chain.is_empty() || site.member.is_some() || !site.krate.is_empty()
+                })
             })
             .map(|definition| (describe(root, definition), definition))
             .collect()
@@ -243,6 +247,9 @@ pub(super) struct DefSite {
     /// For a function the compiler synthesizes for a derive: the trait and method, written
     /// beside the site of the type it is for.
     pub(super) member: Option<String>,
+    /// The root file of the crate the definition is in, when its file is in more than one crate
+    /// (a test support module each test binary includes): the file alone does not say which.
+    pub(super) krate: String,
 }
 
 /// A [`DefSite`] with its file named by path, which means the same in every process.
@@ -253,6 +260,7 @@ struct Site {
     place: String,
     chain: Vec<u32>,
     member: Option<String>,
+    krate: String,
 }
 
 /// A file's path in the database, and whether the database holds it as a real
@@ -291,7 +299,7 @@ impl PathText {
 impl Site {
     #[instrument(level = "trace", skip(text))]
     fn parse(text: &str) -> Option<Self> {
-        let mut parts = text.splitn(6, '|');
+        let mut parts = text.splitn(7, '|');
         let kind = parts.next()?.parse().ok()?;
         let real = match parts.next()? {
             "real" => true,
@@ -312,6 +320,7 @@ impl Site {
             "" => None,
             member => Some(member.to_owned()),
         };
+        let krate = parts.next()?.to_owned();
         Some(Self {
             kind,
             path: PathText {
@@ -321,6 +330,7 @@ impl Site {
             place,
             chain,
             member,
+            krate,
         })
     }
 
@@ -334,10 +344,11 @@ impl Site {
             .collect::<Vec<_>>()
             .join(",");
         format!(
-            "{}|{route}|{}|{chain}|{}|{}",
+            "{}|{route}|{}|{chain}|{}|{}|{}",
             self.kind,
             self.place,
             self.member.as_deref().unwrap_or(""),
+            self.krate,
             self.path.text
         )
     }
@@ -346,6 +357,23 @@ impl Site {
 /// Where `definition` is written, when it has a site at all.
 #[instrument(level = "trace", skip(db, definition))]
 pub(super) fn site_of(db: &RootDatabase, definition: ModuleDef) -> Option<DefSite> {
+    let mut site = site_written(db, definition)?;
+    site.krate = shared_file_crate(db, definition, site.file).unwrap_or_default();
+    Some(site)
+}
+
+/// The root file of the crate `definition` is in, when `file` is in several crates.
+#[instrument(level = "trace", skip(db, definition))]
+fn shared_file_crate(db: &RootDatabase, definition: ModuleDef, file: FileId) -> Option<String> {
+    if ra_ap_ide_db::base_db::relevant_crates(db, file).len() < 2 {
+        return None;
+    }
+    let krate = definition.module(db)?.krate(db);
+    Some(path_of(db, krate.root_file(db))?.text)
+}
+
+#[instrument(level = "trace", skip(db, definition))]
+fn site_written(db: &RootDatabase, definition: ModuleDef) -> Option<DefSite> {
     match definition {
         ModuleDef::Function(it) => {
             derived_site(db, it).or_else(|| site_in(db, KIND_FUNCTION, it.source(db)?))
@@ -419,6 +447,7 @@ fn site_in<N: AstNode + HasName>(
         place: place_in_file(&node),
         chain,
         member: None,
+        krate: String::new(),
     })
 }
 
@@ -548,6 +577,7 @@ fn describe(db: &RootDatabase, definition: ModuleDef) -> String {
                     place: site.place,
                     chain: site.chain,
                     member: site.member,
+                    krate: site.krate,
                 }
                 .text(),
             )

@@ -236,6 +236,21 @@ a few intermediate queries (the def map, a file's item tree) with a fingerprint 
 restored run can re-run them and stop at an unchanged one, and a cutoff in front of each function that
 reads only its own text and what it resolves through. See the staged plan below.
 
+### One evaluated function in a restored process costs the trait solver's whole index
+
+Measured on a specimen and on `elicit_doc`: a restored run that evaluates nothing executes about 27,000
+queries; one that evaluates a single function executes about 125,000, 73,000 of them `capability`
+(`impls_trait`), which builds the impl index of every crate including the sysroot (about 30,000 impl
+signatures). So the functions a restored run cannot find again cost far more than their number.
+The per-phase report (`cordial::phase_queries`) showed it: 290,677 queries in the restored workspace
+load of `elicit_doc` (490,315 cold), with `ImplSignature::of_` and its companions near 30,000 each.
+
+The 170 functions `elicit_doc` evaluated again were all in `tests/support/mod.rs`, a file every test
+binary includes with `mod support;`, so it is one file in many crates. Its description (place and
+path) was the same in each crate and `resolve` found the first crate's function. A definition whose
+file is in more than one crate now carries the root file of its crate in the description and is found
+through that crate's index (`generated_in`).
+
 ### Staged plan toward per-function reuse within a file
 
 1. Place-based description (done): `a_comment_above_a_function_does_not_change_what_describes_it`.

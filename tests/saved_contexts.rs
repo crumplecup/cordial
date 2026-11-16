@@ -795,3 +795,46 @@ fn the_queries_a_run_executes_grow_with_the_crates_in_it() -> Result<()> {
     );
     Ok(())
 }
+
+/// A crate whose two test binaries both include `tests/support/mod.rs`, so that file's
+/// functions are defined once in each of two crates.
+fn shared_support_file() -> Result<tempfile::TempDir> {
+    let root = fixture()?;
+    std::fs::create_dir_all(root.path().join("tests/support")).into_diagnostic()?;
+    std::fs::write(
+        root.path().join("tests/support/mod.rs"),
+        "pub fn helper() {}\npub fn other_helper() { helper(); }\n",
+    )
+    .into_diagnostic()?;
+    for name in ["first", "second"] {
+        std::fs::write(
+            root.path().join(format!("tests/{name}.rs")),
+            "mod support;\n#[test]\nfn uses_support() { support::other_helper(); }\n",
+        )
+        .into_diagnostic()?;
+    }
+    Ok(root)
+}
+
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn a_file_two_crates_include_is_found_again_for_each_of_them() -> Result<()> {
+    cordial::init_tracing();
+    let root = shared_support_file()?;
+    let state = tempfile::tempdir().into_diagnostic()?;
+    let saved = SavedState::at(state.path().join("analysis-state"));
+    run(root.path(), &saved)?;
+    let (cold, total) =
+        workspace_evidence().ok_or_else(|| miette::miette!("the cold run logs its evidence"))?;
+    assert_eq!(cold, total);
+
+    let (restored, _) = run(root.path(), &saved)?;
+    assert!(restored);
+    let (again, total) = workspace_evidence()
+        .ok_or_else(|| miette::miette!("the restored run logs its evidence"))?;
+    assert_eq!(
+        again, 0,
+        "{again} of {total} functions were evaluated again; the shared file's are one each"
+    );
+    Ok(())
+}
