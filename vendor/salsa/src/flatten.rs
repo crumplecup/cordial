@@ -362,6 +362,17 @@ pub(crate) unsafe fn leaves_of(
         return Some((Arc::clone(result), *closure));
     }
 
+    // A query whose value has a saved fingerprint is reached as that fingerprint, however it is
+    // reached: read by a memo, or through a tracked struct it made.
+    if let Some(fingerprint) = cutoff_edge(zalsa, flattener.owner, edge) {
+        let mut found = Builder::default();
+        found.set(flattener.number(fingerprint));
+        let result = flattener.intern(found);
+        let closure = Closure::nothing();
+        flattener.done.insert(edge, (Arc::clone(&result), closure));
+        return Some((result, closure));
+    }
+
     // A query whose group is still open: its group's first query collects the rest.
     if let Some(&order) = flattener.open.get(&edge) {
         flattener.lowlink = flattener.lowlink.min(order);
@@ -413,11 +424,6 @@ pub(crate) unsafe fn leaves_of(
                 // A persisted query is serialized itself: depend on it, and do not walk through
                 // it (its own dependencies are covered by its own memo).
                 let number = flattener.number(dependency_edge);
-                found.set(number);
-            } else if let Some(fingerprint) = cutoff_edge(zalsa, flattener.owner, dependency_edge) {
-                // A query whose value has a saved fingerprint: depend on that, and do not walk
-                // through the query.
-                let number = flattener.number(fingerprint);
                 found.set(number);
             } else if let Some((set, below)) =
                 unsafe { leaves_of(zalsa, dependency_edge, flattener) }

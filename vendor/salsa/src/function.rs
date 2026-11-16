@@ -1056,11 +1056,6 @@ mod persistence {
                 } else {
                     edge
                 });
-            } else if let Some(fingerprint) =
-                crate::flatten::cutoff_edge(zalsa, flattener.owner, edge)
-            {
-                // A query whose value has a saved fingerprint: depend on that.
-                own.insert(fingerprint);
             } else if dependency.as_function().is_some() {
                 // SAFETY: The caller prevents database writes throughout the traversal.
                 if let Some((set, below)) =

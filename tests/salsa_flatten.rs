@@ -1329,3 +1329,92 @@ fn a_query_with_no_fingerprint_asked_for_is_walked_through_and_not_depended_on()
         );
     }
 }
+
+/// What `shape` is, as a tracked struct a query made and others read a field of, as the
+/// definition map of a crate is read.
+#[salsa::tracked(debug)]
+struct Shaped<'db> {
+    count: usize,
+}
+
+#[salsa::tracked(returns(copy))]
+fn shaped<'db>(db: &'db dyn Database, group: Group) -> Shaped<'db> {
+    Shaped::new(db, shape(db, group))
+}
+
+#[salsa::tracked(returns(copy), persist)]
+fn shaped_fingerprint(db: &dyn Database, group: Group) -> usize {
+    *shaped(db, group).count(db)
+}
+
+static READ_THROUGH_A_STRUCT: AtomicUsize = AtomicUsize::new(0);
+
+/// Persisted, and reads the field of the tracked struct `shaped` makes.
+#[salsa::tracked(returns(copy), persist)]
+fn sized_through_a_struct<'db>(db: &'db dyn Database, group: Group, key: Key<'db>) -> usize {
+    READ_THROUGH_A_STRUCT.fetch_add(1, Ordering::SeqCst);
+    *shaped(db, group).count(db) + key.n(db)
+}
+
+/// How many queries that read a tracked struct's field ran again after `edit`, with `shaped`
+/// declared as `cutoff` says, in a database saved and restored in `format`.
+fn read_through_a_struct_after(cutoff: Cutoff, format: Format, edit: Edit) -> usize {
+    let mut db = Db::default();
+    let fixture = Fixture::new(&db);
+    let ask = |db: &Db| {
+        for n in 0..MEMBERS * 2 {
+            sized_through_a_struct(db, fixture.groups[n % 2], Key::new(db, n));
+        }
+        for group in fixture.groups {
+            shaped_fingerprint(db, group);
+        }
+    };
+    ask(&db);
+    let declare = |db: &Db| {
+        if let Cutoff::Registered = cutoff {
+            assert!(<dyn Database>::register_cutoff(
+                db,
+                "shaped",
+                "shaped_fingerprint"
+            ));
+        }
+    };
+    declare(&db);
+    let (mut restored, _) = round_trip_in(&mut db, format);
+    declare(&restored);
+    for group in fixture.groups {
+        shaped_fingerprint(&restored, group);
+    }
+    ask(&restored);
+    let before = READ_THROUGH_A_STRUCT.load(Ordering::SeqCst);
+    let cell = fixture.cells[0][CELLS / 2];
+    cell.set_value(&mut restored).to(match edit {
+        Edit::LeavesTheShape => 7,
+        Edit::ChangesTheShape => LARGE + 1,
+    });
+    ask(&restored);
+    READ_THROUGH_A_STRUCT.load(Ordering::SeqCst) - before
+}
+
+#[test]
+fn a_query_read_through_a_tracked_struct_it_made_has_its_fingerprint_depended_on_too() {
+    for format in [Format::Json, Format::MessagePack] {
+        assert_eq!(
+            read_through_a_struct_after(Cutoff::Registered, format, Edit::LeavesTheShape),
+            0,
+            "{format:?}: the struct's field is as it was, and its fingerprint says so"
+        );
+        assert_eq!(
+            read_through_a_struct_after(Cutoff::NotRegistered, format, Edit::LeavesTheShape),
+            MEMBERS,
+            "{format:?}: without a fingerprint, the field was made from every cell"
+        );
+        for cutoff in [Cutoff::Registered, Cutoff::NotRegistered] {
+            assert_eq!(
+                read_through_a_struct_after(cutoff, format, Edit::ChangesTheShape),
+                MEMBERS,
+                "{format:?}, {cutoff:?}: the field changed, so what read it runs again"
+            );
+        }
+    }
+}

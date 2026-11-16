@@ -669,7 +669,7 @@
              }
 --- salsa-0.28.5/src/flatten.rs
 +++ salsa/src/flatten.rs
-@@ -0,0 +1,737 @@
+@@ -0,0 +1,743 @@
 +//! Flattening a query's dependencies down to what is persisted, once per query.
 +//!
 +//! A persisted memo's dependencies are rewritten before it is saved: the queries that
@@ -1034,6 +1034,17 @@
 +        return Some((Arc::clone(result), *closure));
 +    }
 +
++    // A query whose value has a saved fingerprint is reached as that fingerprint, however it is
++    // reached: read by a memo, or through a tracked struct it made.
++    if let Some(fingerprint) = cutoff_edge(zalsa, flattener.owner, edge) {
++        let mut found = Builder::default();
++        found.set(flattener.number(fingerprint));
++        let result = flattener.intern(found);
++        let closure = Closure::nothing();
++        flattener.done.insert(edge, (Arc::clone(&result), closure));
++        return Some((result, closure));
++    }
++
 +    // A query whose group is still open: its group's first query collects the rest.
 +    if let Some(&order) = flattener.open.get(&edge) {
 +        flattener.lowlink = flattener.lowlink.min(order);
@@ -1085,11 +1096,6 @@
 +                // A persisted query is serialized itself: depend on it, and do not walk through
 +                // it (its own dependencies are covered by its own memo).
 +                let number = flattener.number(dependency_edge);
-+                found.set(number);
-+            } else if let Some(fingerprint) = cutoff_edge(zalsa, flattener.owner, dependency_edge) {
-+                // A query whose value has a saved fingerprint: depend on that, and do not walk
-+                // through the query.
-+                let number = flattener.number(fingerprint);
 +                found.set(number);
 +            } else if let Some((set, below)) =
 +                unsafe { leaves_of(zalsa, dependency_edge, flattener) }
@@ -1811,7 +1817,7 @@
  
              for entry in <C::SalsaStruct<'_> as SalsaStructInDb>::entries(zalsa) {
                  let memo_ingredient_index = ingredient
-@@ -806,97 +866,307 @@
+@@ -806,97 +866,302 @@
                      memo_ingredient_index,
                  );
  
@@ -2060,11 +2066,6 @@
 +                } else {
 +                    edge
 +                });
-+            } else if let Some(fingerprint) =
-+                crate::flatten::cutoff_edge(zalsa, flattener.owner, edge)
-+            {
-+                // A query whose value has a saved fingerprint: depend on that.
-+                own.insert(fingerprint);
 +            } else if dependency.as_function().is_some() {
 +                // SAFETY: The caller prevents database writes throughout the traversal.
 +                if let Some((set, below)) =
@@ -2180,7 +2181,7 @@
      }
  
      pub struct DeserializeIngredient<'db, C>
-@@ -937,7 +1207,23 @@
+@@ -937,7 +1202,23 @@
          {
              let DeserializeIngredient { zalsa, ingredient } = self;
  
