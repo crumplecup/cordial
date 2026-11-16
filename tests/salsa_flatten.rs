@@ -791,3 +791,44 @@ fn memos_that_read_the_same_cells_do_not_each_take_a_copy_of_them() {
         "restoring gave memos {given} edges, where copies of their sets are {copies}"
     );
 }
+
+/// What `set_verifications` counted since `before`: references verified and sets checked.
+fn set_work_since(before: (u64, u64, u64)) -> (u64, u64) {
+    let now = salsa::set_verifications();
+    (now.0 - before.0, now.1 - before.1)
+}
+
+#[test]
+fn a_set_is_checked_once_for_all_the_memos_that_share_it_in_a_revision() {
+    let mut db = Db::default();
+    let fixture = Fixture::new(&db);
+    fixture.ask_all(&db);
+    let (mut restored, _) = round_trip(&mut db);
+
+    // Nothing changed since the save, so no memo is verified by looking at its dependencies at
+    // all: the sets are not checked.
+    let before = salsa::set_verifications();
+    fixture.ask_all(&restored);
+    assert_eq!(
+        set_work_since(before),
+        (0, 0),
+        "a restore nothing changed after is not verified through its sets"
+    );
+
+    // After a change, every memo has to be verified: each refers to its group's set, and the two
+    // sets are checked once each between all the memos, and a change inside one is found.
+    let cell = fixture.cells[0][CELLS / 2];
+    cell.set_value(&mut restored).to(424_242);
+    let before = salsa::set_verifications();
+    fixture.ask_all(&restored);
+    let (references, checks) = set_work_since(before);
+    let memos = (2 * MEMBERS) as u64;
+    assert!(
+        references >= memos,
+        "each of the {memos} memos had its set verified: {references}"
+    );
+    assert!(
+        (1..=4).contains(&checks),
+        "{references} references to 2 sets checked the sets {checks} times"
+    );
+}

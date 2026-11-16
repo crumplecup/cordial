@@ -417,6 +417,22 @@ struct SetAnswers {
 
 static SET_ANSWERS: std::sync::Mutex<Option<SetAnswers>> = std::sync::Mutex::new(None);
 
+static SET_CHECKS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+static SET_COMPUTED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+static SET_MEMBERS_CHECKED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// How many times a memo's reference to a restored set was verified, how many of those had to
+/// check the set's edges (the rest were answered from an earlier memo's check in the same
+/// revision), and how many edges those checks looked at: what verifying restored memos costs now
+/// that they share their sets.
+pub fn set_verifications() -> (u64, u64, u64) {
+    (
+        SET_CHECKS.load(std::sync::atomic::Ordering::Relaxed),
+        SET_COMPUTED.load(std::sync::atomic::Ordering::Relaxed),
+        SET_MEMBERS_CHECKED.load(std::sync::atomic::Ordering::Relaxed),
+    )
+}
+
 /// The edge of the restored set `number` that changed after `since`, if one did.
 ///
 /// Every memo of a crate refers to the same set, and was verified at the same revision, so the
@@ -428,6 +444,7 @@ pub(crate) fn set_changed_after(
     number: u32,
     since: crate::Revision,
 ) -> Option<QueryEdge> {
+    SET_CHECKS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let database = std::ptr::from_ref(zalsa) as usize;
     let revision = zalsa.current_revision();
     {
@@ -443,8 +460,10 @@ pub(crate) fn set_changed_after(
             return *answer;
         }
     }
+    SET_COMPUTED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let mut changed = None;
     for edge in shared_set(number).iter().copied() {
+        SET_MEMBERS_CHECKED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         if edge.is_watermark() {
             if zalsa.last_changed_revision(WATERMARK_DURABILITY) > since {
                 changed = Some(edge);

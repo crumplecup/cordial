@@ -35,6 +35,8 @@ pub struct LiveStatus {
     in_phase: Mutex<std::collections::HashMap<String, u64>>,
     /// The memos deep-verified and the dependencies checked, as of the last phase's end.
     verified: Mutex<(u64, u64)>,
+    /// The restored sets verified, checked and walked, as of the last phase's end.
+    sets: Mutex<(u64, u64, u64)>,
 }
 
 impl LiveStatus {
@@ -50,6 +52,7 @@ impl LiveStatus {
             phase: Mutex::new(String::new()),
             in_phase: Mutex::new(std::collections::HashMap::new()),
             verified: Mutex::new((0, 0)),
+            sets: Mutex::new((0, 0, 0)),
         })
     }
 
@@ -87,7 +90,21 @@ impl LiveStatus {
                 spent
             })
             .unwrap_or_default();
-        if counts.is_empty() && memos == 0 {
+        let now_sets = salsa::set_verifications();
+        let (set_refs, set_checks, set_members) = self
+            .sets
+            .lock()
+            .map(|mut before| {
+                let spent = (
+                    now_sets.0 - before.0,
+                    now_sets.1 - before.1,
+                    now_sets.2 - before.2,
+                );
+                *before = now_sets;
+                spent
+            })
+            .unwrap_or_default();
+        if counts.is_empty() && memos == 0 && set_refs == 0 {
             return;
         }
         counts.sort_by_key(|(name, count)| (std::cmp::Reverse(*count), name.clone()));
@@ -105,6 +122,9 @@ impl LiveStatus {
             kinds = counts.len(),
             verified = memos,
             edges_checked = edges,
+            set_refs,
+            set_checks,
+            set_members,
             top = %top,
             "queries executed in the phase"
         );
