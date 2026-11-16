@@ -68,6 +68,12 @@ impl SourceDatabase {
             root.to_path_buf(),
         );
         let Some(facts) = queries::antipattern_crate_facts(&self.db, crate_key) else {
+            tracing::info!(
+                target: "cordial::semantic::fallback",
+                step = "antipatterns",
+                query = "antipattern_crate_facts",
+                "a query declined: the antipatterns of the target are read file by file"
+            );
             return Ok(None);
         };
         let mut snapshots = Vec::new();
@@ -77,6 +83,13 @@ impl SourceDatabase {
                 &self.db,
                 WalkKey::new(&self.db, *key, facts.clone()),
             ) else {
+                tracing::info!(
+                    target: "cordial::semantic::fallback",
+                    step = "antipatterns",
+                    query = "antipattern_sites_file",
+                    file = %key.path(&self.db).display(),
+                    "a query declined: the antipatterns of the target are read file by file"
+                );
                 return Ok(None);
             };
             snapshots.push(file.snapshot.clone());
@@ -91,7 +104,16 @@ impl SourceDatabase {
             match contract {
                 Some(Some(file)) => found.push(file.clone()),
                 Some(None) => {}
-                None => return Ok(None),
+                None => {
+                    tracing::info!(
+                        target: "cordial::semantic::fallback",
+                        step = "antipatterns",
+                        query = "antipattern_contracts_file",
+                        file = %key.path(&self.db).display(),
+                        "a query declined: the antipatterns of the target are read file by file"
+                    );
+                    return Ok(None);
+                }
             }
         }
         let contracts = join_clauses(root, found.iter(), &mut snapshots);

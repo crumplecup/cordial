@@ -53,6 +53,12 @@ impl SourceDatabase {
             queries::panic_graph(&self.db, crate_key),
             queries::panic_reachable(&self.db, crate_key),
         ) else {
+            tracing::info!(
+                target: "cordial::semantic::fallback",
+                step = "panics",
+                query = "panic_graph or panic_reachable",
+                "a query declined: the panics of the target are read file by file"
+            );
             return self.panics_directly(
                 root,
                 #[cfg(feature = "verus_ir")]
@@ -66,6 +72,13 @@ impl SourceDatabase {
                 &self.db,
                 queries::ScanKey::new(&self.db, *key, reachable.clone()),
             ) else {
+                tracing::info!(
+                    target: "cordial::semantic::fallback",
+                    step = "panics",
+                    query = "panic_scan_file",
+                    file = %key.path(&self.db).display(),
+                    "a query declined: the panics of the target are read file by file"
+                );
                 return self.panics_directly(
                     root,
                     #[cfg(feature = "verus_ir")]
