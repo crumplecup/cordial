@@ -394,12 +394,7 @@ impl SourceDatabase {
         attach_db(&self.db, || {
             let mut found = HashMap::new();
             for (ordinary, copy) in pairs {
-                let at: HashMap<_, _> = declared_in(&self.db, Crate::from(*ordinary))
-                    .into_iter()
-                    .filter_map(|definition| {
-                        Some((place_of(&self.db, definition, &HashMap::new())?, definition))
-                    })
-                    .collect();
+                let at = places_declared_in(&self.db, *ordinary);
                 for definition in declared_in(&self.db, Crate::from(*copy)) {
                     if let Some(place) = place_of(&self.db, definition, &originals)
                         && let Some(ordinary) = at.get(&place)
@@ -581,6 +576,26 @@ fn associated(item: AssocItem) -> ModuleDef {
         AssocItem::Const(constant) => ModuleDef::Const(constant),
         AssocItem::TypeAlias(alias) => ModuleDef::TypeAlias(alias),
     }
+}
+
+/// What the ordinary build's crate declares, by where it is written: the same for every context,
+/// so it is computed once and kept until something the crate's definitions depend on changes.
+#[salsa::tracked(returns(ref))]
+#[instrument(level = "debug", skip(db))]
+#[hotpath::measure]
+fn places_declared_in(
+    db: &dyn super::queries::SemanticDatabase,
+    krate: InputCrate,
+) -> HashMap<Place, ModuleDef> {
+    let root = db.root_database();
+    attach_db(root, || {
+        declared_in(root, Crate::from(krate))
+            .into_iter()
+            .filter_map(|definition| {
+                Some((place_of(root, definition, &HashMap::new())?, definition))
+            })
+            .collect()
+    })
 }
 
 /// Where `definition`'s name is written in the original source, with `originals`

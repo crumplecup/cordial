@@ -465,7 +465,7 @@ fn a_restored_run_executes_few_rust_analyzer_queries() -> Result<()> {
     // What a restored run still asks rust-analyzer for is what it takes to name each function
     // (parse, item trees, attributes, macro expansion) so its saved evidence can be found: the
     // steps below. Anything else asking for analysis in a restored run is new work to account for.
-    const NAMING: [&str; 16] = [
+    const NAMING: [&str; 17] = [
         "local_functions",
         "derived_site",
         "inner_",
@@ -476,6 +476,8 @@ fn a_restored_run_executes_few_rust_analyzer_queries() -> Result<()> {
         "generated_in",
         // The places of a file's items, indexed once from its parse.
         "places_in",
+        // What the ordinary build's crates declare, listed once for all the contexts.
+        "places_declared_in",
         // One each: the joins over a crate's files, rebuilt from the saved parts, the source
         // captured for the run, and the warm-up's own question of the saved evidence.
         "antipattern_crate_facts",
@@ -880,6 +882,47 @@ fn the_time_to_name_functions_does_not_grow_with_the_square_of_a_files_items() -
     assert!(
         many < few * 5,
         "3,000 impls took {many:?} against {few:?} for 1,000: more than linear growth"
+    );
+    Ok(())
+}
+
+/// How many times a span of the given name was entered, from its `new_span` events.
+#[derive(Default, Clone)]
+struct SpanCount(std::sync::Arc<std::sync::atomic::AtomicUsize>, &'static str);
+
+impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for SpanCount {
+    fn on_new_span(
+        &self,
+        attributes: &tracing::span::Attributes<'_>,
+        _: &tracing::span::Id,
+        _: tracing_subscriber::layer::Context<'_, S>,
+    ) {
+        if attributes.metadata().name() == self.1 {
+            self.0.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        }
+    }
+}
+
+/// The ordinary build's declarations are the same for every context, so they are listed once for
+/// each crate and each context lists only its own copies: three crates and three contexts is
+/// 3 + 3 x 3 listings and the two the index of generated definitions asks for, where listing the
+/// originals again for each context was 20.
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn the_ordinary_builds_declarations_are_listed_once_for_all_the_contexts() -> Result<()> {
+    cordial::init_tracing();
+    let count = SpanCount(Default::default(), "declared_in");
+    let subscriber = tracing_subscriber::registry().with(count.clone());
+    let _subscriber = tracing::subscriber::set_default(subscriber);
+    let root = chain_of_crates()?;
+    let state = tempfile::tempdir().into_diagnostic()?;
+    let saved = SavedState::at(state.path().join("analysis-state"));
+    run_many(root.path(), &saved)?;
+    let listed = count.0.load(std::sync::atomic::Ordering::Relaxed);
+    let (crates, contexts, others) = (3, 3, 2);
+    assert!(
+        listed <= crates * (1 + contexts) + others,
+        "{listed} listings of what a crate declares for {crates} crates and {contexts} contexts"
     );
     Ok(())
 }
