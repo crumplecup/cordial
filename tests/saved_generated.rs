@@ -312,3 +312,54 @@ fn two_types_deriving_the_same_macro_in_one_file_are_each_found_again() -> Resul
     );
     Ok(())
 }
+
+/// What a restored run has to answer for.
+#[derive(Clone, Copy)]
+enum Between {
+    /// The sources are as the saved state left them.
+    NothingToSee,
+    /// A function was added, so what the saved state says about the crate is out of date.
+    SomethingToCatch,
+}
+
+/// The queries a restored run over a proc-macro workspace executed, after `between`.
+fn restored_over_a_proc_macro_workspace(between: Between) -> Result<usize> {
+    let executions = Executions::default();
+    let subscriber = tracing_subscriber::registry().with(executions.clone());
+    let _subscriber = tracing::subscriber::set_default(subscriber);
+    let root = specimen()?;
+    let library = root.path().join("src/lib.rs");
+    let text = bodies_of(20, 2, 3);
+    std::fs::write(&library, &text).into_diagnostic()?;
+    let state = tempfile::tempdir().into_diagnostic()?;
+    let saved = SavedState::at(state.path().join("analysis-state"));
+    run(root.path(), &saved)?;
+    if let Between::SomethingToCatch = between {
+        std::fs::write(&library, format!("{text}\npub fn added() {{}}\n")).into_diagnostic()?;
+    }
+    executions.take();
+    run(root.path(), &saved)?;
+    Ok(executions.take().values().sum())
+}
+
+/// A restored run over a workspace with a procedural macro crate, whose functions carry attribute
+/// macros and whose bodies call macros, executes next to nothing when nothing changed: nothing is
+/// expanded to name a function or to list the files a build depends on, and no definition map is
+/// built. That is the fixed part of a restored run, which the sysroot made some 28,000 queries.
+/// With a function added the maps are built, which shows the count can tell the two apart.
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn a_restored_run_over_a_proc_macro_workspace_builds_no_definition_map() -> Result<()> {
+    cordial::init_tracing();
+    let unchanged = restored_over_a_proc_macro_workspace(Between::NothingToSee)?;
+    let edited = restored_over_a_proc_macro_workspace(Between::SomethingToCatch)?;
+    assert!(
+        edited > 1000,
+        "an edit makes a restored run build maps, and {edited} queries show it"
+    );
+    assert!(
+        unchanged < 40,
+        "{unchanged} queries executed in a restored run nothing changed in, against {edited} after an edit"
+    );
+    Ok(())
+}

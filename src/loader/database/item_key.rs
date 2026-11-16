@@ -50,23 +50,33 @@ pub(super) fn crate_scope(db: &RootDatabase, krate: ra_ap_hir::Crate) -> Option<
     Some(ItemKey::new(db, format!("crate|{}", path.text)))
 }
 
-/// The files of the modules of the crate `scope` describes, as the paths the database holds them
-/// at: each file once, where it is a module of the crate or included in one. `None` for a scope that
-/// is not a crate of this database.
+/// The files of the crate `scope` describes, as the paths the database holds them at: those of its
+/// modules, each once, and those `include!` brings in. `None` for a scope that is not a crate of
+/// this database.
 ///
 /// Saved with the database: asking the crate for its modules builds its definition map and those
 /// of everything it depends on, which are not saved, and the answer changes only with the sources.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub(super) struct CrateFiles {
+    modules: Vec<(bool, String)>,
+    included: Vec<(bool, String)>,
+}
+
 #[salsa::tracked(persist, returns(ref))]
 #[instrument(level = "debug", skip(db, scope))]
 #[hotpath::measure]
-fn module_files<'db>(
-    db: &'db dyn SemanticDatabase,
-    scope: ItemKey<'db>,
-) -> Option<Vec<(bool, String)>> {
+fn crate_files<'db>(db: &'db dyn SemanticDatabase, scope: ItemKey<'db>) -> Option<CrateFiles> {
     let root = db.root_database();
     attach_db(root, || {
         let krate = crate_of(root, scope.descriptor(root))?;
-        let files: std::collections::BTreeSet<FileId> = krate
+        let named = |files: std::collections::BTreeSet<FileId>| -> Vec<(bool, String)> {
+            files
+                .into_iter()
+                .filter_map(|file| path_of(root, file))
+                .map(|path| (path.real, path.text))
+                .collect()
+        };
+        let modules: std::collections::BTreeSet<FileId> = krate
             .modules(root)
             .into_iter()
             .map(|module| {
@@ -76,13 +86,15 @@ fn module_files<'db>(
                     .file_id(root)
             })
             .collect();
-        Some(
-            files
-                .into_iter()
-                .filter_map(|file| path_of(root, file))
-                .map(|path| (path.real, path.text))
-                .collect(),
-        )
+        let included: std::collections::BTreeSet<FileId> =
+            ra_ap_hir_def::include_macro_invoc(root, krate.base())
+                .iter()
+                .map(|(_, file)| file.file_id(root))
+                .collect();
+        Some(CrateFiles {
+            modules: named(modules),
+            included: named(included),
+        })
     })
 }
 
@@ -90,23 +102,36 @@ fn module_files<'db>(
 /// maps when nothing changed.
 #[instrument(level = "trace", skip(db))]
 pub(super) fn files_of(db: &RootDatabase, krate: ra_ap_hir::Crate) -> Option<Vec<FileId>> {
+    Some(files_in(db, &saved_files(db, krate)?.modules))
+}
+
+/// The files `include!` brings into `krate`, from the same saved list.
+#[instrument(level = "trace", skip(db))]
+pub(super) fn included_files_of(db: &RootDatabase, krate: ra_ap_hir::Crate) -> Option<Vec<FileId>> {
+    Some(files_in(db, &saved_files(db, krate)?.included))
+}
+
+#[instrument(level = "trace", skip(db))]
+fn saved_files(db: &RootDatabase, krate: ra_ap_hir::Crate) -> Option<&CrateFiles> {
     let scope = crate_scope(db, krate)?;
     let semantic: &dyn SemanticDatabase = db;
-    let listed = module_files(semantic, scope).as_ref()?;
-    Some(
-        listed
-            .iter()
-            .filter_map(|(real, text)| {
-                file_at(
-                    db,
-                    &PathText {
-                        real: *real,
-                        text: text.clone(),
-                    },
-                )
-            })
-            .collect(),
-    )
+    crate_files(semantic, scope).as_ref()
+}
+
+#[instrument(level = "trace", skip(db, listed))]
+fn files_in(db: &RootDatabase, listed: &[(bool, String)]) -> Vec<FileId> {
+    listed
+        .iter()
+        .filter_map(|(real, text)| {
+            file_at(
+                db,
+                &PathText {
+                    real: *real,
+                    text: text.clone(),
+                },
+            )
+        })
+        .collect()
 }
 
 /// The description of the scope "this file": where the database holds it.
@@ -170,14 +195,13 @@ pub(super) fn canonical_id(db: &RootDatabase, id: SemanticItemId) -> SemanticIte
     }
 }
 
-/// The local crate `scope` describes, found again by its root file.
+/// The crate `scope` describes, found again by its root file.
 #[instrument(level = "trace", skip(db))]
 pub(super) fn crate_of(db: &RootDatabase, scope: &str) -> Option<ra_ap_hir::Crate> {
     let wanted = scope.strip_prefix("crate|")?;
-    ra_ap_hir::Crate::all(db).into_iter().find(|krate| {
-        krate.origin(db).is_local()
-            && path_of(db, krate.root_file(db)).is_some_and(|path| path.text == wanted)
-    })
+    ra_ap_hir::Crate::all(db)
+        .into_iter()
+        .find(|krate| path_of(db, krate.root_file(db)).is_some_and(|path| path.text == wanted))
 }
 
 /// The interned description of `definition`.

@@ -1147,26 +1147,39 @@ fn decoding_the_saved_memos_costs_the_same_for_each_function() -> Result<()> {
     Ok(())
 }
 
+/// What a restored run has to answer for.
+#[derive(Clone, Copy)]
+enum Between {
+    /// The sources are as the saved state left them.
+    NothingToSee,
+    /// A function was added to the crate, so what the saved state says about it is out of date.
+    SomethingToCatch,
+}
+
 /// A restored run of the workspace asking for the package's sources, as selecting a target does:
 /// what rust-analyzer computed under `package_sources`, by query.
-fn package_sources_executions(count: usize) -> Result<std::collections::BTreeMap<String, usize>> {
+fn package_sources_executions(
+    between: Between,
+) -> Result<(std::collections::BTreeMap<String, usize>, usize)> {
     let executions = Executions::default();
     let subscriber = tracing_subscriber::registry().with(executions.clone());
     let _subscriber = tracing::subscriber::set_default(subscriber);
     let root = fixture()?;
-    let mut text = String::from("pub struct S;\n");
-    for n in 0..count {
-        text.push_str(&format!(
-            "impl S {{ pub fn m{n}(&self) -> usize {{ {n} }} }}\n"
-        ));
-    }
-    std::fs::write(root.path().join("src/lib.rs"), text).into_diagnostic()?;
+    let library = root.path().join("src/lib.rs");
+    std::fs::write(&library, "pub struct S;\nimpl S { pub fn m(&self) {} }\n").into_diagnostic()?;
     let state = tempfile::tempdir().into_diagnostic()?;
     let saved = SavedState::at(state.path().join("analysis-state"));
     let options = SemanticCargoOptions::default()
         .with_cfg_contexts(vec![SemanticContextKey::enabling(["kani"])])
         .with_cfg_planning(CfgPlanning::Explicit);
-    for _ in 0..2 {
+    for time in 0..2 {
+        if time == 1 && matches!(between, Between::SomethingToCatch) {
+            std::fs::write(
+                &library,
+                "pub struct S;\nimpl S { pub fn m(&self) {} }\npub fn added() {}\n",
+            )
+            .into_diagnostic()?;
+        }
         executions.take();
         let mut session = SourceDatabase::load_saved(root.path(), &options, Some(saved.clone()))
             .into_diagnostic()?;
@@ -1174,32 +1187,36 @@ fn package_sources_executions(count: usize) -> Result<std::collections::BTreeMap
             .project_target(&CrateTarget::new("gated", root.path()))
             .into_diagnostic()?;
     }
-    Ok(executions
-        .take()
-        .into_iter()
-        .filter(|(name, _)| name.starts_with("package_sources >"))
-        .collect())
+    let all = executions.take();
+    let total = all.values().sum();
+    Ok((
+        all.into_iter()
+            .filter(|(name, _)| {
+                name.starts_with("package_sources >") || name.starts_with("crate_files >")
+            })
+            .collect(),
+        total,
+    ))
 }
 
-/// What asking for a package's sources makes a restored run compute does not grow with the
-/// package: it is the definition maps of the crates it depends on.
+/// Asking for a package's sources builds no definition map in a restored run nothing changed in:
+/// the files of the crate's modules are saved with the database. After an edit they are asked of
+/// rust-analyzer again, which builds the maps of the crate and everything under it, the sysroot
+/// first; the edit shows the count can tell the two apart.
 #[test]
 #[tracing::instrument(level = "debug", err(level = "warn"))]
-fn the_modules_package_sources_asks_for_cost_the_same_whatever_the_package_holds() -> Result<()> {
+fn a_restored_run_lists_a_packages_files_without_building_definition_maps() -> Result<()> {
     cordial::init_tracing();
-    let small = package_sources_executions(100)?;
-    let large = package_sources_executions(1000)?;
-    // Asking for a package's modules makes rust-analyzer build the definition maps of the crates
-    // the package depends on, sysroot first: the same work whatever the package holds, because
-    // definition maps are not saved. It is the first step of a run to ask, and pays for the rest.
-    assert!(!small.is_empty(), "package_sources makes definition maps");
-    for (query, count) in &large {
-        let before = small.get(query).copied().unwrap_or(0);
-        assert!(
-            *count <= before + before / 5 + 10,
-            "{query}: {before} for 100 functions, {count} for 1,000"
-        );
-    }
+    let (unchanged, _) = package_sources_executions(Between::NothingToSee)?;
+    let (_, edited) = package_sources_executions(Between::SomethingToCatch)?;
+    assert!(
+        edited > 1000,
+        "an edit makes the run build definition maps, and {edited} queries show it"
+    );
+    assert!(
+        unchanged.is_empty(),
+        "listing the package's files executed in a run nothing changed in: {unchanged:?}"
+    );
     Ok(())
 }
 
@@ -1258,11 +1275,11 @@ fn run_planned(root: &Path, saved: &SavedState) -> Result<bool> {
     Ok(restored)
 }
 
-/// The queries a restored run executed, by the step that asked, when it plans its own contexts.
-#[test]
-#[tracing::instrument(level = "debug", err(level = "warn"))]
-fn a_restored_planned_run_builds_no_definition_maps() -> Result<()> {
-    cordial::init_tracing();
+/// The queries a restored run that plans its own contexts executed, by the step that asked, after
+/// `between`.
+fn restored_planned_executions(
+    between: Between,
+) -> Result<std::collections::BTreeMap<String, usize>> {
     let executions = Executions::default();
     let subscriber = tracing_subscriber::registry().with(executions.clone());
     let _subscriber = tracing::subscriber::set_default(subscriber);
@@ -1270,6 +1287,11 @@ fn a_restored_planned_run_builds_no_definition_maps() -> Result<()> {
     let state = tempfile::tempdir().into_diagnostic()?;
     let saved = SavedState::at(state.path().join("analysis-state"));
     assert!(!run_planned(root.path(), &saved)?);
+    if let Between::SomethingToCatch = between {
+        let library = root.path().join("src/lib.rs");
+        let text = std::fs::read_to_string(&library).into_diagnostic()?;
+        std::fs::write(&library, format!("{text}\npub fn added() {{}}\n")).into_diagnostic()?;
+    }
     executions.take();
     assert!(run_planned(root.path(), &saved)?);
     let mut by_step = std::collections::BTreeMap::<String, usize>::new();
@@ -1278,7 +1300,28 @@ fn a_restored_planned_run_builds_no_definition_maps() -> Result<()> {
             .entry(name.split(" > ").next().unwrap_or_default().to_owned())
             .or_default() += count;
     }
-    let total: usize = by_step.values().sum();
-    assert!(total < 40, "{total} queries executed: {by_step:?}");
+    Ok(by_step)
+}
+
+/// A restored run that plans its own contexts builds no definition map when nothing changed: it
+/// names no function, walks no copy and lists no files through rust-analyzer, which made it execute
+/// some 52,000 queries. After an edit the maps are built, which shows the count can tell the two
+/// apart.
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn a_restored_planned_run_builds_no_definition_maps() -> Result<()> {
+    cordial::init_tracing();
+    let unchanged = restored_planned_executions(Between::NothingToSee)?;
+    let edited = restored_planned_executions(Between::SomethingToCatch)?;
+    let (unchanged_total, edited_total): (usize, usize) =
+        (unchanged.values().sum(), edited.values().sum());
+    assert!(
+        edited_total > 1000,
+        "an edit makes the run build maps, and {edited_total} queries show it: {edited:?}"
+    );
+    assert!(
+        unchanged_total < 40,
+        "{unchanged_total} queries executed in a run nothing changed in: {unchanged:?}"
+    );
     Ok(())
 }

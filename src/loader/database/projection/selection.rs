@@ -84,11 +84,20 @@ impl SourceDatabase {
                 {
                     continue;
                 }
-                for module in krate.modules(&self.db) {
-                    let file = module
-                        .definition_source_file_id(&self.db)
-                        .original_file_respecting_includes(&self.db)
-                        .file_id(&self.db);
+                let modules =
+                    super::super::item_key::files_of(&self.db, krate).unwrap_or_else(|| {
+                        krate
+                            .modules(&self.db)
+                            .into_iter()
+                            .map(|module| {
+                                module
+                                    .definition_source_file_id(&self.db)
+                                    .original_file_respecting_includes(&self.db)
+                                    .file_id(&self.db)
+                            })
+                            .collect()
+                    });
+                for file in modules {
                     if let Some(path) = self.vfs.file_path(file).as_path() {
                         files.insert(AsRef::<Path>::as_ref(path).to_path_buf());
                     }

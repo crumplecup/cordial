@@ -1,5 +1,6 @@
 //! Compiled artifacts depend on HIR crate and module identities, not folders.
 
+use super::super::item_key;
 use crate::SemanticConfigurationInput;
 use ra_ap_hir::Crate;
 use ra_ap_ide_db::{RootDatabase, base_db::SourceDatabase as RaSourceDatabase};
@@ -41,16 +42,23 @@ pub(super) fn collect(
             continue;
         }
         pending.extend(krate.dependencies(db).into_iter().map(|dep| dep.krate));
-        let modules = krate.modules(db).into_iter().map(|module| {
-            module
-                .definition_source_file_id(db)
-                .original_file_respecting_includes(db)
-                .file_id(db)
+        // The saved lists of the crate's files, which make no definition map to answer.
+        let listed = item_key::files_of(db, krate)
+            .zip(item_key::included_files_of(db, krate))
+            .map(|(modules, included)| modules.into_iter().chain(included).collect::<Vec<_>>());
+        let files = listed.unwrap_or_else(|| {
+            let modules = krate.modules(db).into_iter().map(|module| {
+                module
+                    .definition_source_file_id(db)
+                    .original_file_respecting_includes(db)
+                    .file_id(db)
+            });
+            let includes = ra_ap_hir_def::include_macro_invoc(db, krate.base())
+                .iter()
+                .map(|(_, file)| file.file_id(db));
+            modules.chain(includes).collect()
         });
-        let includes = ra_ap_hir_def::include_macro_invoc(db, krate.base())
-            .iter()
-            .map(|(_, file)| file.file_id(db));
-        for file in modules.chain(includes) {
+        for file in files {
             if let Some(path) = vfs.file_path(file).as_path() {
                 inputs.insert(
                     AsRef::<std::path::Path>::as_ref(path).to_path_buf(),
