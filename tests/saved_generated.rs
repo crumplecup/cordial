@@ -212,3 +212,71 @@ fn the_queries_of_a_restored_run_grow_slowly_with_the_code_macros_generated() ->
     );
     Ok(())
 }
+
+/// `count` functions, each with `stack` attribute macros on it and `calls` macro calls in its
+/// body, one of which expands to two more.
+fn bodies_of(count: usize, stack: usize, calls: usize) -> String {
+    let mut text = String::from(
+        "use macros::wrap;\n\
+         macro_rules! note { ($($t:tt)*) => { let _ = stringify!($($t)*); }; }\n\
+         macro_rules! pair { ($e:expr) => { note!($e); note!($e + 1); }; }\n",
+    );
+    for n in 0..count {
+        for _ in 0..stack {
+            text.push_str("#[wrap]\n");
+        }
+        text.push_str(&format!("pub fn body{n}() {{\n"));
+        for call in 0..calls {
+            text.push_str(&format!("    pair!({call});\n"));
+        }
+        text.push_str("}\n");
+    }
+    text
+}
+
+/// What a restored run executed over `count` functions shaped by `stack` and `calls`.
+fn restored_total_over(count: usize, stack: usize, calls: usize) -> Result<usize> {
+    let executions = Executions::default();
+    let subscriber = tracing_subscriber::registry().with(executions.clone());
+    let _subscriber = tracing::subscriber::set_default(subscriber);
+    let root = specimen()?;
+    std::fs::write(
+        root.path().join("src/lib.rs"),
+        bodies_of(count, stack, calls),
+    )
+    .into_diagnostic()?;
+    let state = tempfile::tempdir().into_diagnostic()?;
+    let saved = SavedState::at(state.path().join("analysis-state"));
+    run(root.path(), &saved)?;
+    executions.take();
+    run(root.path(), &saved)?;
+    Ok(executions.take().values().sum())
+}
+
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn the_queries_of_a_restored_run_by_the_macros_in_and_on_each_function() -> Result<()> {
+    cordial::init_tracing();
+    let per_function = |stack, calls| -> Result<usize> {
+        let few = restored_total_over(5, stack, calls)?;
+        let many = restored_total_over(45, stack, calls)?;
+        Ok(many.saturating_sub(few) / 40)
+    };
+    let plain = per_function(0, 0)?;
+    let with_calls = per_function(0, 6)?;
+    let one = per_function(1, 0)?;
+    let three = per_function(3, 0)?;
+    // Measured: 1 query for a plain function and the same with six macro calls in its body (a
+    // body is not expanded to name a function), 6 with one attribute macro and 16 with three:
+    // about 5 for each attribute macro, which is expanded again in every process.
+    assert!(
+        with_calls <= plain + 2,
+        "macro calls in a body cost {with_calls} against {plain} per function"
+    );
+    let per_attribute = three.saturating_sub(plain) / 3;
+    assert!(
+        (3..=12).contains(&per_attribute) && one > plain,
+        "each attribute macro costs {per_attribute} queries per function (1: {one}, 3: {three})"
+    );
+    Ok(())
+}
