@@ -612,13 +612,13 @@ struct PlacedFile<'db> {
 #[instrument(level = "debug", skip(db))]
 #[hotpath::measure]
 fn places_in<'db>(db: &'db dyn SemanticDatabase, file: PlacedFile<'db>) -> PlaceIndex {
+    // Only the file's text is read, so the index is kept until that text changes. Asking the
+    // database for the file's parse would also read which crate the file is in, and every
+    // registration of a context's crates would make each file's index stale.
     let root = db.root_database();
-    attach_db(root, || {
-        let sema = Semantics::new(root);
-        sema.attach_first_edition_opt(FileId::from_raw(*file.index(db)))
-            .map(|editioned| PlaceIndex::of(sema.parse(editioned).syntax()))
-            .unwrap_or_default()
-    })
+    let text = root.file_text(FileId::from_raw(*file.index(db)));
+    let parse = ra_ap_syntax::SourceFile::parse(text.text(root), ra_ap_syntax::Edition::CURRENT);
+    PlaceIndex::of(parse.tree().syntax())
 }
 
 /// The index of `file`'s places.

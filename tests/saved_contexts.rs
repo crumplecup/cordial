@@ -978,3 +978,31 @@ fn the_ordinary_builds_declarations_are_listed_once_for_all_the_contexts() -> Re
     );
     Ok(())
 }
+
+/// A file's places are indexed once however many items ask for them: the index is a query whose
+/// answer is kept, so it is built once for each file and not for each item in it.
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn a_files_places_are_indexed_once_for_all_the_items_that_ask() -> Result<()> {
+    cordial::init_tracing();
+    let executions = Executions::default();
+    let subscriber = tracing_subscriber::registry().with(executions.clone());
+    let _subscriber = tracing::subscriber::set_default(subscriber);
+    let root = chain_of_crates()?;
+    let state = tempfile::tempdir().into_diagnostic()?;
+    let saved = SavedState::at(state.path().join("analysis-state"));
+    run_many(root.path(), &saved)?;
+    let built: usize = executions
+        .take()
+        .into_iter()
+        .filter(|(query, _)| query.ends_with("> places_in"))
+        .map(|(_, count)| count)
+        .sum();
+    // Three crates of one file each, and three contexts that copy each.
+    let (files, contexts) = (3, 3);
+    assert!(
+        (1..=files * (1 + contexts)).contains(&built),
+        "{built} indexes executed for {files} files and {contexts} contexts"
+    );
+    Ok(())
+}
