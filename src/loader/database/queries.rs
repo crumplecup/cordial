@@ -30,6 +30,34 @@ impl SemanticDatabase for RootDatabase {
 /// its work was new reads it before and after.
 static EVIDENCE_EXECUTED: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 
+/// The keys whose saved evidence this process computed: the rest it took from the saved state.
+static COMPUTED_THIS_RUN: std::sync::LazyLock<std::sync::Mutex<std::collections::HashSet<u64>>> =
+    std::sync::LazyLock::new(Default::default);
+
+/// Forget what has been computed: a projection starts, and what it computes is what it counts.
+#[instrument(level = "trace")]
+pub(super) fn forget_computed() {
+    if let Ok(mut computed) = COMPUTED_THIS_RUN.lock() {
+        computed.clear();
+    }
+}
+
+/// Whether this process computed the saved evidence of the function with `key`.
+#[instrument(level = "trace")]
+pub(super) fn computed_this_run(key: u64) -> bool {
+    COMPUTED_THIS_RUN
+        .lock()
+        .is_ok_and(|computed| computed.contains(&key))
+}
+
+/// How many functions' saved evidence this process computed.
+#[instrument(level = "trace")]
+pub(super) fn computed_count() -> usize {
+    COMPUTED_THIS_RUN
+        .lock()
+        .map_or(0, |computed| computed.len())
+}
+
 /// The number of function-evidence queries executed so far.
 #[instrument(level = "trace")]
 pub(super) fn evidence_executed() -> usize {
@@ -329,6 +357,9 @@ pub(super) fn persisted_evidence<'db>(
         description = %super::item_key::key_text(db.root_database(), key),
         "persisted evidence computed"
     );
+    if let Ok(mut computed) = COMPUTED_THIS_RUN.lock() {
+        computed.insert(super::item_key::key_bits(key));
+    }
     let function = super::item_key::function_of(db, key)?;
     function_evidence(db, FunctionKey::new(db, function)).clone()
 }

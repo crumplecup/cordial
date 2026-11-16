@@ -199,8 +199,8 @@ fn functions_in(db: &RootDatabase, krate: Crate) -> Vec<Function> {
 /// which are not saved. Each function's evidence is found by its description alone.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub(super) struct CrateFunctions {
-    found: Vec<String>,
-    unfound: usize,
+    pub(super) found: Vec<String>,
+    pub(super) unfound: usize,
 }
 
 /// The functions of the crate `scope` describes: see [`CrateFunctions`].

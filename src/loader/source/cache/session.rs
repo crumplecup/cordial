@@ -328,17 +328,20 @@ impl ParsedSourceSession {
     /// Begin a run that loads the workspace only if its results are not already
     /// cached. `cache` is `None` when the inputs could not be gathered, in which
     /// case the workspace loads on first use and nothing is reused.
-    #[tracing::instrument(level = "debug", skip(cache, planning))]
+    #[tracing::instrument(level = "debug", skip(cache, planning, reuse_across_edits))]
     #[hotpath::measure]
     pub(crate) fn begin_deferred(
         root: &std::path::Path,
         planning: CfgPlanning,
+        reuse_across_edits: bool,
         cache: Option<RunCache>,
     ) -> Self {
         let session = Self::begin();
         *locked(&session.token.recipe) = Some(LoadRecipe {
             root: root.to_path_buf(),
-            options: SemanticCargoOptions::default().with_cfg_planning(planning),
+            options: SemanticCargoOptions::default()
+                .with_cfg_planning(planning)
+                .with_reuse_across_edits(reuse_across_edits),
         });
         *locked(&session.token.cache) = cache.map(Arc::new);
         session

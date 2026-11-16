@@ -75,6 +75,7 @@ impl SourceDatabase {
     ) -> CordialResult<CrateIr> {
         let context = self.projection_context()?;
         selection::validate_target(target, &context)?;
+        super::queries::forget_computed();
         self.declare_cutoffs();
         if self.restored {
             self.warm_persisted_dependencies(paths);
@@ -93,6 +94,7 @@ impl SourceDatabase {
             inventory
         };
         self.prime_function_evidence();
+        self.audit_reused_evidence();
         let ordinary_watch = crate::process_memory::Watch::start("ordinary projection".to_owned());
         let (mut graph, outline) = attach_db(&self.db, || {
             self.project_attached(

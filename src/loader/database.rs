@@ -6,6 +6,7 @@ mod antipattern_queries;
 mod apply_queries;
 #[cfg(feature = "internal_error_chain")]
 mod architecture_queries;
+mod audit;
 mod context_crates;
 mod contexts;
 #[cfg(any(

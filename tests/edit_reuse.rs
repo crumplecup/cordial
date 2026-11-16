@@ -20,6 +20,7 @@ use cordial::{
 use miette::{IntoDiagnostic, Result};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 use support::executions::Executions;
 use tracing_subscriber::prelude::*;
 
@@ -203,12 +204,54 @@ enum Reuse {
     Off,
 }
 
+/// What the audit of a run said, from its events: how many reused functions it computed again, and
+/// how many of them were not what the sources give.
+#[derive(Default, Clone)]
+struct AuditEvents(Arc<Mutex<Vec<(u64, u64)>>>);
+
+impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for AuditEvents {
+    fn on_event(&self, event: &tracing::Event<'_>, _: tracing_subscriber::layer::Context<'_, S>) {
+        if event.metadata().target() != "cordial::audit" {
+            return;
+        }
+        #[derive(Default)]
+        struct Fields {
+            audited: u64,
+            mismatched: u64,
+            summary: bool,
+        }
+        impl tracing::field::Visit for Fields {
+            fn record_u64(&mut self, field: &tracing::field::Field, value: u64) {
+                match field.name() {
+                    "audited" => {
+                        self.audited = value;
+                        self.summary = true;
+                    }
+                    "mismatched" => self.mismatched = value,
+                    _ => {}
+                }
+            }
+            fn record_debug(&mut self, _: &tracing::field::Field, _: &dyn std::fmt::Debug) {}
+        }
+        let mut fields = Fields::default();
+        event.record(&mut fields);
+        if fields.summary
+            && let Ok(mut all) = self.0.lock()
+        {
+            all.push((fields.audited, fields.mismatched));
+        }
+    }
+}
+
 /// What a run says: all of it, with ids taken out (they are numbered as the run met them), and the
 /// facts about each function with where things are taken out too, so that an edit that only moves
 /// things is not taken for one that changes what they say.
 struct Said {
     all: serde_json::Value,
     facts: BTreeMap<String, serde_json::Value>,
+    /// Reused functions the run computed again, and how many of those differed.
+    audited: u64,
+    mismatched: u64,
 }
 
 /// The facts about each function by name, without ids or places.
@@ -248,7 +291,10 @@ fn facts_of(graph: &CrateIr) -> Result<BTreeMap<String, serde_json::Value>> {
 /// What a run says about the crate, and how many functions' evidence it computed.
 fn run(root: &Path, saved: &SavedState, reuse: Reuse) -> Result<(Said, usize)> {
     let executions = Executions::default();
-    let subscriber = tracing_subscriber::registry().with(executions.clone());
+    let audit = AuditEvents::default();
+    let subscriber = tracing_subscriber::registry()
+        .with(executions.clone())
+        .with(audit.clone());
     let _subscriber = tracing::subscriber::set_default(subscriber);
     let options = SemanticCargoOptions::default()
         .with_cfg_planning(CfgPlanning::Explicit)
@@ -260,9 +306,16 @@ fn run(root: &Path, saved: &SavedState, reuse: Reuse) -> Result<(Said, usize)> {
         .into_diagnostic()?;
     let mut all = serde_json::to_value(graph.snapshot().into_diagnostic()?).into_diagnostic()?;
     without_ids(&mut all);
+    let (audited, mismatched) = audit
+        .0
+        .lock()
+        .map(|all| all.iter().fold((0, 0), |(a, m), (x, y)| (a + x, m + y)))
+        .unwrap_or_default();
     let said = Said {
         all,
         facts: facts_of(&graph)?,
+        audited,
+        mismatched,
     };
     let computed = executions
         .take()
@@ -338,6 +391,11 @@ fn check(index: usize, reuse: Reuse) -> Result<()> {
         edit.name
     );
     assert_eq!(
+        outcome.restored.mismatched, 0,
+        "{reuse:?}, {}: the audit found {} of {} reused functions not what the sources give",
+        edit.name, outcome.restored.mismatched, outcome.restored.audited
+    );
+    assert_eq!(
         outcome.cold.facts != outcome.before.facts,
         edit.changes_what_is_said,
         "{reuse:?}, {}: the facts {} by the edit",
@@ -411,7 +469,7 @@ fn independent_files() -> Result<tempfile::TempDir> {
 
 /// How many functions' evidence a restored run computed after the body of the last function of
 /// the third file changed, which nothing calls.
-fn computed_after_a_body_edit(reuse: Reuse) -> Result<usize> {
+fn computed_after_a_body_edit(reuse: Reuse) -> Result<(usize, u64, u64)> {
     cordial::init_tracing();
     let root = independent_files()?;
     let state = tempfile::tempdir().into_diagnostic()?;
@@ -427,7 +485,8 @@ fn computed_after_a_body_edit(reuse: Reuse) -> Result<usize> {
         ),
     )
     .into_diagnostic()?;
-    Ok(run(root.path(), &saved, reuse)?.1)
+    let (said, computed) = run(root.path(), &saved, reuse)?;
+    Ok((computed, said.audited, said.mismatched))
 }
 
 /// With reuse across edits, an edit to a function's body makes a run compute the functions of the
@@ -436,8 +495,20 @@ fn computed_after_a_body_edit(reuse: Reuse) -> Result<usize> {
 /// computes.) Without it, every function of the crate is computed.
 #[test]
 fn an_edit_to_a_body_computes_the_functions_of_its_file_and_not_the_crate() -> Result<()> {
-    let everything = computed_after_a_body_edit(Reuse::Off)?;
-    let reused = computed_after_a_body_edit(Reuse::On)?;
+    let (everything, audited_without, _) = computed_after_a_body_edit(Reuse::Off)?;
+    let (reused, audited, mismatched) = computed_after_a_body_edit(Reuse::On)?;
+    assert_eq!(
+        audited_without, 0,
+        "there is no audit without reuse to check"
+    );
+    assert!(
+        audited > 0,
+        "the audit computed again some of what was reused"
+    );
+    assert_eq!(
+        mismatched, 0,
+        "none of what was reused differs from what the sources give"
+    );
     assert!(
         everything > FILES * PER_FILE,
         "without reuse a run computed {everything} of {} functions",

@@ -64,6 +64,13 @@ pub struct CordialConfig {
     /// `--memory-limit` flag and `CORDIAL_MEMORY_LIMIT` take precedence; the default is `75%`.
     #[serde(default)]
     memory_limit: Option<String>,
+    /// Save what is computed for a function as depending on a fingerprint of its crate's
+    /// definition map, so that an edit to a function's body makes the next run compute the
+    /// functions of that file and not of the whole crate. A run that computed anything then
+    /// computes a sample of what it reused again and says if any of it differs. Off by default
+    /// until it has run on enough code to be trusted.
+    #[serde(default)]
+    reuse_across_edits: bool,
     /// Shared enable and path policy, keyed by etiquette configuration identity.
     #[serde(default)]
     lints: std::collections::BTreeMap<String, LintPolicy>,

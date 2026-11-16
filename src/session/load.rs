@@ -67,8 +67,11 @@ fn begin_database(
     let task = session
         .progress()
         .spinner("Checking for cached results".to_string());
+    let reuse = *crate::config::load_session_config(session).reuse_across_edits();
     let cache = timings.measure("pipeline", "result_cache_key", || {
-        let options = crate::loader::SemanticCargoOptions::default().with_cfg_planning(planning);
+        let options = crate::loader::SemanticCargoOptions::default()
+            .with_cfg_planning(planning)
+            .with_reuse_across_edits(reuse);
         crate::run_cache::gather(&crate::run_cache::KeyRequest::new(
             session.project_root(),
             format!("{options:?}"),
@@ -87,6 +90,7 @@ fn begin_database(
     Ok(ParsedSourceSession::begin_deferred(
         session.project_root(),
         planning,
+        reuse,
         cache,
     ))
 }
