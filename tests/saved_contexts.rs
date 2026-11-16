@@ -1398,3 +1398,84 @@ fn a_restored_planned_run_builds_no_definition_maps() -> Result<()> {
     );
     Ok(())
 }
+
+/// A workspace with a file no context compiles: `never.rs` is a module only where the feature
+/// `never` is on, which no context turns on, so it is not in any copy's crate.
+fn with_a_file_nothing_compiles() -> Result<tempfile::TempDir> {
+    let root = fixture()?;
+    let library = root.path().join("src/lib.rs");
+    let text = std::fs::read_to_string(&library).into_diagnostic()?;
+    std::fs::write(
+        &library,
+        format!("{text}\n#[cfg(feature = \"never\")]\nmod never;\n"),
+    )
+    .into_diagnostic()?;
+    std::fs::write(
+        root.path().join("src/never.rs"),
+        "pub fn unreachable_here() {}\n",
+    )
+    .into_diagnostic()?;
+    Ok(root)
+}
+
+/// What a restored run asks rust-analyzer for, and how often it falls back, over a workspace with a
+/// file no context compiles, projected the way a run is: every source file is asked about.
+fn restored_over_a_file_nothing_compiles(between: Between) -> Result<(usize, usize)> {
+    let executions = Executions::default();
+    let fallbacks = FallbackEvents::default();
+    let subscriber = tracing_subscriber::registry()
+        .with(executions.clone())
+        .with(fallbacks.clone());
+    let _subscriber = tracing::subscriber::set_default(subscriber);
+    let root = with_a_file_nothing_compiles()?;
+    let state = tempfile::tempdir().into_diagnostic()?;
+    let saved = SavedState::at(state.path().join("analysis-state"));
+    let options = SemanticCargoOptions::default()
+        .with_cfg_contexts(vec![SemanticContextKey::enabling(["kani"])])
+        .with_cfg_planning(CfgPlanning::Explicit);
+    let paths = [
+        root.path().join("src/lib.rs"),
+        root.path().join("src/never.rs"),
+    ];
+    for time in 0..2 {
+        if time == 1 && matches!(between, Between::SomethingToCatch) {
+            std::fs::write(root.path().join("src/never.rs"), "pub fn changed() {}\n")
+                .into_diagnostic()?;
+        }
+        executions.take();
+        fallbacks.0.store(0, std::sync::atomic::Ordering::Relaxed);
+        let mut session = SourceDatabase::load_saved(root.path(), &options, Some(saved.clone()))
+            .into_diagnostic()?;
+        session
+            .project(&CrateTarget::new("gated", root.path()), &paths)
+            .into_diagnostic()?;
+    }
+    Ok((
+        executions.take().values().sum(),
+        fallbacks.0.load(std::sync::atomic::Ordering::Relaxed),
+    ))
+}
+
+/// A file no crate compiles under a context's cfg has no definitions there: it is not a reason to
+/// ask rust-analyzer. A restored run over a workspace with such a file falls back no more than one
+/// without; an edit shows the count can tell the two apart.
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn a_file_no_context_compiles_is_not_read_through_rust_analyzer() -> Result<()> {
+    cordial::init_tracing();
+    let (unchanged, fallbacks) = restored_over_a_file_nothing_compiles(Between::NothingToSee)?;
+    let (edited, _) = restored_over_a_file_nothing_compiles(Between::SomethingToCatch)?;
+    assert!(
+        edited > 1000,
+        "an edit makes the run build maps, and {edited} queries show it"
+    );
+    assert_eq!(
+        fallbacks, 0,
+        "a restored run nothing changed in read a file nothing compiles through rust-analyzer {fallbacks} times"
+    );
+    assert!(
+        unchanged < 40,
+        "{unchanged} queries executed in a run nothing changed in"
+    );
+    Ok(())
+}

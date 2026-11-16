@@ -44,7 +44,12 @@ fn functions_in_copy<'db>(
     attach_db(root, || {
         let file = item_key::file_of_scope(root, &item_key::key_text(root, scope))?;
         let sema = Semantics::new(root);
-        let tree = sema.parse(sema.attach_first_edition_opt(file)?);
+        // A file that is a module of no crate under the copy's cfg (gated off, say) has no
+        // definitions there: its list is empty, which is an answer and not a reason to ask again.
+        let Some(edition) = sema.attach_first_edition_opt(file) else {
+            return Some(Vec::new());
+        };
+        let tree = sema.parse(edition);
         let mut found = Vec::new();
         for function in tree.syntax().descendants().filter_map(ast::Fn::cast) {
             let Some(definition) = sema
