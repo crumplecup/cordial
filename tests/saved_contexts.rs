@@ -465,7 +465,7 @@ fn a_restored_run_executes_few_rust_analyzer_queries() -> Result<()> {
     // What a restored run still asks rust-analyzer for is what it takes to name each function
     // (parse, item trees, attributes, macro expansion) so its saved evidence can be found: the
     // steps below. Anything else asking for analysis in a restored run is new work to account for.
-    const NAMING: [&str; 15] = [
+    const NAMING: [&str; 16] = [
         "local_functions",
         "derived_site",
         "inner_",
@@ -474,6 +474,8 @@ fn a_restored_run_executes_few_rust_analyzer_queries() -> Result<()> {
         "harvest",
         "written_in_file",
         "generated_in",
+        // The places of a file's items, indexed once from its parse.
+        "places_in",
         // One each: the joins over a crate's files, rebuilt from the saved parts, the source
         // captured for the run, and the warm-up's own question of the saved evidence.
         "antipattern_crate_facts",
@@ -835,6 +837,44 @@ fn a_file_two_crates_include_is_found_again_for_each_of_them() -> Result<()> {
     assert_eq!(
         again, 0,
         "{again} of {total} functions were evaluated again; the shared file's are one each"
+    );
+    Ok(())
+}
+
+/// A crate with one file of `count` impl blocks of one method each, with its state saved by a
+/// first run, and how long a second, restored run takes.
+fn restored_time_over_impls(count: usize) -> Result<std::time::Duration> {
+    let root = fixture()?;
+    let mut text = String::from("pub struct S;\n");
+    for n in 0..count {
+        text.push_str(&format!(
+            "impl S {{ pub fn m{n}(&self) -> usize {{ {n} }} }}\n"
+        ));
+    }
+    std::fs::write(root.path().join("src/lib.rs"), text).into_diagnostic()?;
+    let state = tempfile::tempdir().into_diagnostic()?;
+    let saved = SavedState::at(state.path().join("analysis-state"));
+    run(root.path(), &saved)?;
+    let started = std::time::Instant::now();
+    run(root.path(), &saved)?;
+    Ok(started.elapsed())
+}
+
+/// Naming a function by where it is must not take time in proportion to the square of the items
+/// in its file: one file of many impl blocks with one label (so each is told from the others by
+/// an ordinal) took 68 s to restore at 4,000 impls when each was counted against the ones before
+/// it, and takes 12 s now, over a base of about 4 s.
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn the_time_to_name_functions_does_not_grow_with_the_square_of_a_files_items() -> Result<()> {
+    cordial::init_tracing();
+    let few = restored_time_over_impls(1000)?;
+    let many = restored_time_over_impls(3000)?;
+    // Three times the items: linear is about three times the work above the base; the base is
+    // most of the small run. Counting siblings one by one made it nine times.
+    assert!(
+        many < few * 5,
+        "3,000 impls took {many:?} against {few:?} for 1,000: more than linear growth"
     );
     Ok(())
 }

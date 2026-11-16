@@ -18,7 +18,7 @@ use std::sync::OnceLock;
 use ra_ap_hir::{Adt, HasSource, InFile, ModuleDef, Semantics, attach_db};
 use ra_ap_ide_db::RootDatabase;
 use ra_ap_ide_db::base_db::{SourceDatabase as RaSourceDatabase, SourceRootId};
-use ra_ap_syntax::{AstNode, SyntaxKind, SyntaxNode, ast, ast::HasName};
+use ra_ap_syntax::{AstNode, SyntaxKind, SyntaxNode, TextSize, ast, ast::HasName};
 use ra_ap_vfs::{FileId, VfsPath};
 use salsa::plumbing::{AsId, FromId};
 use tracing::instrument;
@@ -119,13 +119,13 @@ fn resolve<'db>(db: &'db dyn SemanticDatabase, key: ItemKey<'db>) -> Option<Modu
             // A file in several crates holds one definition for each; the file's own module
             // is the first crate's, so which one this is only the crate's index can say.
             _ if !site.krate.is_empty() => Vec::new(),
-            0 => node_at(&tree, &site.place)
+            0 => node_at(root, file, &tree, &site.place)
                 .and_then(|owner| written_in_file(&sema, owner, site.kind))
                 .into_iter()
                 .collect(),
             // A function an attribute macro generated: the annotated function is
             // where the call is.
-            1 if site.kind == KIND_FUNCTION => annotated_function(&sema, &tree, &site),
+            1 if site.kind == KIND_FUNCTION => annotated_function(root, file, &sema, &tree, &site),
             _ => Vec::new(),
         };
         // Whatever was found must say it is this definition.
@@ -207,13 +207,15 @@ fn written_in_file(
 
 /// What the function written at the site's place could be: the definition its attribute
 /// macros expand to, or the function itself.
-#[instrument(level = "trace", skip(sema, tree, site))]
+#[instrument(level = "trace", skip(db, sema, tree, site))]
 fn annotated_function(
+    db: &RootDatabase,
+    file: FileId,
     sema: &Semantics<'_, RootDatabase>,
     tree: &ast::SourceFile,
     site: &Site,
 ) -> Vec<ModuleDef> {
-    let Some(function) = node_at(tree, &site.place).and_then(ast::Fn::cast) else {
+    let Some(function) = node_at(db, file, tree, &site.place).and_then(ast::Fn::cast) else {
         return Vec::new();
     };
     expanded_definition(sema, &function)
@@ -444,7 +446,7 @@ fn site_in<N: AstNode + HasName>(
     Some(DefSite {
         kind,
         file,
-        place: place_in_file(&node),
+        place: place_in_file(db, file, &node),
         chain,
         member: None,
         krate: String::new(),
@@ -503,40 +505,128 @@ fn label(node: &SyntaxNode) -> Option<String> {
     )
 }
 
-/// Where `node` is in its file, by name and not by position: the labels of the modules, impls,
-/// traits and functions around it and of the item itself, outermost first, each followed by
-/// `#n` when `n` earlier siblings have the same label (two functions of one name under
-/// different `cfg`s). Adding text above or between items changes nothing about it.
-#[instrument(level = "trace", skip(node))]
-pub(super) fn place_in_file(node: &SyntaxNode) -> String {
-    let mut segments: Vec<String> = node
-        .ancestors()
-        .filter_map(|item| {
-            let label = label(&item)?;
-            let earlier = std::iter::successors(item.prev_sibling(), SyntaxNode::prev_sibling)
-                .filter(|sibling| {
-                    sibling.kind() == item.kind() && self::label(sibling).as_ref() == Some(&label)
-                })
-                .count();
-            Some(match earlier {
-                0 => label,
-                n => format!("{label}#{n}"),
-            })
-        })
-        .collect();
-    segments.reverse();
-    segments.join("/")
+/// Every item of one file that has a place, by node and by place, built in one pass.
+///
+/// The place of an item is the labels of the modules, impls, traits and functions around it and of
+/// the item itself, outermost first, each followed by `#n` when `n` earlier siblings have the same
+/// label (two functions of one name under different `cfg`s). Adding text above or between items
+/// changes nothing about it. Counting the earlier siblings of each item one by one, as a place is
+/// worded, takes time in proportion to the square of the items a file has (thousands of impls
+/// with one label), so the file is walked once and each parent keeps its own counts.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub(super) struct PlaceIndex {
+    by_node: std::collections::HashMap<(SyntaxKind, u32), String>,
+    by_place: std::collections::HashMap<String, (SyntaxKind, u32)>,
 }
 
-/// The item of `tree` at `place`, found by looking at the items that carry its last label.
-#[instrument(level = "trace", skip(tree))]
-fn node_at(tree: &ast::SourceFile, place: &str) -> Option<SyntaxNode> {
-    let last = place.rsplit('/').next()?;
-    let label = last.split_once('#').map_or(last, |(label, _)| label);
+/// What is known of the items counted under one node while walking a file.
+struct Parent {
+    /// The place of the nearest item at or above the node.
+    place: std::rc::Rc<str>,
+    /// How many items with each label were seen directly under the node so far.
+    seen: std::collections::HashMap<(SyntaxKind, String), usize>,
+}
+
+impl PlaceIndex {
+    #[instrument(level = "trace", skip(root))]
+    fn of(root: &SyntaxNode) -> Self {
+        use ra_ap_syntax::WalkEvent;
+        let mut index = Self::default();
+        let mut parents = vec![Parent {
+            place: std::rc::Rc::from(""),
+            seen: std::collections::HashMap::new(),
+        }];
+        for event in root.preorder() {
+            match event {
+                WalkEvent::Enter(node) => {
+                    let place = match (label(&node), parents.last_mut()) {
+                        (Some(label), Some(parent)) => {
+                            let earlier =
+                                parent.seen.entry((node.kind(), label.clone())).or_default();
+                            let segment = match *earlier {
+                                0 => label,
+                                n => format!("{label}#{n}"),
+                            };
+                            *earlier += 1;
+                            let place = match parent.place.is_empty() {
+                                true => segment,
+                                false => format!("{}/{segment}", parent.place),
+                            };
+                            let at = (node.kind(), u32::from(node.text_range().start()));
+                            index.by_node.insert(at, place.clone());
+                            index.by_place.insert(place.clone(), at);
+                            std::rc::Rc::from(place)
+                        }
+                        (_, parent) => {
+                            parent.map_or_else(|| std::rc::Rc::from(""), |p| p.place.clone())
+                        }
+                    };
+                    parents.push(Parent {
+                        place,
+                        seen: std::collections::HashMap::new(),
+                    });
+                }
+                WalkEvent::Leave(_) => {
+                    parents.pop();
+                }
+            }
+        }
+        index
+    }
+}
+
+/// A file, as the argument of the query that indexes its places.
+#[salsa::interned(debug)]
+struct PlacedFile<'db> {
+    index: u32,
+}
+
+/// The places of `file`'s items, kept until the file's text changes.
+#[salsa::tracked(returns(ref))]
+#[instrument(level = "debug", skip(db))]
+#[hotpath::measure]
+fn places_in<'db>(db: &'db dyn SemanticDatabase, file: PlacedFile<'db>) -> PlaceIndex {
+    let root = db.root_database();
+    attach_db(root, || {
+        let sema = Semantics::new(root);
+        sema.attach_first_edition_opt(FileId::from_raw(*file.index(db)))
+            .map(|editioned| PlaceIndex::of(sema.parse(editioned).syntax()))
+            .unwrap_or_default()
+    })
+}
+
+/// The index of `file`'s places.
+#[instrument(level = "trace", skip(db))]
+fn index_of(db: &RootDatabase, file: FileId) -> &PlaceIndex {
+    let semantic: &dyn SemanticDatabase = db;
+    places_in(semantic, PlacedFile::new(semantic, file.index()))
+}
+
+/// Where `node`, an item of `file`, is: see [`PlaceIndex`].
+#[instrument(level = "trace", skip(db, node))]
+pub(super) fn place_in_file(db: &RootDatabase, file: FileId, node: &SyntaxNode) -> String {
+    let at = (node.kind(), u32::from(node.text_range().start()));
+    index_of(db, file)
+        .by_node
+        .get(&at)
+        .cloned()
+        .unwrap_or_default()
+}
+
+/// The item of `tree`, the parse of `file`, at `place`.
+#[instrument(level = "trace", skip(db, tree))]
+fn node_at(
+    db: &RootDatabase,
+    file: FileId,
+    tree: &ast::SourceFile,
+    place: &str,
+) -> Option<SyntaxNode> {
+    let (kind, start) = *index_of(db, file).by_place.get(place)?;
     tree.syntax()
-        .descendants()
-        .filter(|node| self::label(node).as_deref() == Some(label))
-        .find(|node| place_in_file(node) == place)
+        .token_at_offset(TextSize::from(start))
+        .right_biased()?
+        .parent_ancestors()
+        .find(|node| node.kind() == kind && u32::from(node.text_range().start()) == start)
 }
 
 /// The path the database holds `file` at.

@@ -251,6 +251,21 @@ path) was the same in each crate and `resolve` found the first crate's function.
 file is in more than one crate now carries the root file of its crate in the description and is found
 through that crate's index (`generated_in`).
 
+### Naming must not be quadratic in a file's items
+
+The first place-based description counted the earlier same-label siblings of each item one by one,
+and found an item again by scanning for its label and recomputing the places of every candidate: time
+in proportion to the square of the items in a file when many share a label (thousands of `impl S {}`
+blocks). Restoring one file of 4,000 impls took 68 s, against 12 s now. A file is walked once
+(`PlaceIndex`): each parent keeps its own counts, the result is indexed both ways and kept by Salsa
+until the file's text changes. `the_time_to_name_functions_does_not_grow_with_the_square_of_a_files_items`
+fails on the old algorithm (125 s for 3,000 impls against 20 s for 1,000) and passes on this one. A small
+quadratic term remains (about 0.4 µs per n squared: 24 s of 30 s at 8,000 items in one file).
+
+On `elicit_doc`, restored: 0 of 2,142 functions evaluated, 108,264 queries (290,677 before the
+shared-file fix), 26 s: 5 s to restore and load, 8 s to name each function and find its memo, 8 s to
+build the graph from the evidence, 5 s for the contexts and leaf passes.
+
 ### Staged plan toward per-function reuse within a file
 
 1. Place-based description (done): `a_comment_above_a_function_does_not_change_what_describes_it`.
