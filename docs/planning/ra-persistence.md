@@ -803,9 +803,17 @@ stage it was in.
     populate step holds 250 MB, the ordinary projection 148 MB, loading the database 133 MB.
   - Saving the state is a peak contributor of its own: `step_save` allocates about 900 MB that lives
     from 10 ms to 10 s, of which 270 MB for over a second.
-- **The measure still missing**: which thread frees memory when no step or query is on its stack.
-  Frees are told by the tag of the thread that does them, and threads that are not ours (the
-  loader's, the proc macro server's) have none.
+- **Found, by the ladder of `tests/salsa_eviction.rs` and `tests/ra_eviction.rs`**: Salsa alone gives
+  the memory of evicted values back at once (seven variants). With rust-analyzer's parse of a file
+  as the query, 220 files, the 92 values past the capacity are dropped and none of their memory
+  comes back at eviction: `impl Drop for Parse` in `ra_ap_syntax` does not free the tree, it sends
+  it to a thread called `ParseNodeDropper`, which frees what it has been sent in batches, sleeping
+  100 ms between them. That thread has no tag and no query or step on its stack, which is the
+  "freed outside any query" of the heap events, and it is why memory is released later and
+  at a pace that depends on the load. A file's tree and a macro expansion's (which holds a `Parse`)
+  go through it alike. The eviction events now wait for the memory held to stop falling and say how
+  long that took and how much came back (`eviction.<stage>.settled_micros`, `.freed_settled_bytes`).
+  The syntax crate drops synchronously when it is built with `--cfg no_salsa_async_drops`.
 
 
 ## What is not persisted, and why

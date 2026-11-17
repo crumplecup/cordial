@@ -179,6 +179,7 @@ fn what_the_queries_hold_is_told_by_query() -> Result<()> {
 
     session.evict_regenerable_now();
     let store = tempfile::tempdir().into_diagnostic()?;
+
     let layout = StoreLayout::from_root(store.path().to_path_buf(), "evicted".to_owned());
     cordial::write_run_metrics(&layout).into_diagnostic()?;
     let metrics = cordial::read_run_metrics(&layout);
@@ -194,6 +195,16 @@ fn what_the_queries_hold_is_told_by_query() -> Result<()> {
             .map(|(_, value)| *value)
             .sum()
     };
+    // What the eviction gave back once the deferred frees had run, and how long that took.
+    assert!(
+        of("asked", ".freed_settled_bytes") > 1_000_000,
+        "the memory an eviction gives back is not told: {}",
+        of("asked", ".freed_settled_bytes")
+    );
+    assert!(
+        of("asked", ".settled_micros") > 0,
+        "the time it takes to settle is not told"
+    );
     for query in ["editionedfileid_parse", "macrocallid_parse_macro_expansion"] {
         assert!(of(query, ".dropped") > 0, "nothing of {query} was evicted");
         assert_eq!(

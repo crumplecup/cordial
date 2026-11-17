@@ -30,6 +30,26 @@ pub(super) fn cap_from_environment() {
     }
 }
 
+/// How often the memory held is read while waiting for deferred frees, and how long to wait for it
+/// to stop falling at most.
+const SETTLE_EVERY: std::time::Duration = std::time::Duration::from_millis(20);
+const SETTLE_AT_MOST: std::time::Duration = std::time::Duration::from_secs(5);
+
+/// Wait until the memory the program holds has not fallen for several readings in a row (or a
+/// while has passed) and give it.
+fn settle_held() -> i64 {
+    let began = std::time::Instant::now();
+    let mut last = salsa::held_in_all().unwrap_or(0);
+    let mut steady = 0;
+    while steady < 6 && began.elapsed() < SETTLE_AT_MOST {
+        std::thread::sleep(SETTLE_EVERY);
+        let now = salsa::held_in_all().unwrap_or(0);
+        steady = if now < last { 0 } else { steady + 1 };
+        last = now;
+    }
+    last
+}
+
 impl SourceDatabase {
     /// Evict what is over its capacity, if asked to, and say how long it took and how much of
     /// the process's memory it freed. Needs the database exclusively, so it is for between
@@ -111,11 +131,22 @@ impl SourceDatabase {
     fn evict_quietly(&mut self, after: &str) -> u64 {
         let before = crate::process_memory::sample();
         let held = salsa::allocated_net_bytes();
+        let held_in_all = salsa::held_in_all();
         let started = std::time::Instant::now();
         salsa::set_eviction_label(after);
         salsa::Database::trigger_lru_eviction(&mut self.db);
         salsa::set_eviction_label("");
         let micros = u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX);
+        // A syntax tree dropped by the eviction is not freed by it: rust-analyzer hands it to a
+        // thread that frees it a little later. What the eviction gives back is what is held when that
+        // has run, so wait for the program's memory to stop falling, and say how long that took.
+        let settle_started = std::time::Instant::now();
+        let settled = held_in_all.map(|_| settle_held());
+        let settled_micros =
+            u64::try_from(settle_started.elapsed().as_micros()).unwrap_or(u64::MAX);
+        let freed_settled = held_in_all
+            .zip(settled)
+            .map_or(0, |(held, now)| u64::try_from(held - now).unwrap_or(0));
         let freed = held
             .zip(salsa::allocated_net_bytes())
             .map_or(0, |(held, now)| u64::try_from(held - now).unwrap_or(0));
@@ -127,6 +158,8 @@ impl SourceDatabase {
             step = after,
             micros,
             freed_bytes = freed,
+            settled_micros,
+            freed_settled_bytes = freed_settled,
             resident_before_kib = resident(before),
             resident_after_kib = resident(crate::process_memory::sample()),
             "evicted what is over its capacity"
