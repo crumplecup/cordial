@@ -329,7 +329,7 @@ fn resolve<'db>(db: &'db dyn SemanticDatabase, key: ItemKey<'db>) -> Option<Modu
 #[salsa::tracked(returns(ref))]
 #[instrument(level = "debug", skip(db))]
 #[hotpath::measure]
-fn generated_in(
+pub(super) fn generated_in(
     db: &dyn SemanticDatabase,
     krate: ra_ap_ide_db::base_db::Crate,
 ) -> std::collections::HashMap<String, ModuleDef> {

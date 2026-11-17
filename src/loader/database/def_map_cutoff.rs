@@ -55,6 +55,29 @@ pub(super) fn def_map_fingerprint(db: &dyn SemanticDatabase, krate: InputCrate) 
     })
 }
 
+/// A hash of which definitions of `krate` a macro generated, by description: what `generated_in`
+/// says is there, without the definitions themselves.
+///
+/// What reads the index (`resolve`, for a derive's methods and what an attribute macro wrapped) asks
+/// it for the definition with a description, and a definition is its description: the same
+/// descriptions are the same definitions. The index is made by reading every definition of the
+/// crate, so what read it depends on every file, though an edit to a body leaves the index as it was.
+#[salsa::tracked(persist, returns(copy))]
+#[instrument(level = "debug", skip(db))]
+#[hotpath::measure]
+pub(super) fn generated_in_fingerprint(db: &dyn SemanticDatabase, krate: InputCrate) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut descriptions: Vec<&String> = super::item_key::generated_in(db, krate).keys().collect();
+    descriptions.sort();
+    // A hasher with no key of its own, so that the same descriptions hash the same in every process.
+    let mut hasher = std::hash::DefaultHasher::new();
+    descriptions.len().hash(&mut hasher);
+    for description in descriptions {
+        description.hash(&mut hasher);
+    }
+    hasher.finish()
+}
+
 /// A hash of the inherent impls of `krate`.
 #[salsa::tracked(persist, returns(copy))]
 #[instrument(level = "debug", skip(db))]
@@ -102,6 +125,7 @@ impl SourceDatabase {
             ("crate_local_def_map", "def_map_fingerprint"),
             ("inherent_impls_for_crate", "inherent_impls_fingerprint"),
             ("trait_impls_for_crate", "trait_impls_fingerprint"),
+            ("generated_in", "generated_in_fingerprint"),
         ] {
             let declared = <dyn salsa::Database>::register_cutoff(&self.db, query, fingerprint);
             tracing::debug!(target: "cordial::cache", query, fingerprint, declared, "a fingerprint declared");
@@ -121,6 +145,7 @@ impl SourceDatabase {
                     let _ = def_map_fingerprint(&self.db, krate.base());
                     let _ = inherent_impls_fingerprint(&self.db, krate.base());
                     let _ = trait_impls_fingerprint(&self.db, krate.base());
+                    let _ = generated_in_fingerprint(&self.db, krate.base());
                 }
             }
         });
@@ -140,6 +165,7 @@ impl SourceDatabase {
                 let _ = def_map_fingerprint(&self.db, krate.base());
                 let _ = inherent_impls_fingerprint(&self.db, krate.base());
                 let _ = trait_impls_fingerprint(&self.db, krate.base());
+                let _ = generated_in_fingerprint(&self.db, krate.base());
             }
         });
     }

@@ -47,6 +47,7 @@ fn original() -> Sources {
              pub fn a_top() {\n    a_leaf();\n}\n\
              pub struct A;\n\
              impl A {\n    pub fn m(&self) {}\n}\n\
+             #[derive(Debug)]\n\
              pub struct A2;\n\
              pub trait T {\n    fn t(&self) -> u8;\n}\n\
              impl T for A {\n    fn t(&self) -> u8 {\n        1\n    }\n}\n"
@@ -60,7 +61,7 @@ fn original() -> Sources {
         ),
         (
             "c.rs",
-            "use crate::a::T;\npub fn c_top() {\n    crate::b::b_top();\n    crate::b::b_leaf();\n    crate::a::a_leaf();\n    crate::a::made();\n    crate::a::nested();\n    let a = crate::a::A;\n    a.m();\n    a.t();\n}\n"
+            "use crate::a::T;\npub fn c_top() {\n    crate::b::b_top();\n    crate::b::b_leaf();\n    crate::a::a_leaf();\n    crate::a::made();\n    crate::a::nested();\n    let a = crate::a::A;\n    a.m();\n    a.t();\n    let _ = a.clone();\n}\n"
                 .into(),
         ),
     ]
@@ -206,6 +207,30 @@ fn edits() -> Vec<Edit> {
                     "a.rs",
                     "fn t(&self) -> u8 {\n        1",
                     "fn t(&self) -> u8 {\n        let _ = 3;\n        1",
+                )
+            },
+            changes_what_is_said: false,
+        },
+        Edit {
+            name: "a derive added to a type",
+            apply: |s| {
+                replace(
+                    s,
+                    "a.rs",
+                    "pub struct A;",
+                    "#[derive(Clone)]\npub struct A;",
+                )
+            },
+            changes_what_is_said: true,
+        },
+        Edit {
+            name: "a derive removed from a type",
+            apply: |s| {
+                replace(
+                    s,
+                    "a.rs",
+                    "#[derive(Debug)]\npub struct A2;",
+                    "pub struct A2;",
                 )
             },
             changes_what_is_said: false,
@@ -566,7 +591,9 @@ after_an_edit! {
     an_inherent_impl_moved_to_another_type => 10,
     a_trait_impl_added_for_another_type => 11,
     the_body_of_a_trait_method => 12,
-    a_function_gated_off => 13,
+    a_derive_added_to_a_type => 13,
+    a_derive_removed_from_a_type => 14,
+    a_function_gated_off => 15,
 }
 
 /// The same checks with reuse off, which is the harness telling the two edits that matter most
@@ -849,6 +876,72 @@ fn an_edit_to_a_body_costs_a_small_part_of_a_cold_run_when_the_crate_has_a_cfg_c
         computed <= 2 * (PER_FILE + 1) + 1,
         "the edited run computed the evidence of {computed} functions, against {cold_computed} from \
          nothing"
+    );
+    Ok(())
+}
+
+/// A crate like the independent files whose types derive `Clone` and `Debug`, so that each file
+/// has functions that a macro generated and that have no text of their own to be read from.
+fn independent_files_with_derives() -> Result<tempfile::TempDir> {
+    let root = tempfile::tempdir().into_diagnostic()?;
+    let mut sources: Sources = Vec::new();
+    let mut library = String::new();
+    for file in 0..FILES {
+        library.push_str(&format!("pub mod file{file};\n"));
+        let mut text = format!("#[derive(Clone, Debug)]\npub struct S{file};\n");
+        for function in 0..PER_FILE {
+            text.push_str(&format!(
+                "pub fn f{file}_{function}() {{\n    let s = S{file};\n    let _ = s.clone();\n}}\n"
+            ));
+        }
+        sources.push((Box::leak(format!("file{file}.rs").into_boxed_str()), text));
+    }
+    sources.push(("lib.rs", library));
+    write(root.path(), &sources)?;
+    Ok(root)
+}
+
+/// How many functions' evidence a restored run computed after the body of the last function of the
+/// third file changed, in a crate whose types derive.
+fn computed_after_a_body_edit_with_derives() -> Result<(usize, u64, u64)> {
+    cordial::init_tracing();
+    let root = independent_files_with_derives()?;
+    let state = tempfile::tempdir().into_diagnostic()?;
+    let saved = SavedState::at(state.path().join("analysis-state"));
+    run(root.path(), &saved, Reuse::On)?;
+    let edited = root.path().join("src/file2.rs");
+    let text = std::fs::read_to_string(&edited).into_diagnostic()?;
+    std::fs::write(
+        &edited,
+        text.replace(
+            &format!("pub fn f2_{}() {{", PER_FILE - 1),
+            &format!("pub fn f2_{}() {{\n    let _ = 1;", PER_FILE - 1),
+        ),
+    )
+    .into_diagnostic()?;
+    let (said, computed) = run(root.path(), &saved, Reuse::On)?;
+    Ok((computed, said.audited, said.mismatched))
+}
+
+/// Functions a macro generated depend on the file they were generated in, and not on every file of
+/// the crate: after an edit to one body, a restored run computes the functions of that file and
+/// not the derived functions of the others. (`generated_in` is the crate's index of what macros
+/// generated; what reads it depends on everything it reads.)
+#[test]
+fn an_edit_to_a_body_computes_the_functions_of_its_file_when_the_crate_derives() -> Result<()> {
+    let (computed, audited, mismatched) = computed_after_a_body_edit_with_derives()?;
+    assert_eq!(
+        mismatched, 0,
+        "none of what was reused differs from what the sources give"
+    );
+    // The file's own functions and the two a derive generates for its type, and the warm-up.
+    let file = PER_FILE + 2;
+    assert!(
+        computed <= file + 1,
+        "{computed} of {} functions were computed after an edit to one body in one file ({audited} \
+         of what was reused was audited); what reads the most inputs itself: {}",
+        FILES * file,
+        salsa::flatten_breadth("persisted_evidence").unwrap_or_default()
     );
     Ok(())
 }
