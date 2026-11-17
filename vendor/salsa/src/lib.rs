@@ -313,6 +313,11 @@ pub(crate) fn allocation_probe() -> Option<fn() -> i64> {
     ALLOCATION_PROBE.get().copied()
 }
 
+/// The net bytes the calling thread has allocated, if the program counts them.
+pub fn allocated_net_bytes() -> Option<i64> {
+    allocation_probe().map(|probe| probe())
+}
+
 #[cfg(feature = "accumulator")]
 pub use self::accumulator::Accumulator;
 pub use self::active_query::Backtrace;

@@ -189,6 +189,7 @@ impl SourceDatabase {
             };
             self.harvest(&context, index, &pairs, &files, graph)?;
             crate::process_memory::log("cfg context harvested");
+            self.evict_regenerable("cfg context");
             #[cfg(feature = "tracing")]
             self.merge_context_observability(graph)?;
             if automatic {

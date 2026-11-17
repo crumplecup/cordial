@@ -95,6 +95,7 @@ impl SourceDatabase {
         };
         self.prime_function_evidence();
         self.audit_reused_evidence();
+        self.evict_regenerable("evidence");
         let ordinary_watch = crate::process_memory::Watch::start("ordinary projection".to_owned());
         let (mut graph, outline) = attach_db(&self.db, || {
             self.project_attached(
@@ -107,6 +108,7 @@ impl SourceDatabase {
         })?;
         drop(ordinary_watch);
         crate::process_memory::log("ordinary projection done");
+        self.evict_regenerable("ordinary projection");
         self.log_tables();
         // Gated code is analysed by changing the database's cfg input, which
         // needs the exclusive borrow the ordinary pass does not have.

@@ -68,15 +68,17 @@ impl<C: Configuration> IngredientImpl<C> {
     pub(super) fn evict_value_from_memo_for(
         table: MemoTableWithTypesMut<'_>,
         memo_ingredient_index: MemoIngredientIndex,
-    ) {
+    ) -> bool {
+        let mut evicted = false;
         let map = |memo: &mut Memo<C>| {
             if memo.header.can_evict_value() {
                 // Set the memo value to `None`.
-                memo.value = None;
+                evicted = memo.value.take().is_some();
             }
         };
 
-        table.map_memo(memo_ingredient_index, map)
+        table.map_memo(memo_ingredient_index, map);
+        evicted
     }
 }
 

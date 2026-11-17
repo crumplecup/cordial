@@ -1742,7 +1742,28 @@
  
      /// Evicts the existing memo for the given key, replacing it
      /// with an equivalent memo that has no value. If the memo is untracked
-@@ -168,7 +146,7 @@
+@@ -90,15 +68,17 @@
+     pub(super) fn evict_value_from_memo_for(
+         table: MemoTableWithTypesMut<'_>,
+         memo_ingredient_index: MemoIngredientIndex,
+-    ) {
++    ) -> bool {
++        let mut evicted = false;
+         let map = |memo: &mut Memo<C>| {
+             if memo.header.can_evict_value() {
+                 // Set the memo value to `None`.
+-                memo.value = None;
++                evicted = memo.value.take().is_some();
+             }
+         };
+ 
+-        table.map_memo(memo_ingredient_index, map)
++        table.map_memo(memo_ingredient_index, map);
++        evicted
+     }
+ }
+ 
+@@ -168,7 +148,7 @@
  
      /// Returns the configuration-independent header without a table lookup.
      #[inline(always)]
@@ -1751,7 +1772,7 @@
          // SAFETY: `data` points to the base address of a `Memo` allocation valid for `'memo`, with
          // spatial provenance covering the allocation, and `Memo::header` has offset zero.
          unsafe { self.data.cast::<MemoHeader>().as_ref() }
-@@ -203,7 +181,7 @@
+@@ -203,7 +183,7 @@
  }
  
  #[derive(Debug)]
@@ -1760,7 +1781,7 @@
      /// Last revision when this memo was verified; this begins
      /// as the current revision.
      pub(super) verified_at: AtomicRevision,
-@@ -225,10 +203,25 @@
+@@ -225,10 +205,25 @@
      }
  
      #[inline]
@@ -1882,7 +1903,38 @@
          }
      }
  
-@@ -548,6 +588,77 @@
+@@ -503,13 +543,28 @@
+     }
+ 
+     fn reset_for_new_revision(&mut self, table: &mut Table) {
++        let (mut nominated, mut dropped) = (0_u64, 0_u64);
++        let held = crate::allocated_net_bytes();
+         self.eviction.for_each_evicted(|evict| {
+             let ingredient_index = table.ingredient_index(evict);
+-            Self::evict_value_from_memo_for(
++            nominated += 1;
++            dropped += u64::from(Self::evict_value_from_memo_for(
+                 table.memos_mut(evict),
+                 self.memo_ingredient_indices.get(ingredient_index),
+-            )
++            ));
+         });
++        if nominated > 0 {
++            ::tracing::debug!(
++                target: "salsa::eviction",
++                ingredient = C::DEBUG_NAME,
++                nominated,
++                dropped,
++                freed = held
++                    .zip(crate::allocated_net_bytes())
++                    .map_or(0, |(held, now)| u64::try_from(held - now).unwrap_or(0)),
++                "values evicted"
++            );
++        }
+ 
+         self.deleted_entries.clear();
+     }
+@@ -548,6 +603,77 @@
          C::PERSIST
      }
  
@@ -1960,7 +2012,7 @@
      fn should_serialize(&self, zalsa: &Zalsa) -> bool {
          if !C::PERSIST {
              return false;
-@@ -595,44 +706,6 @@
+@@ -595,44 +721,6 @@
      }
  }
  
@@ -2005,7 +2057,7 @@
  fn flatten_cycle_head_dependencies(
      ingredient: &dyn FunctionIngredient,
      zalsa: &Zalsa,
-@@ -744,7 +817,9 @@
+@@ -744,7 +832,9 @@
  #[cfg(feature = "persistence")]
  mod persistence {
      use super::{Configuration, IngredientImpl, Memo};
@@ -2016,7 +2068,7 @@
      use crate::plumbing::{MemoIngredientMap, SalsaStructInDb};
      use crate::zalsa::Zalsa;
      use crate::zalsa_local::persistence::PersistentQueryOrigin;
-@@ -764,6 +839,14 @@
+@@ -764,6 +854,14 @@
          pub ingredient: &'db IngredientImpl<C>,
      }
  
@@ -2031,7 +2083,7 @@
      impl<C> serde::Serialize for SerializeIngredient<'_, C>
      where
          C: Configuration,
-@@ -774,26 +857,9 @@
+@@ -774,26 +872,9 @@
          {
              let Self { ingredient, zalsa } = self;
  
@@ -2061,7 +2113,7 @@
  
              for entry in <C::SalsaStruct<'_> as SalsaStructInDb>::entries(zalsa) {
                  let memo_ingredient_index = ingredient
-@@ -806,97 +872,305 @@
+@@ -806,97 +887,305 @@
                      memo_ingredient_index,
                  );
  
@@ -2428,7 +2480,7 @@
      }
  
      pub struct DeserializeIngredient<'db, C>
-@@ -937,7 +1211,23 @@
+@@ -937,7 +1226,23 @@
          {
              let DeserializeIngredient { zalsa, ingredient } = self;
  
@@ -2618,7 +2670,7 @@
  mod function;
  mod hash;
  mod id;
-@@ -294,6 +299,20 @@
+@@ -294,6 +299,25 @@
  #[cfg(feature = "salsa_unstable")]
  pub use self::database::{IngredientInfo, PageInfo};
  
@@ -2634,6 +2686,11 @@
 +
 +pub(crate) fn allocation_probe() -> Option<fn() -> i64> {
 +    ALLOCATION_PROBE.get().copied()
++}
++
++/// The net bytes the calling thread has allocated, if the program counts them.
++pub fn allocated_net_bytes() -> Option<i64> {
++    allocation_probe().map(|probe| probe())
 +}
 +
  #[cfg(feature = "accumulator")]

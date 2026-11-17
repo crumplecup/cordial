@@ -18,6 +18,7 @@ mod contexts;
 mod crate_files;
 mod def_map_cutoff;
 mod edition;
+mod eviction;
 mod external;
 mod identity;
 #[cfg(feature = "tracing")]
