@@ -90,6 +90,13 @@ impl SavedState {
         let encoding = std::time::Instant::now();
         let salsa =
             rmp_serde::to_vec(&database.as_serialize()).map_err(|error| self.encoding(&error))?;
+        tracing::debug!(
+            target: "cordial::cache",
+            step = "encoded",
+            bytes = salsa.len(),
+            micros = u64::try_from(encoding.elapsed().as_micros()).unwrap_or(u64::MAX),
+            "the memos encoded"
+        );
         crate::host::event(format!(
             "analysis state: memos encoded, {} bytes in {:?}",
             salsa.len(),
@@ -275,16 +282,26 @@ impl super::SourceDatabase {
         self.verify_persisted_in_parallel();
         tracing::debug!(
             target: "cordial::cache",
-            elapsed = ?verifying.elapsed(),
+            step = "verified",
+            micros = u64::try_from(verifying.elapsed().as_micros()).unwrap_or(u64::MAX),
             "persisted memos verified before the save"
         );
         self.reporter.say("Saving the analysis state");
         let started = std::time::Instant::now();
         match saved.save(&mut self.db, &self.vfs, &self.context_crates) {
-            Ok(bytes) => crate::host::event(format!(
-                "analysis state: saved for the next run, {bytes} bytes in {:?}",
-                started.elapsed()
-            )),
+            Ok(bytes) => {
+                tracing::debug!(
+                    target: "cordial::cache",
+                    step = "saved",
+                    bytes,
+                    micros = u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX),
+                    "the analysis state saved"
+                );
+                crate::host::event(format!(
+                    "analysis state: saved for the next run, {bytes} bytes in {:?}",
+                    started.elapsed()
+                ));
+            }
             Err(error) => {
                 tracing::warn!(target: "cordial::cache", error = ?error, "could not save the analysis state");
                 crate::host::event("analysis state: could not be saved".to_owned());

@@ -198,6 +198,11 @@ pub struct RunRecord {
     #[builder(default)]
     #[serde(default)]
     values: BTreeMap<String, u64>,
+    /// What the program said that cannot be added up: which kinds of query reached the most, why a
+    /// fingerprint was volatile. The last of each.
+    #[builder(default)]
+    #[serde(default)]
+    notes: BTreeMap<String, String>,
 }
 
 /// Lower-case letters, digits and hyphens only, so an id is a safe file name.

@@ -187,6 +187,12 @@ pub fn render_usage(record: &RunRecord, top: usize) -> String {
             );
         }
     }
+    if !record.notes().is_empty() {
+        let _ = writeln!(out, "\nNotes:");
+        for (key, text) in record.notes() {
+            let _ = writeln!(out, "  {key}: {text}");
+        }
+    }
     if !record.values().is_empty() {
         // The largest first; the record keeps all of them.
         let mut values: Vec<(&String, &u64)> = record.values().iter().collect();

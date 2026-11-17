@@ -47,6 +47,7 @@ mod progress;
 mod proof_harness;
 mod reporter;
 mod run_cache;
+mod run_metrics;
 /// Rustdoc JSON inventory helpers used by coverage etiquettes.
 #[cfg(feature = "rustdoc")]
 pub mod rustdoc;
@@ -318,6 +319,9 @@ pub use plugins::{
 pub use plugins::{
     all_etiquettes_from_plugins, all_plugins, coverage_only_plugins, coverage_plugins,
     quality_only_plugins, quality_plugins,
+};
+pub use run_metrics::{
+    MetricsLayer, RunMetrics, metrics_filter, read as read_run_metrics, write as write_run_metrics,
 };
 pub use tracing_init::{
     LOG_SPANS_VARIABLE, init_cli_tracing, init_tracing, span_events, tracing_fmt_layer,

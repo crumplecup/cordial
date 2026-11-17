@@ -28,16 +28,16 @@ use super::queries::SemanticDatabase;
 /// The hash of a fingerprint, saying (for a person looking into why nothing was reused) what in
 /// it had no meaning that survives the process.
 fn hash_of(what: &'static str, fingerprint: ra_ap_hir_expand::stable::StableFingerprint) -> u64 {
-    if fingerprint.volatile > 0 {
-        tracing::debug!(
-            target: "cordial::cache",
-            what,
-            volatile = fingerprint.volatile,
-            reasons = ?fingerprint.reasons,
-            "something has things in it with no meaning that survives the process: \
-             what read it is not reused across an edit"
-        );
-    }
+    // One event for every fingerprint, volatile or not, so that how many were made and how many
+    // could not be given a meaning that survives the process are both counted.
+    tracing::debug!(
+        target: "cordial::cache",
+        what,
+        volatile = fingerprint.volatile,
+        reasons = ?fingerprint.reasons,
+        "a fingerprint made: what is volatile in it has no meaning that survives the process, and \
+         what read it is not reused across an edit"
+    );
     fingerprint.hash
 }
 

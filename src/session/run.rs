@@ -294,6 +294,7 @@ pub(super) fn run_session(
         ledger.record_last_run_timings(timings.clone().into_vec(), run_started.elapsed());
         ledger.write(&store)?;
         crate::storage::record_store(&store);
+        crate::run_metrics::write(&store)?;
         crate::perf::runlog::record(
             &store,
             session.project_root(),

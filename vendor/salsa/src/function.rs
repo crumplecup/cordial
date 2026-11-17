@@ -653,7 +653,7 @@ where
                 already_current = current,
                 unchanged_after_walking = unchanged,
                 changed_and_run_again = changed,
-                elapsed = ?started.elapsed(),
+                micros = u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX),
                 "verified the persisted memos before they are saved"
             );
         }
@@ -1013,7 +1013,7 @@ mod persistence {
                     breadth = flattener.breadth(8),
                     reads_themselves = flattener.direct(8),
                     kinds = ?by_kind,
-                    elapsed = ?elapsed,
+                    micros = u64::try_from(elapsed.as_micros()).unwrap_or(u64::MAX),
                     "flattened the dependencies of the persisted memos"
                 );
             }
@@ -1167,7 +1167,7 @@ mod persistence {
                 memos,
                 verified_from_the_flatten = by_closure,
                 left_for_walking = memos - by_closure,
-                elapsed = ?started.elapsed(),
+                micros = u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX),
                 "verified the persisted memos that flattening them was enough for"
             );
         }

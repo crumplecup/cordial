@@ -66,6 +66,7 @@ pub fn init_cli_tracing() {
                 .with_filter(filter),
         )
         .with(crate::LiveLayer.with_filter(crate::live_filter()))
+        .with(crate::MetricsLayer.with_filter(crate::metrics_filter()))
         .try_init();
     // The run's clock starts here.
     let _ = crate::LiveStatus::global();

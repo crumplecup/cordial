@@ -34,6 +34,8 @@ pub struct WorkflowRequest {
 pub struct StageSample {
     stages: BTreeMap<String, u64>,
     counters: BTreeMap<String, u64>,
+    /// What the run said about itself, as numbers, and the text of it that cannot be added up.
+    metrics: crate::RunMetrics,
 }
 
 impl StageSample {
@@ -46,11 +48,20 @@ impl StageSample {
     /// time is kept, and `pipeline_ran` is 0 so the difference is visible.
     #[instrument(level = "debug", skip(ledger))]
     #[hotpath::measure]
-    pub fn from_ledger(ledger: &GateLedger, process_nanos: u64, fresh: bool) -> Self {
+    pub fn from_ledger(
+        ledger: &GateLedger,
+        metrics: crate::RunMetrics,
+        process_nanos: u64,
+        fresh: bool,
+    ) -> Self {
         let mut stages = BTreeMap::from([("process".to_owned(), process_nanos)]);
         let mut counters = BTreeMap::from([("pipeline_ran".to_owned(), u64::from(fresh))]);
         if !fresh {
-            return Self { stages, counters };
+            return Self {
+                stages,
+                counters,
+                metrics: crate::RunMetrics::default(),
+            };
         }
         for timing in ledger.last_run_timings() {
             let nanos = u64::try_from(*timing.elapsed_nanos()).unwrap_or(u64::MAX);
@@ -60,7 +71,11 @@ impl StageSample {
                 .or_default() += 1;
             *counters.entry("invocations".to_owned()).or_default() += timing.invocations();
         }
-        Self { stages, counters }
+        Self {
+            stages,
+            counters,
+            metrics,
+        }
     }
 }
 
@@ -68,7 +83,9 @@ impl StageSample {
 /// the last sample (they are the same on every repeat of an unchanged tree).
 #[instrument(level = "debug", skip(samples))]
 #[hotpath::measure]
-pub fn fold(samples: &[StageSample]) -> (Vec<StageTiming>, BTreeMap<String, u64>) {
+pub fn fold(
+    samples: &[StageSample],
+) -> (Vec<StageTiming>, BTreeMap<String, u64>, crate::RunMetrics) {
     let mut by_stage: BTreeMap<&String, Vec<u64>> = BTreeMap::new();
     for sample in samples {
         for (name, nanos) in &sample.stages {
@@ -88,7 +105,11 @@ pub fn fold(samples: &[StageSample]) -> (Vec<StageTiming>, BTreeMap<String, u64>
         .last()
         .map(|sample| sample.counters.clone())
         .unwrap_or_default();
-    (stages, counters)
+    let metrics = samples
+        .last()
+        .map(|sample| sample.metrics.clone())
+        .unwrap_or_default();
+    (stages, counters, metrics)
 }
 
 /// The command that runs the whole pipeline in each state. `open` builds a
@@ -154,6 +175,7 @@ fn run_once(
     let fresh = std::fs::read(&ledger_path).ok() != before;
     Ok(StageSample::from_ledger(
         &GateLedger::read(&layout)?,
+        crate::run_metrics::read(&layout),
         process,
         fresh,
     ))
@@ -221,7 +243,7 @@ pub fn measure_workflow(
         if samples.is_empty() {
             continue;
         }
-        let (stages, counters) = fold(&samples);
+        let (stages, counters, metrics) = fold(&samples);
         records.push(
             RunRecordBuilder::default()
                 .identity(identity.clone())
@@ -230,6 +252,8 @@ pub fn measure_workflow(
                 .state(Some(state))
                 .stages(stages)
                 .counters(counters)
+                .values(metrics.values().clone())
+                .notes(metrics.notes().clone())
                 .build()?,
         );
     }
