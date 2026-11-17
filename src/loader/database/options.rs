@@ -41,6 +41,12 @@ pub struct SemanticCargoOptions {
     /// next run compute only what read the edited file, and not every function of the crate. Off
     /// until it has run on enough code to be trusted (see `docs/planning/ra-persistence.md`).
     reuse_across_edits: bool,
+    /// Ask Salsa to drop what is over the capacity of the queries that keep the most recently used
+    /// (the syntax trees of files and of macro expansions among them), between the chunks of the
+    /// priming and at the end of each stage, and wait for the memory to be given back. Off: a run
+    /// is one revision, and Salsa drops those values only when asked or at a revision, so every
+    /// tree it makes is kept until it ends.
+    evicts_between_chunks: bool,
 }
 
 impl SemanticCargoOptions {

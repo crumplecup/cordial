@@ -58,7 +58,7 @@ impl SourceDatabase {
     #[hotpath::measure(impl_type = "SourceDatabase")]
     pub(super) fn evict_regenerable(&mut self, after: &str) {
         self.report_heap(after);
-        if std::env::var_os(EVICT_VARIABLE).is_none() {
+        if !self.evicts() {
             return;
         }
         self.evict_now(after);
@@ -70,6 +70,15 @@ impl SourceDatabase {
     #[hotpath::measure(impl_type = "SourceDatabase")]
     pub fn held_by_ingredient(&self) -> Vec<(String, i64)> {
         salsa::held_by_ingredient(&self.db)
+    }
+
+    /// Whether this run evicts between its stages: as its options say, or as the environment asks
+    /// for an experiment.
+    fn evicts(&self) -> bool {
+        self.cargo_options
+            .as_ref()
+            .is_some_and(|options| *options.evicts_between_chunks())
+            || std::env::var_os(EVICT_VARIABLE).is_some()
     }
 
     /// Say what the queries hold at this point of the run, the largest few, as events.
@@ -107,7 +116,7 @@ impl SourceDatabase {
     /// chunk add up.
     #[instrument(level = "trace", skip(self))]
     pub(super) fn evict_between_chunks(&mut self) {
-        if std::env::var_os(EVICT_VARIABLE).is_none() {
+        if !self.evicts() {
             return;
         }
         self.evict_quietly("prime chunk");
