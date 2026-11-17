@@ -1255,8 +1255,9 @@ fn package_sources_executions(
 
 /// Asking for a package's sources builds no definition map in a restored run nothing changed in:
 /// the files of the crate's modules are saved with the database. After an edit they are asked of
-/// rust-analyzer again, which builds the maps of the crate and everything under it, the sysroot
-/// first; the edit shows the count can tell the two apart.
+/// rust-analyzer again, which builds the map of the crate that changed and not those of the crates
+/// under it, which are saved with the database (that was over a thousand queries, the sysroot's
+/// first); the edit shows the count can tell the two apart.
 #[test]
 #[tracing::instrument(level = "debug", err(level = "warn"))]
 fn a_restored_run_lists_a_packages_files_without_building_definition_maps() -> Result<()> {
@@ -1264,8 +1265,12 @@ fn a_restored_run_lists_a_packages_files_without_building_definition_maps() -> R
     let (unchanged, _) = package_sources_executions(Between::NothingToSee)?;
     let (_, edited) = package_sources_executions(Between::SomethingToCatch)?;
     assert!(
-        edited > 1000,
-        "an edit makes the run build definition maps, and {edited} queries show it"
+        edited > 0,
+        "an edit makes the run build the crate's definition map, and {edited} queries show it"
+    );
+    assert!(
+        edited < 1000,
+        "an edit made the run build the maps of the crates under the one that changed: {edited} queries"
     );
     assert!(
         unchanged.is_empty(),
@@ -1394,8 +1399,13 @@ fn a_restored_planned_run_builds_no_definition_maps() -> Result<()> {
     let (unchanged_total, edited_total): (usize, usize) =
         (unchanged.values().sum(), edited.values().sum());
     assert!(
-        edited_total > 1000,
+        edited_total > unchanged_total,
         "an edit makes the run build maps, and {edited_total} queries show it: {edited:?}"
+    );
+    assert!(
+        edited_total < 1000,
+        "an edit made the run build the maps of the crates under the ones that changed: \
+         {edited_total} queries: {edited:?}"
     );
     assert!(
         unchanged_total < 40,
@@ -1471,8 +1481,12 @@ fn a_file_no_context_compiles_is_not_read_through_rust_analyzer() -> Result<()> 
     let (unchanged, fallbacks) = restored_over_a_file_nothing_compiles(Between::NothingToSee)?;
     let (edited, _) = restored_over_a_file_nothing_compiles(Between::SomethingToCatch)?;
     assert!(
-        edited > 1000,
+        edited > unchanged,
         "an edit makes the run build maps, and {edited} queries show it"
+    );
+    assert!(
+        edited < 1000,
+        "an edit made the run build the maps of the crates under the one that changed: {edited} queries"
     );
     assert_eq!(
         fallbacks, 0,

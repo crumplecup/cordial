@@ -8,7 +8,7 @@ use std::fmt;
 use hir_expand::name::{AsName, Name};
 use intern::{Symbol, sym};
 /// Different signed int types.
-#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize)]
 pub enum BuiltinInt {
     Isize,
     I8,
@@ -19,7 +19,7 @@ pub enum BuiltinInt {
 }
 
 /// Different unsigned int types.
-#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize)]
 pub enum BuiltinUint {
     Usize,
     U8,
@@ -29,7 +29,7 @@ pub enum BuiltinUint {
     U128,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize)]
 pub enum BuiltinFloat {
     F16,
     F32,
@@ -37,7 +37,7 @@ pub enum BuiltinFloat {
     F128,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum BuiltinType {
     Char,
     Bool,

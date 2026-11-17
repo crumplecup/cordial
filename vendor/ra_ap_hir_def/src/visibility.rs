@@ -15,7 +15,7 @@ use crate::{
 pub use crate::item_tree::{RawVisibility, VisibilityExplicitness};
 
 /// Visibility of an item, with the path resolved.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum Visibility {
     /// Visibility is restricted to a certain module.
     Module(ModuleId, VisibilityExplicitness),

@@ -653,10 +653,12 @@ fn computed_after_a_body_edit(reuse: Reuse) -> Result<(usize, u64, u64)> {
     Ok((computed, said.audited, said.mismatched))
 }
 
-/// With reuse across edits, an edit to a function's body makes a run compute the functions of the
-/// file it is in and not those of the crate: the definition map the edit makes is the one there was,
-/// and nothing else reads the file. (One more is the warm-up's own query, which every restored run
-/// computes.) Without it, every function of the crate is computed.
+/// An edit to a function's body makes a run compute the functions of the file it is in and not those
+/// of the crate: the definition map the edit makes is the one there was, and nothing else reads the
+/// file. (One more is the warm-up's own query, which every restored run computes.) That holds with
+/// reuse across edits and without it, because the definition map is saved: a saved query that gives
+/// the value it had does not change, and what read it is still valid. The option adds the audit, and
+/// the fingerprints of what is not saved.
 #[test]
 fn an_edit_to_a_body_computes_the_functions_of_its_file_and_not_the_crate() -> Result<()> {
     let (everything, audited_without, _) = computed_after_a_body_edit(Reuse::Off)?;
@@ -674,8 +676,9 @@ fn an_edit_to_a_body_computes_the_functions_of_its_file_and_not_the_crate() -> R
         "none of what was reused differs from what the sources give"
     );
     assert!(
-        everything > FILES * PER_FILE,
-        "without reuse a run computed {everything} of {} functions",
+        everything <= PER_FILE + 1,
+        "without reuse a run computed {everything} of {} functions: more than the {PER_FILE} \
+         functions of the file and the warm-up's query",
         FILES * PER_FILE
     );
     assert!(

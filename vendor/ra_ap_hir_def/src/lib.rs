@@ -38,6 +38,22 @@ pub mod hir;
 pub mod resolver;
 
 mod stable;
+
+/// An arena index as a number, which is how a saved definition map holds the index of a `use` tree.
+pub(crate) mod serde_idx {
+    use la_arena::{Idx, RawIdx};
+    use serde::{Deserialize, Deserializer, Serializer};
+
+    pub(crate) fn serialize<T, S: Serializer>(idx: &Idx<T>, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_u32(idx.into_raw().into_u32())
+    }
+
+    pub(crate) fn deserialize<'de, T, D: Deserializer<'de>>(
+        deserializer: D,
+    ) -> Result<Idx<T>, D::Error> {
+        Ok(Idx::from_raw(RawIdx::from_u32(u32::deserialize(deserializer)?)))
+    }
+}
 pub mod nameres;
 
 pub mod src;
@@ -849,7 +865,7 @@ pub enum GenericParamId {
 impl_from!(TypeParamId, LifetimeParamId, ConstParamId for GenericParamId);
 
 /// The defs which can be visible in the module.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum ModuleDefId {
     ModuleId(ModuleId),
     FunctionId(FunctionId),

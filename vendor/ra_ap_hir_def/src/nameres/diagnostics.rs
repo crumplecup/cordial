@@ -9,11 +9,15 @@ use syntax::ast;
 
 use crate::{AstId, nameres::ModuleId};
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum DefDiagnosticKind {
     UnresolvedModule { ast: AstId<ast::Module>, candidates: Box<[String]> },
     UnresolvedExternCrate { ast: AstId<ast::ExternCrate> },
-    UnresolvedImport { id: AstId<ast::Use>, index: Idx<ast::UseTree> },
+    UnresolvedImport {
+        id: AstId<ast::Use>,
+        #[serde(with = "crate::serde_idx")]
+        index: Idx<ast::UseTree>,
+    },
     UnconfiguredCode { ast_id: ErasedAstId, cfg: CfgExpr, opts: CfgOptions },
     UnresolvedMacroCall { ast: MacroCallKind, path: ModPath },
     UnimplementedBuiltinMacro { ast: AstId<ast::Macro> },
@@ -25,6 +29,19 @@ pub enum DefDiagnosticKind {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DefDiagnostics(Option<triomphe::ThinArc<(), DefDiagnostic>>);
+
+/// As the list of diagnostics, which is what a saved definition map holds.
+impl serde::Serialize for DefDiagnostics {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_seq(self.iter())
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for DefDiagnostics {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        <Vec<DefDiagnostic> as serde::Deserialize>::deserialize(deserializer).map(Self::new)
+    }
+}
 
 impl DefDiagnostics {
     pub fn new(diagnostics: Vec<DefDiagnostic>) -> Self {
@@ -41,7 +58,7 @@ impl DefDiagnostics {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct DefDiagnostic {
     pub in_module: ModuleId,
     pub kind: DefDiagnosticKind,

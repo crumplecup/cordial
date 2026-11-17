@@ -583,6 +583,14 @@
  pub enum CfgAtom {
      /// eg. `#[cfg(test)]`
      Flag(Symbol),
+@@ -47,6 +48,7 @@
+ }
+ 
+ #[derive(Debug, Clone, PartialEq, Eq, Hash)]
++#[derive(serde::Serialize, serde::Deserialize)]
+ #[cfg_attr(test, derive(arbitrary::Arbitrary))]
+ pub enum CfgExpr {
+     Invalid,
 --- a/ra_ap_cfg-0.0.358/src/lib.rs
 +++ ra_ap_cfg/src/lib.rs
 @@ -30,6 +30,7 @@
@@ -626,7 +634,15 @@
  pub enum Edition {
 --- a/ra_ap_hir_def-0.0.358/Cargo.toml
 +++ ra_ap_hir_def/Cargo.toml
-@@ -101,6 +101,10 @@
+@@ -64,6 +64,7 @@
+ 
+ [dependencies.either]
+ version = "1.15.0"
++features = ["serde"]
+ 
+ [dependencies.fst]
+ version = "0.4.7"
+@@ -101,6 +102,10 @@
  [dependencies.rustc_apfloat]
  version = "0.2.3"
  
@@ -637,6 +653,23 @@
  [dependencies.salsa]
  version = "0.28.5"
  features = [
+@@ -115,6 +120,7 @@
+ [dependencies.smallvec]
+ version = "1.15.1"
+ features = [
++    "serde",
+     "const_new",
+     "union",
+     "const_generics",
+@@ -149,7 +155,7 @@
+ 
+ [dependencies.triomphe]
+ version = "0.1.14"
+-features = ["std"]
++features = ["std", "serde"]
+ default-features = false
+ 
+ [dependencies.tt]
 --- a/ra_ap_hir_def-0.0.358/src/builtin_derive.rs
 +++ ra_ap_hir_def/src/builtin_derive.rs
 @@ -15,7 +15,7 @@
@@ -648,17 +681,113 @@
          pub enum BuiltinDeriveImplTrait {
              $( $trait, )*
          }
+--- a/ra_ap_hir_def-0.0.358/src/builtin_type.rs
++++ ra_ap_hir_def/src/builtin_type.rs
+@@ -8,7 +8,7 @@
+ use hir_expand::name::{AsName, Name};
+ use intern::{Symbol, sym};
+ /// Different signed int types.
+-#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
++#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize)]
+ pub enum BuiltinInt {
+     Isize,
+     I8,
+@@ -19,7 +19,7 @@
+ }
+ 
+ /// Different unsigned int types.
+-#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
++#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize)]
+ pub enum BuiltinUint {
+     Usize,
+     U8,
+@@ -29,7 +29,7 @@
+     U128,
+ }
+ 
+-#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
++#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize)]
+ pub enum BuiltinFloat {
+     F16,
+     F32,
+@@ -37,7 +37,7 @@
+     F128,
+ }
+ 
+-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
++#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+ pub enum BuiltinType {
+     Char,
+     Bool,
 --- a/ra_ap_hir_def-0.0.358/src/item_scope.rs
 +++ ra_ap_hir_def/src/item_scope.rs
-@@ -30,6 +30,8 @@
+@@ -30,7 +30,9 @@
      macros: FxHashSet<(ModuleId, Name)>,
  }
  
+-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 +mod stable;
 +
- #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
++#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
  pub enum ImportOrExternCrate {
      Glob(GlobId),
+     Import(ImportId),
+@@ -71,7 +73,7 @@
+     }
+ }
+ 
+-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
++#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+ pub enum ImportOrGlob {
+     Glob(GlobId),
+     Import(ImportId),
+@@ -86,7 +88,7 @@
+     }
+ }
+ 
+-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
++#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+ pub enum ImportOrDef {
+     Import(ImportId),
+     Glob(GlobId),
+@@ -97,15 +99,17 @@
+ impl_from!(ImportOrExternCrate { Import, Glob, ExternCrate } for ImportOrDef);
+ impl_from!(ImportOrGlob { Import, Glob } for ImportOrDef);
+ 
+-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd)]
++#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd, serde::Serialize, serde::Deserialize)]
+ pub struct ImportId {
+     pub use_: UseId,
++    #[serde(with = "crate::serde_idx")]
+     pub idx: Idx<ast::UseTree>,
+ }
+ 
+-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd)]
++#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd, serde::Serialize, serde::Deserialize)]
+ pub struct GlobId {
+     pub use_: UseId,
++    #[serde(with = "crate::serde_idx")]
+     pub idx: Idx<ast::UseTree>,
+ }
+ 
+@@ -121,7 +125,7 @@
+     }
+ }
+ 
+-#[derive(Debug, Default, PartialEq, Eq)]
++#[derive(Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+ pub struct ItemScope {
+     /// Defs visible in this scope. This includes `declarations`, but also
+     /// imports. The imports belong to this module and can be resolved by using them on
+@@ -171,7 +175,7 @@
+     derive_macros: FxHashMap<AstId<ast::Adt>, SmallVec<[DeriveMacroInvocation; 1]>>,
+ }
+ 
+-#[derive(Debug, PartialEq, Eq)]
++#[derive(Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+ struct DeriveMacroInvocation {
+     attr_id: AttrId,
+     /// The `#[derive]` call
 --- a/ra_ap_hir_def-0.0.358/src/item_scope/stable.rs
 +++ ra_ap_hir_def/src/item_scope/stable.rs
 @@ -0,0 +1,191 @@
@@ -855,15 +984,27 @@
 +}
 --- a/ra_ap_hir_def-0.0.358/src/item_tree.rs
 +++ ra_ap_hir_def/src/item_tree.rs
-@@ -336,6 +336,8 @@
+@@ -336,8 +336,10 @@
  #[allow(type_alias_bounds)]
  pub(crate) type ItemTreeAstId<T: ItemTreeNode> = FileAstId<T::Source>;
  
 +mod stable;
 +
  /// Identifies a particular [`ItemTree`].
- #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+-#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
++#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash, serde::Serialize, serde::Deserialize)]
  pub struct TreeId {
+     file: HirFileId,
+     block: Option<BlockId>,
+@@ -629,7 +631,7 @@
+ 
+ /// Whether the item was imported through an explicit `pub(crate) use` or just a `use` without
+ /// visibility.
+-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
++#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+ pub enum VisibilityExplicitness {
+     Explicit,
+     Implicit,
 --- a/ra_ap_hir_def-0.0.358/src/item_tree/stable.rs
 +++ ra_ap_hir_def/src/item_tree/stable.rs
 @@ -0,0 +1,13 @@
@@ -920,15 +1061,31 @@
                  $(#[$attr])*
 --- a/ra_ap_hir_def-0.0.358/src/lib.rs
 +++ ra_ap_hir_def/src/lib.rs
-@@ -37,6 +37,7 @@
+@@ -37,6 +37,23 @@
  pub mod hir;
  pub mod resolver;
  
 +mod stable;
++
++/// An arena index as a number, which is how a saved definition map holds the index of a `use` tree.
++pub(crate) mod serde_idx {
++    use la_arena::{Idx, RawIdx};
++    use serde::{Deserialize, Deserializer, Serializer};
++
++    pub(crate) fn serialize<T, S: Serializer>(idx: &Idx<T>, serializer: S) -> Result<S::Ok, S::Error> {
++        serializer.serialize_u32(idx.into_raw().into_u32())
++    }
++
++    pub(crate) fn deserialize<'de, T, D: Deserializer<'de>>(
++        deserializer: D,
++    ) -> Result<Idx<T>, D::Error> {
++        Ok(Idx::from_raw(RawIdx::from_u32(u32::deserialize(deserializer)?)))
++    }
++}
  pub mod nameres;
  
  pub mod src;
-@@ -103,7 +104,7 @@
+@@ -103,7 +120,7 @@
  ///
  /// Note: this struct shouldn't be exposed to ide crates -- consider using
  /// [`set_expand_proc_attr_macros`] instead, if possible.
@@ -937,7 +1094,7 @@
  pub(crate) struct ExpandProcAttrMacros {
      #[returns(copy)]
      pub(crate) enabled: bool,
-@@ -119,7 +120,8 @@
+@@ -119,7 +136,8 @@
      }
  }
  
@@ -947,7 +1104,7 @@
  pub struct ItemLoc<N: AstIdNode> {
      pub container: ModuleId,
      pub id: AstId<N>,
-@@ -155,7 +157,8 @@
+@@ -155,7 +173,8 @@
      }
  }
  
@@ -957,7 +1114,7 @@
  pub struct AssocItemLoc<N: AstIdNode> {
      // FIXME: Store this as an erased `salsa::Id` to save space
      pub container: ItemContainerId,
-@@ -229,6 +232,17 @@
+@@ -229,6 +248,17 @@
      ($id:ident, $loc:ident) => {
          impl_intern_key!($id, $loc);
          impl_intern_lookup!($id, $loc);
@@ -975,7 +1132,7 @@
      };
  }
  
-@@ -346,7 +360,7 @@
+@@ -346,7 +376,7 @@
      }
  }
  
@@ -984,7 +1141,7 @@
  pub struct BuiltinDeriveImplLoc {
      pub adt: AdtId,
      pub trait_: BuiltinDeriveImplTrait,
-@@ -354,7 +368,7 @@
+@@ -354,7 +384,7 @@
      pub derive_index: u32,
  }
  
@@ -993,7 +1150,7 @@
  #[derive(PartialOrd, Ord)]
  pub struct BuiltinDeriveImplId {
      #[returns(ref)]
-@@ -376,7 +390,7 @@
+@@ -376,7 +406,7 @@
      }
  }
  
@@ -1002,7 +1159,7 @@
  pub struct EnumVariantLoc {
      pub id: AstId<ast::Variant>,
      pub parent: EnumId,
-@@ -414,7 +428,7 @@
+@@ -414,7 +444,7 @@
      }
  }
  
@@ -1011,7 +1168,7 @@
  pub struct Macro2Loc {
      pub container: ModuleId,
      pub id: AstId<ast::MacroDef>,
-@@ -425,7 +439,7 @@
+@@ -425,7 +455,7 @@
  impl_intern!(Macro2Id, Macro2Loc);
  impl_loc!(Macro2Loc, id: MacroDef, container: ModuleId);
  
@@ -1020,7 +1177,7 @@
  pub struct MacroRulesLoc {
      pub container: ModuleId,
      pub id: AstId<ast::MacroRules>,
-@@ -444,7 +458,19 @@
+@@ -444,7 +474,19 @@
      }
  }
  
@@ -1041,7 +1198,7 @@
  pub enum MacroExpander {
      Declarative { styles: MacroCallStyles },
      BuiltIn(BuiltinFnLikeExpander),
-@@ -454,7 +480,7 @@
+@@ -454,7 +496,7 @@
      UnimplementedBuiltIn,
  }
  
@@ -1050,7 +1207,7 @@
  pub struct ProcMacroLoc {
      pub container: ModuleId,
      pub id: AstId<ast::Fn>,
-@@ -492,7 +518,7 @@
+@@ -492,7 +534,7 @@
      }
  }
  
@@ -1059,7 +1216,7 @@
  #[derive(PartialOrd, Ord)]
  pub struct BlockIdLt<'db> {
      #[returns(copy)]
-@@ -536,7 +562,7 @@
+@@ -536,7 +578,7 @@
      }
  }
  
@@ -1068,7 +1225,7 @@
  #[derive(PartialOrd, Ord)]
  pub struct ModuleIdLt<'db> {
      /// The crate this module belongs to.
-@@ -723,7 +749,7 @@
+@@ -723,7 +765,7 @@
      pub local_id: usize,
  }
  
@@ -1077,7 +1234,7 @@
  pub enum ItemContainerId {
      ExternBlockId(ExternBlockId),
      ModuleId(ModuleId),
-@@ -733,7 +759,7 @@
+@@ -733,7 +775,7 @@
  impl_from!(ModuleId for ItemContainerId);
  
  /// A Data Type
@@ -1086,7 +1243,7 @@
  pub enum AdtId {
      StructId(StructId),
      UnionId(UnionId),
-@@ -742,7 +768,7 @@
+@@ -742,7 +784,7 @@
  impl_from!(StructId, UnionId, EnumId for AdtId);
  
  /// A macro
@@ -1095,6 +1252,64 @@
  pub enum MacroId {
      Macro2Id(Macro2Id),
      MacroRulesId(MacroRulesId),
+@@ -823,7 +865,7 @@
+ impl_from!(TypeParamId, LifetimeParamId, ConstParamId for GenericParamId);
+ 
+ /// The defs which can be visible in the module.
+-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
++#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+ pub enum ModuleDefId {
+     ModuleId(ModuleId),
+     FunctionId(FunctionId),
+--- a/ra_ap_hir_def-0.0.358/src/nameres/diagnostics.rs
++++ ra_ap_hir_def/src/nameres/diagnostics.rs
+@@ -9,11 +9,15 @@
+ 
+ use crate::{AstId, nameres::ModuleId};
+ 
+-#[derive(Debug, PartialEq, Eq)]
++#[derive(Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+ pub enum DefDiagnosticKind {
+     UnresolvedModule { ast: AstId<ast::Module>, candidates: Box<[String]> },
+     UnresolvedExternCrate { ast: AstId<ast::ExternCrate> },
+-    UnresolvedImport { id: AstId<ast::Use>, index: Idx<ast::UseTree> },
++    UnresolvedImport {
++        id: AstId<ast::Use>,
++        #[serde(with = "crate::serde_idx")]
++        index: Idx<ast::UseTree>,
++    },
+     UnconfiguredCode { ast_id: ErasedAstId, cfg: CfgExpr, opts: CfgOptions },
+     UnresolvedMacroCall { ast: MacroCallKind, path: ModPath },
+     UnimplementedBuiltinMacro { ast: AstId<ast::Macro> },
+@@ -26,6 +30,19 @@
+ #[derive(Clone, Debug, PartialEq, Eq)]
+ pub struct DefDiagnostics(Option<triomphe::ThinArc<(), DefDiagnostic>>);
+ 
++/// As the list of diagnostics, which is what a saved definition map holds.
++impl serde::Serialize for DefDiagnostics {
++    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
++        serializer.collect_seq(self.iter())
++    }
++}
++
++impl<'de> serde::Deserialize<'de> for DefDiagnostics {
++    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
++        <Vec<DefDiagnostic> as serde::Deserialize>::deserialize(deserializer).map(Self::new)
++    }
++}
++
+ impl DefDiagnostics {
+     pub fn new(diagnostics: Vec<DefDiagnostic>) -> Self {
+         Self(
+@@ -41,7 +58,7 @@
+     }
+ }
+ 
+-#[derive(Debug, PartialEq, Eq)]
++#[derive(Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+ pub struct DefDiagnostic {
+     pub in_module: ModuleId,
+     pub kind: DefDiagnosticKind,
 --- a/ra_ap_hir_def-0.0.358/src/nameres.rs
 +++ ra_ap_hir_def/src/nameres.rs
 @@ -54,6 +54,7 @@
@@ -1105,6 +1320,96 @@
  
  #[cfg(test)]
  mod tests;
+@@ -123,7 +124,7 @@
+ /// a dependency to the crate). Instead we split them out of the DefMap into a LocalDefMap struct.
+ /// `crate_local_def_map()` returns both, and `crate_def_map()` returns only the external-relevant
+ /// DefMap.
+-#[derive(Debug, PartialEq, Eq, Default)]
++#[derive(Debug, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+ pub struct LocalDefMap {
+     // FIXME: There are probably some other things that could be here, but this is less severe and you
+     // need to be careful with things that block def maps also have.
+@@ -168,7 +169,7 @@
+ /// computed by the `crate_def_map` query. Additionally, every block expression introduces the
+ /// opportunity to write arbitrary item and module hierarchies, and thus gets its own `DefMap` that
+ /// is computed by the `block_def_map` query.
+-#[derive(Debug, PartialEq, Eq)]
++#[derive(Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+ pub struct DefMap {
+     /// The crate this `DefMap` belongs to.
+     krate: Crate,
+@@ -206,7 +207,7 @@
+ }
+ 
+ /// Data that belongs to a crate which is shared between a crate's def map and all its block def maps.
+-#[derive(Clone, Debug, PartialEq, Eq)]
++#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+ struct DefMapCrateData {
+     /// Side table for resolving derive helpers.
+     exported_derives: FxHashMap<MacroId, Box<[Name]>>,
+@@ -264,7 +265,7 @@
+ }
+ 
+ /// For `DefMap`s computed for a block expression, this stores its location in the parent map.
+-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
++#[derive(Debug, PartialEq, Eq, Clone, Copy, serde::Serialize, serde::Deserialize)]
+ struct BlockInfo {
+     /// The `BlockId` this `DefMap` was created from.
+     block: BlockId,
+@@ -288,7 +289,7 @@
+     }
+ }
+ 
+-#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
++#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash, serde::Serialize, serde::Deserialize)]
+ pub enum ModuleOrigin {
+     CrateRoot {
+         definition: EditionedFileId,
+@@ -362,7 +363,7 @@
+     }
+ }
+ 
+-#[derive(Debug, PartialEq, Eq)]
++#[derive(Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+ pub struct ModuleData {
+     /// Where does this module come from?
+     pub origin: ModuleOrigin,
+@@ -381,7 +382,7 @@
+     crate_local_def_map(db, crate_id).def_map(db)
+ }
+ 
+-#[salsa::tracked]
++#[salsa::tracked(persist)]
+ pub(crate) struct DefMapPair<'db> {
+     #[tracked]
+     #[returns(ref)]
+@@ -390,7 +391,7 @@
+     pub(crate) local: LocalDefMap,
+ }
+ 
+-#[salsa::tracked(returns(ref))]
++#[salsa::tracked(returns(ref), persist)]
+ pub(crate) fn crate_local_def_map(db: &dyn SourceDatabase, crate_id: Crate) -> DefMapPair<'_> {
+     let krate = crate_id.data(db);
+     let _p = tracing::info_span!(
+@@ -424,7 +425,7 @@
+     DefMapPair::new(db, def_map, local_def_map)
+ }
+ 
+-#[salsa::tracked(returns(ref))]
++#[salsa::tracked(returns(ref), persist)]
+ pub fn block_def_map<'db>(db: &'db dyn SourceDatabase, block_id: BlockIdLt<'db>) -> DefMap {
+     let block_id = unsafe { block_id.to_static() };
+     let ast_id = block_id.ast_id(db);
+@@ -885,7 +886,7 @@
+ }
+ 
+ /// A newtype wrapper around `FxHashMap<ModuleId, ModuleData>` that implements `IndexMut`.
+-#[derive(Debug, PartialEq, Eq)]
++#[derive(Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+ pub struct ModulesMap {
+     inner: FxIndexMap<ModuleId, ModuleData>,
+ }
 --- a/ra_ap_hir_def-0.0.358/src/nameres/stable.rs
 +++ ra_ap_hir_def/src/nameres/stable.rs
 @@ -0,0 +1,246 @@
@@ -1354,6 +1659,17 @@
 +    pair.local(db).stable_hash(&mut cx);
 +    cx.finish()
 +}
+--- a/ra_ap_hir_def-0.0.358/src/per_ns.rs
++++ ra_ap_hir_def/src/per_ns.rs
+@@ -28,7 +28,7 @@
+     }
+ }
+ 
+-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
++#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+ pub struct Item<Def, Import = ImportId> {
+     pub def: Def,
+     pub vis: Visibility,
 --- a/ra_ap_hir_def-0.0.358/src/stable.rs
 +++ ra_ap_hir_def/src/stable.rs
 @@ -0,0 +1,229 @@
@@ -1586,6 +1902,28 @@
 +        }
 +    }
 +}
+--- a/ra_ap_hir_def-0.0.358/src/unstable_features.rs
++++ ra_ap_hir_def/src/unstable_features.rs
+@@ -55,7 +55,7 @@
+ 
+ macro_rules! define_unstable_features {
+     ( $( $feature:ident, )* ) => {
+-        #[derive(Clone, Default)]
++        #[derive(Clone, Default, serde::Serialize, serde::Deserialize)]
+         pub struct UnstableFeatures {
+             all: FxHashSet<Symbol>,
+ 
+--- a/ra_ap_hir_def-0.0.358/src/visibility.rs
++++ ra_ap_hir_def/src/visibility.rs
+@@ -15,7 +15,7 @@
+ pub use crate::item_tree::{RawVisibility, VisibilityExplicitness};
+ 
+ /// Visibility of an item, with the path resolved.
+-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
++#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+ pub enum Visibility {
+     /// Visibility is restricted to a certain module.
+     Module(ModuleId, VisibilityExplicitness),
 --- a/ra_ap_hir_expand-0.0.358/Cargo.toml
 +++ ra_ap_hir_expand/Cargo.toml
 @@ -71,6 +71,10 @@
@@ -1781,6 +2119,26 @@
  pub enum HirFileId {
      FileId(EditionedFileId),
      MacroFile(MacroCallId),
+--- a/ra_ap_hir_expand-0.0.358/src/mod_path.rs
++++ ra_ap_hir_expand/src/mod_path.rs
+@@ -17,7 +17,7 @@
+ use span::{Edition, SyntaxContext};
+ use syntax::{AstNode, SyntaxToken, ast};
+ 
+-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
++#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize)]
+ pub struct ModPath {
+     pub kind: PathKind,
+     segments: SmallVec<[Name; 1]>,
+@@ -25,7 +25,7 @@
+ 
+ intern::impl_internable!(ModPath);
+ 
+-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
++#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize)]
+ pub enum PathKind {
+     Plain,
+     /// `self::` is `Super(0)`
 --- a/ra_ap_hir_expand-0.0.358/src/name.rs
 +++ ra_ap_hir_expand/src/name.rs
 @@ -16,7 +16,7 @@

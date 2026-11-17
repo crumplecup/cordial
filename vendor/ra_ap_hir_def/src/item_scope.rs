@@ -32,7 +32,7 @@ pub struct PerNsGlobImports {
 
 mod stable;
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum ImportOrExternCrate {
     Glob(GlobId),
     Import(ImportId),
@@ -73,7 +73,7 @@ impl ImportOrExternCrate {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum ImportOrGlob {
     Glob(GlobId),
     Import(ImportId),
@@ -88,7 +88,7 @@ impl ImportOrGlob {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum ImportOrDef {
     Import(ImportId),
     Glob(GlobId),
@@ -99,15 +99,17 @@ pub enum ImportOrDef {
 impl_from!(ImportOrExternCrate { Import, Glob, ExternCrate } for ImportOrDef);
 impl_from!(ImportOrGlob { Import, Glob } for ImportOrDef);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd, serde::Serialize, serde::Deserialize)]
 pub struct ImportId {
     pub use_: UseId,
+    #[serde(with = "crate::serde_idx")]
     pub idx: Idx<ast::UseTree>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd, serde::Serialize, serde::Deserialize)]
 pub struct GlobId {
     pub use_: UseId,
+    #[serde(with = "crate::serde_idx")]
     pub idx: Idx<ast::UseTree>,
 }
 
@@ -123,7 +125,7 @@ impl PerNsGlobImports {
     }
 }
 
-#[derive(Debug, Default, PartialEq, Eq)]
+#[derive(Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ItemScope {
     /// Defs visible in this scope. This includes `declarations`, but also
     /// imports. The imports belong to this module and can be resolved by using them on
@@ -173,7 +175,7 @@ pub struct ItemScope {
     derive_macros: FxHashMap<AstId<ast::Adt>, SmallVec<[DeriveMacroInvocation; 1]>>,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 struct DeriveMacroInvocation {
     attr_id: AttrId,
     /// The `#[derive]` call

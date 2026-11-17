@@ -64,6 +64,7 @@ version = "0.1.5"
 
 [dependencies.either]
 version = "1.15.0"
+features = ["serde"]
 
 [dependencies.fst]
 version = "0.4.7"
@@ -119,6 +120,7 @@ default-features = false
 [dependencies.smallvec]
 version = "1.15.1"
 features = [
+    "serde",
     "const_new",
     "union",
     "const_generics",
@@ -153,7 +155,7 @@ default-features = false
 
 [dependencies.triomphe]
 version = "0.1.14"
-features = ["std"]
+features = ["std", "serde"]
 default-features = false
 
 [dependencies.tt]

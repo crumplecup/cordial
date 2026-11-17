@@ -55,7 +55,7 @@ impl UnstableFeatures {
 
 macro_rules! define_unstable_features {
     ( $( $feature:ident, )* ) => {
-        #[derive(Clone, Default)]
+        #[derive(Clone, Default, serde::Serialize, serde::Deserialize)]
         pub struct UnstableFeatures {
             all: FxHashSet<Symbol>,
 

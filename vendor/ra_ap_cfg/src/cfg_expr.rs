@@ -48,6 +48,7 @@ impl fmt::Display for CfgAtom {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(serde::Serialize, serde::Deserialize)]
 #[cfg_attr(test, derive(arbitrary::Arbitrary))]
 pub enum CfgExpr {
     Invalid,

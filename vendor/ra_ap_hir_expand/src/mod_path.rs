@@ -17,7 +17,7 @@ use smallvec::SmallVec;
 use span::{Edition, SyntaxContext};
 use syntax::{AstNode, SyntaxToken, ast};
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize)]
 pub struct ModPath {
     pub kind: PathKind,
     segments: SmallVec<[Name; 1]>,
@@ -25,7 +25,7 @@ pub struct ModPath {
 
 intern::impl_internable!(ModPath);
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize)]
 pub enum PathKind {
     Plain,
     /// `self::` is `Super(0)`

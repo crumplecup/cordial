@@ -124,7 +124,7 @@ const PREDEFINED_TOOLS: &[SmolStr] = &[
 /// a dependency to the crate). Instead we split them out of the DefMap into a LocalDefMap struct.
 /// `crate_local_def_map()` returns both, and `crate_def_map()` returns only the external-relevant
 /// DefMap.
-#[derive(Debug, PartialEq, Eq, Default)]
+#[derive(Debug, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub struct LocalDefMap {
     // FIXME: There are probably some other things that could be here, but this is less severe and you
     // need to be careful with things that block def maps also have.
@@ -169,7 +169,7 @@ impl LocalDefMap {
 /// computed by the `crate_def_map` query. Additionally, every block expression introduces the
 /// opportunity to write arbitrary item and module hierarchies, and thus gets its own `DefMap` that
 /// is computed by the `block_def_map` query.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct DefMap {
     /// The crate this `DefMap` belongs to.
     krate: Crate,
@@ -207,7 +207,7 @@ pub struct DefMap {
 }
 
 /// Data that belongs to a crate which is shared between a crate's def map and all its block def maps.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 struct DefMapCrateData {
     /// Side table for resolving derive helpers.
     exported_derives: FxHashMap<MacroId, Box<[Name]>>,
@@ -265,7 +265,7 @@ impl DefMapCrateData {
 }
 
 /// For `DefMap`s computed for a block expression, this stores its location in the parent map.
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, serde::Serialize, serde::Deserialize)]
 struct BlockInfo {
     /// The `BlockId` this `DefMap` was created from.
     block: BlockId,
@@ -289,7 +289,7 @@ impl std::ops::IndexMut<ModuleId> for DefMap {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash, serde::Serialize, serde::Deserialize)]
 pub enum ModuleOrigin {
     CrateRoot {
         definition: EditionedFileId,
@@ -363,7 +363,7 @@ impl ModuleOrigin {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ModuleData {
     /// Where does this module come from?
     pub origin: ModuleOrigin,
@@ -382,7 +382,7 @@ pub fn crate_def_map(db: &dyn SourceDatabase, crate_id: Crate) -> &DefMap {
     crate_local_def_map(db, crate_id).def_map(db)
 }
 
-#[salsa::tracked]
+#[salsa::tracked(persist)]
 pub(crate) struct DefMapPair<'db> {
     #[tracked]
     #[returns(ref)]
@@ -391,7 +391,7 @@ pub(crate) struct DefMapPair<'db> {
     pub(crate) local: LocalDefMap,
 }
 
-#[salsa::tracked(returns(ref))]
+#[salsa::tracked(returns(ref), persist)]
 pub(crate) fn crate_local_def_map(db: &dyn SourceDatabase, crate_id: Crate) -> DefMapPair<'_> {
     let krate = crate_id.data(db);
     let _p = tracing::info_span!(
@@ -425,7 +425,7 @@ pub(crate) fn crate_local_def_map(db: &dyn SourceDatabase, crate_id: Crate) -> D
     DefMapPair::new(db, def_map, local_def_map)
 }
 
-#[salsa::tracked(returns(ref))]
+#[salsa::tracked(returns(ref), persist)]
 pub fn block_def_map<'db>(db: &'db dyn SourceDatabase, block_id: BlockIdLt<'db>) -> DefMap {
     let block_id = unsafe { block_id.to_static() };
     let ast_id = block_id.ast_id(db);
@@ -886,7 +886,7 @@ fn sub_namespace_match(
 }
 
 /// A newtype wrapper around `FxHashMap<ModuleId, ModuleData>` that implements `IndexMut`.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ModulesMap {
     inner: FxIndexMap<ModuleId, ModuleData>,
 }

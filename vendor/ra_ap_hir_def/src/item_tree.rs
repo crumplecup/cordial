@@ -339,7 +339,7 @@ pub(crate) type ItemTreeAstId<T: ItemTreeNode> = FileAstId<T::Source>;
 mod stable;
 
 /// Identifies a particular [`ItemTree`].
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash, serde::Serialize, serde::Deserialize)]
 pub struct TreeId {
     file: HirFileId,
     block: Option<BlockId>,
@@ -631,7 +631,7 @@ pub enum RawVisibility {
 
 /// Whether the item was imported through an explicit `pub(crate) use` or just a `use` without
 /// visibility.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum VisibilityExplicitness {
     Explicit,
     Implicit,
