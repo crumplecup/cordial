@@ -370,6 +370,9 @@ impl super::SourceDatabase {
             .num_threads(threads)
             .stack_size(VERIFY_STACK_BYTES)
             .thread_name(|index| format!("cordial-verify-{index}"))
+            .start_handler(|_| {
+                let _ = salsa::enter_heap_step("verify_worker");
+            })
             .build();
         let Ok(pool) = pool else {
             tracing::warn!("could not start the verifying threads: verifying on this one");

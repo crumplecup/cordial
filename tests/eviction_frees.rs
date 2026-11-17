@@ -204,3 +204,37 @@ fn what_the_queries_hold_is_told_by_query() -> Result<()> {
     }
     Ok(())
 }
+
+/// What a thread allocates and frees while it is in a step is told as the step's, with how long it
+/// lived, whatever it does with the thread afterwards.
+#[test]
+fn what_a_thread_frees_in_a_step_is_told_as_the_steps() {
+    salsa::set_allocation_probe(counting_allocator::net_bytes);
+    salsa::set_allocation_tags(salsa::AllocationTags {
+        set_tag: counting_allocator::set_tag,
+        held_by_tag: counting_allocator::held_by_tag,
+        held_in_all: counting_allocator::held_in_all,
+        peak_held: counting_allocator::peak_held,
+        freed_pairs: counting_allocator::freed_pairs,
+        freed_by_age: counting_allocator::freed_by_age,
+    });
+    let tag = salsa::heap_step_tag("a_worker_of_the_test").expect("a tag");
+    std::thread::spawn(|| {
+        // Not left: as a worker's thread-local destructors would run after it.
+        let _ = salsa::enter_heap_step("a_worker_of_the_test");
+        let held = vec![7_u8; 4096];
+        std::thread::sleep(std::time::Duration::from_millis(150));
+        drop(std::hint::black_box(held));
+    })
+    .join()
+    .expect("the thread ends");
+    let lived: i64 = salsa::freed_by_age()
+        .into_iter()
+        .filter(|(found, _)| *found == tag)
+        .map(|(_, buckets)| buckets[2])
+        .sum();
+    assert!(
+        lived >= 4096,
+        "the 4 KiB freed after 150 ms is told as {lived} bytes of 100 ms to 1 s"
+    );
+}

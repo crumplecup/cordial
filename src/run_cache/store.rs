@@ -77,6 +77,7 @@ impl RunCache {
         let writer = std::thread::Builder::new()
             .name("cordial-ir-cache-writer".to_owned())
             .spawn(move || {
+                let _ = salsa::enter_heap_step("ir_cache_writer");
                 tracing::dispatcher::with_default(&dispatch, || {
                     snapshot.write_cache(&partial)?;
                     std::fs::rename(&partial, &path)?;

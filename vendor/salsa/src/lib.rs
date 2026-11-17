@@ -403,6 +403,11 @@ static STEP_NAMES: std::sync::Mutex<Vec<&'static str>> = std::sync::Mutex::new(V
 /// held by no query is told by the step that made it.
 pub fn enter_heap_step(name: &'static str) -> Option<u32> {
     let tags = allocation_tags()?;
+    Some((tags.set_tag)(heap_step_tag(name)?))
+}
+
+/// The tag the step called `name` is told by.
+pub fn heap_step_tag(name: &'static str) -> Option<u32> {
     let index = {
         let mut names = STEP_NAMES.lock().ok()?;
         match names.iter().position(|known| *known == name) {
@@ -413,8 +418,7 @@ pub fn enter_heap_step(name: &'static str) -> Option<u32> {
             }
         }
     };
-    let tag = STEP_TAG_BASE + u32::try_from(index).ok()?;
-    Some((tags.set_tag)(tag))
+    Some(STEP_TAG_BASE + u32::try_from(index).ok()?)
 }
 
 /// Go back to the tag [`enter_heap_step`] gave.

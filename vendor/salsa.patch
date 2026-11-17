@@ -2768,7 +2768,7 @@
  mod function;
  mod hash;
  mod id;
-@@ -294,6 +299,170 @@
+@@ -294,6 +299,174 @@
  #[cfg(feature = "salsa_unstable")]
  pub use self::database::{IngredientInfo, PageInfo};
  
@@ -2876,6 +2876,11 @@
 +/// held by no query is told by the step that made it.
 +pub fn enter_heap_step(name: &'static str) -> Option<u32> {
 +    let tags = allocation_tags()?;
++    Some((tags.set_tag)(heap_step_tag(name)?))
++}
++
++/// The tag the step called `name` is told by.
++pub fn heap_step_tag(name: &'static str) -> Option<u32> {
 +    let index = {
 +        let mut names = STEP_NAMES.lock().ok()?;
 +        match names.iter().position(|known| *known == name) {
@@ -2886,8 +2891,7 @@
 +            }
 +        }
 +    };
-+    let tag = STEP_TAG_BASE + u32::try_from(index).ok()?;
-+    Some((tags.set_tag)(tag))
++    Some(STEP_TAG_BASE + u32::try_from(index).ok()?)
 +}
 +
 +/// Go back to the tag [`enter_heap_step`] gave.
