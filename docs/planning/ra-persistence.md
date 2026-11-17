@@ -597,7 +597,49 @@ cannot make the layer under it cheap. In the specimen this is 99.9% of the queri
 with its registry dependencies, it is millions of queries and the memory of the whole dependency
 graph.
 
-**Still to do.** The dependency layer. Either persist it (rust-analyzer's impl indexes and what
+**Persisting the dependency layer: what it takes (explored, nothing built).**
+
+*What the layer is, measured.* The 125,721 queries of the edited run in the specimen, by the step
+that asked: under `capability` about 75,000 (`ImplSignature::of_`, `ImplSignature::with_source_map_`,
+`impl_self_ty_with_diagnostics`, `impl_trait_with_diagnostics`, each 12,427 times, one per impl of
+the sysroot, and `AttrFlags::query_` 12,969, which is the impl index being built); under
+`collect_direct` about 23,000 (`AttrFlags::query_` 22,154 and `ImplItems::of_` 1,135); under
+`inner_` and the rest about 25,000 (file item trees, ast id maps, macro arguments and expansions of
+the dependency files: the first touch of the definition maps). The `collect_direct` ones are not
+the function's body: `FamousDefs` and `lang_item` lookups make rust-analyzer's `lang_items` read the
+attributes of every item of every crate in the extern prelude chain (`hir_def::lang_item::
+lang_items` -> `crate_lang_items` -> `AttrFlags::lang_item`). So about three quarters of the cost
+is three crate-wide indexes, `lang_items`, `TraitImpls::for_crate` and `InherentImpls::for_crate`,
+whose results are small (ids), and the rest is definition maps and file-level queries.
+
+*What persisting them needs, from a spike (reverted).* Every id comes from `impl_intern_key!` in
+`base_db`, and Salsa's `interned` takes `persist`. With it, the first errors name 16 id types whose
+`Loc` has no serde: `ItemLoc<N>`, `AssocItemLoc<N>`, `EnumVariantLoc`, `Macro2Loc`,
+`MacroRulesLoc`, `ProcMacroLoc`. Deriving those moves the errors one level down: `ModuleIdLt`,
+`AstId<N>` (a `HirFileId` and a `FileAstId<N>`), `MacroExpander`, `Name`, `MacroRulesLocFlags`,
+`ItemContainerId`, `CustomProcMacroExpander`. Below that is `HirFileId`, and with it `MacroCallId`
+and `MacroCallLoc`, which the sysroot's macro-generated impls are written in: its call kind holds
+spans, hygiene contexts (`SyntaxContext`, interned in `span`) and, for eager macros, token trees
+that have no serde. That is a bounded set (a few dozen types, all in crates already vendored) and a
+decision about eager token trees, not an open-ended one. Then `lang_items` and the two impl indexes
+get `persist`; the indexes are keyed by `SimplifiedType<SolverDefId>`, whose closure and anonymous
+constant ids are interned in `hir_ty` and cannot be in an impl's self type, so they need a
+serializer that refuses them. What reads these memos is verified as the rest is: flattened to the
+text of the dependency files and the crate graph, which do not change between runs.
+
+*What it would leave.* The definition maps and file-level queries of the dependency crates, about a
+quarter of the specimen's cost, which is the first-touch of name resolution in the sysroot and each
+registry crate. Persisting definition maps is a larger step (a `DefMap` holds macro expanders and
+proc-macro handles) and is not needed to remove the rest.
+
+*Stages, each measured by the reproduction (`an_edit_to_a_body_costs_a_small_part_of_a_cold_run_
+when_the_crate_has_a_cfg_context`).* S1: ids persistable, `lang_items` persisted: the 23,000 under
+`collect_direct` should go. S2: `TraitImpls::for_crate` and `InherentImpls::for_crate` persisted
+for crates that are not workspace members: the 75,000 under `capability` should go. S3, only if the
+remainder matters on cordial: file-level queries or definition maps. The test's bound is set from
+what S2 measures, and not before.
+
+**Still to do.** The dependency layer, as above. Before it: persist it (rust-analyzer's impl indexes and what
 they read, for crates that are not workspace members, whose inputs do not change between runs; the
 stable ids of `hir_expand::stable` are the means), or stop asking the trait solver for facts that a
 saved answer holds. Then: measure the cordial run with the impl fingerprints; cordial's `resolve` should find
