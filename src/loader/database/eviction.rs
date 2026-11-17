@@ -90,6 +90,7 @@ impl SourceDatabase {
             resident_after_kib = resident(crate::process_memory::sample()),
             "evicted what is over its capacity"
         );
+        self.report_heap(&format!("evicted {after}"));
         freed
     }
 }

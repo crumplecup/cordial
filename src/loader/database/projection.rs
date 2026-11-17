@@ -178,28 +178,33 @@ impl SourceDatabase {
                 crate::ir::SourcePolicyInventory::default()
             }
         };
+        self.report_heap("before visibility step a");
         #[cfg(feature = "visibility")]
         policies.set_visibility(
             target.crate_root(),
             self.project_visibility(target.crate_root())?,
         );
+        self.report_heap("before cli_layout step b");
         #[cfg(feature = "cli_layout")]
         policies.set_cli_layout(
             target.crate_root(),
             self.project_cli_layout(target.crate_root(), target.crate_name())?,
         );
+        self.report_heap("before tracing step c");
         #[cfg(feature = "tracing")]
         graph.set_attr(
             graph.root(),
             crate::ir::ATTR_SOURCE_OBSERVABILITY,
             serde_json::to_value(self.project_observability(target.crate_root())?)?,
         )?;
+        self.report_heap("before verus_ir step d");
         #[cfg(feature = "verus_ir")]
         graph.set_attr(
             graph.root(),
             crate::ir::ATTR_SOURCE_VERUS,
             serde_json::to_value(self.project_verus(target.crate_root())?)?,
         )?;
+        self.report_heap("before panics step e");
         #[cfg(feature = "panics")]
         graph.set_attr(
             graph.root(),
@@ -210,54 +215,63 @@ impl SourceDatabase {
                 &crate::IrView::source_verus(&graph)?.facts(),
             )?)?,
         )?;
+        self.report_heap("before antipatterns step f");
         #[cfg(feature = "antipatterns")]
         graph.set_attr(
             graph.root(),
             crate::ir::ATTR_SOURCE_ANTIPATTERNS,
             serde_json::to_value(self.project_antipatterns(target)?)?,
         )?;
+        self.report_heap("before error_sites step g");
         #[cfg(feature = "error_sites")]
         graph.set_attr(
             graph.root(),
             crate::ir::ATTR_SOURCE_ERROR_SITES,
             serde_json::to_value(self.project_error_sites(target.crate_root())?)?,
         )?;
+        self.report_heap("before error_chain step h");
         #[cfg(feature = "error_chain")]
         graph.set_attr(
             graph.root(),
             crate::ir::ATTR_SOURCE_ERROR_CHAINS,
             serde_json::to_value(self.project_error_chains(target.crate_root())?)?,
         )?;
+        self.report_heap("before internal_error_chain step i");
         #[cfg(feature = "internal_error_chain")]
         graph.set_attr(
             graph.root(),
             crate::ir::ATTR_SOURCE_ERROR_TYPES,
             serde_json::to_value(self.project_error_types(target.crate_root())?)?,
         )?;
+        self.report_heap("before internal_error_chain step j");
         #[cfg(feature = "internal_error_chain")]
         graph.set_attr(
             graph.root(),
             crate::ir::ATTR_SOURCE_ERROR_COMPLIANCE,
             serde_json::to_value(self.project_error_compliance(target)?)?,
         )?;
+        self.report_heap("before internal_error_chain step k");
         #[cfg(feature = "internal_error_chain")]
         graph.set_attr(
             graph.root(),
             crate::ir::ATTR_SOURCE_ERROR_SIGNATURES,
             serde_json::to_value(self.project_error_signatures(target.crate_root())?)?,
         )?;
+        self.report_heap("before internal_error_chain step l");
         #[cfg(feature = "internal_error_chain")]
         graph.set_attr(
             graph.root(),
             crate::ir::ATTR_SOURCE_ERROR_ARCHITECTURE,
             serde_json::to_value(self.project_error_architecture(target)?)?,
         )?;
+        self.report_heap("before internal_error_chain step m");
         #[cfg(feature = "internal_error_chain")]
         graph.set_attr(
             graph.root(),
             crate::ir::ATTR_SOURCE_ERROR_APPLY,
             serde_json::to_value(self.project_error_apply(target.crate_root())?)?,
         )?;
+        self.report_heap("before declarations step n");
         let (snapshots, outline) =
             self.project_declarations(target.crate_root(), paths, &mut graph)?;
         #[cfg(any(

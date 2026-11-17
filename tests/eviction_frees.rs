@@ -142,3 +142,63 @@ fn what_the_queries_hold_is_told_by_query() -> Result<()> {
     }
     Ok(())
 }
+
+/// What each query held less, from one reading to the next, the most first.
+fn released(before: &[(String, i64)], after: &[(String, i64)]) -> Vec<(String, i64)> {
+    let mut less: Vec<(String, i64)> = before
+        .iter()
+        .map(|(name, held)| {
+            let now = after
+                .iter()
+                .find(|(other, _)| other == name)
+                .map_or(0, |(_, bytes)| *bytes);
+            (name.clone(), held - now)
+        })
+        .filter(|(_, less)| *less != 0)
+        .collect();
+    less.sort_by_key(|(_, less)| std::cmp::Reverse(*less));
+    less
+}
+
+/// Evicting what is over the capacities gives back the memory of the syntax trees of expansions
+/// and of files, on a crate with more of them than the capacities.
+#[test]
+fn evicting_gives_back_the_memory_of_the_trees() -> Result<()> {
+    cordial::init_tracing();
+    salsa::set_allocation_probe(counting_allocator::net_bytes);
+    salsa::set_allocation_tags(salsa::AllocationTags {
+        set_tag: counting_allocator::set_tag,
+        held_by_tag: counting_allocator::held_by_tag,
+        held_in_all: counting_allocator::held_in_all,
+    });
+    let root = crate_with_derives()?;
+    let state = tempfile::tempdir().into_diagnostic()?;
+    let saved = SavedState::at(state.path().join("analysis-state"));
+    let options = SemanticCargoOptions::default().with_cfg_planning(CfgPlanning::Explicit);
+    let mut session =
+        SourceDatabase::load_saved(root.path(), &options, Some(saved)).into_diagnostic()?;
+    session
+        .project(
+            &CrateTarget::new("evicted", root.path()),
+            &sources_of(root.path()),
+        )
+        .into_diagnostic()?;
+    let projected = session.held_by_ingredient();
+    session.evict_regenerable_now();
+    let less = released(&projected, &session.held_by_ingredient());
+    let report = table(&less);
+    let of = |query: &str| {
+        less.iter()
+            .find(|(name, _)| name.contains(query))
+            .map_or(0, |(_, bytes)| *bytes)
+    };
+    assert!(
+        of("parse_macro_expansion") > 1_000_000,
+        "the expansions' trees were not given back\n{report}"
+    );
+    assert!(
+        of("EditionedFileId::parse") > 0,
+        "the files' trees were not given back\n{report}"
+    );
+    Ok(())
+}
