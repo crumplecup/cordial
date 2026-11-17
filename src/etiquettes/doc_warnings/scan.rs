@@ -329,7 +329,10 @@ fn run_cargo_doc(
     crate_name: &str,
     policy: &DocWarningsThresholds,
 ) -> CordialResult<String> {
-    let target_dir = crate::tier::timing_target_dir(crate_root.join("target"));
+    // Its own directory: Cargo holds a lock on the one it builds in, and the analysis runs
+    // Cargo on the project's too, to read what the build scripts made, so sharing it made one
+    // wait for the other (4 s of every run on elicit_doc).
+    let target_dir = crate::tier::timing_target_dir(crate_root.join("target").join("doc-warnings"));
     let mut command = Command::new(cargo);
     command
         .current_dir(crate_root)

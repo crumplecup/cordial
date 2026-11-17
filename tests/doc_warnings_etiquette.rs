@@ -267,3 +267,46 @@ fn dogfood_cordial_has_no_rustdoc_warnings() -> miette::Result<()> {
     );
     Ok(())
 }
+
+/// The doc build runs beside the analysis, which runs Cargo on the project too, and Cargo locks
+/// the directory it builds in: so the doc build has a directory of its own, and the project's is
+/// left alone.
+#[test]
+fn the_doc_build_does_not_use_the_projects_target_directory() -> miette::Result<()> {
+    cordial::init_tracing();
+    let _guard = CARGO_ENV_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+    fs::create_dir_all(fixture.path().join("src")).into_diagnostic()?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = \"documented\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+    )
+    .into_diagnostic()?;
+    fs::write(
+        fixture.path().join("src/lib.rs"),
+        "//! Crate.\npub fn ok() {}\n",
+    )
+    .into_diagnostic()?;
+    let policy = load_cordial_config(fixture.path(), fixture.path());
+    scan_crate_doc_warnings(
+        fixture.path(),
+        fixture.path(),
+        "documented",
+        policy.doc_warnings(),
+    )
+    .into_diagnostic()
+    .wrap_err("scan")?;
+    let target = fixture.path().join("target");
+    assert!(target.join("doc-warnings").join("doc").is_dir());
+    assert!(
+        !target.join("doc").exists(),
+        "the project's own doc output was written to"
+    );
+    assert!(
+        !target.join("debug").exists(),
+        "the project's own build output was written to"
+    );
+    Ok(())
+}
