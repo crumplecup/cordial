@@ -555,8 +555,26 @@ scanning the source roots, so every function depends on all of them), and `crate
 (the one cut). A specimen of 6 files with an inherent method and a trait impl each, and functions
 that call both, reproduces it: after an edit to one body, 39 of 42 functions were computed.
 
-**Still to do.** The impl index needs a fingerprint of its own (it lives in `ra_ap_hir_ty`, which
-is not vendored yet); cordial's `resolve` should find a file without reading every source root; the walk-width metric names them. Functions of one file still all read the file's
+**The impl indexes.** The flatten report's `breadth` (the widest query of each kind, and which
+kinds of leaf its set holds) named `InherentImpls::for_crate_` and `TraitImpls::for_crate_` as the
+widest queries after the evidence ones, each reaching the text of every file: every function that
+calls a method depended on all of them. `ra_ap_hir_ty` is vendored for this (`method_resolution/
+stable.rs`: the two indexes taken apart without `..`, `SimplifiedType` and `SolverDefId` matched
+exhaustively, the ids the solver numbers itself volatile), each index has a persisted fingerprint
+in cordial, and the two `for_crate_` queries are cut to them. In the 6-file specimen with impls an
+edit to one body now computes the functions of its file and no others (it was 39 of 42). The
+battery has four edits that change the indexes (a trait impl or an inherent impl moved to another
+type, a trait impl added, a trait method's body) and all agree with a run from nothing.
+
+The battery found something that was not the cutoff: two runs of the same sources put a crate's
+function nodes in a different order in the graph's `by_kind` index. `connect` set an attribute on
+each node in a hash map's order, and every `set_attr` indexes the node again. Ordering by item id
+did not fix it (an id is the order its key was interned in, which differs between a restored run
+and one from nothing); it now goes in the order the nodes were made. Setting an attribute still
+adds the node to `by_kind` again, so the lists hold duplicates: noted, not changed here.
+
+**Still to do.** Measure the cordial run with the impl fingerprints; cordial's `resolve` should find
+a file without reading every source root if it still shows in the report; the walk-width metric names them. Functions of one file still all read the file's
 syntax, so the next granularity is a function's body. The audit that recomputes a sample of reused
 functions and compares them, so that a construct the battery does not think of is caught in the
 field, is not written.

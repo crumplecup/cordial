@@ -46,7 +46,10 @@ fn original() -> Sources {
              pub fn a_leaf() {}\n\
              pub fn a_top() {\n    a_leaf();\n}\n\
              pub struct A;\n\
-             impl A {\n    pub fn m(&self) {}\n}\n"
+             impl A {\n    pub fn m(&self) {}\n}\n\
+             pub struct A2;\n\
+             pub trait T {\n    fn t(&self) -> u8;\n}\n\
+             impl T for A {\n    fn t(&self) -> u8 {\n        1\n    }\n}\n"
                 .into(),
         ),
         (
@@ -57,7 +60,7 @@ fn original() -> Sources {
         ),
         (
             "c.rs",
-            "pub fn c_top() {\n    crate::b::b_top();\n    crate::b::b_leaf();\n    crate::a::a_leaf();\n    crate::a::made();\n    crate::a::nested();\n    let a = crate::a::A;\n    a.m();\n}\n"
+            "use crate::a::T;\npub fn c_top() {\n    crate::b::b_top();\n    crate::b::b_leaf();\n    crate::a::a_leaf();\n    crate::a::made();\n    crate::a::nested();\n    let a = crate::a::A;\n    a.m();\n    a.t();\n}\n"
                 .into(),
         ),
     ]
@@ -172,6 +175,40 @@ fn edits() -> Vec<Edit> {
                 )
             },
             changes_what_is_said: true,
+        },
+        Edit {
+            name: "a trait impl moved to another type",
+            apply: |s| replace(s, "a.rs", "impl T for A {", "impl T for A2 {"),
+            changes_what_is_said: true,
+        },
+        Edit {
+            name: "an inherent impl moved to another type",
+            apply: |s| replace(s, "a.rs", "impl A {", "impl A2 {"),
+            changes_what_is_said: true,
+        },
+        Edit {
+            name: "a trait impl added for another type",
+            apply: |s| {
+                replace(
+                    s,
+                    "a.rs",
+                    "pub struct A2;",
+                    "pub struct A2;\nimpl T for A2 {\n    fn t(&self) -> u8 {\n        a_leaf();\n        2\n    }\n}",
+                )
+            },
+            changes_what_is_said: false,
+        },
+        Edit {
+            name: "the body of a trait method",
+            apply: |s| {
+                replace(
+                    s,
+                    "a.rs",
+                    "fn t(&self) -> u8 {\n        1",
+                    "fn t(&self) -> u8 {\n        let _ = 3;\n        1",
+                )
+            },
+            changes_what_is_said: false,
         },
         Edit {
             name: "a function gated off",
@@ -390,16 +427,67 @@ fn after(edit: &Edit, reuse: Reuse) -> Result<Outcome> {
     })
 }
 
+/// Where two values first differ, as the path to it and the two things there, so that a failure
+/// says what is different instead of printing both.
+fn first_difference(left: &serde_json::Value, right: &serde_json::Value) -> String {
+    fn walk(
+        path: &mut Vec<String>,
+        left: &serde_json::Value,
+        right: &serde_json::Value,
+    ) -> Option<String> {
+        use serde_json::Value::{Array, Object};
+        match (left, right) {
+            (Object(a), Object(b)) => {
+                for key in a.keys().chain(b.keys()) {
+                    path.push(key.clone());
+                    let found = match (a.get(key), b.get(key)) {
+                        (Some(x), Some(y)) => walk(path, x, y),
+                        (x, y) => Some(format!("{}: {x:?} against {y:?}", path.join("/"))),
+                    };
+                    path.pop();
+                    if found.is_some() {
+                        return found;
+                    }
+                }
+                None
+            }
+            (Array(a), Array(b))
+                if a != b
+                    && a.iter()
+                        .chain(b)
+                        .all(|item| !item.is_object() && !item.is_array()) =>
+            {
+                Some(format!("{}: {a:?} against {b:?}", path.join("/")))
+            }
+            (Array(a), Array(b)) if a.len() == b.len() => {
+                for (index, (x, y)) in a.iter().zip(b).enumerate() {
+                    path.push(index.to_string());
+                    let found = walk(path, x, y);
+                    path.pop();
+                    if found.is_some() {
+                        return found;
+                    }
+                }
+                None
+            }
+            (a, b) if a == b => None,
+            (a, b) => Some(format!("{}: {a} against {b}", path.join("/"))),
+        }
+    }
+    walk(&mut Vec::new(), left, right).unwrap_or_else(|| "nothing".into())
+}
+
 /// A run restored from before `edit` says what a run from nothing says after it, and the edit
 /// changes the facts when it should.
 fn check(index: usize, reuse: Reuse) -> Result<()> {
     let edit = &edits()[index];
     let outcome = after(edit, reuse)?;
-    assert_eq!(
-        outcome.restored.all, outcome.cold.all,
+    assert!(
+        outcome.restored.all == outcome.cold.all,
         "{reuse:?}, {}: a run restored from before the edit said something else than a run from \
-         nothing",
-        edit.name
+         nothing; the first difference, restored against cold, {}",
+        edit.name,
+        first_difference(&outcome.restored.all, &outcome.cold.all)
     );
     assert_eq!(
         outcome.restored.facts, outcome.cold.facts,
@@ -447,7 +535,11 @@ after_an_edit! {
     what_a_macro_defines => 6,
     what_a_macro_that_another_macro_calls_defines => 7,
     the_return_type_of_a_method => 8,
-    a_function_gated_off => 9,
+    a_trait_impl_moved_to_another_type => 9,
+    an_inherent_impl_moved_to_another_type => 10,
+    a_trait_impl_added_for_another_type => 11,
+    the_body_of_a_trait_method => 12,
+    a_function_gated_off => 13,
 }
 
 /// The same checks with reuse off, which is the harness telling the two edits that matter most
@@ -455,7 +547,8 @@ after_an_edit! {
 #[test]
 fn the_checks_hold_without_reuse_too() -> Result<()> {
     check(2, Reuse::Off)?;
-    check(3, Reuse::Off)
+    check(3, Reuse::Off)?;
+    check(11, Reuse::Off)
 }
 
 /// A crate of `FILES` modules of `PER_FILE` functions, each calling the one before it in its own
@@ -584,6 +677,74 @@ fn the_specimens_definition_maps_mean_the_same_in_every_process() -> Result<()> 
     assert!(
         found.is_empty(),
         "definition maps with volatile things in them: {found:?}"
+    );
+    Ok(())
+}
+
+/// A crate like the independent files, with what cordial has that they do not: each file has a type
+/// with an inherent method, a trait impl, and functions that call both.
+fn independent_files_with_impls() -> Result<tempfile::TempDir> {
+    let root = tempfile::tempdir().into_diagnostic()?;
+    let mut sources: Sources = Vec::new();
+    let mut library = String::new();
+    for file in 0..FILES {
+        library.push_str(&format!("pub mod file{file};\n"));
+        let mut text = format!(
+            "pub struct S{file};\nimpl S{file} {{\n    pub fn m(&self) {{}}\n}}\nimpl Default for S{file} {{\n    fn default() -> Self {{\n        S{file}\n    }}\n}}\n"
+        );
+        for function in 0..PER_FILE {
+            text.push_str(&format!(
+                "pub fn f{file}_{function}() {{\n    let s = S{file}::default();\n    s.m();\n}}\n"
+            ));
+        }
+        sources.push((Box::leak(format!("file{file}.rs").into_boxed_str()), text));
+    }
+    sources.push(("lib.rs", library));
+    write(root.path(), &sources)?;
+    Ok(root)
+}
+
+/// How many functions' evidence a restored run computed after the body of the last function of the
+/// third file changed, in a crate whose files each have an inherent method and a trait impl.
+fn computed_after_a_body_edit_with_impls() -> Result<(usize, u64, u64)> {
+    cordial::init_tracing();
+    let root = independent_files_with_impls()?;
+    let state = tempfile::tempdir().into_diagnostic()?;
+    let saved = SavedState::at(state.path().join("analysis-state"));
+    run(root.path(), &saved, Reuse::On)?;
+    let edited = root.path().join("src/file2.rs");
+    let text = std::fs::read_to_string(&edited).into_diagnostic()?;
+    std::fs::write(
+        &edited,
+        text.replace(
+            &format!("pub fn f2_{}() {{", PER_FILE - 1),
+            &format!("pub fn f2_{}() {{\n    let _ = 1;", PER_FILE - 1),
+        ),
+    )
+    .into_diagnostic()?;
+    let (said, computed) = run(root.path(), &saved, Reuse::On)?;
+    Ok((computed, said.audited, said.mismatched))
+}
+
+/// With impls in the crate, as cordial has, an edit to a function's body still computes the
+/// functions of its file and not the crate's. (When it does not, the flatten report names the kinds
+/// of query that read the most inputs themselves: `salsa::flatten_breadth`, and in a log
+/// `RUST_LOG=salsa::persistence=info`.)
+#[test]
+fn an_edit_to_a_body_computes_the_functions_of_its_file_when_the_crate_has_impls() -> Result<()> {
+    let (computed, audited, mismatched) = computed_after_a_body_edit_with_impls()?;
+    assert_eq!(
+        mismatched, 0,
+        "none of what was reused differs from what the sources give"
+    );
+    // Each file has PER_FILE functions, an inherent method and a trait method.
+    let file = PER_FILE + 2;
+    assert!(
+        computed <= file + 1,
+        "{computed} of {} functions were computed after an edit to one body in one file ({audited} \
+         of what was reused was audited); what reads the most inputs itself: {}",
+        FILES * file,
+        salsa::flatten_breadth("persisted_evidence").unwrap_or_default()
     );
     Ok(())
 }

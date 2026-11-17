@@ -1,4 +1,4 @@
-//! The definition map of a crate, depended on as its fingerprint.
+//! The definition map and the impl indexes of a crate, depended on as their fingerprints.
 //!
 //! Every function reads the definition map of its crate to resolve a name, and the map is made
 //! from the text of every file of the crate, so a memo that read it depends on all of them: an edit
@@ -12,6 +12,11 @@
 //! compile error there until it is accounted for. What it could not give a meaning that survives
 //! the process it makes volatile, which is safe (it differs in every process, so nothing is reused)
 //! and counted.
+//!
+//! The impl indexes (what method resolution searches for the impls of a type, and for the impls of
+//! a trait) are the same: made from every impl of the crate, read by every function that calls a
+//! method, and the same after an edit to a body. They have a fingerprint each
+//! (`ra_ap_hir_ty::method_resolution::stable`).
 
 use ra_ap_hir::attach_db;
 use ra_ap_ide_db::base_db::Crate as InputCrate;
@@ -20,6 +25,22 @@ use tracing::instrument;
 use super::SourceDatabase;
 use super::queries::SemanticDatabase;
 
+/// The hash of a fingerprint, saying (for a person looking into why nothing was reused) what in
+/// it had no meaning that survives the process.
+fn hash_of(what: &'static str, fingerprint: ra_ap_hir_expand::stable::StableFingerprint) -> u64 {
+    if fingerprint.volatile > 0 {
+        tracing::debug!(
+            target: "cordial::cache",
+            what,
+            volatile = fingerprint.volatile,
+            reasons = ?fingerprint.reasons,
+            "something has things in it with no meaning that survives the process: \
+             what read it is not reused across an edit"
+        );
+    }
+    fingerprint.hash
+}
+
 /// A hash of the definition map of `krate`.
 #[salsa::tracked(persist, returns(copy))]
 #[instrument(level = "debug", skip(db))]
@@ -27,17 +48,38 @@ use super::queries::SemanticDatabase;
 pub(super) fn def_map_fingerprint(db: &dyn SemanticDatabase, krate: InputCrate) -> u64 {
     let root = db.root_database();
     attach_db(root, || {
-        let fingerprint = ra_ap_hir_def::nameres::stable::def_map_fingerprint(root, krate);
-        if fingerprint.volatile > 0 {
-            tracing::debug!(
-                target: "cordial::cache",
-                volatile = fingerprint.volatile,
-                reasons = ?fingerprint.reasons,
-                "a definition map has things in it with no meaning that survives the process: \
-                 what read it is not reused across an edit"
-            );
-        }
-        fingerprint.hash
+        hash_of(
+            "a definition map",
+            ra_ap_hir_def::nameres::stable::def_map_fingerprint(root, krate),
+        )
+    })
+}
+
+/// A hash of the inherent impls of `krate`.
+#[salsa::tracked(persist, returns(copy))]
+#[instrument(level = "debug", skip(db))]
+#[hotpath::measure]
+pub(super) fn inherent_impls_fingerprint(db: &dyn SemanticDatabase, krate: InputCrate) -> u64 {
+    let root = db.root_database();
+    attach_db(root, || {
+        hash_of(
+            "the inherent impls of a crate",
+            ra_ap_hir_ty::method_resolution::stable::inherent_impls_fingerprint(root, krate),
+        )
+    })
+}
+
+/// A hash of the trait impls of `krate`.
+#[salsa::tracked(persist, returns(copy))]
+#[instrument(level = "debug", skip(db))]
+#[hotpath::measure]
+pub(super) fn trait_impls_fingerprint(db: &dyn SemanticDatabase, krate: InputCrate) -> u64 {
+    let root = db.root_database();
+    attach_db(root, || {
+        hash_of(
+            "the trait impls of a crate",
+            ra_ap_hir_ty::method_resolution::stable::trait_impls_fingerprint(root, krate),
+        )
     })
 }
 
@@ -56,12 +98,17 @@ impl SourceDatabase {
         if !self.reuses_across_edits() {
             return;
         }
-        let declared = <dyn salsa::Database>::register_cutoff(
-            &self.db,
-            "crate_local_def_map",
-            "def_map_fingerprint",
-        );
-        tracing::debug!(target: "cordial::cache", declared, "the definition map's fingerprint declared");
+        for (query, fingerprint) in [
+            ("crate_local_def_map", "def_map_fingerprint"),
+            (
+                "InherentImpls < 'db >::for_crate_",
+                "inherent_impls_fingerprint",
+            ),
+            ("TraitImpls < 'db >::for_crate_", "trait_impls_fingerprint"),
+        ] {
+            let declared = <dyn salsa::Database>::register_cutoff(&self.db, query, fingerprint);
+            tracing::debug!(target: "cordial::cache", query, fingerprint, declared, "a fingerprint declared");
+        }
     }
 
     /// Ask for the fingerprint of every local crate's definition map, as a save needs to find them.
@@ -75,6 +122,8 @@ impl SourceDatabase {
             for krate in ra_ap_hir::Crate::all(&self.db) {
                 if krate.origin(&self.db).is_local() {
                     let _ = def_map_fingerprint(&self.db, krate.base());
+                    let _ = inherent_impls_fingerprint(&self.db, krate.base());
+                    let _ = trait_impls_fingerprint(&self.db, krate.base());
                 }
             }
         });
@@ -92,6 +141,8 @@ impl SourceDatabase {
                 .find(|krate| krate.origin(&self.db).is_local())
             {
                 let _ = def_map_fingerprint(&self.db, krate.base());
+                let _ = inherent_impls_fingerprint(&self.db, krate.base());
+                let _ = trait_impls_fingerprint(&self.db, krate.base());
             }
         });
     }
