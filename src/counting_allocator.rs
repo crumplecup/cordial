@@ -25,8 +25,9 @@ static HELD: [AtomicI64; TAGS] = [const { AtomicI64::new(0) }; TAGS];
 static TOTAL: AtomicI64 = AtomicI64::new(0);
 static PEAK: AtomicI64 = AtomicI64::new(0);
 
-/// Frees of at least this many bytes are counted by who allocated and who freed.
-const PAIRED_FROM: usize = 1024;
+/// Frees of at least this many bytes are counted by how long they had lived and by who allocated
+/// and who freed: small enough that the nodes of a syntax tree are in it.
+const PAIRED_FROM: usize = 32;
 /// Of those, the pairs are only for memory that lived this long (milliseconds): what is made and
 /// freed within a query's execution is not what is held.
 const PAIRED_AFTER_MS: u32 = 100;
@@ -190,7 +191,7 @@ pub fn held_in_all() -> i64 {
 }
 
 /// Bytes freed, by the tag of the query that allocated them and of the one executing when they
-/// were freed (0 for neither), for the frees of a kilobyte or more.
+/// were freed (0 for neither), for the frees of 32 bytes or more that lived long enough to be held.
 pub fn freed_pairs() -> Vec<(u32, u32, i64)> {
     (0..PAIRS)
         .filter_map(|at| {
@@ -208,7 +209,7 @@ pub fn freed_pairs() -> Vec<(u32, u32, i64)> {
 }
 
 /// Bytes freed by the tag that allocated them and how long they lived: under 10 ms, 100 ms, 1 s,
-/// 10 s, and longer; for the frees of a kilobyte or more.
+/// 10 s, and longer; for the frees of 32 bytes or more.
 pub fn freed_by_age() -> Vec<(u32, [i64; 5])> {
     LIVED
         .iter()
