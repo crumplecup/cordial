@@ -22,6 +22,10 @@ use tracing_subscriber::layer::{Context, Layer};
 
 use crate::{CordialResult, StoreLayout};
 
+/// The environment variable that asks a save for the size of each ingredient in it, which encodes
+/// the saved state a second time.
+pub const STATE_SIZES_VARIABLE: &str = "CORDIAL_STATE_SIZES";
+
 /// Where a run's metrics are written, in its store.
 const FILE: &str = "metrics.json";
 
@@ -103,6 +107,7 @@ pub fn metrics_filter() -> Targets {
         .with_target("cordial::cache", tracing::Level::DEBUG)
         .with_target("salsa::persistence", tracing::Level::DEBUG)
         .with_target("salsa::database", tracing::Level::DEBUG)
+        .with_target("salsa::state_size", tracing::Level::DEBUG)
 }
 
 /// Adds up the numeric fields of the events [`metrics_filter`] lets through.

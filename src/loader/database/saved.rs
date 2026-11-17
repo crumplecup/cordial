@@ -90,6 +90,19 @@ impl SavedState {
         let encoding = std::time::Instant::now();
         let salsa =
             rmp_serde::to_vec(&database.as_serialize()).map_err(|error| self.encoding(&error))?;
+        if std::env::var_os(crate::STATE_SIZES_VARIABLE).is_some() {
+            // Where the size is, by ingredient: the whole database is encoded once more.
+            for (ingredient, bytes) in database.ingredient_sizes(&|part| {
+                rmp_serde::to_vec(part).map_or(0, |encoded| encoded.len())
+            }) {
+                tracing::debug!(
+                    target: "salsa::state_size",
+                    ingredient,
+                    bytes,
+                    "an ingredient's share of the saved state"
+                );
+            }
+        }
         tracing::debug!(
             target: "cordial::cache",
             step = "encoded",

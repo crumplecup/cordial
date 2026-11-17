@@ -26,6 +26,7 @@ fn a_runs_events_are_added_up_by_what_they_are_about() {
         tracing::debug!(target: "cordial::cache", what = "a definition map", volatile = 0_u64, "fingerprint");
         tracing::debug!(target: "cordial::cache", what = "a definition map", volatile = 3_u64, reasons = ?[("a closure", 3_u32)], "fingerprint");
         tracing::info!(target: "cordial::semantic::fallback", step = "prime", "fell back");
+        tracing::debug!(target: "salsa::state_size", ingredient = "ImplId", bytes = 4_096_u64, "share");
         // What the layer is not asked about is not counted, and neither is a level below the one asked for.
         tracing::info!(target: "cordial::keys", queries = 99_u64, "elsewhere");
         tracing::debug!(target: "cordial::audit", audited = 1_000_u64, "too fine");
@@ -62,6 +63,11 @@ fn a_runs_events_are_added_up_by_what_they_are_about() {
         "a fingerprint with nothing volatile is counted too"
     );
     assert_eq!(value("semantic.fallback.prime.events"), Some(1));
+    assert_eq!(
+        value("state_size.implid.bytes"),
+        Some(4_096),
+        "an ingredient's share of the saved state"
+    );
     assert_eq!(
         value("keys.queries"),
         None,

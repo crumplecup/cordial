@@ -321,7 +321,7 @@ pub use plugins::{
     quality_only_plugins, quality_plugins,
 };
 pub use run_metrics::{
-    MetricsLayer, RunMetrics, keep_at as keep_run_metrics_at, metrics_filter,
+    MetricsLayer, RunMetrics, STATE_SIZES_VARIABLE, keep_at as keep_run_metrics_at, metrics_filter,
     read as read_run_metrics, write as write_run_metrics, write_ended as write_ended_run_metrics,
 };
 pub use tracing_init::{

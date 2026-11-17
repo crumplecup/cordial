@@ -137,3 +137,31 @@ fn what_was_saved_is_taken_once() {
         "the saved module was taken by the query that made it first"
     );
 }
+
+/// Where the size of a saved database is, by ingredient: what is saved is measured, and what a
+/// larger ingredient holds shows as a larger share.
+#[test]
+fn the_size_of_a_saved_database_is_told_by_ingredient() {
+    let mut db = Db::default();
+    Source::new(&db, 5);
+    mentions(&db);
+    let sizes = <dyn Database>::ingredient_sizes(&mut db, &|part| {
+        serde_json::to_vec(part).map_or(0, |encoded| encoded.len())
+    });
+    let size_of = |name: &str| {
+        sizes
+            .iter()
+            .find(|(ingredient, _)| ingredient.contains(name))
+            .map(|(_, bytes)| *bytes)
+    };
+    let modules = size_of("Module").expect("the modules are saved");
+    let query = size_of("mentions").expect("the persisted query is saved");
+    assert!(
+        modules > query,
+        "eight modules are more than the one id a query holds"
+    );
+    assert!(
+        sizes.iter().all(|(_, bytes)| *bytes > 0),
+        "everything saved has a size"
+    );
+}

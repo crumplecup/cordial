@@ -661,7 +661,34 @@
          /// Returns a type implementing [`serde::Serialize`], that can be used to serialize the
          /// current state of the database.
          ///
-@@ -369,8 +460,16 @@
+@@ -183,6 +274,26 @@
+             SerializeDatabase::new(self)
+         }
+ 
++        /// How large each ingredient that is saved is, in the encoding `encoded_size` measures: the
++        /// name of the ingredient and what `encoded_size` says of what is saved of it. This
++        /// encodes the whole database once more, so it is for finding out where the size of a
++        /// saved database is, not for every save.
++        pub fn ingredient_sizes(
++            &mut self,
++            encoded_size: &dyn Fn(&dyn erased_serde::Serialize) -> usize,
++        ) -> Vec<(&'static str, usize)> {
++            let zalsa = self.zalsa_mut();
++            let zalsa: &Zalsa = zalsa;
++            zalsa
++                .ingredients()
++                .filter(|ingredient| ingredient.should_serialize(zalsa))
++                .map(|ingredient| {
++                    let saved = SerializeIngredient(ingredient, zalsa);
++                    (ingredient.debug_name(), encoded_size(&saved))
++                })
++                .collect()
++        }
++
+         /// Deserialize the database using a [`serde::Deserializer`].
+         ///
+         /// This method will modify the database in-place based on the serialized data.
+@@ -369,8 +480,16 @@
                  // to the ingredient as well as the database.
                  let mut ingredient = zalsa.take_ingredient(index);
  
