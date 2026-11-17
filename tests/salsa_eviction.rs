@@ -74,6 +74,20 @@ fn by_interned_reference<'db>(db: &'db dyn Database, key: Key<'db>) -> Vec<u8> {
     vec![*key.seed(db); VALUE_BYTES]
 }
 
+/// A database, with the program's allocator told to Salsa as in a run.
+fn fresh() -> Db {
+    salsa::set_allocation_probe(counting_allocator::net_bytes);
+    salsa::set_allocation_tags(salsa::AllocationTags {
+        set_tag: counting_allocator::set_tag,
+        held_by_tag: counting_allocator::held_by_tag,
+        held_in_all: counting_allocator::held_in_all,
+        peak_held: counting_allocator::peak_held,
+        freed_pairs: counting_allocator::freed_pairs,
+        freed_by_age: counting_allocator::freed_by_age,
+    });
+    Db::default()
+}
+
 fn held() -> i64 {
     counting_allocator::held_in_all()
 }
@@ -104,7 +118,7 @@ fn assert_gives_back(back: i64, should: i64, what: &str) {
 
 #[test]
 fn a_query_returned_by_reference_gives_its_values_back() {
-    let mut db = Db::default();
+    let mut db = fresh();
     let docs = docs(&db);
     let before = held();
     for doc in &docs {
@@ -116,7 +130,7 @@ fn a_query_returned_by_reference_gives_its_values_back() {
 
 #[test]
 fn a_query_returned_as_a_clone_gives_its_values_back() {
-    let mut db = Db::default();
+    let mut db = fresh();
     let docs = docs(&db);
     let before = held();
     for doc in &docs {
@@ -128,7 +142,7 @@ fn a_query_returned_as_a_clone_gives_its_values_back() {
 
 #[test]
 fn values_made_on_other_threads_are_given_back() {
-    let mut db = Db::default();
+    let mut db = fresh();
     let docs = docs(&db);
     let before = held();
     std::thread::scope(|scope| {
@@ -147,7 +161,7 @@ fn values_made_on_other_threads_are_given_back() {
 
 #[test]
 fn values_a_query_read_are_given_back() {
-    let mut db = Db::default();
+    let mut db = fresh();
     let docs = docs(&db);
     let before = held();
     for doc in &docs {
@@ -159,7 +173,7 @@ fn values_a_query_read_are_given_back() {
 
 #[test]
 fn a_revision_gives_the_values_back_too() {
-    let mut db = Db::default();
+    let mut db = fresh();
     let docs = docs(&db);
     let before = held();
     for doc in &docs {
@@ -175,7 +189,7 @@ fn a_revision_gives_the_values_back_too() {
 
 #[test]
 fn a_query_keyed_by_an_interned_struct_returned_as_a_clone_gives_its_values_back() {
-    let mut db = Db::default();
+    let mut db = fresh();
     let before = held();
     for n in 0..INPUTS {
         let key = Key::new(&db, u32::try_from(n).unwrap_or(0), 7);
@@ -187,7 +201,7 @@ fn a_query_keyed_by_an_interned_struct_returned_as_a_clone_gives_its_values_back
 
 #[test]
 fn a_query_keyed_by_an_interned_struct_returned_by_reference_gives_its_values_back() {
-    let mut db = Db::default();
+    let mut db = fresh();
     let before = held();
     for n in 0..INPUTS {
         let key = Key::new(&db, u32::try_from(n).unwrap_or(0), 7);
