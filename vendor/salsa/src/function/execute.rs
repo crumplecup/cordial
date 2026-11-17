@@ -335,6 +335,24 @@ where
 
         // Query was not previously executed, or value is potentially
         // stale, or value is absent. Let's execute!
+        // The memory the query allocates while it runs is tagged with its ingredient, if the
+        // program's allocator tags.
+        let tags = crate::allocation_tags();
+        let previous_tag = tags.map(|tags| {
+            (tags.set_tag)(active_query.database_key_index.ingredient_index().as_u32() + 1)
+        });
+        let result = Self::execute_timed(db, zalsa, active_query);
+        if let (Some(tags), Some(previous)) = (tags, previous_tag) {
+            (tags.set_tag)(previous);
+        }
+        result
+    }
+
+    fn execute_timed<'db>(
+        db: &'db C::DbView,
+        zalsa: &'db Zalsa,
+        active_query: ActiveQueryGuard<'db>,
+    ) -> (C::Output<'db>, ActiveQueryGuard<'db>) {
         let timed = ::tracing::enabled!(target: "salsa::execution", ::tracing::Level::INFO);
         if !timed {
             let new_value = C::execute(

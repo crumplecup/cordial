@@ -1610,10 +1610,28 @@
  
          zalsa.event(&|| {
              Event::new(EventKind::WillExecute {
-@@ -332,15 +335,52 @@
+@@ -332,15 +335,70 @@
  
          // Query was not previously executed, or value is potentially
          // stale, or value is absent. Let's execute!
++        // The memory the query allocates while it runs is tagged with its ingredient, if the
++        // program's allocator tags.
++        let tags = crate::allocation_tags();
++        let previous_tag = tags.map(|tags| {
++            (tags.set_tag)(active_query.database_key_index.ingredient_index().as_u32() + 1)
++        });
++        let result = Self::execute_timed(db, zalsa, active_query);
++        if let (Some(tags), Some(previous)) = (tags, previous_tag) {
++            (tags.set_tag)(previous);
++        }
++        result
++    }
++
++    fn execute_timed<'db>(
++        db: &'db C::DbView,
++        zalsa: &'db Zalsa,
++        active_query: ActiveQueryGuard<'db>,
++    ) -> (C::Output<'db>, ActiveQueryGuard<'db>) {
 +        let timed = ::tracing::enabled!(target: "salsa::execution", ::tracing::Level::INFO);
 +        if !timed {
 +            let new_value = C::execute(
@@ -2670,7 +2688,7 @@
  mod function;
  mod hash;
  mod id;
-@@ -294,6 +299,25 @@
+@@ -294,6 +299,77 @@
  #[cfg(feature = "salsa_unstable")]
  pub use self::database::{IngredientInfo, PageInfo};
  
@@ -2686,6 +2704,58 @@
 +
 +pub(crate) fn allocation_probe() -> Option<fn() -> i64> {
 +    ALLOCATION_PROBE.get().copied()
++}
++
++/// What the program offers for attributing memory to the queries that allocated it.
++#[derive(Clone, Copy)]
++pub struct AllocationTags {
++    /// Sets the tag the calling thread's allocations carry, and gives the one it had.
++    pub set_tag: fn(u32) -> u32,
++    /// The bytes held now, by tag.
++    pub held_by_tag: fn() -> Vec<(u32, i64)>,
++    /// The bytes held now, in all.
++    pub held_in_all: fn() -> i64,
++}
++
++static ALLOCATION_TAGS: std::sync::OnceLock<AllocationTags> = std::sync::OnceLock::new();
++
++/// Tell Salsa that the program's allocator tags allocations, so that each query's execution sets
++/// the tag to its ingredient while it runs.
++pub fn set_allocation_tags(tags: AllocationTags) {
++    let _ = ALLOCATION_TAGS.set(tags);
++}
++
++pub(crate) fn allocation_tags() -> Option<AllocationTags> {
++    ALLOCATION_TAGS.get().copied()
++}
++
++/// The bytes the program holds now, in all, if its allocator counts them.
++pub fn held_in_all() -> Option<i64> {
++    allocation_tags().map(|tags| (tags.held_in_all)())
++}
++
++/// The bytes held now by the queries that allocated them, with the name of each ingredient, most
++/// first; the bytes no query was executing for are under the name `outside queries`.
++pub fn held_by_ingredient(db: &dyn Database) -> Vec<(String, i64)> {
++    let Some(tags) = allocation_tags() else {
++        return Vec::new();
++    };
++    let zalsa = db.zalsa();
++    let mut held: Vec<(String, i64)> = (tags.held_by_tag)()
++        .into_iter()
++        .map(|(tag, bytes)| {
++            let name = match tag.checked_sub(1) {
++                None => "outside queries".to_owned(),
++                Some(index) => zalsa
++                    .lookup_ingredient(crate::zalsa::IngredientIndex::new(index))
++                    .debug_name()
++                    .to_owned(),
++            };
++            (name, bytes)
++        })
++        .collect();
++    held.sort_by_key(|(_, bytes)| std::cmp::Reverse(*bytes));
++    held
 +}
 +
 +/// The net bytes the calling thread has allocated, if the program counts them.

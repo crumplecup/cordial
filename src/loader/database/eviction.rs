@@ -10,6 +10,9 @@ use tracing::instrument;
 
 use super::SourceDatabase;
 
+/// How many of the queries holding the most a report says.
+const HEAP_ROWS: usize = 25;
+
 /// The environment variable that asks a run to evict between its phases.
 pub const EVICT_VARIABLE: &str = "CORDIAL_EVICT_LRU";
 
@@ -20,9 +23,53 @@ impl SourceDatabase {
     #[instrument(level = "debug", skip(self))]
     #[hotpath::measure(impl_type = "SourceDatabase")]
     pub(super) fn evict_regenerable(&mut self, after: &str) {
+        self.report_heap(after);
         if std::env::var_os(EVICT_VARIABLE).is_none() {
             return;
         }
+        self.evict_now(after);
+    }
+
+    /// What each query holds in memory now, if the program's allocator says: the bytes by the
+    /// ingredient that allocated them, most first.
+    #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure(impl_type = "SourceDatabase")]
+    pub fn held_by_ingredient(&self) -> Vec<(String, i64)> {
+        salsa::held_by_ingredient(&self.db)
+    }
+
+    /// Say what the queries hold at this point of the run, the largest few, as events.
+    #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure(impl_type = "SourceDatabase")]
+    pub(super) fn report_heap(&self, after: &str) {
+        if let Some(total) = salsa::held_in_all() {
+            tracing::info!(
+                target: "cordial::heap",
+                ingredient = format!("{after} total"),
+                bytes = u64::try_from(total).unwrap_or(0),
+                "held by the program"
+            );
+        }
+        for (name, bytes) in self.held_by_ingredient().into_iter().take(HEAP_ROWS) {
+            tracing::info!(
+                target: "cordial::heap",
+                ingredient = format!("{after} {name}"),
+                bytes = u64::try_from(bytes).unwrap_or(0),
+                "held by the queries that allocated it"
+            );
+        }
+    }
+
+    /// Evict what is over its capacity now, whatever the environment says. For the tests of
+    /// what eviction frees. Returns the bytes the calling thread freed, which are the process's
+    /// when the program counts them (and 0 when it does not).
+    #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure(impl_type = "SourceDatabase")]
+    pub fn evict_regenerable_now(&mut self) -> u64 {
+        self.evict_now("asked")
+    }
+
+    fn evict_now(&mut self, after: &str) -> u64 {
         let before = crate::process_memory::sample();
         let held = salsa::allocated_net_bytes();
         let started = std::time::Instant::now();
@@ -43,5 +90,6 @@ impl SourceDatabase {
             resident_after_kib = resident(crate::process_memory::sample()),
             "evicted what is over its capacity"
         );
+        freed
     }
 }

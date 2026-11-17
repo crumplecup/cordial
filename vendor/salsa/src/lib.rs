@@ -313,6 +313,58 @@ pub(crate) fn allocation_probe() -> Option<fn() -> i64> {
     ALLOCATION_PROBE.get().copied()
 }
 
+/// What the program offers for attributing memory to the queries that allocated it.
+#[derive(Clone, Copy)]
+pub struct AllocationTags {
+    /// Sets the tag the calling thread's allocations carry, and gives the one it had.
+    pub set_tag: fn(u32) -> u32,
+    /// The bytes held now, by tag.
+    pub held_by_tag: fn() -> Vec<(u32, i64)>,
+    /// The bytes held now, in all.
+    pub held_in_all: fn() -> i64,
+}
+
+static ALLOCATION_TAGS: std::sync::OnceLock<AllocationTags> = std::sync::OnceLock::new();
+
+/// Tell Salsa that the program's allocator tags allocations, so that each query's execution sets
+/// the tag to its ingredient while it runs.
+pub fn set_allocation_tags(tags: AllocationTags) {
+    let _ = ALLOCATION_TAGS.set(tags);
+}
+
+pub(crate) fn allocation_tags() -> Option<AllocationTags> {
+    ALLOCATION_TAGS.get().copied()
+}
+
+/// The bytes the program holds now, in all, if its allocator counts them.
+pub fn held_in_all() -> Option<i64> {
+    allocation_tags().map(|tags| (tags.held_in_all)())
+}
+
+/// The bytes held now by the queries that allocated them, with the name of each ingredient, most
+/// first; the bytes no query was executing for are under the name `outside queries`.
+pub fn held_by_ingredient(db: &dyn Database) -> Vec<(String, i64)> {
+    let Some(tags) = allocation_tags() else {
+        return Vec::new();
+    };
+    let zalsa = db.zalsa();
+    let mut held: Vec<(String, i64)> = (tags.held_by_tag)()
+        .into_iter()
+        .map(|(tag, bytes)| {
+            let name = match tag.checked_sub(1) {
+                None => "outside queries".to_owned(),
+                Some(index) => zalsa
+                    .lookup_ingredient(crate::zalsa::IngredientIndex::new(index))
+                    .debug_name()
+                    .to_owned(),
+            };
+            (name, bytes)
+        })
+        .collect();
+    held.sort_by_key(|(_, bytes)| std::cmp::Reverse(*bytes));
+    held
+}
+
 /// The net bytes the calling thread has allocated, if the program counts them.
 pub fn allocated_net_bytes() -> Option<i64> {
     allocation_probe().map(|probe| probe())
