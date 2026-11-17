@@ -736,6 +736,36 @@ syntax, so the next granularity is a function's body. The audit that recomputes 
 functions and compares them, so that a construct the battery does not think of is caught in the
 field, is not written.
 
+## Where an edited run's time went on elicit_doc, and what removed it
+
+Measured with `CORDIAL_QUERY_STEPS=1` (which now also says how long each kind of query took on its
+own: the `execution.<query>.nanos` metrics, from Salsa's `salsa::execution` event) and the hotpath
+report, on an edit that adds a comment line to one file.
+
+| | Before | After |
+| --- | --- | --- |
+| Edited run, whole process | 26.2 s | 15.7 s |
+| Run that reuses everything (warm) | 6.5 s | 2.6 s |
+| Query time on their own, edited run | 13.8 s | 5.7 s |
+
+- **Proc macro expansions** were 6.7 s of the 13.8 s (2,930 round trips to the proc macro server
+  for calls the edit left alone). `expand_proc_macro_of` is persisted (the call is its key; its
+  result is a token tree, which already had serde): 53 executions now, 15 MB more state.
+- **Build scripts, 4.1 s.** Not rust-analyzer's cost: `cargo check` for them takes 0.1 s when it
+  is alone. The `cargo doc` that the doc warnings start ahead of the scan built in the project's
+  `target`, and Cargo locks the directory it builds in. It builds in `target/doc-warnings` now.
+- **The key of a run, 2.6 s in every state.** It read and hashed every file under the package
+  roots, 478 MB of them on elicit_doc (cordial's own rustdoc caches). The digest of a file is now
+  remembered by size and modification time (trusted once the file has stood still for two
+  seconds), and files not remembered are hashed on every thread.
+- **Writes.** The worklist, the ledger, the run cache and the report artifacts went to their
+  files a few bytes at a time; they are buffered.
+
+What is left in the 15.7 s: decoding the state 3.0 s (one serde stream), the audit's 265
+recomputed functions (about 4 s, of which inference of 446 bodies is 2.0 s and re-parsing 6,500
+macro expansions 1.0 s), saving 2.3 s (1.75 s encoding), the `+test` context's copy 1.5 s, the
+ledger write 0.76 s (an `fsync` that also waits for the state just written).
+
 ## What is not persisted, and why
 
 - **The cfg contexts and the leaf pass are persisted** (see the next section).
