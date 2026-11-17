@@ -847,6 +847,13 @@ impl AstIdMap {
             .unwrap_or_else(|| panic!("AstIdMap node mismatch with node `{ptr:?}`"))
     }
 
+    /// Whether the file has a node with this id. An id that a saved database holds can name a node
+    /// that an edit has since removed, and `get_erased` panics for it.
+    pub fn contains_erased(&self, id: ErasedFileAstId) -> bool {
+        let hash = hash_ast_id(&id);
+        self.id_map.find(hash, |&idx| self.arena[idx].1 == id).is_some()
+    }
+
     pub fn get_erased(&self, id: ErasedFileAstId) -> SyntaxNodePtr {
         let hash = hash_ast_id(&id);
         match self.id_map.find(hash, |&idx| self.arena[idx].1 == id) {

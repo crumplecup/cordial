@@ -64,7 +64,9 @@ pub(super) fn evidence_executed() -> usize {
     EVIDENCE_EXECUTED.load(std::sync::atomic::Ordering::Relaxed)
 }
 
-#[salsa::interned]
+/// A function, as the queries that are saved ask about it. Never reused for another: a saved memo
+/// holds it, and a restored process has to find it the same function.
+#[salsa::interned(persist, revisions = usize::MAX)]
 pub(super) struct FunctionKey<'db> {
     #[returns(copy)]
     function: Function,
@@ -135,13 +137,16 @@ fn collect_file_facts(
     })
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// What one function's body says on its own, without what the functions it calls say: saved with the
+/// database, so that a function whose body did not change is not read again when something that
+/// calls it is.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 struct DirectFacts {
     facts: SemanticFunction,
     source_targets: Vec<Function>,
 }
 
-#[salsa::tracked(returns(ref))]
+#[salsa::tracked(persist, returns(ref))]
 #[instrument(level = "debug", skip(db, key))]
 #[hotpath::measure]
 fn direct_facts<'db>(db: &'db dyn SemanticDatabase, key: FunctionKey<'db>) -> Option<DirectFacts> {
@@ -151,6 +156,11 @@ fn direct_facts<'db>(db: &'db dyn SemanticDatabase, key: FunctionKey<'db>) -> Op
 #[instrument(level = "debug", skip(db, function))]
 #[hotpath::measure]
 fn collect_direct(db: &RootDatabase, function: Function) -> Option<DirectFacts> {
+    // A saved memo can hold a function that an edit removed or renamed, and verifying what read it
+    // asks again: it has no facts, as one that was never there has none.
+    if !function.is_written(db) {
+        return None;
+    }
     let sema = Semantics::new(db);
     let source = sema.source(function)?;
     let label = function.name(db).as_str().to_owned();

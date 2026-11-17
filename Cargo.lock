@@ -1754,8 +1754,6 @@ dependencies = [
 [[package]]
 name = "ra_ap_hir"
 version = "0.0.358"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9464cf1121d47a72dffa58c31603b5f06139747b3d848c3b87f63a6da283abb5"
 dependencies = [
  "arrayvec",
  "either",
@@ -1774,6 +1772,7 @@ dependencies = [
  "ra_ap_tt",
  "rustc-hash 2.1.3",
  "salsa",
+ "serde",
  "serde_json",
  "smallvec",
  "tracing",

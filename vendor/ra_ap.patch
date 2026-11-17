@@ -632,6 +632,19 @@
  #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
  #[repr(u8)]
  pub enum Edition {
+--- a/ra_ap_hir-0.0.358/Cargo.toml
++++ ra_ap_hir/Cargo.toml
+@@ -69,6 +69,10 @@
+ version = "=0.0.358"
+ package = "ra_ap_intern"
+ 
++[dependencies.serde]
++version = "1"
++features = ["derive"]
++
+ [dependencies.itertools]
+ version = "0.15.0"
+ 
 --- a/ra_ap_hir_def-0.0.358/Cargo.toml
 +++ ra_ap_hir_def/Cargo.toml
 @@ -64,6 +64,7 @@
@@ -672,7 +685,7 @@
  [dependencies.tt]
 --- a/ra_ap_hir_def-0.0.358/src/builtin_derive.rs
 +++ ra_ap_hir_def/src/builtin_derive.rs
-@@ -15,7 +15,7 @@
+@@ -15,12 +15,12 @@
  
  macro_rules! declare_enum {
      ( $( $trait:ident => [ $( $method:ident ),* ] ),* $(,)? ) => {
@@ -681,6 +694,12 @@
          pub enum BuiltinDeriveImplTrait {
              $( $trait, )*
          }
+ 
+-        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
++        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+         #[allow(non_camel_case_types)]
+         pub enum BuiltinDeriveImplMethod {
+             $( $( $method, )* )*
 --- a/ra_ap_hir_def-0.0.358/src/builtin_type.rs
 +++ ra_ap_hir_def/src/builtin_type.rs
 @@ -8,7 +8,7 @@
@@ -2846,6 +2865,54 @@
 +        self.parent(cx.db).stable_hash(cx);
 +    }
 +}
+--- a/ra_ap_hir-0.0.358/src/lib.rs
++++ ra_ap_hir/src/lib.rs
+@@ -1471,13 +1471,17 @@
+     }
+ }
+ 
+-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
++#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+ enum AnyFunctionId {
+     FunctionId(FunctionId),
+     BuiltinDeriveImplMethod { method: BuiltinDeriveImplMethod, impl_: BuiltinDeriveImplId },
+ }
+ 
+-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
++/// A function is saved as what names it: the id of the function, or the impl and the method of a
++/// builtin derive that has none. The ids are saved with the database, so the next process gives
++/// the same function the same id.
++#[derive(Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
++#[serde(transparent)]
+ pub struct Function {
+     pub(crate) id: AnyFunctionId,
+ }
+@@ -1504,6 +1508,25 @@
+         }
+     }
+ 
++    /// Whether the function is still written in its file. The id of one that an edit removed can
++    /// still be held (by a memo a saved database restored), and reading its source panics.
++    pub fn is_written(self, db: &dyn HirDatabase) -> bool {
++        fn written<N: AstIdNode>(
++            db: &dyn HirDatabase,
++            id: hir_expand::AstId<N>,
++        ) -> bool {
++            id.file_id.ast_id_map(db).contains_erased(id.value.erase())
++        }
++        match self.id {
++            AnyFunctionId::FunctionId(id) => written(db, hir_def::AstIdLoc::ast_id(id.loc(db))),
++            AnyFunctionId::BuiltinDeriveImplMethod { impl_, .. } => match impl_.loc(db).adt {
++                AdtId::StructId(it) => written(db, hir_def::AstIdLoc::ast_id(it.loc(db))),
++                AdtId::EnumId(it) => written(db, hir_def::AstIdLoc::ast_id(it.loc(db))),
++                AdtId::UnionId(it) => written(db, hir_def::AstIdLoc::ast_id(it.loc(db))),
++            },
++        }
++    }
++
+     pub fn name(self, db: &dyn HirDatabase) -> Name {
+         match self.id {
+             AnyFunctionId::FunctionId(id) => FunctionSignature::of(db, id).name.clone(),
 --- a/ra_ap_hir_ty-0.0.358/src/method_resolution.rs
 +++ ra_ap_hir_ty/src/method_resolution.rs
 @@ -563,6 +563,9 @@
@@ -3789,6 +3856,20 @@
  pub struct FileAstId<N> {
      raw: ErasedFileAstId,
      _marker: PhantomData<fn() -> N>,
+@@ -845,6 +847,13 @@
+             .unwrap_or_else(|| panic!("AstIdMap node mismatch with node `{ptr:?}`"))
+     }
+ 
++    /// Whether the file has a node with this id. An id that a saved database holds can name a node
++    /// that an edit has since removed, and `get_erased` panics for it.
++    pub fn contains_erased(&self, id: ErasedFileAstId) -> bool {
++        let hash = hash_ast_id(&id);
++        self.id_map.find(hash, |&idx| self.arena[idx].1 == id).is_some()
++    }
++
+     pub fn get_erased(&self, id: ErasedFileAstId) -> SyntaxNodePtr {
+         let hash = hash_ast_id(&id);
+         match self.id_map.find(hash, |&idx| self.arena[idx].1 == id) {
 --- a/ra_ap_span-0.0.358/src/hygiene.rs
 +++ ra_ap_span/src/hygiene.rs
 @@ -35,7 +35,7 @@
