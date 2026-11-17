@@ -162,8 +162,12 @@ impl GateLedger {
             .create_new(true)
             .open(&temporary)?;
         let result = (|| -> CordialResult<()> {
-            serde_json::to_writer_pretty(&mut file, self)?;
-            file.write_all(b"\n")?;
+            // Buffered: the writer makes a call for every token, and each would be a system call.
+            let mut writer = std::io::BufWriter::new(&mut file);
+            serde_json::to_writer_pretty(&mut writer, self)?;
+            writer.write_all(b"\n")?;
+            writer.flush()?;
+            drop(writer);
             file.sync_all()?;
             fs::rename(&temporary, &path)?;
             Ok(())

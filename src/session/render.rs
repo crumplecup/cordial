@@ -175,8 +175,10 @@ pub(super) fn render_and_write(
                 if let Some(parent) = path.parent() {
                     std::fs::create_dir_all(parent)?;
                 }
-                let mut file = std::fs::File::create(&path)?;
-                artifact.write_to(&mut file)
+                let mut file = std::io::BufWriter::new(std::fs::File::create(&path)?);
+                artifact.write_to(&mut file)?;
+                std::io::Write::flush(&mut file)?;
+                Ok(())
             })?;
             writes.inc(1);
         }

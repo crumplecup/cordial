@@ -226,10 +226,13 @@ fn partial_path(path: &Path) -> PathBuf {
 #[hotpath::measure]
 fn write_json<T: Serialize>(path: &Path, value: &T) -> CordialResult<()> {
     let partial = partial_path(path);
-    let mut encoder =
-        zstd::stream::write::Encoder::new(std::fs::File::create(&partial)?, ZSTD_LEVEL)?;
-    serde_json::to_writer(&mut encoder, value)?;
-    encoder.finish()?;
+    let encoder = zstd::stream::write::Encoder::new(std::fs::File::create(&partial)?, ZSTD_LEVEL)?;
+    // The JSON writer emits many small writes; batch them for the encoder.
+    let mut out = std::io::BufWriter::with_capacity(1 << 16, encoder);
+    serde_json::to_writer(&mut out, value)?;
+    out.into_inner()
+        .map_err(std::io::IntoInnerError::into_error)?
+        .finish()?;
     std::fs::rename(&partial, path)?;
     Ok(())
 }
