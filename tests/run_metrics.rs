@@ -107,3 +107,48 @@ fn a_run_ended_from_outside_its_flow_still_says_what_it_had_done() {
     );
     assert!(metrics.values().contains_key("run.queries_executed"));
 }
+
+/// With the steps asked for, the queries Salsa executes are counted by the step of cordial that
+/// ran them and by the query, and the most executed are kept in the metrics.
+#[test]
+fn queries_are_counted_by_the_step_that_asked() {
+    let subscriber = tracing_subscriber::registry()
+        .with(MetricsLayer.with_filter(cordial::metrics_filter_with(true)));
+    tracing::subscriber::with_default(subscriber, || {
+        let step = tracing::debug_span!(target: "cordial::specimen", "capability");
+        let _inside = step.enter();
+        for _ in 0..3 {
+            tracing::info!(target: "salsa::function::execute", "ImplSignature::of_(Id(1))");
+        }
+        tracing::info!(target: "salsa::function::execute", "AttrFlags::query_(Id(2))");
+    });
+    tracing::info!(target: "salsa::function::execute", "never counted: nothing asked for it");
+    let root = tempfile::tempdir().expect("a directory");
+    let store = StoreLayout::from_root(root.path().to_path_buf(), "specimen".to_owned());
+    cordial::write_run_metrics(&store).expect("the metrics are written");
+    let metrics = cordial::read_run_metrics(&store);
+    let value = |name: &str| metrics.values().get(name).copied();
+    assert_eq!(value("steps.capability > ImplSignature::of_"), Some(3));
+    assert_eq!(value("steps.capability > AttrFlags::query_"), Some(1));
+}
+
+/// Without the steps asked for, the queries Salsa executes are not looked at: they would cost an
+/// event each.
+#[test]
+fn queries_are_not_counted_unless_asked_for() {
+    let subscriber = tracing_subscriber::registry()
+        .with(MetricsLayer.with_filter(cordial::metrics_filter_with(false)));
+    tracing::subscriber::with_default(subscriber, || {
+        tracing::info!(target: "salsa::function::execute", "Unwatched::query_(Id(9))");
+    });
+    let root = tempfile::tempdir().expect("a directory");
+    let store = StoreLayout::from_root(root.path().to_path_buf(), "specimen".to_owned());
+    cordial::write_run_metrics(&store).expect("the metrics are written");
+    let metrics = cordial::read_run_metrics(&store);
+    assert!(
+        metrics
+            .values()
+            .keys()
+            .all(|name| !name.contains("Unwatched"))
+    );
+}

@@ -26,6 +26,13 @@ use crate::{CordialResult, StoreLayout};
 /// the saved state a second time.
 pub const STATE_SIZES_VARIABLE: &str = "CORDIAL_STATE_SIZES";
 
+/// The environment variable that asks a run for the queries Salsa executed, by the step of cordial
+/// that asked: it turns on cordial's own spans, which costs what a profile does.
+pub const QUERY_STEPS_VARIABLE: &str = "CORDIAL_QUERY_STEPS";
+
+/// The most step and query pairs a run keeps in its metrics, the most executed first.
+const STEPS_KEPT: usize = 400;
+
 /// Where a run's metrics are written, in its store.
 const FILE: &str = "metrics.json";
 
@@ -50,6 +57,10 @@ pub struct RunMetrics {
 }
 
 static CURRENT: LazyLock<Mutex<RunMetrics>> = LazyLock::new(|| Mutex::new(RunMetrics::default()));
+
+/// Queries executed, by the step of cordial that asked and the query: `step > query`.
+static STEPS: LazyLock<Mutex<BTreeMap<String, u64>>> =
+    LazyLock::new(|| Mutex::new(BTreeMap::new()));
 
 /// Where the run's metrics go, for a run that has to be ended where it is.
 static KEPT: std::sync::OnceLock<std::path::PathBuf> = std::sync::OnceLock::new();
@@ -88,6 +99,13 @@ fn snapshot() -> RunMetrics {
         "run.queries_executed".to_owned(),
         crate::LiveStatus::global().executed(),
     );
+    if let Ok(steps) = STEPS.lock() {
+        let mut most: Vec<_> = steps.iter().collect();
+        most.sort_by_key(|(name, count)| (std::cmp::Reverse(**count), (*name).clone()));
+        for (name, count) in most.into_iter().take(STEPS_KEPT) {
+            metrics.values.insert(format!("steps.{name}"), *count);
+        }
+    }
     if let Some(memory) = crate::process_memory::sample() {
         metrics.values.insert(
             "run.peak_memory.bytes".to_owned(),
@@ -100,14 +118,28 @@ fn snapshot() -> RunMetrics {
 /// The events [`MetricsLayer`] reads, and the level it reads them at.
 #[instrument(level = "trace")]
 pub fn metrics_filter() -> Targets {
-    Targets::new()
+    metrics_filter_with(std::env::var_os(QUERY_STEPS_VARIABLE).is_some())
+}
+
+/// [`metrics_filter`], with or without the queries Salsa executed by the step that asked.
+#[instrument(level = "trace")]
+pub fn metrics_filter_with(steps: bool) -> Targets {
+    let targets = Targets::new()
         .with_target("cordial::phase_queries", tracing::Level::INFO)
         .with_target("cordial::audit", tracing::Level::INFO)
         .with_target("cordial::semantic::fallback", tracing::Level::INFO)
         .with_target("cordial::cache", tracing::Level::DEBUG)
         .with_target("salsa::persistence", tracing::Level::DEBUG)
         .with_target("salsa::database", tracing::Level::DEBUG)
-        .with_target("salsa::state_size", tracing::Level::DEBUG)
+        .with_target("salsa::state_size", tracing::Level::DEBUG);
+    if steps {
+        // Salsa's execution events, and cordial's spans to say which step ran them.
+        targets
+            .with_target("salsa::function::execute", tracing::Level::INFO)
+            .with_target("cordial", tracing::Level::DEBUG)
+    } else {
+        targets
+    }
 }
 
 /// Adds up the numeric fields of the events [`metrics_filter`] lets through.
@@ -177,8 +209,15 @@ fn prefix(target: &str) -> String {
         .replace("::", ".")
 }
 
-impl<S: tracing::Subscriber> Layer<S> for MetricsLayer {
-    fn on_event(&self, event: &tracing::Event<'_>, _: Context<'_, S>) {
+impl<S> Layer<S> for MetricsLayer
+where
+    S: tracing::Subscriber + for<'lookup> tracing_subscriber::registry::LookupSpan<'lookup>,
+{
+    fn on_event(&self, event: &tracing::Event<'_>, context: Context<'_, S>) {
+        if event.metadata().target() == "salsa::function::execute" {
+            count_step(event, &context);
+            return;
+        }
         let mut fields = Fields::default();
         event.record(&mut fields);
         let mut name = prefix(event.metadata().target());
@@ -198,6 +237,41 @@ impl<S: tracing::Subscriber> Layer<S> for MetricsLayer {
                 current.notes.insert(format!("{name}.{field}"), text);
             }
         }
+    }
+}
+
+/// Count a query Salsa executed against the innermost span of cordial's own that it runs under.
+fn count_step<S>(event: &tracing::Event<'_>, context: &Context<'_, S>)
+where
+    S: tracing::Subscriber + for<'lookup> tracing_subscriber::registry::LookupSpan<'lookup>,
+{
+    struct Message(String);
+    impl tracing::field::Visit for Message {
+        fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
+            if field.name() == "message" {
+                self.0 = format!("{value:?}");
+            }
+        }
+    }
+    let mut message = Message(String::new());
+    event.record(&mut message);
+    let query = message
+        .0
+        .split('(')
+        .next()
+        .unwrap_or_default()
+        .trim_matches('"');
+    let step = context
+        .event_scope(event)
+        .and_then(|scope| {
+            scope
+                .into_iter()
+                .find(|span| span.metadata().target().starts_with("cordial"))
+                .map(|span| span.name())
+        })
+        .unwrap_or("outside cordial");
+    if let Ok(mut steps) = STEPS.lock() {
+        *steps.entry(format!("{step} > {query}")).or_default() += 1;
     }
 }
 
