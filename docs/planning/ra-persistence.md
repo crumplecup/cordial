@@ -697,7 +697,37 @@ silently and differently from run to run, so two runs did not do the same work a
 compared. They are removed. The run's `memory_limit` is the only limit, and it ends the run and
 says where. `SemanticContextPlan::complete` stays, true when planning reached its fixed point.
 
-**Still to do.** The definition maps of the dependency crates (S3), as above. Before it: persist it (rust-analyzer's impl indexes and what
+*S3 built (commits d7eabad, 68e36fe).* The definition maps (`crate_local_def_map`, `block_def_map`,
+`DefMapPair`) are saved, with serde through the whole map (`hir_def`, `cfg`, `hir_expand`); a saved
+query that gives the value it had does not change, so what read it is valid with or without
+`reuse_across_edits` (which now adds the audit and the fingerprints of what is not saved). Then
+`direct_facts`, what one function's body says on its own, is saved: `ra_ap_hir` is vendored so
+that `Function` serializes, and a function an edit removed is asked `is_written` before its source
+is read, because a saved memo holds ids that are gone (the battery found it: a rename, a move and
+two impl moves panicked in `AstIdMap::get_erased`).
+
+*Measured.* Specimen, one body edited: 126,158 queries from nothing, **330** restored (it was
+125,721 before the dependency layer was saved). elicit_doc (34,600 lines, `cordial perf workflow`
+with `--repeat 1`; a comment added to `src/impl_coverage.rs`):
+
+| | cold | warm | edited |
+| --- | --- | --- | --- |
+| before S3 | 559,260 queries | 0 | 276,675 queries, 975 functions recomputed |
+| generated definitions fingerprinted | | | 264,242, 96 recomputed |
+| definition maps saved | 559,328 | 0 | 189,584, 96 recomputed |
+| `direct_facts` saved | 559,328, 66 s | 7.5 s | **51,704, 30 recomputed, 35 s** |
+
+The audit recomputed 265 of the 2,113 reused functions and none differed. The state is 233 MB.
+
+*What the edited run costs now* (from its events, not Salsa work): decoding the state 2.8 s,
+verifying about 18,400 restored memos 6.6 s, building the `+test` context's copy of the crates
+4.8 s, verifying about 48,000 more in that context 1.4 s, saving 1.9 s. Queries are 52,000 of
+559,000; the rest is restoring and verifying a state.
+
+**Still to do.** The cost of restoring: the decode and the verification of the memos (set checks
+and edges), and the copy a context makes of the crates; cordial itself has not been run since the
+caps were removed and the definition maps saved; memory (the state, and the whole dependency layer
+in memory while it is used). Before it: persist it (rust-analyzer's impl indexes and what
 they read, for crates that are not workspace members, whose inputs do not change between runs; the
 stable ids of `hir_expand::stable` are the means), or stop asking the trait solver for facts that a
 saved answer holds. Then: measure the cordial run with the impl fingerprints; cordial's `resolve` should find
