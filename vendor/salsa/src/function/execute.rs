@@ -335,13 +335,38 @@ where
 
         // Query was not previously executed, or value is potentially
         // stale, or value is absent. Let's execute!
+        let timed = ::tracing::enabled!(target: "salsa::execution", ::tracing::Level::INFO);
+        if !timed {
+            let new_value = C::execute(
+                db,
+                C::id_to_input(zalsa, active_query.database_key_index.key_index()),
+            );
+            return (new_value, active_query);
+        }
+        // What this query took on its own: the time it ran less the time of the queries it
+        // started, which are told to it through the thread's running total.
+        let outer = CHILDREN_NANOS.replace(0);
+        let started = std::time::Instant::now();
         let new_value = C::execute(
             db,
             C::id_to_input(zalsa, active_query.database_key_index.key_index()),
         );
+        let total = u64::try_from(started.elapsed().as_nanos()).unwrap_or(u64::MAX);
+        let children = CHILDREN_NANOS.replace(outer.saturating_add(total));
+        ::tracing::info!(
+            target: "salsa::execution",
+            ingredient = C::DEBUG_NAME,
+            nanos = total.saturating_sub(children),
+            "a query executed"
+        );
 
         (new_value, active_query)
     }
+}
+
+crate::sync::thread_local! {
+    /// The time the queries started by the one now running have taken, in nanoseconds.
+    static CHILDREN_NANOS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
 }
 
 struct PreviousIteration {

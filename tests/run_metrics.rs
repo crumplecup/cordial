@@ -161,3 +161,71 @@ fn queries_are_not_counted_unless_asked_for() {
             .all(|name| !name.contains("Unwatched"))
     );
 }
+
+mod execution_time {
+    use cordial::{MetricsLayer, StoreLayout};
+    use salsa::{Database, Storage};
+    use tracing_subscriber::Layer;
+    use tracing_subscriber::layer::SubscriberExt;
+
+    #[salsa::input]
+    struct Source {
+        #[returns(copy)]
+        value: u64,
+    }
+
+    #[salsa::db]
+    #[derive(Clone, Default)]
+    struct Db {
+        storage: Storage<Self>,
+    }
+
+    #[salsa::db]
+    impl Database for Db {}
+
+    /// Takes a while on its own.
+    #[salsa::tracked(returns(copy))]
+    fn the_inner_one(db: &dyn Database, source: Source) -> u64 {
+        std::thread::sleep(std::time::Duration::from_millis(60));
+        source.value(db)
+    }
+
+    /// Takes little on its own and starts the inner one.
+    #[salsa::tracked(returns(copy))]
+    fn the_outer_one(db: &dyn Database, source: Source) -> u64 {
+        the_inner_one(db, source) + 1
+    }
+
+    /// With the steps asked for, each query executed says how long it took on its own: what it
+    /// started is counted for those, not again for it.
+    #[test]
+    fn a_query_executed_says_what_it_took_on_its_own() {
+        let subscriber = tracing_subscriber::registry()
+            .with(MetricsLayer.with_filter(cordial::metrics_filter_with(true)));
+        tracing::subscriber::with_default(subscriber, || {
+            let db = Db::default();
+            let source = Source::new(&db, 7);
+            assert_eq!(the_outer_one(&db, source), 8);
+        });
+        let root = tempfile::tempdir().expect("a directory");
+        let store = StoreLayout::from_root(root.path().to_path_buf(), "specimen".to_owned());
+        cordial::write_run_metrics(&store).expect("the metrics are written");
+        let metrics = cordial::read_run_metrics(&store);
+        let value = |name: &str| {
+            metrics
+                .values()
+                .iter()
+                .find(|(key, _)| {
+                    key.starts_with("execution.") && key.contains(name) && key.ends_with(".nanos")
+                })
+                .map(|(_, value)| *value)
+        };
+        let inner = value("the_inner_one").expect("the inner query is timed");
+        let outer = value("the_outer_one").expect("the outer query is timed");
+        assert!(inner >= 60_000_000, "{inner} ns for 60 ms of sleeping");
+        assert!(
+            outer < inner / 2,
+            "outer {outer} ns counted the inner {inner} ns"
+        );
+    }
+}

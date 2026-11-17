@@ -139,6 +139,7 @@ pub fn metrics_filter_with(steps: bool) -> Targets {
         // Salsa's execution events, and cordial's spans to say which step ran them.
         targets
             .with_target("salsa::function::execute", tracing::Level::INFO)
+            .with_target("salsa::execution", tracing::Level::INFO)
             .with_target("cordial", tracing::Level::DEBUG)
     } else {
         targets
