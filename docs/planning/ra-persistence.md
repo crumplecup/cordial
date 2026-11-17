@@ -639,6 +639,29 @@ for crates that are not workspace members: the 75,000 under `capability` should 
 remainder matters on cordial: file-level queries or definition maps. The test's bound is set from
 what S2 measures, and not before.
 
+*S1 attempted, and what it found (nothing committed).* Making the ids persistable is as bounded as
+the spike said: `span` (hygiene contexts, `Span`, ast ids; `text-size` with its `serde` feature),
+`tt` (`TopSubtree` is a byte buffer, compressed span parts and symbols: it derives), `mbe`
+(`ExpandErrorKind`, and `MacroCallStyles` by hand from its bits), `hir_expand` (the macro call
+chain, builtin expanders, `InFile`, `HirFileId`) and `base_db` (`EditionedFileId`, and the ids from
+`impl_intern_key!`) all compiled with serde and `persist` on their interned structs. What stopped
+it is `hir_def::ModuleIdLt`: it is a tracked struct, created by `crate_local_def_map`, and every id
+(`ImplId`, `TraitId`, ...) holds one in its loc. A tracked struct's id is found, when its creating
+query runs, in the identity map of that query's earlier memo (`zalsa_local.tracked_struct_id`);
+with no earlier memo a new slot is allocated. The definition map is not persisted, so in a restored
+process it runs again with no earlier memo, and numbers its modules afresh. An `ImplId` in a
+restored impl index would then name a module that no longer has that number, and the impl re-derived
+from the new definition map would be a different id for the same impl. So persisting the three
+indexes alone is not sound, and S1 and S2 as staged cannot stand.
+
+Two ways to make the module ids reproducible, to be chosen: (A) persist the definition maps of the
+dependency crates, whose tracked structs and identity maps Salsa already keeps with a persisted
+creating query (a `DefMap` is about forty types, the same closure `nameres::stable` takes apart,
+and removes the remaining quarter of the cost too); or (B) keep the identity maps of the creating
+queries that are not persisted, in Salsa, so that when `crate_local_def_map` runs again it finds
+each module's earlier id by its identity (crate, block, parent, name), which is what its earlier
+memo would have given it. (B) is smaller and leaves the definition-map first touch to recompute.
+
 **Still to do.** The dependency layer, as above. Before it: persist it (rust-analyzer's impl indexes and what
 they read, for crates that are not workspace members, whose inputs do not change between runs; the
 stable ids of `hir_expand::stable` are the means), or stop asking the trait solver for facts that a
