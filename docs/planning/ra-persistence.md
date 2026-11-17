@@ -766,6 +766,33 @@ recomputed functions (about 4 s, of which inference of 446 bodies is 2.0 s and r
 macro expansions 1.0 s), saving 2.3 s (1.75 s encoding), the `+test` context's copy 1.5 s, the
 ledger write 0.76 s (an `fsync` that also waits for the state just written).
 
+## Where the memory is, measured on elicit_doc
+
+Measured by tagging every allocation with the query executing when it was made (`alloc_metrics`
+builds; `cordial::heap` events; see `src/counting_allocator.rs` and `src/peak_heap.rs`), so what is
+held can be read by query at any moment, and where the program held the most is kept with the
+stage it was in.
+
+- **The most held, 2.06 GB at 36 s, in the ordinary projection**: the queries' memos hold
+  macro-expansion trees 385 MB, file trees 345 MB, `file_items` 253 MB, definition maps 68 MB,
+  bodies 62 MB, inference 49 MB; 555 MB is held by no query (texts, interners, the loader's own
+  structures). An edited run holds 0.6 to 1.0 GB outside queries: the decoded state, which is about
+  four times the size it has on disk.
+- **The trees are first-time memos, not re-executions**: 2% to 3% of executions replace an earlier
+  memo and a run has 6 revisions, all of loading the workspace. 3,026 files and 55,837 macro calls
+  are distinct (dependencies and the sysroot among them).
+- **Evicting between phases gives back little while the trees are in use.** Rust-analyzer's LRU
+  keeps what it is marked with (128 files, 512 expansions, by count and not by bytes) and drops
+  the rest only when Salsa is asked to with the database held exclusively, which a run never did.
+  Asked at the stages of a projection (`CORDIAL_EVICT_LRU`), it gave back 0.1 MB of 728 MB of trees
+  after priming; the same memory is released later, as the projection steps finish, and how much an
+  eviction frees varies with the load of the machine. Capping the capacities
+  (`CORDIAL_LRU_CAP`) changed nothing. Something holds the trees after their memos are dropped, and
+  which is not known yet. It is not a `Semantics` cache (none is alive between steps), not a query
+  value (cordial's are plain data), and not Salsa's deferred free list (the eviction clears it).
+- **Not yet tried**: a byte bound instead of a count; asking who holds a tree (a count of the
+  strong references of each tree at eviction); thread-local or deferred state of the worker threads.
+
 ## What is not persisted, and why
 
 - **The cfg contexts and the leaf pass are persisted** (see the next section).
