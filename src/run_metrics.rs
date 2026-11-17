@@ -30,6 +30,9 @@ pub const STATE_SIZES_VARIABLE: &str = "CORDIAL_STATE_SIZES";
 /// that asked: it turns on cordial's own spans, which costs what a profile does.
 pub const QUERY_STEPS_VARIABLE: &str = "CORDIAL_QUERY_STEPS";
 
+/// How many of the steps of cordial that ran a query are kept with it, from the innermost out.
+const CHAIN: usize = 4;
+
 /// The most step and query pairs a run keeps in its metrics, the most executed first.
 const STEPS_KEPT: usize = 400;
 
@@ -261,15 +264,24 @@ where
         .next()
         .unwrap_or_default()
         .trim_matches('"');
-    let step = context
+    // The steps of cordial that ran it, the innermost first and the outermost last: the innermost
+    // is often a helper (one that walks a syntax tree), and the one that asked is further out.
+    let chain: Vec<&str> = context
         .event_scope(event)
-        .and_then(|scope| {
+        .map(|scope| {
             scope
                 .into_iter()
-                .find(|span| span.metadata().target().starts_with("cordial"))
+                .filter(|span| span.metadata().target().starts_with("cordial"))
                 .map(|span| span.name())
+                .take(CHAIN)
+                .collect()
         })
-        .unwrap_or("outside cordial");
+        .unwrap_or_default();
+    let step = if chain.is_empty() {
+        "outside cordial".to_owned()
+    } else {
+        chain.join(" < ")
+    };
     if let Ok(mut steps) = STEPS.lock() {
         *steps.entry(format!("{step} > {query}")).or_default() += 1;
     }

@@ -117,6 +117,8 @@ fn queries_are_counted_by_the_step_that_asked() {
     tracing::subscriber::with_default(subscriber, || {
         let step = tracing::debug_span!(target: "cordial::specimen", "capability");
         let _inside = step.enter();
+        let helper = tracing::debug_span!(target: "cordial::specimen", "node");
+        let _helping = helper.enter();
         for _ in 0..3 {
             tracing::info!(target: "salsa::function::execute", "ImplSignature::of_(Id(1))");
         }
@@ -128,8 +130,15 @@ fn queries_are_counted_by_the_step_that_asked() {
     cordial::write_run_metrics(&store).expect("the metrics are written");
     let metrics = cordial::read_run_metrics(&store);
     let value = |name: &str| metrics.values().get(name).copied();
-    assert_eq!(value("steps.capability > ImplSignature::of_"), Some(3));
-    assert_eq!(value("steps.capability > AttrFlags::query_"), Some(1));
+    // The innermost step first, then the one that asked.
+    assert_eq!(
+        value("steps.node < capability > ImplSignature::of_"),
+        Some(3)
+    );
+    assert_eq!(
+        value("steps.node < capability > AttrFlags::query_"),
+        Some(1)
+    );
 }
 
 /// Without the steps asked for, the queries Salsa executes are not looked at: they would cost an
