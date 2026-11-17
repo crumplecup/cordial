@@ -543,8 +543,20 @@ it stays off until a run on real code has been clean.
 function's body computes the evidence of the functions of its file and the warm-up's query, 6 of 31;
 without it, all 31.
 
-**Still to do.** Other crate-wide queries that every function reads (the impl indexes) need their
-own fingerprints; the walk-width metric names them. Functions of one file still all read the file's
+**First run on cordial (`reuse_across_edits = true`, a one-line edit to one function's body).** The
+audit computed again 260 of the 5,975 functions the run reused: none differed. No definition map was
+volatile (118 were, before a macro call's hygiene context was given a meaning that survives the
+process), and nothing fell back to rust-analyzer. The reuse was partial: 14,748 of 20,723 functions
+were computed, so 29% were reused. The flatten report's `breadth` and `reads_themselves` (and, in a
+test, `salsa::flatten_breadth`) say why: the kinds of query that read many leaf edges themselves
+are `TraitImpls::for_crate_and_deps_` (one query reading every file's impls, so every function that
+resolves a trait or a method depends on every file), cordial's own `resolve` (which finds a file by
+scanning the source roots, so every function depends on all of them), and `crate_local_def_map`
+(the one cut). A specimen of 6 files with an inherent method and a trait impl each, and functions
+that call both, reproduces it: after an edit to one body, 39 of 42 functions were computed.
+
+**Still to do.** The impl index needs a fingerprint of its own (it lives in `ra_ap_hir_ty`, which
+is not vendored yet); cordial's `resolve` should find a file without reading every source root; the walk-width metric names them. Functions of one file still all read the file's
 syntax, so the next granularity is a function's body. The audit that recomputes a sample of reused
 functions and compares them, so that a construct the battery does not think of is caught in the
 field, is not written.

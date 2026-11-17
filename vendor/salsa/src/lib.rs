@@ -264,7 +264,8 @@ mod durability;
 mod event;
 mod flatten;
 pub use flatten::{
-    deep_verifications, edges_expanded, persisted_executions, set_verifications,
+    deep_verifications, edges_expanded, flatten_breadth, persisted_executions,
+    set_verifications,
 };
 mod function;
 mod hash;

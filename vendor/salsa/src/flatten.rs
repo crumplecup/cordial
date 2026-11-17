@@ -174,9 +174,14 @@ pub struct EdgeFlattener {
     /// The ingredient whose memos are being flattened, which a fingerprint's own dependencies do
     /// not stop short of the query it fingerprints for.
     pub(crate) owner: Option<crate::IngredientIndex>,
-    /// For each query the walk passed through, the most edges any of its sets reached: which
-    /// queries are the wide ones, that every memo reading them depends on a great deal through.
-    widest: FxHashMap<&'static str, u32>,
+    /// For each kind of query the walk passed through: how many were walked, the edges their sets
+    /// reached added up, and the most any one reached. Which kinds make the memos that read them
+    /// depend on a great deal, and whether it is all of them or one.
+    breadth: FxHashMap<&'static str, (u32, u64, u32)>,
+    /// For each kind of query the walk passed through: how many were walked, the leaf edges they
+    /// read themselves (not through a query below them) added up, and the most any one read. A kind
+    /// that reads a great many itself is one that goes through every file of a crate.
+    direct: FxHashMap<&'static str, (u32, u64, u32)>,
     /// Queries walked whose group is still open, with the order they were first reached in.
     open: FxHashMap<QueryEdge, usize>,
     /// The open queries, in the order they were first reached.
@@ -216,7 +221,8 @@ impl Default for EdgeFlattener {
             met_no_memo: false,
             carried: Closure::nothing(),
             owner: None,
-            widest: FxHashMap::default(),
+            breadth: FxHashMap::default(),
+            direct: FxHashMap::default(),
             open: FxHashMap::default(),
             stack: Vec::new(),
             next: 0,
@@ -312,13 +318,32 @@ impl EdgeFlattener {
         })
     }
 
-    /// The queries whose sets reached the most edges, widest first, as `name=edges`.
-    pub(crate) fn widest(&self, count: usize) -> String {
-        let mut all: Vec<_> = self.widest.iter().collect();
-        all.sort_by_key(|(name, size)| (std::cmp::Reverse(**size), **name));
+    /// The kinds of query that read the most leaf edges themselves, most first, as `name=walked
+    /// x average (most)`: a kind that reads many itself goes through every file, however few the
+    /// kinds below it read.
+    pub(crate) fn direct(&self, count: usize) -> String {
+        let mut all: Vec<_> = self.direct.iter().collect();
+        all.sort_by_key(|(name, (_, total, most))| (std::cmp::Reverse(*most), std::cmp::Reverse(*total), **name));
         all.into_iter()
             .take(count)
-            .map(|(name, size)| format!("{name}={size}"))
+            .map(|(name, (walked, total, most))| {
+                format!("{name}={walked}x{} ({most})", total / u64::from(*walked).max(1))
+            })
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+
+    /// The kinds of query whose sets reached the most edges between them, as `name=walked x
+    /// average (most)`: a kind that is wide for all of its queries is what every memo reading one
+    /// depends on a great deal through.
+    pub(crate) fn breadth(&self, count: usize) -> String {
+        let mut all: Vec<_> = self.breadth.iter().collect();
+        all.sort_by_key(|(name, (_, total, _))| (std::cmp::Reverse(*total), **name));
+        all.into_iter()
+            .take(count)
+            .map(|(name, (walked, total, most))| {
+                format!("{name}={walked}x{} ({most})", total / u64::from(*walked).max(1))
+            })
             .collect::<Vec<_>>()
             .join(" ")
     }
@@ -417,6 +442,7 @@ pub(crate) unsafe fn leaves_of(
     let outer = std::mem::replace(&mut flattener.lowlink, usize::MAX);
 
     let mut found = Builder::default();
+    let mut direct = 0u32;
     let mut closure = memo.header().closure();
     for dependency_edge in memo.header().origin().edges() {
         if dependency_edge.is_set() {
@@ -424,12 +450,14 @@ pub(crate) unsafe fn leaves_of(
             for member in shared_set(dependency_edge.set_number()).edges() {
                 let number = flattener.number(member);
                 found.set(number);
+                direct += 1;
             }
             continue;
         }
         if dependency_edge.is_watermark() {
             let number = flattener.number(dependency_edge);
             found.set(number);
+            direct += 1;
             continue;
         }
         let dependency = zalsa.lookup_ingredient(dependency_edge.key().ingredient_index());
@@ -440,6 +468,7 @@ pub(crate) unsafe fn leaves_of(
                 // it (its own dependencies are covered by its own memo).
                 let number = flattener.number(dependency_edge);
                 found.set(number);
+                direct += 1;
             } else if let Some((set, below)) =
                 unsafe { leaves_of(zalsa, dependency_edge, flattener) }
             {
@@ -462,6 +491,7 @@ pub(crate) unsafe fn leaves_of(
         for leaf in added.drain(..) {
             let number = flattener.number(leaf);
             found.set(number);
+            direct += 1;
         }
         flattener.scratch = added;
         closure.merge(std::mem::replace(&mut flattener.carried, Closure::nothing()));
@@ -470,8 +500,14 @@ pub(crate) unsafe fn leaves_of(
     let result = flattener.intern(found);
     {
         let size: u32 = result.0.iter().map(|word| word.count_ones()).sum();
-        let widest = flattener.widest.entry(ingredient.debug_name()).or_default();
-        *widest = (*widest).max(size);
+        let (walked, total, most) = flattener.breadth.entry(ingredient.debug_name()).or_default();
+        *walked += 1;
+        *total += u64::from(size);
+        *most = (*most).max(size);
+        let (walked, total, most) = flattener.direct.entry(ingredient.debug_name()).or_default();
+        *walked += 1;
+        *total += u64::from(direct);
+        *most = (*most).max(direct);
     }
     if flattener.lowlink >= order {
         // The first query of its group: everything the group reaches has been found, and
@@ -603,6 +639,27 @@ struct SetAnswers {
 }
 
 static SET_ANSWERS: std::sync::Mutex<Option<SetAnswers>> = std::sync::Mutex::new(None);
+
+static LAST_BREADTH: std::sync::Mutex<Vec<(&'static str, String)>> = std::sync::Mutex::new(Vec::new());
+
+/// The kinds of query whose sets reached the most edges when `ingredient`'s memos were last
+/// flattened for a save, as the flatten report says them (`name=walked x average (most)`): which
+/// kinds of query make what reads them depend on a great deal.
+pub fn flatten_breadth(ingredient: &str) -> Option<String> {
+    LAST_BREADTH
+        .lock()
+        .ok()?
+        .iter()
+        .find(|(name, _)| *name == ingredient)
+        .map(|(_, breadth)| breadth.clone())
+}
+
+pub(crate) fn note_breadth(ingredient: &'static str, breadth: String) {
+    if let Ok(mut all) = LAST_BREADTH.lock() {
+        all.retain(|(name, _)| *name != ingredient);
+        all.push((ingredient, breadth));
+    }
+}
 
 static SET_CHECKS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 static SET_COMPUTED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);

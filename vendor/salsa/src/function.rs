@@ -998,6 +998,7 @@ mod persistence {
 
             if count > 0 {
                 let (stats, elapsed) = flattener.report();
+                crate::flatten::note_breadth(C::DEBUG_NAME, flattener.direct(12));
                 ::tracing::info!(
                     target: "salsa::persistence",
                     ingredient = C::DEBUG_NAME,
@@ -1009,7 +1010,8 @@ mod persistence {
                     walked = stats.walked,
                     reused = stats.reused,
                     incomplete = stats.incomplete,
-                    widest = flattener.widest(6),
+                    breadth = flattener.breadth(8),
+                    reads_themselves = flattener.direct(8),
                     kinds = ?by_kind,
                     elapsed = ?elapsed,
                     "flattened the dependencies of the persisted memos"

@@ -309,7 +309,8 @@ fn run(root: &Path, saved: &SavedState, reuse: Reuse) -> Result<(Said, usize)> {
     let audit = AuditEvents::default();
     let subscriber = tracing_subscriber::registry()
         .with(executions.clone())
-        .with(audit.clone());
+        .with(audit.clone())
+        .with(cordial::tracing_fmt_layer());
     let _subscriber = tracing::subscriber::set_default(subscriber);
     let options = SemanticCargoOptions::default()
         .with_cfg_planning(CfgPlanning::Explicit)
