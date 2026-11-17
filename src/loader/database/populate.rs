@@ -180,7 +180,13 @@ impl Projection {
                 serde_json::to_value(flow)?,
             )?;
         }
-        for (id, node) in &self.definitions {
+        // Each node set here is indexed again, so the order here is the order of the graph's
+        // indexes. It is the order the nodes were made in, which is the same in every run: a
+        // map's order is its own, and an item's id is the order it was interned in, which is
+        // not the same in a run restored from the last one as in one from nothing.
+        let mut definitions: Vec<_> = self.definitions.iter().collect();
+        definitions.sort_by_key(|(_, node)| **node);
+        for (id, node) in definitions {
             locator.record_trait_implementation(graph, *id, *node)?;
         }
         // A call to a function with no node here may land in another crate of
