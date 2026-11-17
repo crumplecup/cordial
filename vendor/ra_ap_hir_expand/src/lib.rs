@@ -736,44 +736,51 @@ impl MacroCallId {
     /// proc macros, since they are not deterministic in general, and
     /// non-determinism breaks salsa in a very, very, very bad way.
     /// @edwin0cheng heroically debugged this once! See #4315 for details
-    #[salsa::tracked(returns(ref))]
-    fn expand_proc_macro(self, db: &dyn SourceDatabase) -> ExpandResult<tt::TopSubtree> {
-        let loc = self.loc(db);
-        let (macro_arg, undo_info, span) = self.macro_arg_considering_derives(db, &loc.kind);
-
-        let (ast, expander) = match loc.def.kind {
-            MacroDefKind::ProcMacro(ast, expander, _) => (ast, expander),
-            _ => unreachable!(),
-        };
-
-        let attr_arg = match &loc.kind {
-            MacroCallKind::Attr { attr_args: Some(attr_args), .. } => Some(&**attr_args),
-            _ => None,
-        };
-
-        let ExpandResult { value: mut tt, err } = {
-            let span = proc_macro_span(db, ast);
-            expander.expand(
-                db,
-                loc.def.krate,
-                loc.krate,
-                macro_arg,
-                attr_arg,
-                span_with_def_site_ctxt(db, span, self.into(), loc.def.edition),
-                span_with_call_site_ctxt(db, span, self.into(), loc.def.edition),
-                span_with_mixed_site_ctxt(db, span, self.into(), loc.def.edition),
-            )
-        };
-
-        // Set a hard limit for the expanded tt
-        if let Err(value) = check_tt_count(&tt) {
-            return value.map(|()| tt::TopSubtree::empty(tt::DelimSpan::from_single(*span)));
-        }
-
-        fixup::reverse_fixups(&mut tt, undo_info);
-
-        ExpandResult { value: tt, err }
+    fn expand_proc_macro(self, db: &dyn SourceDatabase) -> &ExpandResult<tt::TopSubtree> {
+        expand_proc_macro_of(db, self)
     }
+}
+
+/// What a proc macro call expands to. Saved with the database: an expansion is a round trip to
+/// the proc macro server, and the next run that has the same input and the same macro asks for
+/// it again.
+#[salsa::tracked(returns(ref), persist)]
+fn expand_proc_macro_of(db: &dyn SourceDatabase, call: MacroCallId) -> ExpandResult<tt::TopSubtree> {
+    let loc = call.loc(db);
+    let (macro_arg, undo_info, span) = call.macro_arg_considering_derives(db, &loc.kind);
+
+    let (ast, expander) = match loc.def.kind {
+        MacroDefKind::ProcMacro(ast, expander, _) => (ast, expander),
+        _ => unreachable!(),
+    };
+
+    let attr_arg = match &loc.kind {
+        MacroCallKind::Attr { attr_args: Some(attr_args), .. } => Some(&**attr_args),
+        _ => None,
+    };
+
+    let ExpandResult { value: mut tt, err } = {
+        let span = proc_macro_span(db, ast);
+        expander.expand(
+            db,
+            loc.def.krate,
+            loc.krate,
+            macro_arg,
+            attr_arg,
+            span_with_def_site_ctxt(db, span, call.into(), loc.def.edition),
+            span_with_call_site_ctxt(db, span, call.into(), loc.def.edition),
+            span_with_mixed_site_ctxt(db, span, call.into(), loc.def.edition),
+        )
+    };
+
+    // Set a hard limit for the expanded tt
+    if let Err(value) = check_tt_count(&tt) {
+        return value.map(|()| tt::TopSubtree::empty(tt::DelimSpan::from_single(*span)));
+    }
+
+    fixup::reverse_fixups(&mut tt, undo_info);
+
+    ExpandResult { value: tt, err }
 }
 
 impl MacroCallId {

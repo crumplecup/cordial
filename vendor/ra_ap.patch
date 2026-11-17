@@ -645,6 +645,54 @@
  [dependencies.itertools]
  version = "0.15.0"
  
+--- a/ra_ap_hir-0.0.358/src/lib.rs
++++ ra_ap_hir/src/lib.rs
+@@ -1471,13 +1471,17 @@
+     }
+ }
+ 
+-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
++#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+ enum AnyFunctionId {
+     FunctionId(FunctionId),
+     BuiltinDeriveImplMethod { method: BuiltinDeriveImplMethod, impl_: BuiltinDeriveImplId },
+ }
+ 
+-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
++/// A function is saved as what names it: the id of the function, or the impl and the method of a
++/// builtin derive that has none. The ids are saved with the database, so the next process gives
++/// the same function the same id.
++#[derive(Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
++#[serde(transparent)]
+ pub struct Function {
+     pub(crate) id: AnyFunctionId,
+ }
+@@ -1504,6 +1508,25 @@
+         }
+     }
+ 
++    /// Whether the function is still written in its file. The id of one that an edit removed can
++    /// still be held (by a memo a saved database restored), and reading its source panics.
++    pub fn is_written(self, db: &dyn HirDatabase) -> bool {
++        fn written<N: AstIdNode>(
++            db: &dyn HirDatabase,
++            id: hir_expand::AstId<N>,
++        ) -> bool {
++            id.file_id.ast_id_map(db).contains_erased(id.value.erase())
++        }
++        match self.id {
++            AnyFunctionId::FunctionId(id) => written(db, hir_def::AstIdLoc::ast_id(id.loc(db))),
++            AnyFunctionId::BuiltinDeriveImplMethod { impl_, .. } => match impl_.loc(db).adt {
++                AdtId::StructId(it) => written(db, hir_def::AstIdLoc::ast_id(it.loc(db))),
++                AdtId::EnumId(it) => written(db, hir_def::AstIdLoc::ast_id(it.loc(db))),
++                AdtId::UnionId(it) => written(db, hir_def::AstIdLoc::ast_id(it.loc(db))),
++            },
++        }
++    }
++
+     pub fn name(self, db: &dyn HirDatabase) -> Name {
+         match self.id {
+             AnyFunctionId::FunctionId(id) => FunctionSignature::of(db, id).name.clone(),
 --- a/ra_ap_hir_def-0.0.358/Cargo.toml
 +++ ra_ap_hir_def/Cargo.toml
 @@ -64,6 +64,7 @@
@@ -2111,7 +2159,91 @@
  pub enum MacroKind {
      /// `macro_rules!` or Macros 2.0 macro.
      Declarative,
-@@ -1497,7 +1498,7 @@
+@@ -735,44 +736,51 @@
+     /// proc macros, since they are not deterministic in general, and
+     /// non-determinism breaks salsa in a very, very, very bad way.
+     /// @edwin0cheng heroically debugged this once! See #4315 for details
+-    #[salsa::tracked(returns(ref))]
+-    fn expand_proc_macro(self, db: &dyn SourceDatabase) -> ExpandResult<tt::TopSubtree> {
+-        let loc = self.loc(db);
+-        let (macro_arg, undo_info, span) = self.macro_arg_considering_derives(db, &loc.kind);
++    fn expand_proc_macro(self, db: &dyn SourceDatabase) -> &ExpandResult<tt::TopSubtree> {
++        expand_proc_macro_of(db, self)
++    }
++}
+ 
+-        let (ast, expander) = match loc.def.kind {
+-            MacroDefKind::ProcMacro(ast, expander, _) => (ast, expander),
+-            _ => unreachable!(),
+-        };
++/// What a proc macro call expands to. Saved with the database: an expansion is a round trip to
++/// the proc macro server, and the next run that has the same input and the same macro asks for
++/// it again.
++#[salsa::tracked(returns(ref), persist)]
++fn expand_proc_macro_of(db: &dyn SourceDatabase, call: MacroCallId) -> ExpandResult<tt::TopSubtree> {
++    let loc = call.loc(db);
++    let (macro_arg, undo_info, span) = call.macro_arg_considering_derives(db, &loc.kind);
++
++    let (ast, expander) = match loc.def.kind {
++        MacroDefKind::ProcMacro(ast, expander, _) => (ast, expander),
++        _ => unreachable!(),
++    };
+ 
+-        let attr_arg = match &loc.kind {
+-            MacroCallKind::Attr { attr_args: Some(attr_args), .. } => Some(&**attr_args),
+-            _ => None,
+-        };
++    let attr_arg = match &loc.kind {
++        MacroCallKind::Attr { attr_args: Some(attr_args), .. } => Some(&**attr_args),
++        _ => None,
++    };
+ 
+-        let ExpandResult { value: mut tt, err } = {
+-            let span = proc_macro_span(db, ast);
+-            expander.expand(
+-                db,
+-                loc.def.krate,
+-                loc.krate,
+-                macro_arg,
+-                attr_arg,
+-                span_with_def_site_ctxt(db, span, self.into(), loc.def.edition),
+-                span_with_call_site_ctxt(db, span, self.into(), loc.def.edition),
+-                span_with_mixed_site_ctxt(db, span, self.into(), loc.def.edition),
+-            )
+-        };
++    let ExpandResult { value: mut tt, err } = {
++        let span = proc_macro_span(db, ast);
++        expander.expand(
++            db,
++            loc.def.krate,
++            loc.krate,
++            macro_arg,
++            attr_arg,
++            span_with_def_site_ctxt(db, span, call.into(), loc.def.edition),
++            span_with_call_site_ctxt(db, span, call.into(), loc.def.edition),
++            span_with_mixed_site_ctxt(db, span, call.into(), loc.def.edition),
++        )
++    };
+ 
+-        // Set a hard limit for the expanded tt
+-        if let Err(value) = check_tt_count(&tt) {
+-            return value.map(|()| tt::TopSubtree::empty(tt::DelimSpan::from_single(*span)));
+-        }
++    // Set a hard limit for the expanded tt
++    if let Err(value) = check_tt_count(&tt) {
++        return value.map(|()| tt::TopSubtree::empty(tt::DelimSpan::from_single(*span)));
++    }
+ 
+-        fixup::reverse_fixups(&mut tt, undo_info);
++    fixup::reverse_fixups(&mut tt, undo_info);
+ 
+-        ExpandResult { value: tt, err }
+-    }
++    ExpandResult { value: tt, err }
+ }
+ 
+ impl MacroCallId {
+@@ -1497,7 +1505,7 @@
  ///
  /// `ExpandTo` captures this bit of information about a particular macro call
  /// site.
@@ -2120,7 +2252,7 @@
  pub enum ExpandTo {
      Statements,
      Items,
-@@ -1551,7 +1552,7 @@
+@@ -1551,7 +1559,7 @@
  ///
  /// We encode macro definitions into ids of macro calls, this what allows us
  /// to be incremental.
@@ -2129,7 +2261,7 @@
  #[doc(alias = "MacroFileId")]
  pub struct MacroCallId {
      #[returns(ref)]
-@@ -1572,7 +1573,7 @@
+@@ -1572,7 +1580,7 @@
      }
  }
  
@@ -2865,54 +2997,6 @@
 +        self.parent(cx.db).stable_hash(cx);
 +    }
 +}
---- a/ra_ap_hir-0.0.358/src/lib.rs
-+++ ra_ap_hir/src/lib.rs
-@@ -1471,13 +1471,17 @@
-     }
- }
- 
--#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
- enum AnyFunctionId {
-     FunctionId(FunctionId),
-     BuiltinDeriveImplMethod { method: BuiltinDeriveImplMethod, impl_: BuiltinDeriveImplId },
- }
- 
--#[derive(Clone, Copy, PartialEq, Eq, Hash)]
-+/// A function is saved as what names it: the id of the function, or the impl and the method of a
-+/// builtin derive that has none. The ids are saved with the database, so the next process gives
-+/// the same function the same id.
-+#[derive(Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
-+#[serde(transparent)]
- pub struct Function {
-     pub(crate) id: AnyFunctionId,
- }
-@@ -1504,6 +1508,25 @@
-         }
-     }
- 
-+    /// Whether the function is still written in its file. The id of one that an edit removed can
-+    /// still be held (by a memo a saved database restored), and reading its source panics.
-+    pub fn is_written(self, db: &dyn HirDatabase) -> bool {
-+        fn written<N: AstIdNode>(
-+            db: &dyn HirDatabase,
-+            id: hir_expand::AstId<N>,
-+        ) -> bool {
-+            id.file_id.ast_id_map(db).contains_erased(id.value.erase())
-+        }
-+        match self.id {
-+            AnyFunctionId::FunctionId(id) => written(db, hir_def::AstIdLoc::ast_id(id.loc(db))),
-+            AnyFunctionId::BuiltinDeriveImplMethod { impl_, .. } => match impl_.loc(db).adt {
-+                AdtId::StructId(it) => written(db, hir_def::AstIdLoc::ast_id(it.loc(db))),
-+                AdtId::EnumId(it) => written(db, hir_def::AstIdLoc::ast_id(it.loc(db))),
-+                AdtId::UnionId(it) => written(db, hir_def::AstIdLoc::ast_id(it.loc(db))),
-+            },
-+        }
-+    }
-+
-     pub fn name(self, db: &dyn HirDatabase) -> Name {
-         match self.id {
-             AnyFunctionId::FunctionId(id) => FunctionSignature::of(db, id).name.clone(),
 --- a/ra_ap_hir_ty-0.0.358/src/method_resolution.rs
 +++ ra_ap_hir_ty/src/method_resolution.rs
 @@ -563,6 +563,9 @@
@@ -3763,6 +3847,15 @@
  pub enum ExpandErrorKind {
      BindingError(Box<Box<str>>),
      UnresolvedBinding(Box<Box<str>>),
+@@ -338,7 +338,7 @@
+ 
+ pub type ExpandResult<T> = ValueResult<T, ExpandError>;
+ 
+-#[derive(Debug, Clone, Eq, PartialEq)]
++#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+ pub struct ValueResult<T, E> {
+     pub value: T,
+     pub err: Option<E>,
 --- a/ra_ap_mbe-0.0.358/src/macro_call_style.rs
 +++ ra_ap_mbe/src/macro_call_style.rs
 @@ -21,6 +21,18 @@

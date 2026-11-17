@@ -338,7 +338,7 @@ fn validate(pattern: &MetaTemplate) -> Result<(), ParseError> {
 
 pub type ExpandResult<T> = ValueResult<T, ExpandError>;
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ValueResult<T, E> {
     pub value: T,
     pub err: Option<E>,
