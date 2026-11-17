@@ -814,6 +814,15 @@ stage it was in.
   go through it alike. The eviction events now wait for the memory held to stop falling and say how
   long that took and how much came back (`eviction.<stage>.settled_micros`, `.freed_settled_bytes`).
   The syntax crate drops synchronously when it is built with `--cfg no_salsa_async_drops`.
+- **What eviction with the settle wait gives on elicit_doc (cold)**: the 16 priming chunks give
+  back 875 MB once settled (16 MB at once), 4.7 s of settling in all (0.3 s each); the ordinary
+  projection 222 MB in 0.46 s; the cfg context 102 MB in 0.36 s. The trees held at the evidence
+  stage fall from 728 MB to 41 MB and the total there from 1,312 MB to 587 MB. So the deferred drop
+  is a lag of a fraction of a second, and cordial holds no tree: the trees were held for the whole
+  run because nothing evicted. The run costs 79 s against 47.6 s (re-parsing what is evicted and
+  needed again), and the peak held falls only from 2,061 MB to 1,977 MB (peak RSS 2.90 to 2.60 GB),
+  because it moves to the cfg-context stage and is then cordial's own: `step_save` 404 MB, `file_items`
+  253 MB, `step_populate` 250 MB, `step_project_attached` 148 MB, `step_load_database` 133 MB.
 
 
 ## What is not persisted, and why
