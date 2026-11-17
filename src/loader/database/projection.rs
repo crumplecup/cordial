@@ -96,6 +96,24 @@ impl SourceDatabase {
         self.prime_function_evidence();
         self.audit_reused_evidence();
         self.evict_regenerable("evidence");
+        #[cfg(any(
+            feature = "error_sites",
+            feature = "error_chain",
+            feature = "internal_error_chain",
+            feature = "tracing",
+            feature = "verus_ir",
+            feature = "visibility",
+            feature = "allows",
+            feature = "cfg_hygiene",
+            feature = "cfg_scatter",
+            feature = "glob_imports",
+            feature = "inline_tests",
+            feature = "modularity",
+            feature = "pageantry",
+            feature = "derives",
+            feature = "cli_layout"
+        ))]
+        self.prime_file_scans(target.crate_root())?;
         let ordinary_watch = crate::process_memory::Watch::start("ordinary projection".to_owned());
         let (mut graph, outline) = attach_db(&self.db, || {
             self.project_attached(

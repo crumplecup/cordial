@@ -20,6 +20,24 @@ mod def_map_cutoff;
 mod edition;
 mod eviction;
 mod external;
+#[cfg(any(
+    feature = "error_sites",
+    feature = "error_chain",
+    feature = "internal_error_chain",
+    feature = "tracing",
+    feature = "verus_ir",
+    feature = "visibility",
+    feature = "allows",
+    feature = "cfg_hygiene",
+    feature = "cfg_scatter",
+    feature = "glob_imports",
+    feature = "inline_tests",
+    feature = "modularity",
+    feature = "pageantry",
+    feature = "derives",
+    feature = "cli_layout"
+))]
+mod file_scans;
 mod identity;
 #[cfg(feature = "tracing")]
 mod islands;

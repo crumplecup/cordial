@@ -116,17 +116,27 @@ impl SourceDatabase {
         one: impl Fn(&RootDatabase, &T) + Sync,
     ) {
         let before = queries::evidence_executed();
-        let size = chunk_size(functions.len());
-        let chunks = functions.len().div_ceil(size);
-        for (index, part) in functions.chunks(size).enumerate() {
+        self.run_in_chunks(label, functions, &one);
+        self.say_primed(label, before, functions.len());
+    }
+
+    /// Run `one` over `items` on worker threads in chunks, evicting between the chunks if asked to.
+    pub(in crate::loader::database) fn run_in_chunks<T: Sync>(
+        &mut self,
+        label: &str,
+        items: &[T],
+        one: &(impl Fn(&RootDatabase, &T) + Sync),
+    ) {
+        let size = chunk_size(items.len());
+        let chunks = items.len().div_ceil(size);
+        for (index, part) in items.chunks(size).enumerate() {
             crate::peak_heap::note_stage(format!(
                 "priming {label}, chunk {} of {chunks}",
                 index + 1
             ));
-            self.prime_part(part, &one);
+            self.prime_part(part, one);
             self.evict_between_chunks();
         }
-        self.say_primed(label, before, functions.len());
     }
 
     fn say_primed(&self, label: &str, before: usize, functions: usize) {

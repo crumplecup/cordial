@@ -47,6 +47,10 @@ pub struct SemanticCargoOptions {
     /// is one revision, and Salsa drops those values only when asked or at a revision, so every
     /// tree it makes is kept until it ends.
     evicts_between_chunks: bool,
+    /// Do not compute what the collectors that read only a file's tree find in each file before the
+    /// steps that merge them: each step then asks for it, file by file, and the first to ask
+    /// computes it. For the tests of what the pass does.
+    skip_file_scan_priming: bool,
 }
 
 impl SemanticCargoOptions {

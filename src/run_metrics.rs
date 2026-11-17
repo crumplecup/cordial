@@ -30,8 +30,10 @@ pub const STATE_SIZES_VARIABLE: &str = "CORDIAL_STATE_SIZES";
 /// that asked: it turns on cordial's own spans, which costs what a profile does.
 pub const QUERY_STEPS_VARIABLE: &str = "CORDIAL_QUERY_STEPS";
 
-/// How many of the steps of cordial that ran a query are kept with it, from the innermost out.
-const CHAIN: usize = 4;
+/// How many of the steps of cordial that ran a query are kept with it, from the innermost out: enough
+/// that the step of the run that asked (a projection, the priming) is among them when the query is
+/// run by a helper of a helper.
+const CHAIN: usize = 8;
 
 /// The most step and query pairs a run keeps in its metrics, the most executed first.
 const STEPS_KEPT: usize = 400;

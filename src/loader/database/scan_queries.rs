@@ -582,3 +582,70 @@ pub(super) fn policy_file<'db>(
 ) -> Option<PolicyFile> {
     extracted(db, key).as_ref()?.policy.clone()
 }
+
+#[cfg(any(
+    feature = "error_sites",
+    feature = "error_chain",
+    feature = "internal_error_chain",
+    feature = "tracing",
+    feature = "verus_ir",
+    feature = "visibility",
+    feature = "allows",
+    feature = "cfg_hygiene",
+    feature = "cfg_scatter",
+    feature = "glob_imports",
+    feature = "inline_tests",
+    feature = "modularity",
+    feature = "pageantry",
+    feature = "derives",
+    feature = "cli_layout"
+))]
+/// Compute what every collector finds in one file, if it is not known: for the pass that does it
+/// before the steps ask.
+pub(super) fn prime_extraction(
+    db: &RootDatabase,
+    file: ra_ap_vfs::FileId,
+    path: &std::path::Path,
+    root: &std::path::Path,
+) {
+    // Through what each collector saves, and not the extraction, which is not saved: what a
+    // restored run has is valid, and nothing is computed; where it is not, the first to ask computes
+    // the extraction and the others read it.
+    let key = ScanKey::new(
+        db,
+        file,
+        path.to_path_buf(),
+        PathBuf::new(),
+        root.to_path_buf(),
+        String::new(),
+        false,
+    );
+    #[cfg(feature = "error_sites")]
+    let _ = error_sites_file(db, key);
+    #[cfg(feature = "error_chain")]
+    let _ = error_chains_file(db, key);
+    #[cfg(feature = "internal_error_chain")]
+    {
+        let _ = error_types_file(db, key);
+        let _ = error_apply_file(db, key);
+    }
+    #[cfg(feature = "tracing")]
+    let _ = observability_file(db, key);
+    #[cfg(feature = "verus_ir")]
+    let _ = verus_file(db, key);
+    #[cfg(feature = "visibility")]
+    let _ = visibility_file(db, key);
+    #[cfg(any(
+        feature = "allows",
+        feature = "cfg_hygiene",
+        feature = "cfg_scatter",
+        feature = "glob_imports",
+        feature = "inline_tests",
+        feature = "modularity",
+        feature = "pageantry",
+        feature = "derives",
+        feature = "visibility",
+        feature = "cli_layout"
+    ))]
+    let _ = policy_file(db, key);
+}
