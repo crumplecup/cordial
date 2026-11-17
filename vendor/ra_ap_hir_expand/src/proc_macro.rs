@@ -396,7 +396,7 @@ impl PartialEq for ProcMacro {
 }
 
 /// A custom proc-macro expander handle. This handle together with its crate resolves to a [`ProcMacro`]
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct CustomProcMacroExpander {
     proc_macro_id: u32,
 }

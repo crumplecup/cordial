@@ -1960,8 +1960,6 @@ dependencies = [
 [[package]]
 name = "ra_ap_mbe"
 version = "0.0.358"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e2b58d33d66aa5ae520204e9920063dcd78a60a610726be70a2c2a9cb1cbe563"
 dependencies = [
  "arrayvec",
  "bitflags",
@@ -1975,6 +1973,7 @@ dependencies = [
  "ra_ap_tt",
  "rustc-hash 2.1.3",
  "salsa",
+ "serde",
  "smallvec",
 ]
 
@@ -2171,8 +2170,6 @@ dependencies = [
 [[package]]
 name = "ra_ap_tt"
 version = "0.0.358"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6767bfe5e71541eef3b764098e0a9ec77864978f610900f8bedfa85151dd58b1"
 dependencies = [
  "arrayvec",
  "ra-ap-rustc_lexer",
@@ -2180,6 +2177,7 @@ dependencies = [
  "ra_ap_span",
  "ra_ap_stdx",
  "rustc-hash 2.1.3",
+ "serde",
  "text-size",
 ]
 
@@ -2660,6 +2658,9 @@ name = "text-size"
 version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f18aa187839b2bdb1ad2fa35ead8c4c2976b64e4363c386d45ac0f7ee85c9233"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "textwrap"

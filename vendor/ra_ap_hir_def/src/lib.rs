@@ -120,7 +120,8 @@ pub fn set_expand_proc_attr_macros(db: &mut dyn SourceDatabase, enabled: bool) {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[serde(bound = "")]
 pub struct ItemLoc<N: AstIdNode> {
     pub container: ModuleId,
     pub id: AstId<N>,
@@ -156,7 +157,8 @@ impl<N: AstIdNode> HasModule for ItemLoc<N> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[serde(bound = "")]
 pub struct AssocItemLoc<N: AstIdNode> {
     // FIXME: Store this as an erased `salsa::Id` to save space
     pub container: ItemContainerId,
@@ -388,7 +390,7 @@ impl ExternBlockId {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct EnumVariantLoc {
     pub id: AstId<ast::Variant>,
     pub parent: EnumId,
@@ -426,7 +428,7 @@ impl EnumVariantId {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct Macro2Loc {
     pub container: ModuleId,
     pub id: AstId<ast::MacroDef>,
@@ -437,7 +439,7 @@ pub struct Macro2Loc {
 impl_intern!(Macro2Id, Macro2Loc);
 impl_loc!(Macro2Loc, id: MacroDef, container: ModuleId);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct MacroRulesLoc {
     pub container: ModuleId,
     pub id: AstId<ast::MacroRules>,
@@ -456,7 +458,19 @@ bitflags::bitflags! {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+impl serde::Serialize for MacroRulesLocFlags {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_u8(self.bits())
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for MacroRulesLocFlags {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        <u8 as serde::Deserialize>::deserialize(deserializer).map(Self::from_bits_retain)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum MacroExpander {
     Declarative { styles: MacroCallStyles },
     BuiltIn(BuiltinFnLikeExpander),
@@ -466,7 +480,7 @@ pub enum MacroExpander {
     UnimplementedBuiltIn,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct ProcMacroLoc {
     pub container: ModuleId,
     pub id: AstId<ast::Fn>,
@@ -504,7 +518,7 @@ mod tracked_struct_token {
     }
 }
 
-#[salsa::tracked(constructor = new_)]
+#[salsa::tracked(constructor = new_, persist)]
 #[derive(PartialOrd, Ord)]
 pub struct BlockIdLt<'db> {
     #[returns(copy)]
@@ -548,7 +562,7 @@ impl BlockId {
     }
 }
 
-#[salsa::tracked(debug)]
+#[salsa::tracked(debug, persist)]
 #[derive(PartialOrd, Ord)]
 pub struct ModuleIdLt<'db> {
     /// The crate this module belongs to.
@@ -735,7 +749,7 @@ pub struct HrtbLifetimeParamId {
     pub local_id: usize,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, salsa::Supertype)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, salsa::Supertype, serde::Serialize, serde::Deserialize)]
 pub enum ItemContainerId {
     ExternBlockId(ExternBlockId),
     ModuleId(ModuleId),

@@ -54,7 +54,7 @@ pub const NO_DOWNMAP_ERASED_FILE_AST_ID_MARKER: ErasedFileAstId =
     ErasedFileAstId(pack_hash_index_and_kind(0, 0, ErasedFileAstIdKind::NoDownmap as u32));
 
 /// This is a type erased FileAstId.
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct ErasedFileAstId(u32);
 
 impl fmt::Debug for ErasedFileAstId {
@@ -285,6 +285,8 @@ impl ErasedFileAstId {
 pub trait AstIdNode: AstNode {}
 
 /// `AstId` points to an AST node in a specific file.
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(bound = "")]
 pub struct FileAstId<N> {
     raw: ErasedFileAstId,
     _marker: PhantomData<fn() -> N>,

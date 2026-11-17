@@ -35,7 +35,7 @@ mod imp {
 
     use crate::{MacroCallId, Transparency};
 
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
     struct SyntaxContextData {
         outer_expn: MacroCallId,
         outer_transparency: Transparency,
@@ -57,12 +57,12 @@ mod imp {
         }
     }
 
-    #[salsa::interned(unsafe(no_lifetime), revisions = usize::MAX)]
+    #[salsa::interned(unsafe(no_lifetime), revisions = usize::MAX, persist)]
     struct SyntaxContextImpl {
         data: SyntaxContextData,
     }
 
-    #[derive(Clone, Copy, PartialEq, Eq, Hash)]
+    #[derive(Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
     pub struct SyntaxContext(NonZeroU32);
 
     impl SyntaxContext {
@@ -324,7 +324,7 @@ mod imp {
 
 /// A property of a macro expansion that determines how identifiers
 /// produced by that expansion are resolved.
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Hash, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Hash, Debug, serde::Serialize, serde::Deserialize)]
 pub enum Transparency {
     /// Identifier produced by a transparent expansion is always resolved at call-site.
     /// Call-site spans in procedural macros, hygiene opt-out in `macro` should use this.

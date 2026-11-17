@@ -75,7 +75,7 @@ impl Span {
 /// Spans represent a region of code, used by the IDE to be able link macro inputs and outputs
 /// together. Positions in spans are relative to some [`SpanAnchor`] to make them more incremental
 /// friendly.
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct Span {
     /// The text range of this span, relative to the anchor.
     /// We need the anchor for incrementality, as storing absolute ranges will require
@@ -119,7 +119,7 @@ impl fmt::Display for Span {
     }
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct SpanAnchor {
     pub file_id: EditionedFileId,
     pub ast_id: ErasedFileAstId,
@@ -133,7 +133,7 @@ impl fmt::Debug for SpanAnchor {
 
 /// A [`FileId`] and [`Edition`] bundled up together.
 /// The MSB is reserved for `HirFileId` encoding, more upper bits are used to then encode the edition.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
 pub struct EditionedFileId(u32);
 
 impl fmt::Debug for EditionedFileId {
@@ -232,10 +232,10 @@ mod salsa {
 /// Internally this holds a `salsa::Id`, but we cannot use this definition here
 /// as it references things from base-db and hir-expand.
 // FIXME: Give this a better fitting name
-#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
 pub struct HirFileId(pub salsa::Id);
 
 /// `MacroCallId` identifies a particular macro invocation, like
 /// `println!("Hello, {}", world)`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize)]
 pub struct MacroCallId(pub salsa::Id);

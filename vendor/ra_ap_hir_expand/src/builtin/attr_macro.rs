@@ -9,7 +9,7 @@ use super::quote;
 
 macro_rules! register_builtin {
     ($(($name:ident, $variant:ident) => $expand:ident),* $(,)? ) => {
-        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
         pub enum BuiltinAttrExpander {
             $($variant),*
         }

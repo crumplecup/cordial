@@ -345,7 +345,7 @@ fn unescape(s: &str) -> Option<Cow<'_, str>> {
 ///
 /// Outer attributes are counted first, then inner attributes. This does not support
 /// out-of-line modules, which may have attributes spread across 2 files!
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct AttrId {
     id: u32,
 }

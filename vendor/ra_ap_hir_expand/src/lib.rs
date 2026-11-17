@@ -116,7 +116,7 @@ impl_intern_lookup!(MacroCallId, MacroCallLoc);
 
 pub type ExpandResult<T> = ValueResult<T, ExpandError>;
 
-#[derive(Debug, PartialEq, Eq, Clone, Hash)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash, serde::Serialize, serde::Deserialize)]
 pub struct ExpandError {
     inner: Arc<(ExpandErrorKind, Span)>,
 }
@@ -140,7 +140,7 @@ impl ExpandError {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Hash)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash, serde::Serialize, serde::Deserialize)]
 pub enum ExpandErrorKind {
     /// Attribute macro expansion is disabled.
     ProcMacroAttrExpansionDisabled,
@@ -236,7 +236,7 @@ impl From<mbe::ExpandError> for ExpandError {
         ExpandError { inner: Arc::new((ExpandErrorKind::Mbe(mbe.inner.1.clone()), mbe.inner.0)) }
     }
 }
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct MacroCallLoc {
     pub def: MacroDefId,
     pub krate: Crate,
@@ -249,7 +249,7 @@ pub struct MacroCallLoc {
     pub macro_depth: u32,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct MacroDefId {
     pub krate: Crate,
     pub edition: Edition,
@@ -258,7 +258,7 @@ pub struct MacroDefId {
     pub allow_internal_unsafe: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum MacroDefKind {
     Declarative(AstId<ast::Macro>, MacroCallStyles),
     BuiltIn(AstId<ast::Macro>, BuiltinFnLikeExpander),
@@ -288,7 +288,7 @@ impl MacroDefKind {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct EagerCallInfo {
     /// The expanded argument of the eager macro.
     arg: tt::TopSubtree,
@@ -299,7 +299,7 @@ pub struct EagerCallInfo {
     span: Span,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum MacroCallKind {
     FnLike {
         ast_id: AstId<ast::MacroCall>,
@@ -335,7 +335,7 @@ pub enum MacroCallKind {
     },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct AttrMacroAttrIds(AttrMacroAttrIdsRepr);
 
 impl AttrMacroAttrIds {
@@ -354,7 +354,7 @@ impl AttrMacroAttrIds {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 enum AttrMacroAttrIdsRepr {
     One(AttrId),
     ManyDerives(ThinVec<AttrId>),
@@ -394,7 +394,7 @@ impl MacroCallKind {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum MacroKind {
     /// `macro_rules!` or Macros 2.0 macro.
     Declarative,
@@ -1498,7 +1498,7 @@ pub fn resolve_span(db: &dyn SourceDatabase, Span { range, anchor, ctx: _ }: Spa
 ///
 /// `ExpandTo` captures this bit of information about a particular macro call
 /// site.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum ExpandTo {
     Statements,
     Items,
@@ -1552,7 +1552,7 @@ impl ExpandTo {
 ///
 /// We encode macro definitions into ids of macro calls, this what allows us
 /// to be incremental.
-#[salsa::interned(unsafe(no_lifetime), debug, revisions = usize::MAX)]
+#[salsa::interned(unsafe(no_lifetime), debug, revisions = usize::MAX, persist)]
 #[doc(alias = "MacroFileId")]
 pub struct MacroCallId {
     #[returns(ref)]
@@ -1573,7 +1573,7 @@ impl From<MacroCallId> for span::MacroCallId {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, salsa::Supertype)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, salsa::Supertype, serde::Serialize, serde::Deserialize)]
 pub enum HirFileId {
     FileId(EditionedFileId),
     MacroFile(MacroCallId),

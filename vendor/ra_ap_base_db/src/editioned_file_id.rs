@@ -10,7 +10,7 @@ use vfs::FileId;
 
 use crate::SourceDatabase;
 
-#[salsa::interned(debug, constructor = from_span_file_id, unsafe(no_lifetime), revisions = usize::MAX)]
+#[salsa::interned(debug, constructor = from_span_file_id, unsafe(no_lifetime), revisions = usize::MAX, persist)]
 #[derive(PartialOrd, Ord)]
 pub struct EditionedFileId {
     #[returns(copy)]

@@ -29,7 +29,7 @@ use syntax::{
 
 macro_rules! register_builtin {
     ( $($trait:ident => $expand:ident),* $(,)? ) => {
-        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
         pub enum BuiltinDeriveExpander {
             $($trait),*
         }

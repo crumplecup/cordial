@@ -48,7 +48,7 @@ pub type FxIndexMap<K, V> =
 #[macro_export]
 macro_rules! impl_intern_key {
     ($id:ident, $loc:ident) => {
-        #[salsa::interned(unsafe(no_lifetime), revisions = usize::MAX)]
+        #[salsa::interned(unsafe(no_lifetime), revisions = usize::MAX, persist)]
         #[derive(PartialOrd, Ord)]
         pub struct $id {
             #[returns(ref)]
