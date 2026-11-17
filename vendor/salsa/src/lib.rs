@@ -299,6 +299,20 @@ pub use salsa_macros::{SalsaValue, Supertype, accumulator, db, input, interned, 
 #[cfg(feature = "salsa_unstable")]
 pub use self::database::{IngredientInfo, PageInfo};
 
+/// The function that reads how many bytes the calling thread has allocated and not yet freed,
+/// when the program has an allocator that counts them.
+static ALLOCATION_PROBE: std::sync::OnceLock<fn() -> i64> = std::sync::OnceLock::new();
+
+/// Tell Salsa how to read the net bytes the calling thread has allocated, so that the events
+/// that say how long a query took also say how much memory its execution left behind.
+pub fn set_allocation_probe(probe: fn() -> i64) {
+    let _ = ALLOCATION_PROBE.set(probe);
+}
+
+pub(crate) fn allocation_probe() -> Option<fn() -> i64> {
+    ALLOCATION_PROBE.get().copied()
+}
+
 #[cfg(feature = "accumulator")]
 pub use self::accumulator::Accumulator;
 pub use self::active_query::Backtrace;

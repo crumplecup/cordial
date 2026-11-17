@@ -5,9 +5,19 @@ use cordial::{Cli, init_cli_tracing};
 use miette::IntoDiagnostic;
 
 use tracing::instrument;
+
+#[cfg(all(feature = "alloc_metrics", not(feature = "hotpath-alloc")))]
+mod counting_allocator;
+
+#[cfg(all(feature = "alloc_metrics", not(feature = "hotpath-alloc")))]
+#[global_allocator]
+static ALLOCATOR: counting_allocator::Counting = counting_allocator::Counting;
+
 #[instrument(level = "info", err(level = "warn"))]
 #[hotpath::measure]
 fn main() -> miette::Result<()> {
+    #[cfg(all(feature = "alloc_metrics", not(feature = "hotpath-alloc")))]
+    salsa::set_allocation_probe(counting_allocator::net_bytes);
     init_cli_tracing();
     Cli::parse().act().into_diagnostic()
 }

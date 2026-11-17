@@ -183,10 +183,19 @@ mod execution_time {
     #[salsa::db]
     impl Database for Db {}
 
+    std::thread_local! {
+        static HELD: std::cell::Cell<i64> = const { std::cell::Cell::new(0) };
+    }
+
+    fn held() -> i64 {
+        HELD.with(std::cell::Cell::get)
+    }
+
     /// Takes a while on its own.
     #[salsa::tracked(returns(copy))]
     fn the_inner_one(db: &dyn Database, source: Source) -> u64 {
         std::thread::sleep(std::time::Duration::from_millis(60));
+        HELD.with(|held| held.set(held.get() + 4096));
         source.value(db)
     }
 
@@ -200,6 +209,7 @@ mod execution_time {
     /// started is counted for those, not again for it.
     #[test]
     fn a_query_executed_says_what_it_took_on_its_own() {
+        salsa::set_allocation_probe(held);
         let subscriber = tracing_subscriber::registry()
             .with(MetricsLayer.with_filter(cordial::metrics_filter_with(true)));
         tracing::subscriber::with_default(subscriber, || {
@@ -227,5 +237,19 @@ mod execution_time {
             outer < inner / 2,
             "outer {outer} ns counted the inner {inner} ns"
         );
+        // The inner query holds 4 KiB more when it is done, and the outer one nothing of its own.
+        let bytes = |query: &str| {
+            metrics
+                .values()
+                .iter()
+                .find(|(key, _)| {
+                    key.starts_with("execution.")
+                        && key.contains(query)
+                        && key.ends_with(".retained")
+                })
+                .map(|(_, value)| *value)
+        };
+        assert_eq!(bytes("the_inner_one"), Some(4096));
+        assert_eq!(bytes("the_outer_one"), Some(0));
     }
 }

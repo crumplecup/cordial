@@ -346,6 +346,9 @@ where
         // What this query took on its own: the time it ran less the time of the queries it
         // started, which are told to it through the thread's running total.
         let outer = CHILDREN_NANOS.replace(0);
+        let outer_bytes = CHILDREN_BYTES.replace(0);
+        let probe = crate::allocation_probe();
+        let bytes_before = probe.map_or(0, |probe| probe());
         let started = std::time::Instant::now();
         let new_value = C::execute(
             db,
@@ -353,10 +356,17 @@ where
         );
         let total = u64::try_from(started.elapsed().as_nanos()).unwrap_or(u64::MAX);
         let children = CHILDREN_NANOS.replace(outer.saturating_add(total));
+        // The same for memory: the bytes this thread holds more of than it did, less those the
+        // queries this one started are accountable for. Freed is what it released of earlier ones.
+        let held = probe.map_or(0, |probe| probe()) - bytes_before;
+        let children_bytes = CHILDREN_BYTES.replace(outer_bytes.saturating_add(held));
+        let own = held - children_bytes;
         ::tracing::info!(
             target: "salsa::execution",
             ingredient = C::DEBUG_NAME,
             nanos = total.saturating_sub(children),
+            retained = u64::try_from(own).unwrap_or(0),
+            freed = u64::try_from(-own).unwrap_or(0),
             "a query executed"
         );
 
@@ -367,6 +377,8 @@ where
 crate::sync::thread_local! {
     /// The time the queries started by the one now running have taken, in nanoseconds.
     static CHILDREN_NANOS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+    /// The net bytes held by the queries started by the one now running.
+    static CHILDREN_BYTES: std::cell::Cell<i64> = const { std::cell::Cell::new(0) };
 }
 
 struct PreviousIteration {

@@ -1610,7 +1610,7 @@
  
          zalsa.event(&|| {
              Event::new(EventKind::WillExecute {
-@@ -332,15 +335,40 @@
+@@ -332,15 +335,52 @@
  
          // Query was not previously executed, or value is potentially
          // stale, or value is absent. Let's execute!
@@ -1625,6 +1625,9 @@
 +        // What this query took on its own: the time it ran less the time of the queries it
 +        // started, which are told to it through the thread's running total.
 +        let outer = CHILDREN_NANOS.replace(0);
++        let outer_bytes = CHILDREN_BYTES.replace(0);
++        let probe = crate::allocation_probe();
++        let bytes_before = probe.map_or(0, |probe| probe());
 +        let started = std::time::Instant::now();
          let new_value = C::execute(
              db,
@@ -1632,10 +1635,17 @@
          );
 +        let total = u64::try_from(started.elapsed().as_nanos()).unwrap_or(u64::MAX);
 +        let children = CHILDREN_NANOS.replace(outer.saturating_add(total));
++        // The same for memory: the bytes this thread holds more of than it did, less those the
++        // queries this one started are accountable for. Freed is what it released of earlier ones.
++        let held = probe.map_or(0, |probe| probe()) - bytes_before;
++        let children_bytes = CHILDREN_BYTES.replace(outer_bytes.saturating_add(held));
++        let own = held - children_bytes;
 +        ::tracing::info!(
 +            target: "salsa::execution",
 +            ingredient = C::DEBUG_NAME,
 +            nanos = total.saturating_sub(children),
++            retained = u64::try_from(own).unwrap_or(0),
++            freed = u64::try_from(-own).unwrap_or(0),
 +            "a query executed"
 +        );
  
@@ -1646,6 +1656,8 @@
 +crate::sync::thread_local! {
 +    /// The time the queries started by the one now running have taken, in nanoseconds.
 +    static CHILDREN_NANOS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
++    /// The net bytes held by the queries started by the one now running.
++    static CHILDREN_BYTES: std::cell::Cell<i64> = const { std::cell::Cell::new(0) };
 +}
 +
  struct PreviousIteration {
@@ -2606,6 +2618,27 @@
  mod function;
  mod hash;
  mod id;
+@@ -294,6 +299,20 @@
+ #[cfg(feature = "salsa_unstable")]
+ pub use self::database::{IngredientInfo, PageInfo};
+ 
++/// The function that reads how many bytes the calling thread has allocated and not yet freed,
++/// when the program has an allocator that counts them.
++static ALLOCATION_PROBE: std::sync::OnceLock<fn() -> i64> = std::sync::OnceLock::new();
++
++/// Tell Salsa how to read the net bytes the calling thread has allocated, so that the events
++/// that say how long a query took also say how much memory its execution left behind.
++pub fn set_allocation_probe(probe: fn() -> i64) {
++    let _ = ALLOCATION_PROBE.set(probe);
++}
++
++pub(crate) fn allocation_probe() -> Option<fn() -> i64> {
++    ALLOCATION_PROBE.get().copied()
++}
++
+ #[cfg(feature = "accumulator")]
+ pub use self::accumulator::Accumulator;
+ pub use self::active_query::Backtrace;
 --- salsa-0.28.5/src/tracked_struct.rs
 +++ salsa/src/tracked_struct.rs
 @@ -202,6 +202,22 @@

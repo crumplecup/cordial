@@ -115,9 +115,12 @@ impl LiveStatus {
             .map(|(name, count)| format!("{name}={count}"))
             .collect::<Vec<_>>()
             .join(" ");
+        let memory = crate::process_memory::sample();
         tracing::info!(
             target: "cordial::phase_queries",
             phase = ended,
+            resident_kib = memory.map_or(0, |memory| memory.resident_kib()),
+            peak_kib = memory.map_or(0, |memory| memory.peak_kib()),
             queries,
             kinds = counts.len(),
             verified = memos,
