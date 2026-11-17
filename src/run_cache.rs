@@ -7,6 +7,7 @@
 //! the workspace; a run whose inputs changed analyses again and replaces the
 //! entry. Nothing is reused across different inputs, so nothing can be stale.
 
+mod digests;
 mod key;
 mod store;
 

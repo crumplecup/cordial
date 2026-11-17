@@ -75,6 +75,7 @@ fn begin_database(
         crate::run_cache::gather(&crate::run_cache::KeyRequest::new(
             session.project_root(),
             format!("{options:?}"),
+            Some(store.cache_dir().join("file-digests.json")),
         ))
         .map(|inputs| crate::run_cache::RunCache::open(store, inputs))
     });

@@ -7,7 +7,9 @@
 //! script, an `include_str!` target or a test fixture can all change what the
 //! analysis sees. Each input keeps a label, so a miss can say which one changed.
 
+use super::digests::{DigestMemo, Remembered};
 use crate::CordialResult;
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -78,6 +80,13 @@ impl Inputs {
     }
 }
 
+/// One input file's label and what it hashed to.
+struct Hashed {
+    label: String,
+    value: String,
+    remembered: Option<Remembered>,
+}
+
 /// What the caller supplies; everything else is read from the machine.
 #[derive(Debug, derive_new::new)]
 pub(crate) struct KeyRequest<'a> {
@@ -85,6 +94,8 @@ pub(crate) struct KeyRequest<'a> {
     project_root: &'a Path,
     /// The Cargo options and cfg planning, in a stable text form.
     options: String,
+    /// Where the digests of files already hashed are kept, if they are.
+    digests: Option<PathBuf>,
 }
 
 /// Gather every input of a run on `request.project_root`.
@@ -100,19 +111,58 @@ pub(crate) fn gather(request: &KeyRequest<'_>) -> CordialResult<Inputs> {
         inputs.put(format!("env:{name}"), value);
     }
     let (workspace_root, roots) = local_package_roots(request.project_root)?;
-    for file in [
+    let mut files: Vec<PathBuf> = [
         "Cargo.lock",
         "Cargo.toml",
         "rust-toolchain",
         "rust-toolchain.toml",
         ".cargo/config.toml",
         "cordial.toml",
-    ] {
-        hash_file(&mut inputs, &workspace_root, &workspace_root.join(file));
-    }
+    ]
+    .iter()
+    .map(|file| workspace_root.join(file))
+    .collect();
     for root in &roots {
-        hash_tree(&mut inputs, &workspace_root, root);
+        files.extend(tree_files(root));
     }
+    // The memo is written by the run, so it is not an input of it: it would change the key it
+    // is kept for.
+    if let Some(memo) = &request.digests {
+        files.retain(|path| path != memo && path.with_extension("partial") != *memo);
+    }
+    // What the files hash to, the unchanged ones from the memo and the rest read at once on
+    // every thread.
+    let memo = DigestMemo::open(request.digests.clone());
+    let hashed: Vec<Option<Hashed>> = files
+        .into_par_iter()
+        .map(|path| {
+            let label = path
+                .strip_prefix(&workspace_root)
+                .unwrap_or(&path)
+                .display()
+                .to_string();
+            // A file that cannot be read still changes the key, by the reason.
+            match memo.digest(&path) {
+                Ok((value, remembered)) => Some(Hashed {
+                    label,
+                    value,
+                    remembered: Some(remembered),
+                }),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+                Err(error) => Some(Hashed {
+                    label,
+                    value: format!("unreadable:{error}"),
+                    remembered: None,
+                }),
+            }
+        })
+        .collect();
+    let mut used = Vec::new();
+    for found in hashed.into_iter().flatten() {
+        inputs.put(format!("file:{}", found.label), found.value);
+        used.extend(found.remembered);
+    }
+    memo.save(used);
     Ok(inputs)
 }
 
@@ -198,10 +248,11 @@ fn local_package_roots(project_root: &Path) -> CordialResult<(PathBuf, Vec<PathB
     Ok((workspace_root, roots))
 }
 
-#[instrument(level = "debug", skip(inputs))]
+/// Every file under `root` except build output and version control.
+#[instrument(level = "debug")]
 #[hotpath::measure]
-fn hash_tree(inputs: &mut Inputs, workspace_root: &Path, root: &Path) {
-    let entries = walkdir::WalkDir::new(root)
+fn tree_files(root: &Path) -> Vec<PathBuf> {
+    walkdir::WalkDir::new(root)
         .into_iter()
         .filter_entry(|entry| {
             !(entry.file_type().is_dir()
@@ -209,33 +260,15 @@ fn hash_tree(inputs: &mut Inputs, workspace_root: &Path, root: &Path) {
                     .iter()
                     .any(|name| entry.file_name() == *name)
                     || entry.path().join(BUILD_DIRECTORY_MARKER).exists()))
-        });
-    for entry in entries.filter_map(Result::ok) {
-        if entry.file_type().is_file() {
-            hash_file(inputs, workspace_root, entry.path());
-        }
-    }
-}
-
-#[instrument(level = "debug", skip(inputs, path))]
-#[hotpath::measure]
-fn hash_file(inputs: &mut Inputs, workspace_root: &Path, path: &Path) {
-    let label = path
-        .strip_prefix(workspace_root)
-        .unwrap_or(path)
-        .display()
-        .to_string();
-    // A file that cannot be read still changes the key, by the reason.
-    let value = match std::fs::read(path) {
-        Ok(bytes) => hex(&Sha256::digest(&bytes)),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return,
-        Err(error) => format!("unreadable:{error}"),
-    };
-    inputs.put(format!("file:{label}"), value);
+        })
+        .filter_map(Result::ok)
+        .filter(|entry| entry.file_type().is_file())
+        .map(walkdir::DirEntry::into_path)
+        .collect()
 }
 
 #[instrument(level = "debug")]
 #[hotpath::measure]
-fn hex(bytes: &[u8]) -> String {
+pub(super) fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }

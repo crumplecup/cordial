@@ -1,5 +1,7 @@
 //! Hidden exports for in-repo parity tests and oracles.
 
+mod run_key;
+
 #[cfg(feature = "shadow")]
 mod shadow_oracle;
 
@@ -8,6 +10,8 @@ mod wrapper_oracle;
 
 #[cfg(feature = "rustdoc")]
 mod load_view;
+
+pub use run_key::run_cache_digest;
 
 #[cfg(feature = "shadow")]
 pub use shadow_oracle::{build_shadow_pair_report, build_shadow_pair_report_from_inventories};
