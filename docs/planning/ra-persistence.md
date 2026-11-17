@@ -662,7 +662,35 @@ queries that are not persisted, in Salsa, so that when `crate_local_def_map` run
 each module's earlier id by its identity (crate, block, parent, name), which is what its earlier
 memo would have given it. (B) is smaller and leaves the definition-map first touch to recompute.
 
-**Still to do.** The dependency layer, as above. Before it: persist it (rust-analyzer's impl indexes and what
+*Built (commits 4d72a57, 619415c, fad45e7).* (1) Salsa keeps each tracked struct's `Identity` with
+its value and, in a process that restored a database, gives a struct made again by a query with no
+earlier memo the id it was saved with (`salsa_tracked_identity`: the same, not the same when made
+under other identities, and taken once). (2) The ids are saved: `impl_intern_key!` ids,
+`EditionedFileId`, `MacroCallId`, hygiene contexts, `ModuleIdLt` and `BlockIdLt` (tracked structs),
+with serde through `span`, `tt` and `mbe` (now vendored), `hir_expand`, `hir_def`. (3)
+`lang_items`, `crate_lang_items`, and the two impl indexes (`inherent_impls_for_crate`,
+`trait_impls_for_crate`, made free functions so the macro's impl needs no `allow`) are persisted;
+`hir_ty::method_resolution::saved` writes a `SimplifiedType` as its own enum, matched exhaustively,
+and refuses the ids the solver numbers itself. (4) `Symbol` hashes its text, not its address:
+the identity hash of a module has its name in it, and an address differs in every process, so
+no saved identity ever matched until this (the first restored run panicked with `ModuleId not
+found in ModulesMap`).
+
+*Measured, specimen with a cfg context, after an edit to one body:* the restored run executed
+125,721 queries before, 102,692 with `lang_items` saved, and **27,930** with the impl indexes
+saved too, against 126,154 for the run from nothing; 8 functions' evidence computed. The battery
+(13 edits, each compared with a run from nothing and audited), the Salsa tests and the saved-state
+tests pass.
+
+*Not measured.* The size of the saved state and the time to save it on cordial (every interned id
+is now in it); the effect of hashing a symbol by its text on a cold run; the edited run on
+cordial. All three need a cordial-sized run.
+
+*What is left of the 27,930:* `ast_id_map` 6,662, `file_item_tree` 6,659, `macro_arg` and
+`parse_macro_expansion` 5,661 each, `parse` and `real_span_map` 1,007 each, and 18 re-run
+`crate_local_def_map` calls: the first touch of the definition maps of the dependency crates (S3).
+
+**Still to do.** The definition maps of the dependency crates (S3), as above. Before it: persist it (rust-analyzer's impl indexes and what
 they read, for crates that are not workspace members, whose inputs do not change between runs; the
 stable ids of `hir_expand::stable` are the means), or stop asking the trait solver for facts that a
 saved answer holds. Then: measure the cordial run with the impl fingerprints; cordial's `resolve` should find
