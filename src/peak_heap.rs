@@ -133,6 +133,23 @@ pub(crate) fn report_releases(db: &dyn salsa::Database) {
             );
         }
     }
+    // How long what was freed had lived, by the query that allocated it.
+    let mut ages = salsa::freed_by_age();
+    ages.sort_by_key(|(_, buckets)| std::cmp::Reverse(buckets.iter().sum::<i64>()));
+    for (tag, buckets) in ages.into_iter().take(25) {
+        let [under_10ms, under_100ms, under_1s, under_10s, longer] =
+            buckets.map(|bytes| u64::try_from(bytes).unwrap_or(0));
+        tracing::info!(
+            target: "cordial::heap",
+            ingredient = format!("lived {}", salsa::ingredient_name(db, tag)),
+            under_10ms,
+            under_100ms,
+            under_1s,
+            under_10s,
+            longer,
+            "memory freed, by how long it had lived"
+        );
+    }
     let mut pairs = salsa::freed_pairs();
     pairs.sort_by_key(|(_, _, bytes)| std::cmp::Reverse(*bytes));
     for (allocated, freed, bytes) in pairs.into_iter().take(30) {

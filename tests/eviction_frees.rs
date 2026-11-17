@@ -80,6 +80,7 @@ fn what_the_queries_hold_is_told_by_query() -> Result<()> {
         held_in_all: counting_allocator::held_in_all,
         peak_held: counting_allocator::peak_held,
         freed_pairs: counting_allocator::freed_pairs,
+        freed_by_age: counting_allocator::freed_by_age,
     });
     cordial::start_heap_sampling();
     let root = crate_with_derives()?;
@@ -112,6 +113,23 @@ fn what_the_queries_hold_is_told_by_query() -> Result<()> {
         .get(name)
         .copied()
     };
+    // What was freed is told by how long it had lived, most of it within an execution.
+    let lived = |bucket: &str| -> u64 {
+        let store = tempfile::tempdir().expect("a directory");
+        let layout = StoreLayout::from_root(store.path().to_path_buf(), "evicted".to_owned());
+        cordial::write_run_metrics(&layout).expect("the metrics are written");
+        cordial::read_run_metrics(&layout)
+            .values()
+            .iter()
+            .filter(|(key, _)| key.starts_with("heap.lived_") && key.ends_with(bucket))
+            .map(|(_, bytes)| *bytes)
+            .sum()
+    };
+    assert!(
+        lived(".under_10ms") > 1_000_000,
+        "the memory freed within 10 ms is not told: {}",
+        lived(".under_10ms")
+    );
     let at_peak = peak("heap.peak_at.bytes").unwrap_or(0);
     assert!(
         i64::try_from(at_peak).unwrap_or(0) >= counting_allocator::held_in_all() * 9 / 10,

@@ -349,6 +349,8 @@ pub struct AllocationTags {
     pub peak_held: fn() -> i64,
     /// Bytes freed, by the tag that allocated them and the tag executing when they were freed.
     pub freed_pairs: fn() -> Vec<(u32, u32, i64)>,
+    /// Bytes freed, by the tag that allocated them and how long they lived.
+    pub freed_by_age: fn() -> Vec<(u32, [i64; 5])>,
 }
 
 static ALLOCATION_TAGS: std::sync::OnceLock<AllocationTags> = std::sync::OnceLock::new();
@@ -371,6 +373,11 @@ pub fn held_in_all() -> Option<i64> {
 /// The most the program has held at once, if its allocator counts it.
 pub fn held_peak() -> Option<i64> {
     allocation_tags().map(|tags| (tags.peak_held)())
+}
+
+/// Bytes freed by the tag that allocated them and how long they lived, in five age buckets.
+pub fn freed_by_age() -> Vec<(u32, [i64; 5])> {
+    allocation_tags().map_or_else(Vec::new, |tags| (tags.freed_by_age)())
 }
 
 /// Bytes freed by tag pair, as the program's allocator has counted them: who allocated, who was

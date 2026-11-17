@@ -8,7 +8,9 @@
 
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::cell::Cell;
+use std::sync::OnceLock;
 use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
+use std::time::Instant;
 
 /// How many tags there can be: tag 0 is what no query was executing for, and the others are
 /// Salsa's ingredient indices plus one.
@@ -25,6 +27,20 @@ static PEAK: AtomicI64 = AtomicI64::new(0);
 
 /// Frees of at least this many bytes are counted by who allocated and who freed.
 const PAIRED_FROM: usize = 1024;
+/// Of those, the pairs are only for memory that lived this long (milliseconds): what is made and
+/// freed within a query's execution is not what is held.
+const PAIRED_AFTER_MS: u32 = 100;
+/// Upper bounds, in milliseconds, of the ages memory is counted by when it is freed; the last
+/// bucket is every age above.
+const AGES_MS: [u32; 4] = [10, 100, 1000, 10_000];
+
+static START: OnceLock<Instant> = OnceLock::new();
+static LIVED: [[AtomicI64; 5]; TAGS] = [const { [const { AtomicI64::new(0) }; 5] }; TAGS];
+
+/// Milliseconds since the first allocation counted.
+fn now_ms() -> u32 {
+    u32::try_from(START.get_or_init(Instant::now).elapsed().as_millis()).unwrap_or(u32::MAX)
+}
 /// A table of (allocating tag, freeing tag) pairs, open-addressed so that counting never allocates.
 const PAIRS: usize = 16384;
 static PAIR_KEY: [AtomicU64; PAIRS] = [const { AtomicU64::new(0) }; PAIRS];
@@ -86,6 +102,7 @@ fn tagged(real: *mut u8, pad: usize, size: usize) -> *mut u8 {
     unsafe {
         let user = real.add(pad);
         user.sub(4).cast::<u32>().write(tag);
+        user.sub(8).cast::<u32>().write(now_ms());
         HELD[tag as usize % TAGS]
             .fetch_add(i64::try_from(size).unwrap_or(i64::MAX), Ordering::Relaxed);
         user
@@ -117,7 +134,15 @@ unsafe impl GlobalAlloc for Counting {
                 Ordering::Relaxed,
             );
             if layout.size() >= PAIRED_FROM {
-                pair_add(tag, current_tag(), layout.size());
+                let age = now_ms().wrapping_sub(ptr.sub(8).cast::<u32>().read());
+                let bucket = AGES_MS.iter().position(|bound| age < *bound).unwrap_or(4);
+                LIVED[tag as usize % TAGS][bucket].fetch_add(
+                    i64::try_from(layout.size()).unwrap_or(i64::MAX),
+                    Ordering::Relaxed,
+                );
+                if age >= PAIRED_AFTER_MS {
+                    pair_add(tag, current_tag(), layout.size());
+                }
             }
             System.dealloc(ptr.sub(pad), asked);
         }
@@ -178,6 +203,24 @@ pub fn freed_pairs() -> Vec<(u32, u32, i64)> {
                     bytes,
                 )
             })
+        })
+        .collect()
+}
+
+/// Bytes freed by the tag that allocated them and how long they lived: under 10 ms, 100 ms, 1 s,
+/// 10 s, and longer; for the frees of a kilobyte or more.
+pub fn freed_by_age() -> Vec<(u32, [i64; 5])> {
+    LIVED
+        .iter()
+        .enumerate()
+        .filter_map(|(tag, buckets)| {
+            let counts = buckets
+                .each_ref()
+                .map(|bucket| bucket.load(Ordering::Relaxed));
+            counts
+                .iter()
+                .any(|count| *count != 0)
+                .then_some((tag as u32, counts))
         })
         .collect()
 }

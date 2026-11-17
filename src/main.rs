@@ -25,6 +25,7 @@ fn main() -> miette::Result<()> {
         held_in_all: counting_allocator::held_in_all,
         peak_held: counting_allocator::peak_held,
         freed_pairs: counting_allocator::freed_pairs,
+        freed_by_age: counting_allocator::freed_by_age,
     });
     #[cfg(all(feature = "alloc_metrics", not(feature = "hotpath-alloc")))]
     cordial::start_heap_sampling();
