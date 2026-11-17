@@ -25,7 +25,7 @@ impl SourceDatabase {
     /// spread over the available cores.
     #[instrument(level = "debug", skip(self))]
     #[hotpath::measure(impl_type = "SourceDatabase")]
-    pub(super) fn prime_function_evidence(&self) {
+    pub(super) fn prime_function_evidence(&mut self) {
         // The functions of each ordinary crate, by description, as the last run saved them. A crate
         // all of whose functions a description finds again is primed from them without asking
         // rust-analyzer which functions it has; any other is enumerated.
@@ -62,16 +62,19 @@ impl SourceDatabase {
                 functions = described.len(),
                 "priming from the saved descriptions of the workspace's functions"
             );
-            self.prime("workspace", &described, |db, text| {
+            self.prime_in_chunks("workspace", &described, |db, text| {
                 let _ = queries::persisted_evidence(db, ItemKey::new(db, text.clone()));
             });
             return;
         }
         let excluded = self.shadow_crates();
         let functions = attach_db(&self.db, || local_functions(&self.db, &excluded));
-        self.prime_functions("workspace", &functions);
+        self.prime_in_chunks("workspace", &functions, |db, function| {
+            let _ = queries::evidence_of(db, *function);
+        });
     }
 
+    #[cfg(feature = "tracing")]
     /// Evaluate the evidence of `functions` on worker threads. The results are
     /// those of the database's cfg as it is now: after the cfg changes they are
     /// computed again, so a pass that enters a context primes inside it.
@@ -87,6 +90,7 @@ impl SourceDatabase {
     }
 
     /// Run `one` over `items` on worker threads, each item once.
+    #[cfg(feature = "tracing")]
     #[instrument(level = "debug", skip(self, functions, one))]
     #[hotpath::measure(impl_type = "SourceDatabase")]
     pub(in crate::loader::database) fn prime<T: Sync>(
@@ -96,6 +100,44 @@ impl SourceDatabase {
         one: impl Fn(&RootDatabase, &T) + Sync,
     ) {
         let before = queries::evidence_executed();
+        self.prime_part(functions, &one);
+        self.say_primed(label, before, functions.len());
+    }
+
+    /// [`Self::prime`] in chunks, with what is over its capacity evicted between them. The
+    /// workers hold handles onto the database while they run, and eviction needs it exclusively,
+    /// so a pass that never stops keeps every syntax tree it makes until it is over.
+    #[instrument(level = "debug", skip(self, functions, one))]
+    #[hotpath::measure(impl_type = "SourceDatabase")]
+    pub(in crate::loader::database) fn prime_in_chunks<T: Sync>(
+        &mut self,
+        label: &str,
+        functions: &[T],
+        one: impl Fn(&RootDatabase, &T) + Sync,
+    ) {
+        let before = queries::evidence_executed();
+        let size = chunk_size(functions.len());
+        let chunks = functions.len().div_ceil(size);
+        for (index, part) in functions.chunks(size).enumerate() {
+            crate::peak_heap::note_stage(format!(
+                "priming {label}, chunk {} of {chunks}",
+                index + 1
+            ));
+            self.prime_part(part, &one);
+            self.evict_between_chunks();
+        }
+        self.say_primed(label, before, functions.len());
+    }
+
+    fn say_primed(&self, label: &str, before: usize, functions: usize) {
+        let evaluated = queries::evidence_executed().saturating_sub(before);
+        crate::host::event(format!(
+            "function evidence ({label}): {evaluated} evaluated for {functions} function(s), the rest already known"
+        ));
+    }
+
+    /// Run `one` over `functions` on worker threads, each once, and wait for them.
+    fn prime_part<T: Sync>(&self, functions: &[T], one: &(impl Fn(&RootDatabase, &T) + Sync)) {
         let workers = std::thread::available_parallelism()
             .map_or(1, usize::from)
             .min(functions.len().max(1));
@@ -111,7 +153,7 @@ impl SourceDatabase {
         std::thread::scope(|scope| {
             for index in 0..workers {
                 let db = self.db.clone();
-                let (functions, next, dispatch, one) = (functions, &next, dispatch.clone(), &one);
+                let (functions, next, dispatch) = (functions, &next, dispatch.clone());
                 let spawned = std::thread::Builder::new()
                     .name(format!("cordial-prime-{index}"))
                     .stack_size(WORKER_STACK_BYTES)
@@ -127,12 +169,15 @@ impl SourceDatabase {
                 }
             }
         });
-        let evaluated = queries::evidence_executed().saturating_sub(before);
-        crate::host::event(format!(
-            "function evidence ({label}): {evaluated} evaluated for {} function(s), the rest already known",
-            functions.len()
-        ));
     }
+}
+
+/// How many functions go between two evictions: enough that the workers' start-up is nothing
+/// to it, few enough that what a chunk parses is a small part of the whole.
+fn chunk_size(functions: usize) -> usize {
+    const CHUNKS: usize = 16;
+    const LEAST: usize = 64;
+    functions.div_ceil(CHUNKS).max(LEAST)
 }
 
 /// Take functions from the shared counter until none are left.

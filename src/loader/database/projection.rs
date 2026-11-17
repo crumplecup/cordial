@@ -115,6 +115,8 @@ impl SourceDatabase {
         let rest = self.project_after_ordinary(paths, &outline, &mut graph);
         // A run that fails in the contexts still leaves what it computed.
         self.save_state();
+        crate::peak_heap::report(&self.db);
+        crate::peak_heap::report_releases(&self.db);
         rest?;
         // What the database now holds, for a profile; it needs the database
         // exclusively, which it has here.

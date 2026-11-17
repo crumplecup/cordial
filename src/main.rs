@@ -23,7 +23,11 @@ fn main() -> miette::Result<()> {
         set_tag: counting_allocator::set_tag,
         held_by_tag: counting_allocator::held_by_tag,
         held_in_all: counting_allocator::held_in_all,
+        peak_held: counting_allocator::peak_held,
+        freed_pairs: counting_allocator::freed_pairs,
     });
+    #[cfg(all(feature = "alloc_metrics", not(feature = "hotpath-alloc")))]
+    cordial::start_heap_sampling();
     init_cli_tracing();
     Cli::parse().act().into_diagnostic()
 }

@@ -313,6 +313,12 @@ pub(crate) fn allocation_probe() -> Option<fn() -> i64> {
     ALLOCATION_PROBE.get().copied()
 }
 
+/// Keep at most `cap` values of each query that evicts the least recently used (0 to keep what
+/// each is marked with), at the next eviction.
+pub fn cap_lru_capacities(cap: usize) {
+    crate::function::cap_capacities(cap);
+}
+
 /// What the program offers for attributing memory to the queries that allocated it.
 #[derive(Clone, Copy)]
 pub struct AllocationTags {
@@ -322,6 +328,10 @@ pub struct AllocationTags {
     pub held_by_tag: fn() -> Vec<(u32, i64)>,
     /// The bytes held now, in all.
     pub held_in_all: fn() -> i64,
+    /// The most held at once so far.
+    pub peak_held: fn() -> i64,
+    /// Bytes freed, by the tag that allocated them and the tag executing when they were freed.
+    pub freed_pairs: fn() -> Vec<(u32, u32, i64)>,
 }
 
 static ALLOCATION_TAGS: std::sync::OnceLock<AllocationTags> = std::sync::OnceLock::new();
@@ -339,6 +349,34 @@ pub(crate) fn allocation_tags() -> Option<AllocationTags> {
 /// The bytes the program holds now, in all, if its allocator counts them.
 pub fn held_in_all() -> Option<i64> {
     allocation_tags().map(|tags| (tags.held_in_all)())
+}
+
+/// The most the program has held at once, if its allocator counts it.
+pub fn held_peak() -> Option<i64> {
+    allocation_tags().map(|tags| (tags.peak_held)())
+}
+
+/// Bytes freed by tag pair, as the program's allocator has counted them: who allocated, who was
+/// executing when it was freed.
+pub fn freed_pairs() -> Vec<(u32, u32, i64)> {
+    allocation_tags().map_or_else(Vec::new, |tags| (tags.freed_pairs)())
+}
+
+/// The bytes held now by tag, as the program's allocator has them; see [`ingredient_name`].
+pub fn held_by_tag() -> Vec<(u32, i64)> {
+    allocation_tags().map_or_else(Vec::new, |tags| (tags.held_by_tag)())
+}
+
+/// The name of the ingredient a tag stands for, or `outside queries` for tag 0.
+pub fn ingredient_name(db: &dyn Database, tag: u32) -> String {
+    match tag.checked_sub(1) {
+        None => "outside queries".to_owned(),
+        Some(index) => db
+            .zalsa()
+            .lookup_ingredient(crate::zalsa::IngredientIndex::new(index))
+            .debug_name()
+            .to_owned(),
+    }
 }
 
 /// The bytes held now by the queries that allocated them, with the name of each ingredient, most

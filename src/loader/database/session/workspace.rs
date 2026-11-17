@@ -68,6 +68,7 @@ impl SourceDatabase {
         reporter: &Reporter,
         saved: Option<SavedState>,
     ) -> CordialResult<Self> {
+        super::super::eviction::cap_from_environment();
         let root = root.canonicalize()?;
         // canonicalize established absoluteness; check UTF-8 before the
         // upstream path constructor's assertion boundary.

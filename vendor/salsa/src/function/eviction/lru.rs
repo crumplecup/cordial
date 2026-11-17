@@ -11,6 +11,17 @@ use crate::sync::Mutex;
 
 use super::{EvictionPolicy, HasCapacity};
 
+/// The most any LRU keeps, when the program asks for fewer than the queries are marked with
+/// (0: what they are marked with). Counted by values and not by bytes, so a program whose values
+/// are large asks for fewer.
+static CAPACITY_CAP: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// Keep at most `cap` values of each query that has a capacity (0 to keep what each is marked
+/// with). Takes effect at the next eviction.
+pub fn cap_capacities(cap: usize) {
+    CAPACITY_CAP.store(cap, std::sync::atomic::Ordering::Relaxed);
+}
+
 /// Least Recently Used eviction policy.
 ///
 /// When the number of memoized values exceeds the configured capacity,
@@ -54,8 +65,12 @@ impl EvictionPolicy for Lru {
         let Some(cap) = self.capacity else {
             return;
         };
+        let cap = match CAPACITY_CAP.load(std::sync::atomic::Ordering::Relaxed) {
+            0 => cap.get(),
+            capped => cap.get().min(capped),
+        };
         let set = self.set.get_mut();
-        while set.len() > cap.get() {
+        while set.len() > cap {
             if let Some(id) = set.pop_front() {
                 cb(id);
             }

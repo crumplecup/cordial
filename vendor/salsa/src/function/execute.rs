@@ -341,7 +341,7 @@ where
         let previous_tag = tags.map(|tags| {
             (tags.set_tag)(active_query.database_key_index.ingredient_index().as_u32() + 1)
         });
-        let result = Self::execute_timed(db, zalsa, active_query);
+        let result = Self::execute_timed(db, zalsa, active_query, opt_old_header.is_some());
         if let (Some(tags), Some(previous)) = (tags, previous_tag) {
             (tags.set_tag)(previous);
         }
@@ -352,6 +352,7 @@ where
         db: &'db C::DbView,
         zalsa: &'db Zalsa,
         active_query: ActiveQueryGuard<'db>,
+        again: bool,
     ) -> (C::Output<'db>, ActiveQueryGuard<'db>) {
         let timed = ::tracing::enabled!(target: "salsa::execution", ::tracing::Level::INFO);
         if !timed {
@@ -383,6 +384,7 @@ where
             target: "salsa::execution",
             ingredient = C::DEBUG_NAME,
             nanos = total.saturating_sub(children),
+            again = u64::from(again),
             retained = u64::try_from(own).unwrap_or(0),
             freed = u64::try_from(-own).unwrap_or(0),
             "a query executed"

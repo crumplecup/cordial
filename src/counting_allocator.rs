@@ -8,7 +8,7 @@
 
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::cell::Cell;
-use std::sync::atomic::{AtomicI64, Ordering};
+use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
 
 /// How many tags there can be: tag 0 is what no query was executing for, and the others are
 /// Salsa's ingredient indices plus one.
@@ -21,6 +21,32 @@ thread_local! {
 
 static HELD: [AtomicI64; TAGS] = [const { AtomicI64::new(0) }; TAGS];
 static TOTAL: AtomicI64 = AtomicI64::new(0);
+static PEAK: AtomicI64 = AtomicI64::new(0);
+
+/// Frees of at least this many bytes are counted by who allocated and who freed.
+const PAIRED_FROM: usize = 1024;
+/// A table of (allocating tag, freeing tag) pairs, open-addressed so that counting never allocates.
+const PAIRS: usize = 16384;
+static PAIR_KEY: [AtomicU64; PAIRS] = [const { AtomicU64::new(0) }; PAIRS];
+static PAIR_BYTES: [AtomicI64; PAIRS] = [const { AtomicI64::new(0) }; PAIRS];
+
+fn pair_add(allocated: u32, freed: u32, bytes: usize) {
+    let key = ((u64::from(allocated) << 32) | u64::from(freed)) + 1;
+    let mut at = (key.wrapping_mul(0x9E37_79B9_7F4A_7C15) >> 40) as usize % PAIRS;
+    for _ in 0..64 {
+        let found = PAIR_KEY[at].load(Ordering::Relaxed);
+        if found == key
+            || (found == 0
+                && PAIR_KEY[at]
+                    .compare_exchange(0, key, Ordering::Relaxed, Ordering::Relaxed)
+                    .map_or_else(|other| other == key, |_| true))
+        {
+            PAIR_BYTES[at].fetch_add(i64::try_from(bytes).unwrap_or(i64::MAX), Ordering::Relaxed);
+            return;
+        }
+        at = (at + 1) % PAIRS;
+    }
+}
 
 /// Counts for the program's allocator.
 pub struct Counting;
@@ -30,7 +56,10 @@ fn add(bytes: usize, grows: bool) {
     let signed = if grows { bytes } else { -bytes };
     // Not available while the thread is being torn down: nothing to count then.
     let _ = NET.try_with(|net| net.set(net.get() + signed));
-    TOTAL.fetch_add(signed, Ordering::Relaxed);
+    let now = TOTAL.fetch_add(signed, Ordering::Relaxed) + signed;
+    if grows {
+        PEAK.fetch_max(now, Ordering::Relaxed);
+    }
 }
 
 fn current_tag() -> u32 {
@@ -87,6 +116,9 @@ unsafe impl GlobalAlloc for Counting {
                 i64::try_from(layout.size()).unwrap_or(i64::MAX),
                 Ordering::Relaxed,
             );
+            if layout.size() >= PAIRED_FROM {
+                pair_add(tag, current_tag(), layout.size());
+            }
             System.dealloc(ptr.sub(pad), asked);
         }
     }
@@ -130,6 +162,29 @@ pub fn set_tag(tag: u32) -> u32 {
 /// What every thread together holds.
 pub fn held_in_all() -> i64 {
     TOTAL.load(Ordering::Relaxed)
+}
+
+/// Bytes freed, by the tag of the query that allocated them and of the one executing when they
+/// were freed (0 for neither), for the frees of a kilobyte or more.
+pub fn freed_pairs() -> Vec<(u32, u32, i64)> {
+    (0..PAIRS)
+        .filter_map(|at| {
+            let key = PAIR_KEY[at].load(Ordering::Relaxed);
+            let bytes = PAIR_BYTES[at].load(Ordering::Relaxed);
+            (key != 0).then(|| {
+                (
+                    ((key - 1) >> 32) as u32,
+                    ((key - 1) & 0xFFFF_FFFF) as u32,
+                    bytes,
+                )
+            })
+        })
+        .collect()
+}
+
+/// The most every thread together has held at once.
+pub fn peak_held() -> i64 {
+    PEAK.load(Ordering::Relaxed)
 }
 
 /// What each tag holds that is not zero.

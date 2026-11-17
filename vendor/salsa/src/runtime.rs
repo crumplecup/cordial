@@ -299,6 +299,8 @@ impl Runtime {
         self.revisions[0] = r_new;
         *self.cancellation_count.get_mut() = 0;
         crate::tracing::info!("new_revision: {r_old:?} -> {r_new:?}");
+        // Said as an execution is, so that the step of the program that asked for it is told.
+        ::tracing::info!(target: "salsa::function::execute", "new_revision({r_new:?})");
         r_new
     }
 

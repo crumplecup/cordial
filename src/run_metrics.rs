@@ -46,7 +46,15 @@ const LIMIT: usize = 4_000;
 const QUALIFIERS: &[&str] = &["ingredient", "phase", "step", "part", "what"];
 
 /// The text fields kept as notes.
-const NOTES: &[&str] = &["breadth", "reads_themselves", "kinds", "top", "reasons"];
+const NOTES: &[&str] = &[
+    "breadth",
+    "reads_themselves",
+    "kinds",
+    "top",
+    "reasons",
+    "stage",
+    "phase",
+];
 
 /// What a run said about itself.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize, derive_getters::Getters)]

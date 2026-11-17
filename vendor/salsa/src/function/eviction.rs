@@ -6,7 +6,7 @@
 mod lru;
 mod noop;
 
-pub use lru::Lru;
+pub use lru::{Lru, cap_capacities};
 pub use noop::NoopEviction;
 
 use crate::Id;

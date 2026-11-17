@@ -37,6 +37,7 @@ mod live_status;
 mod loader;
 mod memory_limit;
 mod objects;
+mod peak_heap;
 pub mod perf;
 mod plugin;
 mod plugins;
@@ -289,6 +290,7 @@ pub use memory_limit::{
     parse_limit, parse_meminfo, parse_size, resolve as resolve_memory_limit,
     resolve_with as resolve_memory_limit_with,
 };
+pub use peak_heap::start_sampling as start_heap_sampling;
 #[cfg(all(feature = "rustdoc", feature = "impl_coverage"))]
 pub use plugin::classify_elicit_complete_gap;
 #[cfg(feature = "elicitation")]

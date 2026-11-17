@@ -164,7 +164,7 @@ fn queries_are_not_counted_unless_asked_for() {
 
 mod execution_time {
     use cordial::{MetricsLayer, StoreLayout};
-    use salsa::{Database, Storage};
+    use salsa::{Database, Setter, Storage};
     use tracing_subscriber::Layer;
     use tracing_subscriber::layer::SubscriberExt;
 
@@ -213,9 +213,14 @@ mod execution_time {
         let subscriber = tracing_subscriber::registry()
             .with(MetricsLayer.with_filter(cordial::metrics_filter_with(true)));
         tracing::subscriber::with_default(subscriber, || {
-            let db = Db::default();
+            let mut db = Db::default();
             let source = Source::new(&db, 7);
             assert_eq!(the_outer_one(&db, source), 8);
+            // A new revision, asked for by a step of the program, and the queries run again.
+            let step = tracing::debug_span!(target: "cordial::specimen", "changing_the_input");
+            let _inside = step.enter();
+            source.set_value(&mut db).to(9);
+            assert_eq!(the_outer_one(&db, source), 10);
         });
         let root = tempfile::tempdir().expect("a directory");
         let store = StoreLayout::from_root(root.path().to_path_buf(), "specimen".to_owned());
@@ -237,7 +242,8 @@ mod execution_time {
             outer < inner / 2,
             "outer {outer} ns counted the inner {inner} ns"
         );
-        // The inner query holds 4 KiB more when it is done, and the outer one nothing of its own.
+        // The inner query holds 4 KiB more each time it is done (it ran twice), and the outer one
+        // nothing of its own.
         let bytes = |query: &str| {
             metrics
                 .values()
@@ -249,7 +255,33 @@ mod execution_time {
                 })
                 .map(|(_, value)| *value)
         };
-        assert_eq!(bytes("the_inner_one"), Some(4096));
+        // It ran twice, and the second time replaced the memo of the first.
+        let value = |name: &str| metrics.values().get(name).copied();
+        let again = |query: &str| {
+            metrics
+                .values()
+                .iter()
+                .find(|(key, _)| {
+                    key.starts_with("execution.") && key.contains(query) && key.ends_with(".again")
+                })
+                .map(|(_, value)| *value)
+        };
+        assert_eq!(again("the_inner_one"), Some(1));
+        assert_eq!(again("the_outer_one"), Some(1));
+        // The step that asked for the revision is told.
+        assert!(
+            metrics.values().iter().any(|(key, count)| key
+                .ends_with("changing_the_input > new_revision")
+                && *count >= 1),
+            "no step is told to have started a revision: {:?}",
+            metrics
+                .values()
+                .keys()
+                .filter(|key| key.starts_with("steps."))
+                .collect::<Vec<_>>()
+        );
+        let _ = value;
+        assert_eq!(bytes("the_inner_one"), Some(8192));
         assert_eq!(bytes("the_outer_one"), Some(0));
     }
 }

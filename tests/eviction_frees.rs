@@ -78,7 +78,10 @@ fn what_the_queries_hold_is_told_by_query() -> Result<()> {
         set_tag: counting_allocator::set_tag,
         held_by_tag: counting_allocator::held_by_tag,
         held_in_all: counting_allocator::held_in_all,
+        peak_held: counting_allocator::peak_held,
+        freed_pairs: counting_allocator::freed_pairs,
     });
+    cordial::start_heap_sampling();
     let root = crate_with_derives()?;
     let state = tempfile::tempdir().into_diagnostic()?;
     let saved = SavedState::at(state.path().join("analysis-state"));
@@ -94,6 +97,29 @@ fn what_the_queries_hold_is_told_by_query() -> Result<()> {
             &sources_of(root.path()),
         )
         .into_diagnostic()?;
+
+    // The most the program held is told too, and by whom, with the stage it was in.
+    let peak = |name: &str| {
+        cordial::read_run_metrics(&{
+            let store = tempfile::tempdir().expect("a directory");
+            let layout = StoreLayout::from_root(store.path().to_path_buf(), "evicted".to_owned());
+            cordial::write_run_metrics(&layout).expect("the metrics are written");
+            std::mem::forget(store);
+            layout
+        })
+        .values()
+        .get(name)
+        .copied()
+    };
+    let at_peak = peak("heap.peak_at.bytes").unwrap_or(0);
+    assert!(
+        i64::try_from(at_peak).unwrap_or(0) >= counting_allocator::held_in_all() * 9 / 10,
+        "the highest the program held ({at_peak} bytes) is under what it holds now"
+    );
+    assert!(
+        peak("heap.peak_held_crate_local_def_map.bytes").unwrap_or(0) > 0,
+        "the highest is not told by query"
+    );
 
     let held = session.held_by_ingredient();
     let told: i64 = held.iter().map(|(_, bytes)| bytes).sum();
@@ -170,6 +196,8 @@ fn evicting_gives_back_the_memory_of_the_trees() -> Result<()> {
         set_tag: counting_allocator::set_tag,
         held_by_tag: counting_allocator::held_by_tag,
         held_in_all: counting_allocator::held_in_all,
+        peak_held: counting_allocator::peak_held,
+        freed_pairs: counting_allocator::freed_pairs,
     });
     let root = crate_with_derives()?;
     let state = tempfile::tempdir().into_diagnostic()?;
@@ -186,7 +214,11 @@ fn evicting_gives_back_the_memory_of_the_trees() -> Result<()> {
     let projected = session.held_by_ingredient();
     session.evict_regenerable_now();
     let less = released(&projected, &session.held_by_ingredient());
-    let report = table(&less);
+    let report = format!(
+        "released:\n{}held before:\n{}",
+        table(&less),
+        table(&projected)
+    );
     let of = |query: &str| {
         less.iter()
             .find(|(name, _)| name.contains(query))
