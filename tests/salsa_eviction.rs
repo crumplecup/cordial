@@ -99,8 +99,19 @@ fn docs(db: &Db) -> Vec<Doc> {
 }
 
 /// What evicting gives back, in bytes, and how much it should: the values past the capacity.
+///
+/// Before it, the memos hold every value that was made: the capacity of a query is not a bound
+/// while queries run, since the values past it are dropped only when Salsa is asked to (or a
+/// revision starts), with the database held exclusively. That is what a run that never asks keeps.
 fn eviction_gives_back(db: &mut Db, before: i64) -> (i64, i64) {
     let made = held() - before;
+    let all = i64::try_from(INPUTS * VALUE_BYTES).unwrap_or(0);
+    assert!(
+        made >= all * 9 / 10,
+        "the memos hold {} MB of the {} MB made, though the capacity is {CAPACITY} of {INPUTS}",
+        made / 1_000_000,
+        all / 1_000_000
+    );
     db.trigger_lru_eviction();
     let back = made - (held() - before);
     let should = i64::try_from((INPUTS - CAPACITY) * VALUE_BYTES).unwrap_or(0);
