@@ -100,11 +100,8 @@ impl SourceDatabase {
         }
         for (query, fingerprint) in [
             ("crate_local_def_map", "def_map_fingerprint"),
-            (
-                "InherentImpls < 'db >::for_crate_",
-                "inherent_impls_fingerprint",
-            ),
-            ("TraitImpls < 'db >::for_crate_", "trait_impls_fingerprint"),
+            ("inherent_impls_for_crate", "inherent_impls_fingerprint"),
+            ("trait_impls_for_crate", "trait_impls_fingerprint"),
         ] {
             let declared = <dyn salsa::Database>::register_cutoff(&self.db, query, fingerprint);
             tracing::debug!(target: "cordial::cache", query, fingerprint, declared, "a fingerprint declared");

@@ -342,6 +342,18 @@ fn facts_of(graph: &CrateIr) -> Result<BTreeMap<String, serde_json::Value>> {
 
 /// What a run says about the crate, and how many functions' evidence it computed.
 fn run(root: &Path, saved: &SavedState, reuse: Reuse) -> Result<(Said, usize)> {
+    let (said, computed, _) = run_with(root, saved, reuse, CfgPlanning::Explicit)?;
+    Ok((said, computed))
+}
+
+/// A run, with how many functions' evidence it computed and how many queries of any kind it
+/// executed.
+fn run_with(
+    root: &Path,
+    saved: &SavedState,
+    reuse: Reuse,
+    planning: CfgPlanning,
+) -> Result<(Said, usize, usize)> {
     let executions = Executions::default();
     let audit = AuditEvents::default();
     let subscriber = tracing_subscriber::registry()
@@ -350,7 +362,7 @@ fn run(root: &Path, saved: &SavedState, reuse: Reuse) -> Result<(Said, usize)> {
         .with(cordial::tracing_fmt_layer());
     let _subscriber = tracing::subscriber::set_default(subscriber);
     let options = SemanticCargoOptions::default()
-        .with_cfg_planning(CfgPlanning::Explicit)
+        .with_cfg_planning(planning)
         .with_reuse_across_edits(matches!(reuse, Reuse::On));
     let mut session =
         SourceDatabase::load_saved(root, &options, Some(saved.clone())).into_diagnostic()?;
@@ -370,14 +382,29 @@ fn run(root: &Path, saved: &SavedState, reuse: Reuse) -> Result<(Said, usize)> {
         audited,
         mismatched,
     };
-    let computed = executions
-        .take()
-        .into_iter()
+    let all = executions.take();
+    let computed = all
+        .iter()
         .filter(|(name, _)| name.ends_with("> persisted_evidence"))
         .map(|(_, count)| count)
         .sum();
-    Ok((said, computed))
+    let executed = all.values().sum();
+    // Which kinds of query ran the most, for a failure to say what it was that ran.
+    let mut most: Vec<_> = all.iter().collect();
+    most.sort_by_key(|(name, count)| (std::cmp::Reverse(**count), (*name).clone()));
+    *RAN_MOST
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner) = most
+        .into_iter()
+        .take(40)
+        .map(|(name, count)| format!("{name}={count}"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    Ok((said, computed, executed))
 }
+
+/// The kinds of query the last run executed the most of.
+static RAN_MOST: Mutex<String> = Mutex::new(String::new());
 
 fn without_ids(value: &mut serde_json::Value) {
     match value {
@@ -745,6 +772,83 @@ fn an_edit_to_a_body_computes_the_functions_of_its_file_when_the_crate_has_impls
          of what was reused was audited); what reads the most inputs itself: {}",
         FILES * file,
         salsa::flatten_breadth("persisted_evidence").unwrap_or_default()
+    );
+    Ok(())
+}
+
+/// A crate like the independent files, with a function in each file that a Cargo feature gates, so
+/// that the planner adds a cfg context in which those files are compiled again, as cordial's own
+/// features do.
+fn independent_files_with_a_gated_function() -> Result<tempfile::TempDir> {
+    let root = independent_files()?;
+    std::fs::write(
+        root.path().join("Cargo.toml"),
+        "[package]\nname='gated'\nversion='0.1.0'\nedition='2024'\n[features]\nextra=[]\n[workspace]\n",
+    )
+    .into_diagnostic()?;
+    for file in 0..FILES {
+        let path = root.path().join(format!("src/file{file}.rs"));
+        let mut text = std::fs::read_to_string(&path).into_diagnostic()?;
+        text.push_str(&format!(
+            "#[cfg(feature = \"extra\")]\npub fn gated{file}() {{\n    f{file}_0();\n}}\n"
+        ));
+        std::fs::write(&path, text).into_diagnostic()?;
+    }
+    Ok(root)
+}
+
+/// What a restored run does after an edit to one body, in a crate with a cfg context, against what
+/// the run from nothing did: the functions' evidence computed and the queries executed by each.
+fn after_a_body_edit_with_a_context() -> Result<((usize, usize), (usize, usize))> {
+    cordial::init_tracing();
+    let root = independent_files_with_a_gated_function()?;
+    let state = tempfile::tempdir().into_diagnostic()?;
+    let saved = SavedState::at(state.path().join("analysis-state"));
+    let (_, cold_computed, cold_executed) =
+        run_with(root.path(), &saved, Reuse::On, CfgPlanning::Automatic)?;
+    let edited = root.path().join("src/file2.rs");
+    let text = std::fs::read_to_string(&edited).into_diagnostic()?;
+    std::fs::write(
+        &edited,
+        text.replace(
+            &format!("pub fn f2_{}() {{", PER_FILE - 1),
+            &format!("pub fn f2_{}() {{\n    let _ = 1;", PER_FILE - 1),
+        ),
+    )
+    .into_diagnostic()?;
+    let (_, computed, executed) = run_with(root.path(), &saved, Reuse::On, CfgPlanning::Automatic)?;
+    Ok(((cold_computed, cold_executed), (computed, executed)))
+}
+
+/// With a cfg context (as cordial has dozens of), an edit to one body makes a restored run execute
+/// a small part of what the run from nothing did, and compute the evidence of the functions of one
+/// file in the ordinary build and in the context, not of the crate.
+#[test]
+fn an_edit_to_a_body_costs_a_small_part_of_a_cold_run_when_the_crate_has_a_cfg_context()
+-> Result<()> {
+    let ((cold_computed, cold_executed), (computed, executed)) =
+        after_a_body_edit_with_a_context()?;
+    tracing::info!(
+        target: "edit_reuse",
+        cold_executed,
+        cold_computed,
+        executed,
+        computed,
+        most = %RAN_MOST.lock().map(|most| most.clone()).unwrap_or_default(),
+        "what the run from nothing and the run restored after an edit did"
+    );
+    assert!(
+        executed * 4 < cold_executed,
+        "the edited run executed {executed} queries, {computed} of them functions' evidence; the run \
+         from nothing executed {cold_executed}, {cold_computed} of them functions' evidence; the \
+         most of the edited run: {}",
+        RAN_MOST.lock().map(|most| most.clone()).unwrap_or_default()
+    );
+    // Each file's functions, once in the ordinary build and once in the context.
+    assert!(
+        computed <= 2 * (PER_FILE + 1) + 1,
+        "the edited run computed the evidence of {computed} functions, against {cold_computed} from \
+         nothing"
     );
     Ok(())
 }

@@ -360,7 +360,7 @@ impl ImplId {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct BuiltinDeriveImplLoc {
     pub adt: AdtId,
     pub trait_: BuiltinDeriveImplTrait,
@@ -368,7 +368,7 @@ pub struct BuiltinDeriveImplLoc {
     pub derive_index: u32,
 }
 
-#[salsa::interned(debug, unsafe(no_lifetime), revisions = usize::MAX)]
+#[salsa::interned(debug, unsafe(no_lifetime), revisions = usize::MAX, persist)]
 #[derive(PartialOrd, Ord)]
 pub struct BuiltinDeriveImplId {
     #[returns(ref)]
@@ -759,7 +759,7 @@ pub enum ItemContainerId {
 impl_from!(ModuleId for ItemContainerId);
 
 /// A Data Type
-#[derive(Debug, PartialOrd, Ord, Clone, Copy, PartialEq, Eq, Hash, salsa::Supertype)]
+#[derive(Debug, PartialOrd, Ord, Clone, Copy, PartialEq, Eq, Hash, salsa::Supertype, serde::Serialize, serde::Deserialize)]
 pub enum AdtId {
     StructId(StructId),
     UnionId(UnionId),
@@ -768,7 +768,7 @@ pub enum AdtId {
 impl_from!(StructId, UnionId, EnumId for AdtId);
 
 /// A macro
-#[derive(Debug, PartialOrd, Ord, Clone, Copy, PartialEq, Eq, Hash, salsa::Supertype)]
+#[derive(Debug, PartialOrd, Ord, Clone, Copy, PartialEq, Eq, Hash, salsa::Supertype, serde::Serialize, serde::Deserialize)]
 pub enum MacroId {
     Macro2Id(Macro2Id),
     MacroRulesId(MacroRulesId),

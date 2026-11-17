@@ -15,7 +15,7 @@ use crate::{
 
 macro_rules! declare_enum {
     ( $( $trait:ident => [ $( $method:ident ),* ] ),* $(,)? ) => {
-        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
         pub enum BuiltinDeriveImplTrait {
             $( $trait, )*
         }

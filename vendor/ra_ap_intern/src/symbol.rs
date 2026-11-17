@@ -116,9 +116,19 @@ impl TaggedArcPtr {
     }
 }
 
-#[derive(PartialEq, Eq, Hash)]
+#[derive(PartialEq, Eq)]
 pub struct Symbol {
     repr: TaggedArcPtr,
+}
+
+/// A symbol is hashed as the text it stands for, and not as the address it is interned at, which is
+/// different in every process: what is hashed with a name in it (the identity of a tracked struct,
+/// which a saved database keeps) means the same in the process that restores it. Equal symbols are
+/// the same text, so this agrees with `Eq`.
+impl std::hash::Hash for Symbol {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.as_str().hash(state);
+    }
 }
 
 impl serde::Serialize for Symbol {

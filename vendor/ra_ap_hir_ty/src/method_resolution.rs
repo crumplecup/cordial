@@ -564,6 +564,7 @@ pub fn simplified_type_module(db: &dyn HirDatabase, ty: &SimplifiedType<'_>) -> 
 }
 
 pub mod stable;
+mod saved;
 
 #[derive(Debug, PartialEq, Eq, SalsaValue)]
 pub struct InherentImpls<'db> {
@@ -574,15 +575,22 @@ pub struct InherentImpls<'db> {
     map: FxHashMap<SimplifiedType<'db>, Box<[ImplId]>>,
 }
 
+/// The inherent impls of a crate. Saved with the database: what it holds is ids, which are saved
+/// too, and it is made from every impl of the crate, which is most of what a restored run would
+/// otherwise do again for a dependency.
+#[salsa::tracked(returns(ref), persist)]
+fn inherent_impls_for_crate(db: &dyn HirDatabase, krate: Crate) -> InherentImpls<'_> {
+    let _p = tracing::info_span!("inherent_impls_in_crate_query", ?krate).entered();
+
+    let crate_def_map = crate_def_map(db, krate);
+
+    InherentImpls::collect_def_map(db, crate_def_map)
+}
+
 #[salsa::tracked]
 impl<'db> InherentImpls<'db> {
-    #[salsa::tracked(returns(ref))]
-    pub fn for_crate(db: &'db dyn HirDatabase, krate: Crate) -> InherentImpls<'db> {
-        let _p = tracing::info_span!("inherent_impls_in_crate_query", ?krate).entered();
-
-        let crate_def_map = crate_def_map(db, krate);
-
-        Self::collect_def_map(db, crate_def_map)
+    pub fn for_crate(db: &'db dyn HirDatabase, krate: Crate) -> &'db InherentImpls<'db> {
+        inherent_impls_for_crate(db, krate)
     }
 
     #[salsa::tracked(returns(ref))]
@@ -690,15 +698,20 @@ pub struct TraitImpls<'db> {
     map: FxHashMap<TraitId, OneTraitImpls<'db>>,
 }
 
+/// The trait impls of a crate, saved with the database as the inherent impls are.
+#[salsa::tracked(returns(ref), persist)]
+fn trait_impls_for_crate(db: &dyn HirDatabase, krate: Crate) -> Arc<TraitImpls<'_>> {
+    let _p = tracing::info_span!("inherent_impls_in_crate_query", ?krate).entered();
+
+    let crate_def_map = crate_def_map(db, krate);
+    let result = TraitImpls::collect_def_map(db, crate_def_map);
+    Arc::new(result)
+}
+
 #[salsa::tracked]
 impl<'db> TraitImpls<'db> {
-    #[salsa::tracked(returns(ref))]
-    pub fn for_crate(db: &'db dyn HirDatabase, krate: Crate) -> Arc<TraitImpls<'db>> {
-        let _p = tracing::info_span!("inherent_impls_in_crate_query", ?krate).entered();
-
-        let crate_def_map = crate_def_map(db, krate);
-        let result = Self::collect_def_map(db, crate_def_map);
-        Arc::new(result)
+    pub fn for_crate(db: &'db dyn HirDatabase, krate: Crate) -> &'db Arc<TraitImpls<'db>> {
+        trait_impls_for_crate(db, krate)
     }
 
     #[salsa::tracked(returns(as_deref))]

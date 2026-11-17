@@ -14,7 +14,7 @@ use crate::{
     nameres::{DefMap, assoc::TraitItems, crate_def_map, crate_local_def_map},
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum LangItemTarget {
     EnumId(EnumId),
     FunctionId(FunctionId),
@@ -34,7 +34,7 @@ impl_from!(
 );
 
 /// Salsa query. This will look for lang items in a specific crate.
-#[salsa::tracked(returns(as_deref))]
+#[salsa::tracked(returns(as_deref), persist)]
 pub fn crate_lang_items(db: &dyn SourceDatabase, krate: Crate) -> Option<Box<LangItems>> {
     let _p = tracing::info_span!("crate_lang_items_query").entered();
 
@@ -112,7 +112,7 @@ pub fn crate_lang_items(db: &dyn SourceDatabase, krate: Crate) -> Option<Box<Lan
 
 /// Salsa query. Look for a lang items, starting from the specified crate and recursively
 /// traversing its dependencies.
-#[salsa::tracked(returns(ref))]
+#[salsa::tracked(returns(ref), persist)]
 pub fn lang_items(db: &dyn SourceDatabase, start_crate: Crate) -> LangItems {
     let _p = tracing::info_span!("lang_items_query").entered();
 
@@ -354,7 +354,7 @@ macro_rules! language_item_table {
         $( $resolve_manually:ident, $resolve_manually_type:ident; )*
     ) => {
         #[allow(non_snake_case)] // FIXME: Should we remove this?
-        #[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
+        #[derive(Debug, Default, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
         pub struct $LangItems {
             $(
                 $(#[$attr])*

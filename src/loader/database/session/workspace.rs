@@ -235,6 +235,11 @@ fn load_database(
             let database = restored.database;
             let semantic: &dyn super::super::queries::SemanticDatabase = &database;
             let _ = super::super::queries::SemanticDatabase::zalsa_register_downcaster(semantic);
+            // The same for the queries rust-analyzer saves (what is in a crate's lang items and its impl indexes).
+            let source: &dyn ra_ap_ide_db::base_db::SourceDatabase = &database;
+            let _ = ra_ap_ide_db::base_db::SourceDatabase::zalsa_register_downcaster(source);
+            let types: &dyn ra_ap_hir_ty::db::HirDatabase = &database;
+            let _ = ra_ap_hir_ty::db::HirDatabase::zalsa_register_downcaster(types);
             <dyn salsa::Database>::init_view_casters(&database);
             (database, vfs, Some(restored.contexts))
         }
