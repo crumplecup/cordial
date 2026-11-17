@@ -790,8 +790,23 @@ stage it was in.
   (`CORDIAL_LRU_CAP`) changed nothing. Something holds the trees after their memos are dropped, and
   which is not known yet. It is not a `Semantics` cache (none is alive between steps), not a query
   value (cordial's are plain data), and not Salsa's deferred free list (the eviction clears it).
-- **Not yet tried**: a byte bound instead of a count; asking who holds a tree (a count of the
-  strong references of each tree at eviction); thread-local or deferred state of the worker threads.
+- **Answered from the logs now** (`heap.*`, `eviction.*`, `execution.*` metrics of a run built with
+  `alloc_metrics`; `CORDIAL_EVICT_LRU` for the stage evictions):
+  - Every value nominated for eviction at every stage is dropped (`eviction.<stage>_<query>.dropped`
+    equals `.nominated`; `.refused` and `.no_value` are 0): 3,164 file trees and 47,124 expansions at
+    the priming chunks. So the memos do not hold the trees after eviction.
+  - The trees lived long: of the memory that parse and expansion allocated, 335 MB and 353 MB lived
+    over 10 s (`heap.lived_*.longer`), and it was freed by code with no query or step of ours on the
+    stack (`heap.freed_*_while_outside_queries`). It is not freed by the priming workers (17 MB) nor
+    by a projection step. The thread that frees it is not yet told.
+  - What no query allocates is told by step now (`heap.peak_held_step_*`): at the peak the
+    populate step holds 250 MB, the ordinary projection 148 MB, loading the database 133 MB.
+  - Saving the state is a peak contributor of its own: `step_save` allocates about 900 MB that lives
+    from 10 ms to 10 s, of which 270 MB for over a second.
+- **The measure still missing**: which thread frees memory when no step or query is on its stack.
+  Frees are told by the tag of the thread that does them, and threads that are not ours (the
+  loader's, the proc macro server's) have none.
+
 
 ## What is not persisted, and why
 
