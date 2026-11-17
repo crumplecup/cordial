@@ -219,20 +219,70 @@ pub fn measure_workflow(
     work_home: &Path,
     request: &WorkflowRequest,
 ) -> CordialResult<Vec<RunRecord>> {
+    let (records, failure) = measure_workflow_partial(root, work_home, request);
+    failure.map_or(Ok(records), Err)
+}
+
+/// [`measure_workflow`], keeping what it measured when a run fails: the records of the states that
+/// finished, and the failure, if there was one.
+#[instrument(level = "debug", skip(root, work_home))]
+#[hotpath::measure]
+pub fn measure_workflow_partial(
+    root: &Path,
+    work_home: &Path,
+    request: &WorkflowRequest,
+) -> (Vec<RunRecord>, Option<CordialError>) {
+    let (cold, warm, incremental, failure) = run_states(root, work_home, request);
+    match records_of(root, request, cold, warm, incremental) {
+        Ok(records) => (records, failure),
+        Err(error) => (Vec::new(), failure.or(Some(error))),
+    }
+}
+
+/// The samples of each state, and the failure that ended the runs, if one did. What finished
+/// before a failure is kept: a workflow whose last state fails has still measured the first two.
+type States = (
+    Vec<StageSample>,
+    Vec<StageSample>,
+    Vec<StageSample>,
+    Option<CordialError>,
+);
+
+/// Run each state for each repeat, and stop at the first run that fails.
+#[instrument(level = "debug", skip_all)]
+#[hotpath::measure]
+fn run_states(root: &Path, work_home: &Path, request: &WorkflowRequest) -> States {
+    let (mut cold, mut warm, mut incremental) = (Vec::new(), Vec::new(), Vec::new());
+    let mut run = || -> CordialResult<()> {
+        let slug_dir = work_home.join(project_slug_from_path(root));
+        for round in 1..=request.repeat().max(1) {
+            if slug_dir.exists() {
+                std::fs::remove_dir_all(&slug_dir)?;
+            }
+            cold.push(run_once(request, root, work_home, Step::Open)?);
+            warm.push(run_once(request, root, work_home, Step::Submit)?);
+            if let Some(file) = request.edit() {
+                incremental.push(edited_run(request, root, work_home, file, round)?);
+            }
+        }
+        Ok(())
+    };
+    let failure = run().err();
+    (cold, warm, incremental, failure)
+}
+
+/// One record for each state that has samples.
+#[instrument(level = "debug", skip_all, err(level = "warn"))]
+#[hotpath::measure]
+fn records_of(
+    root: &Path,
+    request: &WorkflowRequest,
+    cold: Vec<StageSample>,
+    warm: Vec<StageSample>,
+    incremental: Vec<StageSample>,
+) -> CordialResult<Vec<RunRecord>> {
     let identity = PerfIdentity::capture(root)?;
     let environment = PerfEnvironment::capture(root);
-    let slug_dir = work_home.join(project_slug_from_path(root));
-    let (mut cold, mut warm, mut incremental) = (Vec::new(), Vec::new(), Vec::new());
-    for round in 1..=request.repeat().max(1) {
-        if slug_dir.exists() {
-            std::fs::remove_dir_all(&slug_dir)?;
-        }
-        cold.push(run_once(request, root, work_home, Step::Open)?);
-        warm.push(run_once(request, root, work_home, Step::Submit)?);
-        if let Some(file) = request.edit() {
-            incremental.push(edited_run(request, root, work_home, file, round)?);
-        }
-    }
     let name = request.name().clone();
     let mut records = Vec::new();
     for (state, samples) in [

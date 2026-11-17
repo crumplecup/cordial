@@ -47,6 +47,52 @@ pub struct RunMetrics {
 
 static CURRENT: LazyLock<Mutex<RunMetrics>> = LazyLock::new(|| Mutex::new(RunMetrics::default()));
 
+/// Where the run's metrics go, for a run that has to be ended where it is.
+static KEPT: std::sync::OnceLock<std::path::PathBuf> = std::sync::OnceLock::new();
+
+/// Remember where `store`'s metrics go, so that a run stopped from outside its own flow (the
+/// memory limit) can still say what it had done: that is when the numbers matter most.
+#[instrument(level = "debug", skip(store))]
+pub fn keep_at(store: &StoreLayout) {
+    let _ = KEPT.set(store.root().join(FILE));
+}
+
+/// Write what the run has said where [`keep_at`] said, with why it was ended and what it was
+/// doing. Nothing happens for a run that kept no place, and nothing can fail: the run is ending.
+#[instrument(level = "debug")]
+pub fn write_ended(why: &str, during: &str) {
+    let Some(path) = KEPT.get() else {
+        return;
+    };
+    let mut metrics = snapshot();
+    metrics.values.insert(format!("run.ended.{}", slug(why)), 1);
+    metrics
+        .notes
+        .insert("run.ended.during".to_owned(), during.to_owned());
+    if let Ok(bytes) = serde_json::to_vec_pretty(&metrics) {
+        let _ = std::fs::write(path, bytes);
+    }
+}
+
+/// What the run has said, with what the process knows of itself.
+fn snapshot() -> RunMetrics {
+    let mut metrics = CURRENT
+        .lock()
+        .map(|current| current.clone())
+        .unwrap_or_default();
+    metrics.values.insert(
+        "run.queries_executed".to_owned(),
+        crate::LiveStatus::global().executed(),
+    );
+    if let Some(memory) = crate::process_memory::sample() {
+        metrics.values.insert(
+            "run.peak_memory.bytes".to_owned(),
+            memory.peak_kib().saturating_mul(1024),
+        );
+    }
+    metrics
+}
+
 /// The events [`MetricsLayer`] reads, and the level it reads them at.
 #[instrument(level = "trace")]
 pub fn metrics_filter() -> Targets {
@@ -162,20 +208,7 @@ fn add(current: &mut RunMetrics, name: String, value: u64) {
 #[instrument(level = "debug", skip(store), err(level = "warn"))]
 #[hotpath::measure]
 pub fn write(store: &StoreLayout) -> CordialResult<()> {
-    let mut metrics = CURRENT
-        .lock()
-        .map(|current| current.clone())
-        .unwrap_or_default();
-    metrics.values.insert(
-        "run.queries_executed".to_owned(),
-        crate::LiveStatus::global().executed(),
-    );
-    if let Some(memory) = crate::process_memory::sample() {
-        metrics.values.insert(
-            "run.peak_memory.bytes".to_owned(),
-            memory.peak_kib().saturating_mul(1024),
-        );
-    }
+    let metrics = snapshot();
     std::fs::create_dir_all(store.root())?;
     std::fs::write(
         store.root().join(FILE),

@@ -8,7 +8,7 @@ use tracing::instrument;
 use crate::CordialResult;
 use crate::perf::{
     DEFAULT_TOLERANCE, NextestRequest, PerfStore, RunRecord, TimingRequest, Verdict,
-    WorkflowRequestBuilder, compare, measure, measure_from, measure_workflow, profiled,
+    WorkflowRequestBuilder, compare, measure, measure_from, measure_workflow_partial, profiled,
     read_profiles, render_comparison, render_profile, render_stages, render_timing,
 };
 use crate::{CordialError, load_cordial_config};
@@ -343,10 +343,15 @@ fn workflow(
     let store = PerfStore::new(ctx.store());
     let work = ctx.store().perf_dir().join("work");
     let mut output = crate::host::stdout();
-    for record in measure_workflow(ctx.project_root(), &work, &request)? {
+    // The states that finished are saved and shown whether or not a later one failed.
+    let (records, failure) = measure_workflow_partial(ctx.project_root(), &work, &request);
+    for record in records {
         let path = store.save(&record)?;
         write!(output, "{}", render_stages(&record, top))?;
         writeln!(output, "  Saved {}\n", path.display())?;
+    }
+    if let Some(failure) = failure {
+        return Err(failure);
     }
     Ok(())
 }

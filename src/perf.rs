@@ -38,4 +38,7 @@ pub use usage::{
     ChannelUsage, FunctionAllocation, LockUsage, ProfileUsage, ThreadUsage, counts_exactly,
     parse_bytes,
 };
-pub use workflow::{StageSample, WorkflowRequest, WorkflowRequestBuilder, fold, measure_workflow};
+pub use workflow::{
+    StageSample, WorkflowRequest, WorkflowRequestBuilder, fold, measure_workflow,
+    measure_workflow_partial,
+};

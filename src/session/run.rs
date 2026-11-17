@@ -107,6 +107,7 @@ pub(super) fn run_session(
         crate::store::project_slug_from_path(session.project_root()),
     );
     store.ensure_dirs()?;
+    crate::run_metrics::keep_at(&store);
 
     let setup = session
         .progress()

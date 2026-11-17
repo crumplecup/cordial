@@ -242,5 +242,6 @@ fn stop(resident_kib: u64, budget: &Budget) -> ! {
         status.phase(),
         status.line()
     );
+    crate::run_metrics::write_ended("memory limit", &status.phase());
     std::process::exit(MEMORY_LIMIT_EXIT)
 }

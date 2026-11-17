@@ -84,3 +84,20 @@ fn a_runs_events_are_added_up_by_what_they_are_about() {
             .contains_key("cache.a_definition_map.reasons")
     );
 }
+
+/// A run that is ended from outside its own flow (the memory limit stops it where it is) has still
+/// said what it had done, and why it ended and what it was doing: that is when the numbers matter.
+#[test]
+fn a_run_ended_from_outside_its_flow_still_says_what_it_had_done() {
+    let root = tempfile::tempdir().expect("a directory");
+    let store = StoreLayout::from_root(root.path().to_path_buf(), "specimen".to_owned());
+    cordial::keep_run_metrics_at(&store);
+    cordial::write_ended_run_metrics("memory limit", "Saving the analysis state");
+    let metrics = cordial::read_run_metrics(&store);
+    assert_eq!(metrics.values().get("run.ended.memory_limit"), Some(&1));
+    assert_eq!(
+        metrics.notes().get("run.ended.during").map(String::as_str),
+        Some("Saving the analysis state")
+    );
+    assert!(metrics.values().contains_key("run.queries_executed"));
+}
