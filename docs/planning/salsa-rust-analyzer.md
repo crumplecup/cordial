@@ -1647,7 +1647,8 @@ rule: collect once, consume from `IrView`.
 - **Planning.** Every `#[cfg]` in the workspace's files is read from the parsed
   trees and composed with its enclosing nodes' cfgs. A clause no examined state
   satisfies asks for a context on top of the current one; examining it can reach
-  nested gates, so asking repeats to a fixed point (cap: 64 contexts).
+  nested gates, so asking repeats to a fixed point. Nothing else stops it: the only limit on
+  memory is the run's `memory_limit`, which ends the run and says where.
 - **Merging.** Compatible requests share a context. A merged context is entered
   and checked: a module declaring one name twice in one namespace (exclusive
   alternatives) splits it in halves until each half holds. Cordial's 43 requests

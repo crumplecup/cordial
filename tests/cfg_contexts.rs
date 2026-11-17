@@ -272,25 +272,6 @@ fn planning_composes_nested_gates_and_key_value_atoms() -> Result<()> {
     Ok(())
 }
 
-#[test]
-#[tracing::instrument(level = "debug", err(level = "warn"))]
-fn a_spent_memory_budget_leaves_an_incomplete_plan_not_a_failure() -> Result<()> {
-    cordial::init_tracing();
-    let root = fixture()?;
-    let options = SemanticCargoOptions::default().with_context_memory_budget_mib(Some(0));
-    let graph = project_with(&options, root.path())?;
-    let plan = plan(&graph)?;
-    assert!(plan.contexts().is_empty(), "{plan:?}");
-    assert!(!plan.complete(), "{plan:?}");
-    // Gated code stays explicitly inactive; the ordinary facts are untouched.
-    assert!(active(&graph, only(&graph, "harness")?)?.is_empty());
-    assert_eq!(
-        active(&graph, only(&graph, "helper")?)?,
-        vec![SemanticContextKey::ordinary()]
-    );
-    Ok(())
-}
-
 const INDEPENDENT: &str = "\
 #[cfg(feature = \"a\")]
 pub fn only_a() {}

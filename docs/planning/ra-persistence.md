@@ -690,6 +690,13 @@ cordial. All three need a cordial-sized run.
 `parse_macro_expansion` 5,661 each, `parse` and `real_span_map` 1,007 each, and 18 re-run
 `crate_local_def_map` calls: the first touch of the definition maps of the dependency crates (S3).
 
+*The caps on context analysis are gone.* A run of cordial on itself showed that a growth budget of
+1 GiB (`context_memory_budget_mib`, never set by anyone, with no way to set it from outside the
+tests) and two caps of 64 contexts (`CONTEXT_LIMIT`, `LEAF_CONTEXT_LIMIT`) cut the analysis
+silently and differently from run to run, so two runs did not do the same work and could not be
+compared. They are removed. The run's `memory_limit` is the only limit, and it ends the run and
+says where. `SemanticContextPlan::complete` stays, true when planning reached its fixed point.
+
 **Still to do.** The definition maps of the dependency crates (S3), as above. Before it: persist it (rust-analyzer's impl indexes and what
 they read, for crates that are not workspace members, whose inputs do not change between runs; the
 stable ids of `hir_expand::stable` are the means), or stop asking the trait solver for facts that a

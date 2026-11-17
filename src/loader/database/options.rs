@@ -36,10 +36,6 @@ pub struct SemanticCargoOptions {
     cfg_contexts: Vec<crate::SemanticContextKey>,
     /// Whether further contexts are planned from the workspace's cfg predicates.
     cfg_planning: CfgPlanning,
-    /// Resident memory, in MiB, the cfg-context passes may add beyond the ordinary
-    /// pass before planning stops with an incomplete plan. 1024 when unset; 0
-    /// analyses no context at all.
-    context_memory_budget_mib: Option<u64>,
     /// Save what is computed for a function as depending on a fingerprint of its crate's
     /// definition map, so that an edit that leaves the map as it was (a function's body) makes the
     /// next run compute only what read the edited file, and not every function of the crate. Off

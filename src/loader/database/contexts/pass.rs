@@ -32,9 +32,6 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 use std::path::{Path, PathBuf};
 use tracing::instrument;
 
-/// Most contexts analysed for one projection before the rest are reported as a gap.
-const CONTEXT_LIMIT: usize = 64;
-
 /// Contexts still to analyse, and every request ever made.
 #[derive(Debug, Default)]
 struct Wanted {
@@ -144,7 +141,6 @@ impl SourceDatabase {
         let automatic = *options.cfg_planning() == CfgPlanning::Automatic;
         let ordinary = SemanticContextKey::ordinary();
         self.reporter.say("Planning cfg contexts");
-        let budget = Budget::start(&options);
         let mut covered = Covered::default();
         let mut wanted = Wanted::default();
         wanted.add_exact(options.cfg_contexts().clone());
@@ -162,16 +158,6 @@ impl SourceDatabase {
         }
         while let Some(pending) = wanted.queue.pop_front() {
             let context = pending.key().clone();
-            if analysed.len() >= CONTEXT_LIMIT || budget.exceeded() {
-                tracing::warn!(
-                    target: "cordial::semantic::contexts",
-                    analysed = analysed.len(),
-                    queued = wanted.queue.len() + 1,
-                    "cfg context planning stopped before its fixed point"
-                );
-                wanted.queue.push_front(pending);
-                break;
-            }
             self.reporter.say(format!(
                 "Analysing cfg context {} ({} queued): {context}",
                 analysed.len() + 1,
@@ -201,18 +187,10 @@ impl SourceDatabase {
                 nodes,
                 context: &added,
             };
-            let finished = self.harvest(&context, index, &pairs, &budget, &files, graph)?;
+            self.harvest(&context, index, &pairs, &files, graph)?;
             crate::process_memory::log("cfg context harvested");
             #[cfg(feature = "tracing")]
             self.merge_context_observability(graph)?;
-            if !finished {
-                tracing::warn!(
-                    target: "cordial::semantic::contexts",
-                    %context,
-                    "cfg context stopped by the memory budget; its facts are partial"
-                );
-                return Ok(false);
-            }
             if automatic {
                 wanted.add(asked(
                     &self.db,
@@ -242,7 +220,7 @@ impl SourceDatabase {
     /// Full facts and call edges are kept only where this context's cfg change
     /// can matter: a function inactive in the ordinary build, one inside or
     /// holding a gate the context flips, or one that mentions a name such a gate
-    /// defines. Returns `false` when the memory budget ended the pass early.
+    /// defines.
     #[instrument(level = "debug", skip_all, fields(context = %context), err(level = "warn"))]
     #[hotpath::measure(impl_type = "SourceDatabase")]
     fn harvest(
@@ -250,10 +228,9 @@ impl SourceDatabase {
         context: &SemanticContextKey,
         index: u32,
         pairs: &[(CfgOptions, CfgOptions)],
-        budget: &Budget,
         files: &Files<'_>,
         graph: &mut CrateIr,
-    ) -> CordialResult<bool> {
+    ) -> CordialResult<()> {
         attach_db(&self.db, || {
             let sema = Semantics::new(&self.db);
             let roots = self
@@ -269,13 +246,8 @@ impl SourceDatabase {
                 |id: SemanticItemId| -> SemanticItemId { item_key::canonical_id(&self.db, id) };
             let mut definitions: HashMap<SemanticItemId, NodeId> = HashMap::new();
             let mut calls: Vec<(NodeId, SemanticItemId)> = Vec::new();
-            let mut finished = true;
             let (mut saved_files, mut rust_analyzer_files) = (0usize, 0usize);
             for path in files.paths {
-                if budget.exceeded() {
-                    finished = false;
-                    break;
-                }
                 // The context's copy of the file, which has the same text.
                 let original = self.file_id(path)?;
                 let Some(file) = files.context.copy_of(original) else {
@@ -435,7 +407,7 @@ impl SourceDatabase {
             for (caller, locations) in external {
                 push_external_calls(graph, caller, locations, context)?;
             }
-            Ok(finished)
+            Ok(())
         })
     }
 }
@@ -463,48 +435,6 @@ struct Files<'a> {
     paths: &'a [PathBuf],
     nodes: &'a FunctionNodes,
     context: &'a crate::ContextCrates,
-}
-
-/// How much more resident memory the context passes may use than the ordinary
-/// pass left behind. Rust-analyzer keeps every body it infers, so memory grows
-/// with the code a context newly activates; this stops planning cleanly instead
-/// of letting it take the machine.
-#[derive(Debug, Clone, Copy)]
-struct Budget {
-    ceiling_kib: Option<u64>,
-}
-
-/// Growth allowed when the options do not say.
-const DEFAULT_BUDGET_MIB: u64 = 1024;
-
-impl Budget {
-    #[instrument(level = "debug", skip(options))]
-    #[hotpath::measure]
-    fn start(options: &crate::SemanticCargoOptions) -> Self {
-        let allowed_kib = options
-            .context_memory_budget_mib()
-            .unwrap_or(DEFAULT_BUDGET_MIB)
-            .saturating_mul(1024);
-        // A budget of zero allows nothing, so planning stops before the first
-        // context whatever the process happens to be using.
-        let ceiling_kib = crate::memory_sample().map(|memory| {
-            if allowed_kib == 0 {
-                0
-            } else {
-                memory.resident_kib().saturating_add(allowed_kib)
-            }
-        });
-        Self { ceiling_kib }
-    }
-
-    /// Whether resident memory is past the ceiling. Without a reading, never.
-    #[instrument(level = "trace", skip(self))]
-    fn exceeded(&self) -> bool {
-        match (self.ceiling_kib, crate::memory_sample()) {
-            (Some(ceiling), Some(memory)) => memory.resident_kib() > ceiling,
-            _ => false,
-        }
-    }
 }
 
 /// Record that `node` is active in the context at `index`.

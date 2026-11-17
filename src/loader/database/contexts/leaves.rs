@@ -19,8 +19,6 @@ use ra_ap_syntax::{AstNode, ast, ast::HasName};
 use std::collections::{BTreeSet, VecDeque};
 use std::path::PathBuf;
 
-/// Most contexts the leaf files may ask for before the rest are reported as a gap.
-const LEAF_CONTEXT_LIMIT: usize = 64;
 use tracing::instrument;
 
 impl SourceDatabase {
@@ -93,14 +91,6 @@ impl SourceDatabase {
         let mut queue = VecDeque::from([base]);
         let mut outcome = Ok(());
         while let Some(context) = queue.pop_front() {
-            if seen.len() > LEAF_CONTEXT_LIMIT {
-                tracing::warn!(
-                    target: "cordial::semantic::leaves",
-                    queued = queue.len() + 1,
-                    "leaf context planning stopped before its fixed point"
-                );
-                break;
-            }
             let added = match self.add_context_crates(&context) {
                 Ok(added) => added,
                 Err(error) => {
