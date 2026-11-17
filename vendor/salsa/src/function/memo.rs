@@ -68,18 +68,33 @@ impl<C: Configuration> IngredientImpl<C> {
     pub(super) fn evict_value_from_memo_for(
         table: MemoTableWithTypesMut<'_>,
         memo_ingredient_index: MemoIngredientIndex,
-    ) -> bool {
-        let mut evicted = false;
+    ) -> Eviction {
+        let mut outcome = Eviction::Refused;
         let map = |memo: &mut Memo<C>| {
             if memo.header.can_evict_value() {
                 // Set the memo value to `None`.
-                evicted = memo.value.take().is_some();
+                outcome = if memo.value.take().is_some() {
+                    Eviction::Dropped
+                } else {
+                    Eviction::NoValue
+                };
             }
         };
 
         table.map_memo(memo_ingredient_index, map);
-        evicted
+        outcome
     }
+}
+
+/// What asking for a memo's value to be dropped did.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum Eviction {
+    /// The value was there and is gone.
+    Dropped,
+    /// The memo had no value to drop.
+    NoValue,
+    /// The memo's origin is not one whose value can be computed again.
+    Refused,
 }
 
 /// A memoized query result.

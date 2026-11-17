@@ -112,7 +112,9 @@ impl SourceDatabase {
         let before = crate::process_memory::sample();
         let held = salsa::allocated_net_bytes();
         let started = std::time::Instant::now();
+        salsa::set_eviction_label(after);
         salsa::Database::trigger_lru_eviction(&mut self.db);
+        salsa::set_eviction_label("");
         let micros = u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX);
         let freed = held
             .zip(salsa::allocated_net_bytes())

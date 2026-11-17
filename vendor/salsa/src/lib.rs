@@ -319,6 +319,23 @@ pub fn cap_lru_capacities(cap: usize) {
     crate::function::cap_capacities(cap);
 }
 
+static EVICTION_LABEL: std::sync::Mutex<String> = std::sync::Mutex::new(String::new());
+
+/// Say what the program is doing around an eviction, so that the events of the values it drops
+/// name it (empty for nothing).
+pub fn set_eviction_label(label: &str) {
+    if let Ok(mut current) = EVICTION_LABEL.lock() {
+        label.clone_into(&mut current);
+    }
+}
+
+pub(crate) fn eviction_label(ingredient: &str) -> String {
+    match EVICTION_LABEL.lock() {
+        Ok(label) if !label.is_empty() => format!("{label} {ingredient}"),
+        _ => ingredient.to_owned(),
+    }
+}
+
 /// What the program offers for attributing memory to the queries that allocated it.
 #[derive(Clone, Copy)]
 pub struct AllocationTags {
@@ -367,8 +384,49 @@ pub fn held_by_tag() -> Vec<(u32, i64)> {
     allocation_tags().map_or_else(Vec::new, |tags| (tags.held_by_tag)())
 }
 
-/// The name of the ingredient a tag stands for, or `outside queries` for tag 0.
+/// Tags from here up stand for the steps of the program that has queries run for it, not for
+/// ingredients (which are numbered from 1 up from the first).
+const STEP_TAG_BASE: u32 = 8192;
+
+static STEP_NAMES: std::sync::Mutex<Vec<&'static str>> = std::sync::Mutex::new(Vec::new());
+
+/// Make the allocations of the calling thread carry the tag of the step called `name` (until a
+/// query runs, or the step is left), and give the tag it had; `None` if the program's allocator
+/// does not tag. A program does this for the spans it wants its memory told by, so that what is
+/// held by no query is told by the step that made it.
+pub fn enter_heap_step(name: &'static str) -> Option<u32> {
+    let tags = allocation_tags()?;
+    let index = {
+        let mut names = STEP_NAMES.lock().ok()?;
+        match names.iter().position(|known| *known == name) {
+            Some(index) => index,
+            None => {
+                names.push(name);
+                names.len() - 1
+            }
+        }
+    };
+    let tag = STEP_TAG_BASE + u32::try_from(index).ok()?;
+    Some((tags.set_tag)(tag))
+}
+
+/// Go back to the tag [`enter_heap_step`] gave.
+pub fn leave_heap_step(previous: u32) {
+    if let Some(tags) = allocation_tags() {
+        (tags.set_tag)(previous);
+    }
+}
+
+/// The name of the ingredient (or step of the program) a tag stands for, or `outside queries` for
+/// tag 0.
 pub fn ingredient_name(db: &dyn Database, tag: u32) -> String {
+    if tag >= STEP_TAG_BASE {
+        let name = STEP_NAMES
+            .lock()
+            .ok()
+            .and_then(|names| names.get((tag - STEP_TAG_BASE) as usize).copied());
+        return format!("step {}", name.unwrap_or("unknown"));
+    }
     match tag.checked_sub(1) {
         None => "outside queries".to_owned(),
         Some(index) => db
@@ -385,19 +443,9 @@ pub fn held_by_ingredient(db: &dyn Database) -> Vec<(String, i64)> {
     let Some(tags) = allocation_tags() else {
         return Vec::new();
     };
-    let zalsa = db.zalsa();
     let mut held: Vec<(String, i64)> = (tags.held_by_tag)()
         .into_iter()
-        .map(|(tag, bytes)| {
-            let name = match tag.checked_sub(1) {
-                None => "outside queries".to_owned(),
-                Some(index) => zalsa
-                    .lookup_ingredient(crate::zalsa::IngredientIndex::new(index))
-                    .debug_name()
-                    .to_owned(),
-            };
-            (name, bytes)
-        })
+        .map(|(tag, bytes)| (ingredient_name(db, tag), bytes))
         .collect();
     held.sort_by_key(|(_, bytes)| std::cmp::Reverse(*bytes));
     held

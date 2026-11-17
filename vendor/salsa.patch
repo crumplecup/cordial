@@ -1807,28 +1807,46 @@
  
      /// Evicts the existing memo for the given key, replacing it
      /// with an equivalent memo that has no value. If the memo is untracked
-@@ -90,15 +68,17 @@
+@@ -90,18 +68,35 @@
      pub(super) fn evict_value_from_memo_for(
          table: MemoTableWithTypesMut<'_>,
          memo_ingredient_index: MemoIngredientIndex,
 -    ) {
-+    ) -> bool {
-+        let mut evicted = false;
++    ) -> Eviction {
++        let mut outcome = Eviction::Refused;
          let map = |memo: &mut Memo<C>| {
              if memo.header.can_evict_value() {
                  // Set the memo value to `None`.
 -                memo.value = None;
-+                evicted = memo.value.take().is_some();
++                outcome = if memo.value.take().is_some() {
++                    Eviction::Dropped
++                } else {
++                    Eviction::NoValue
++                };
              }
          };
  
 -        table.map_memo(memo_ingredient_index, map)
 +        table.map_memo(memo_ingredient_index, map);
-+        evicted
++        outcome
      }
  }
  
-@@ -168,7 +148,7 @@
++/// What asking for a memo's value to be dropped did.
++#[derive(Clone, Copy, PartialEq, Eq)]
++pub(super) enum Eviction {
++    /// The value was there and is gone.
++    Dropped,
++    /// The memo had no value to drop.
++    NoValue,
++    /// The memo's origin is not one whose value can be computed again.
++    Refused,
++}
++
+ /// A memoized query result.
+ ///
+ /// # Layout
+@@ -168,7 +163,7 @@
  
      /// Returns the configuration-independent header without a table lookup.
      #[inline(always)]
@@ -1837,7 +1855,7 @@
          // SAFETY: `data` points to the base address of a `Memo` allocation valid for `'memo`, with
          // spatial provenance covering the allocation, and `Memo::header` has offset zero.
          unsafe { self.data.cast::<MemoHeader>().as_ref() }
-@@ -203,7 +183,7 @@
+@@ -203,7 +198,7 @@
  }
  
  #[derive(Debug)]
@@ -1846,7 +1864,7 @@
      /// Last revision when this memo was verified; this begins
      /// as the current revision.
      pub(super) verified_at: AtomicRevision,
-@@ -225,10 +205,25 @@
+@@ -225,10 +220,25 @@
      }
  
      #[inline]
@@ -1977,28 +1995,34 @@
          }
      }
  
-@@ -503,13 +543,28 @@
+@@ -503,13 +543,34 @@
      }
  
      fn reset_for_new_revision(&mut self, table: &mut Table) {
-+        let (mut nominated, mut dropped) = (0_u64, 0_u64);
++        let (mut nominated, mut dropped, mut no_value, mut refused) = (0_u64, 0_u64, 0_u64, 0_u64);
 +        let held = crate::allocated_net_bytes();
          self.eviction.for_each_evicted(|evict| {
              let ingredient_index = table.ingredient_index(evict);
 -            Self::evict_value_from_memo_for(
 +            nominated += 1;
-+            dropped += u64::from(Self::evict_value_from_memo_for(
++            match Self::evict_value_from_memo_for(
                  table.memos_mut(evict),
                  self.memo_ingredient_indices.get(ingredient_index),
 -            )
-+            ));
++            ) {
++                memo::Eviction::Dropped => dropped += 1,
++                memo::Eviction::NoValue => no_value += 1,
++                memo::Eviction::Refused => refused += 1,
++            }
          });
 +        if nominated > 0 {
 +            ::tracing::debug!(
 +                target: "salsa::eviction",
-+                ingredient = C::DEBUG_NAME,
++                ingredient = crate::eviction_label(C::DEBUG_NAME),
 +                nominated,
 +                dropped,
++                no_value,
++                refused,
 +                freed = held
 +                    .zip(crate::allocated_net_bytes())
 +                    .map_or(0, |(held, now)| u64::try_from(held - now).unwrap_or(0)),
@@ -2008,7 +2032,7 @@
  
          self.deleted_entries.clear();
      }
-@@ -548,6 +603,77 @@
+@@ -548,6 +609,77 @@
          C::PERSIST
      }
  
@@ -2086,7 +2110,7 @@
      fn should_serialize(&self, zalsa: &Zalsa) -> bool {
          if !C::PERSIST {
              return false;
-@@ -595,44 +721,6 @@
+@@ -595,44 +727,6 @@
      }
  }
  
@@ -2131,7 +2155,7 @@
  fn flatten_cycle_head_dependencies(
      ingredient: &dyn FunctionIngredient,
      zalsa: &Zalsa,
-@@ -744,7 +832,9 @@
+@@ -744,7 +838,9 @@
  #[cfg(feature = "persistence")]
  mod persistence {
      use super::{Configuration, IngredientImpl, Memo};
@@ -2142,7 +2166,7 @@
      use crate::plumbing::{MemoIngredientMap, SalsaStructInDb};
      use crate::zalsa::Zalsa;
      use crate::zalsa_local::persistence::PersistentQueryOrigin;
-@@ -764,6 +854,14 @@
+@@ -764,6 +860,14 @@
          pub ingredient: &'db IngredientImpl<C>,
      }
  
@@ -2157,7 +2181,7 @@
      impl<C> serde::Serialize for SerializeIngredient<'_, C>
      where
          C: Configuration,
-@@ -774,26 +872,9 @@
+@@ -774,26 +878,9 @@
          {
              let Self { ingredient, zalsa } = self;
  
@@ -2187,7 +2211,7 @@
  
              for entry in <C::SalsaStruct<'_> as SalsaStructInDb>::entries(zalsa) {
                  let memo_ingredient_index = ingredient
-@@ -806,97 +887,305 @@
+@@ -806,97 +893,305 @@
                      memo_ingredient_index,
                  );
  
@@ -2554,7 +2578,7 @@
      }
  
      pub struct DeserializeIngredient<'db, C>
-@@ -937,7 +1226,23 @@
+@@ -937,7 +1232,23 @@
          {
              let DeserializeIngredient { zalsa, ingredient } = self;
  
@@ -2744,7 +2768,7 @@
  mod function;
  mod hash;
  mod id;
-@@ -294,6 +299,115 @@
+@@ -294,6 +299,163 @@
  #[cfg(feature = "salsa_unstable")]
  pub use self::database::{IngredientInfo, PageInfo};
  
@@ -2766,6 +2790,23 @@
 +/// each is marked with), at the next eviction.
 +pub fn cap_lru_capacities(cap: usize) {
 +    crate::function::cap_capacities(cap);
++}
++
++static EVICTION_LABEL: std::sync::Mutex<String> = std::sync::Mutex::new(String::new());
++
++/// Say what the program is doing around an eviction, so that the events of the values it drops
++/// name it (empty for nothing).
++pub fn set_eviction_label(label: &str) {
++    if let Ok(mut current) = EVICTION_LABEL.lock() {
++        label.clone_into(&mut current);
++    }
++}
++
++pub(crate) fn eviction_label(ingredient: &str) -> String {
++    match EVICTION_LABEL.lock() {
++        Ok(label) if !label.is_empty() => format!("{label} {ingredient}"),
++        _ => ingredient.to_owned(),
++    }
 +}
 +
 +/// What the program offers for attributing memory to the queries that allocated it.
@@ -2816,8 +2857,49 @@
 +    allocation_tags().map_or_else(Vec::new, |tags| (tags.held_by_tag)())
 +}
 +
-+/// The name of the ingredient a tag stands for, or `outside queries` for tag 0.
++/// Tags from here up stand for the steps of the program that has queries run for it, not for
++/// ingredients (which are numbered from 1 up from the first).
++const STEP_TAG_BASE: u32 = 8192;
++
++static STEP_NAMES: std::sync::Mutex<Vec<&'static str>> = std::sync::Mutex::new(Vec::new());
++
++/// Make the allocations of the calling thread carry the tag of the step called `name` (until a
++/// query runs, or the step is left), and give the tag it had; `None` if the program's allocator
++/// does not tag. A program does this for the spans it wants its memory told by, so that what is
++/// held by no query is told by the step that made it.
++pub fn enter_heap_step(name: &'static str) -> Option<u32> {
++    let tags = allocation_tags()?;
++    let index = {
++        let mut names = STEP_NAMES.lock().ok()?;
++        match names.iter().position(|known| *known == name) {
++            Some(index) => index,
++            None => {
++                names.push(name);
++                names.len() - 1
++            }
++        }
++    };
++    let tag = STEP_TAG_BASE + u32::try_from(index).ok()?;
++    Some((tags.set_tag)(tag))
++}
++
++/// Go back to the tag [`enter_heap_step`] gave.
++pub fn leave_heap_step(previous: u32) {
++    if let Some(tags) = allocation_tags() {
++        (tags.set_tag)(previous);
++    }
++}
++
++/// The name of the ingredient (or step of the program) a tag stands for, or `outside queries` for
++/// tag 0.
 +pub fn ingredient_name(db: &dyn Database, tag: u32) -> String {
++    if tag >= STEP_TAG_BASE {
++        let name = STEP_NAMES
++            .lock()
++            .ok()
++            .and_then(|names| names.get((tag - STEP_TAG_BASE) as usize).copied());
++        return format!("step {}", name.unwrap_or("unknown"));
++    }
 +    match tag.checked_sub(1) {
 +        None => "outside queries".to_owned(),
 +        Some(index) => db
@@ -2834,19 +2916,9 @@
 +    let Some(tags) = allocation_tags() else {
 +        return Vec::new();
 +    };
-+    let zalsa = db.zalsa();
 +    let mut held: Vec<(String, i64)> = (tags.held_by_tag)()
 +        .into_iter()
-+        .map(|(tag, bytes)| {
-+            let name = match tag.checked_sub(1) {
-+                None => "outside queries".to_owned(),
-+                Some(index) => zalsa
-+                    .lookup_ingredient(crate::zalsa::IngredientIndex::new(index))
-+                    .debug_name()
-+                    .to_owned(),
-+            };
-+            (name, bytes)
-+        })
++        .map(|(tag, bytes)| (ingredient_name(db, tag), bytes))
 +        .collect();
 +    held.sort_by_key(|(_, bytes)| std::cmp::Reverse(*bytes));
 +    held

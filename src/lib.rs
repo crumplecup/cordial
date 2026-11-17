@@ -30,6 +30,7 @@ mod feature_probe;
 mod filter;
 #[cfg(feature = "homecoming_std")]
 mod framework_std;
+mod heap_steps;
 mod hooks;
 pub mod host;
 mod ir;
@@ -284,6 +285,7 @@ pub use etiquettes::framework_std::{AMENABLE_STD_ETIQUETTE, AmenableStdReporter}
 pub use etiquettes::quality_etiquettes;
 #[cfg(feature = "amenable_ext")]
 pub use etiquettes::{AMENABLE_EXT_JIFF_ETIQUETTE, ExtReporter};
+pub use heap_steps::{HeapStepLayer, heap_step_filter};
 pub use live_status::{LiveLayer, LiveStatus, live_filter};
 pub use memory_limit::{
     Budget, DEFAULT_MEMORY_LIMIT, MEMORY_LIMIT_EXIT, MemoryLimit, budget_of, enforce, exceeds,

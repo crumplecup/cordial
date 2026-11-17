@@ -86,7 +86,8 @@ fn what_the_queries_hold_is_told_by_query() -> Result<()> {
     let state = tempfile::tempdir().into_diagnostic()?;
     let saved = SavedState::at(state.path().join("analysis-state"));
     let subscriber = tracing_subscriber::registry()
-        .with(MetricsLayer.with_filter(cordial::metrics_filter_with(true)));
+        .with(MetricsLayer.with_filter(cordial::metrics_filter_with(true)))
+        .with(cordial::HeapStepLayer.with_filter(cordial::heap_step_filter()));
     let _subscriber = tracing::subscriber::set_default(subscriber);
     let options = SemanticCargoOptions::default().with_cfg_planning(CfgPlanning::Explicit);
     let mut session =
@@ -145,6 +146,13 @@ fn what_the_queries_hold_is_told_by_query() -> Result<()> {
             table(&held)
         );
     }
+    // What no query made is told by the step of the run that did, when its span was entered.
+    assert!(
+        held.iter()
+            .any(|(name, bytes)| name.starts_with("step ") && *bytes > 0),
+        "no step is told to hold anything\n{}",
+        table(&held)
+    );
     assert!(
         of("outside queries") > 0,
         "what no query allocated is not told\n{}",
@@ -156,15 +164,25 @@ fn what_the_queries_hold_is_told_by_query() -> Result<()> {
     let layout = StoreLayout::from_root(store.path().to_path_buf(), "evicted".to_owned());
     cordial::write_run_metrics(&layout).into_diagnostic()?;
     let metrics = cordial::read_run_metrics(&layout);
-    let dropped = |query: &str| {
+    // The values asked to be dropped are told by stage and query, each as dropped, already without
+    // a value, or refused; they add up to what was nominated.
+    let of = |query: &str, field: &str| -> u64 {
         metrics
             .values()
-            .get(&format!("eviction.{query}.dropped"))
-            .copied()
-            .unwrap_or(0)
+            .iter()
+            .filter(|(key, _)| {
+                key.starts_with("eviction.") && key.contains(query) && key.ends_with(field)
+            })
+            .map(|(_, value)| *value)
+            .sum()
     };
     for query in ["editionedfileid_parse", "macrocallid_parse_macro_expansion"] {
-        assert!(dropped(query) > 0, "nothing of {query} was evicted");
+        assert!(of(query, ".dropped") > 0, "nothing of {query} was evicted");
+        assert_eq!(
+            of(query, ".nominated"),
+            of(query, ".dropped") + of(query, ".no_value") + of(query, ".refused"),
+            "the outcomes of {query} do not add up to what was nominated"
+        );
     }
     Ok(())
 }

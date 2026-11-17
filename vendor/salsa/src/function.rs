@@ -543,22 +543,28 @@ where
     }
 
     fn reset_for_new_revision(&mut self, table: &mut Table) {
-        let (mut nominated, mut dropped) = (0_u64, 0_u64);
+        let (mut nominated, mut dropped, mut no_value, mut refused) = (0_u64, 0_u64, 0_u64, 0_u64);
         let held = crate::allocated_net_bytes();
         self.eviction.for_each_evicted(|evict| {
             let ingredient_index = table.ingredient_index(evict);
             nominated += 1;
-            dropped += u64::from(Self::evict_value_from_memo_for(
+            match Self::evict_value_from_memo_for(
                 table.memos_mut(evict),
                 self.memo_ingredient_indices.get(ingredient_index),
-            ));
+            ) {
+                memo::Eviction::Dropped => dropped += 1,
+                memo::Eviction::NoValue => no_value += 1,
+                memo::Eviction::Refused => refused += 1,
+            }
         });
         if nominated > 0 {
             ::tracing::debug!(
                 target: "salsa::eviction",
-                ingredient = C::DEBUG_NAME,
+                ingredient = crate::eviction_label(C::DEBUG_NAME),
                 nominated,
                 dropped,
+                no_value,
+                refused,
                 freed = held
                     .zip(crate::allocated_net_bytes())
                     .map_or(0, |(held, now)| u64::try_from(held - now).unwrap_or(0)),
