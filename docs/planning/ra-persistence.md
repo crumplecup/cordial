@@ -573,7 +573,34 @@ did not fix it (an id is the order its key was interned in, which differs betwee
 and one from nothing); it now goes in the order the nodes were made. Setting an attribute still
 adds the node to `by_kind` again, so the lists hold duplicates: noted, not changed here.
 
-**Still to do.** Measure the cordial run with the impl fingerprints; cordial's `resolve` should find
+**The first performance evaluation (2026-11-16, `cordial perf workflow --repeat 1`, commit
+`3956a8d`, `reuse_across_edits = true`).** Cold 621.7 s (`source_ir` 591 s, against 387 s in the
+earlier cold run: not explained yet); warm 23.8 s (run cache); the incremental state, after a
+comment appended to `src/perf/spread.rs`, was stopped by the memory limit during "Saving the
+analysis state": 13m59s, 6.9 million queries (a cold run executes about 4 million), 21.9 GB
+against a limit of 21.7 GB. A cfg context was also cut by the memory budget in the cold run and
+in this one. The workflow threw away the cold and warm records because the last state failed, and
+the stopped run wrote no metrics; both are fixed (`measure_workflow_partial`; `write_ended`).
+
+**Why an edited run costs a cold run, reproduced at specimen scale** (`edit_reuse`, a crate of 6
+files with a feature-gated function in each, so that the planner adds a cfg context): after an
+edit to one body, the restored run executed 125,721 queries and the run from nothing 126,154. Only
+8 of them were functions' evidence. The rest are rust-analyzer's own queries over the dependency
+crates (`AttrFlags::query_`, `ImplSignature::of_`, `impl_self_ty_with_diagnostics`,
+`impl_trait_with_diagnostics`, about 12,400 each), asked by `capability` in `recording.rs`:
+`ty.impls_trait(db, Debug, ..)` is a trait-solver question, and answering it makes rust-analyzer
+build the trait impl index of every crate the type's crate depends on, which is every impl of the
+sysroot and of each registry crate. None of those queries is persisted, so a restored run that has
+to compute any function's evidence pays rust-analyzer's whole warm-up for the dependency layer,
+which does not depend on the edit at all. The cutoffs make the *functions'* evidence cheap; they
+cannot make the layer under it cheap. In the specimen this is 99.9% of the queries; in cordial,
+with its registry dependencies, it is millions of queries and the memory of the whole dependency
+graph.
+
+**Still to do.** The dependency layer. Either persist it (rust-analyzer's impl indexes and what
+they read, for crates that are not workspace members, whose inputs do not change between runs; the
+stable ids of `hir_expand::stable` are the means), or stop asking the trait solver for facts that a
+saved answer holds. Then: measure the cordial run with the impl fingerprints; cordial's `resolve` should find
 a file without reading every source root if it still shows in the report; the walk-width metric names them. Functions of one file still all read the file's
 syntax, so the next granularity is a function's body. The audit that recomputes a sample of reused
 functions and compares them, so that a construct the battery does not think of is caught in the
