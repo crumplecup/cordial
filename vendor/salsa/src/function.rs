@@ -998,7 +998,7 @@ mod persistence {
 
             if count > 0 {
                 let (stats, elapsed) = flattener.report();
-                crate::flatten::note_breadth(C::DEBUG_NAME, flattener.direct(12));
+                crate::flatten::note_breadth(C::DEBUG_NAME, flattener.breadth(12));
                 ::tracing::info!(
                     target: "salsa::persistence",
                     ingredient = C::DEBUG_NAME,

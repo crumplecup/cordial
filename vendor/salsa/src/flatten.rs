@@ -182,6 +182,13 @@ pub struct EdgeFlattener {
     /// read themselves (not through a query below them) added up, and the most any one read. A kind
     /// that reads a great many itself is one that goes through every file of a crate.
     direct: FxHashMap<&'static str, (u32, u64, u32)>,
+    /// For each kind of query: which kinds of leaf (a file's text, a source root, a crate's data)
+    /// it read itself, and how many in all.
+    direct_kinds: FxHashMap<(&'static str, &'static str), u64>,
+    /// For each kind of query: its widest query's size, and which kinds of leaf that one reached,
+    /// most first. Says what a query that reaches a great deal reaches (every file's text, every
+    /// crate's fingerprint), which the sizes alone do not.
+    widest_mix: FxHashMap<&'static str, (u32, String)>,
     /// Queries walked whose group is still open, with the order they were first reached in.
     open: FxHashMap<QueryEdge, usize>,
     /// The open queries, in the order they were first reached.
@@ -223,6 +230,8 @@ impl Default for EdgeFlattener {
             owner: None,
             breadth: FxHashMap::default(),
             direct: FxHashMap::default(),
+            direct_kinds: FxHashMap::default(),
+            widest_mix: FxHashMap::default(),
             open: FxHashMap::default(),
             stack: Vec::new(),
             next: 0,
@@ -327,22 +336,39 @@ impl EdgeFlattener {
         all.into_iter()
             .take(count)
             .map(|(name, (walked, total, most))| {
-                format!("{name}={walked}x{} ({most})", total / u64::from(*walked).max(1))
+                let mut kinds: Vec<_> = self
+                    .direct_kinds
+                    .iter()
+                    .filter(|((query, _), _)| query == name)
+                    .map(|((_, kind), count)| (*count, *kind))
+                    .collect();
+                kinds.sort_by_key(|(count, kind)| (std::cmp::Reverse(*count), *kind));
+                let kinds = kinds
+                    .into_iter()
+                    .take(3)
+                    .map(|(count, kind)| format!("{kind}:{count}"))
+                    .collect::<Vec<_>>()
+                    .join(",");
+                format!(
+                    "{name}={walked}x{} ({most}) [{kinds}]",
+                    total / u64::from(*walked).max(1)
+                )
             })
             .collect::<Vec<_>>()
             .join(" ")
     }
 
-    /// The kinds of query whose sets reached the most edges between them, as `name=walked x
-    /// average (most)`: a kind that is wide for all of its queries is what every memo reading one
-    /// depends on a great deal through.
+    /// The kinds of query with the widest single query, widest first, as `name=walked x average
+    /// (most) [what the widest reached]`: the widest are what everything reading them depends on a
+    /// great deal through, and what they reached says whether it is every file's text.
     pub(crate) fn breadth(&self, count: usize) -> String {
         let mut all: Vec<_> = self.breadth.iter().collect();
-        all.sort_by_key(|(name, (_, total, _))| (std::cmp::Reverse(*total), **name));
+        all.sort_by_key(|(name, (_, _, most))| (std::cmp::Reverse(*most), **name));
         all.into_iter()
             .take(count)
             .map(|(name, (walked, total, most))| {
-                format!("{name}={walked}x{} ({most})", total / u64::from(*walked).max(1))
+                let mix = self.widest_mix.get(name).map(|(_, mix)| mix.as_str()).unwrap_or("");
+                format!("{name}={walked}x{} ({most}) [{mix}]", total / u64::from(*walked).max(1))
             })
             .collect::<Vec<_>>()
             .join(" ")
@@ -443,6 +469,7 @@ pub(crate) unsafe fn leaves_of(
 
     let mut found = Builder::default();
     let mut direct = 0u32;
+    let mut direct_leaves: Vec<QueryEdge> = Vec::new();
     let mut closure = memo.header().closure();
     for dependency_edge in memo.header().origin().edges() {
         if dependency_edge.is_set() {
@@ -451,6 +478,7 @@ pub(crate) unsafe fn leaves_of(
                 let number = flattener.number(member);
                 found.set(number);
                 direct += 1;
+                direct_leaves.push(member);
             }
             continue;
         }
@@ -458,6 +486,7 @@ pub(crate) unsafe fn leaves_of(
             let number = flattener.number(dependency_edge);
             found.set(number);
             direct += 1;
+            direct_leaves.push(dependency_edge);
             continue;
         }
         let dependency = zalsa.lookup_ingredient(dependency_edge.key().ingredient_index());
@@ -469,6 +498,7 @@ pub(crate) unsafe fn leaves_of(
                 let number = flattener.number(dependency_edge);
                 found.set(number);
                 direct += 1;
+                direct_leaves.push(dependency_edge);
             } else if let Some((set, below)) =
                 unsafe { leaves_of(zalsa, dependency_edge, flattener) }
             {
@@ -492,6 +522,7 @@ pub(crate) unsafe fn leaves_of(
             let number = flattener.number(leaf);
             found.set(number);
             direct += 1;
+            direct_leaves.push(leaf);
         }
         flattener.scratch = added;
         closure.merge(std::mem::replace(&mut flattener.carried, Closure::nothing()));
@@ -500,10 +531,48 @@ pub(crate) unsafe fn leaves_of(
     let result = flattener.intern(found);
     {
         let size: u32 = result.0.iter().map(|word| word.count_ones()).sum();
+        if flattener.widest_mix.get(ingredient.debug_name()).is_none_or(|(widest, _)| size > *widest) {
+            let mut mix: FxHashMap<&'static str, u32> = FxHashMap::default();
+            for (index, word) in result.0.iter().enumerate() {
+                let mut bits = *word;
+                while bits != 0 {
+                    let bit = bits.trailing_zeros() as usize;
+                    bits &= bits - 1;
+                    let leaf = flattener.edges[index * 64 + bit];
+                    let kind = if leaf.is_watermark() {
+                        "<watermark>"
+                    } else if leaf.is_set() {
+                        "<set>"
+                    } else {
+                        zalsa.lookup_ingredient(leaf.key().ingredient_index()).debug_name()
+                    };
+                    *mix.entry(kind).or_default() += 1;
+                }
+            }
+            let mut mix: Vec<_> = mix.into_iter().collect();
+            mix.sort_by_key(|(kind, count)| (std::cmp::Reverse(*count), *kind));
+            let mix = mix
+                .into_iter()
+                .take(4)
+                .map(|(kind, count)| format!("{kind}:{count}"))
+                .collect::<Vec<_>>()
+                .join(",");
+            flattener.widest_mix.insert(ingredient.debug_name(), (size, mix));
+        }
         let (walked, total, most) = flattener.breadth.entry(ingredient.debug_name()).or_default();
         *walked += 1;
         *total += u64::from(size);
         *most = (*most).max(size);
+        for leaf in &direct_leaves {
+            let kind = if leaf.is_watermark() {
+                "<watermark>"
+            } else if leaf.is_set() {
+                "<set>"
+            } else {
+                zalsa.lookup_ingredient(leaf.key().ingredient_index()).debug_name()
+            };
+            *flattener.direct_kinds.entry((ingredient.debug_name(), kind)).or_default() += 1;
+        }
         let (walked, total, most) = flattener.direct.entry(ingredient.debug_name()).or_default();
         *walked += 1;
         *total += u64::from(direct);
