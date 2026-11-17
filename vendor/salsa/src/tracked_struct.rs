@@ -202,6 +202,22 @@ where
     /// Store freed ids
     free_list: SegQueue<Id>,
 
+    /// The ids that tracked structs had in the process that saved the database, by the identity
+    /// they were created under, until a query that creates one again takes it.
+    ///
+    /// A tracked struct is found again, when its creating query runs again, in the identity map of
+    /// that query's earlier memo. A query that was not saved has no earlier memo in a process that
+    /// restored the database, and would number what it creates afresh, so that an id that a saved
+    /// memo holds would name something else. Taking the saved id by identity makes the same
+    /// struct the same id.
+    #[cfg(feature = "persistence")]
+    restored: crate::sync::Mutex<crate::hash::FxHashMap<Identity, Id>>,
+
+    /// Whether `restored` has anything in it, so that a database that restored nothing pays
+    /// nothing for each tracked struct it creates.
+    #[cfg(feature = "persistence")]
+    has_restored: std::sync::atomic::AtomicBool,
+
     memo_table_types: Arc<MemoTableTypes>,
 }
 
@@ -209,7 +225,7 @@ where
 /// This is the key to a hashmap that is (initially)
 /// stored in the [`ActiveQuery`](`crate::active_query::ActiveQuery`)
 /// struct and later moved to the [`Memo`](`crate::function::memo::Memo`).
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Copy, Clone)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Copy, Clone, Hash)]
 #[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
 pub(crate) struct Identity {
     // Conceptually, this contains an `IdentityHash`, but using `IdentityHash` directly will grow the size
@@ -386,6 +402,10 @@ pub struct Value<C>
 where
     C: Configuration,
 {
+    /// The identity this struct was created under, which a saved database keeps so that the struct
+    /// has the same id when the query that created it runs again in a process that restored it.
+    identity: Identity,
+
     /// The revision when this tracked struct was last updated.
     /// This field also acts as a kind of "lock" over the `value` field. Once it is equal
     /// to `Some(current_revision)`, the fields are locked and
@@ -433,7 +453,7 @@ where
 
 // ANCHOR_END: ValueStruct
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Copy, Clone)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Copy, Clone, Hash)]
 #[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "persistence", serde(transparent))]
 pub struct Disambiguator(u32);
@@ -492,8 +512,26 @@ where
             ingredient_index: index,
             phantom: PhantomData,
             free_list: Default::default(),
+            #[cfg(feature = "persistence")]
+            restored: Default::default(),
+            #[cfg(feature = "persistence")]
+            has_restored: std::sync::atomic::AtomicBool::new(false),
             memo_table_types: Arc::new(MemoTableTypes::default()),
         }
+    }
+
+    /// The id this identity had in the process that saved the database, if nothing has taken it.
+    #[cfg(feature = "persistence")]
+    fn take_restored(&self, identity: &Identity) -> Option<Id> {
+        if !self.has_restored.load(std::sync::atomic::Ordering::Acquire) {
+            return None;
+        }
+        self.restored.lock().remove(identity)
+    }
+
+    #[cfg(not(feature = "persistence"))]
+    fn take_restored(&self, _identity: &Identity) -> Option<Id> {
+        None
     }
 
     /// Returns the database key index for a tracked struct with the given id.
@@ -520,7 +558,11 @@ where
             disambiguator,
         };
 
-        if let Some(id) = zalsa_local.tracked_struct_id(&identity) {
+        // The creating query's earlier memo, or else the id the saved database gave this identity.
+        let earlier = zalsa_local.tracked_struct_id(&identity);
+        let restored = earlier.is_none();
+        let earlier = earlier.or_else(|| self.take_restored(&identity));
+        if let Some(id) = earlier {
             // The struct already exists in the intern map.
             crate::tracing::trace!(
                 "Reuse tracked struct {id:?}",
@@ -537,8 +579,14 @@ where
                     return FromId::from_id(updated_id);
                 }
 
-                // The id has not changed.
-                Ok(id) => return FromId::from_id(id),
+                // The id has not changed. One taken from the saved database is not in the
+                // active query's identity map yet.
+                Ok(id) => {
+                    if restored {
+                        zalsa_local.store_tracked_struct_id(identity, id);
+                    }
+                    return FromId::from_id(id);
+                }
 
                 // Failed to perform the update, we are forced to allocate a new slot.
                 Err(fields) => fields,
@@ -547,7 +595,7 @@ where
 
         // We failed to perform the update, or this is a new tracked struct, so allocate a new entry
         // in the struct map.
-        let id = self.allocate(zalsa, zalsa_local, &current_deps, fields);
+        let id = self.allocate(zalsa, zalsa_local, &current_deps, identity, fields);
         crate::tracing::trace!(
             "Allocated new tracked struct {key:?}",
             key = self.database_key_index(id)
@@ -561,10 +609,12 @@ where
         zalsa: &'db Zalsa,
         zalsa_local: &'db ZalsaLocal,
         current_deps: &Stamp,
+        identity: Identity,
         fields: C::Fields<'db>,
     ) -> Id {
         let current_revision = zalsa.current_revision();
         let value = |_| Value {
+            identity,
             updated_at: OptionalAtomicRevision::new(Some(current_revision)),
             durability: current_deps.durability,
             revisions: C::new_revisions(current_deps.changed_at),
@@ -1374,9 +1424,10 @@ mod persistence {
         where
             S: serde::Serializer,
         {
-            let mut value = serializer.serialize_struct("Value", 4)?;
+            let mut value = serializer.serialize_struct("Value", 5)?;
 
             let Value {
+                identity,
                 durability,
                 updated_at,
                 revisions,
@@ -1384,6 +1435,7 @@ mod persistence {
                 memos: _,
             } = self;
 
+            value.serialize_field("identity", &identity)?;
             value.serialize_field("durability", &durability)?;
             value.serialize_field("updated_at", &updated_at)?;
             value.serialize_field("revisions", &revisions)?;
@@ -1454,7 +1506,15 @@ mod persistence {
                 let id = Id::from_bits(id);
                 let (page_idx, _) = crate::table::split_id(id);
 
+                if value.updated_at.load().is_some() {
+                    ingredient.restored.lock().insert(value.identity, id);
+                    ingredient
+                        .has_restored
+                        .store(true, std::sync::atomic::Ordering::Release);
+                }
+
                 let value = Value::<C> {
+                    identity: value.identity,
                     updated_at: value.updated_at,
                     durability: value.durability,
                     revisions: value.revisions,
@@ -1495,6 +1555,7 @@ mod persistence {
     #[derive(Deserialize)]
     #[serde(rename = "Value")]
     pub struct DeserializeValue<C: Configuration> {
+        identity: crate::tracked_struct::Identity,
         durability: Durability,
         updated_at: OptionalAtomicRevision,
         revisions: C::Revisions,
