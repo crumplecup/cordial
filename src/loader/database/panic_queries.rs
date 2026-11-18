@@ -14,7 +14,7 @@ use tracing::instrument;
 use super::crate_files::{CrateKey, FileKey, carried};
 use super::queries::SemanticDatabase;
 use crate::PanicProofGraph;
-use crate::ir::{FileScan, file_proofs, file_scan};
+use crate::ir::{FileCandidates, FileScan, file_candidates, file_proofs};
 
 /// A file's scan, under the functions the proofs reach.
 #[salsa::interned(persist)]
@@ -67,7 +67,22 @@ pub(super) fn panic_reachable<'db>(
     Some(panic_graph(db, key).as_ref()?.reachable())
 }
 
-/// A file's panic sites.
+/// A file's panic sites before the proofs say which are reported: what its syntax gives, with no
+/// reading of the crate's proof graph, so that the syntax is read once for the proofs and the sites.
+#[salsa::tracked(persist, returns(ref))]
+#[instrument(level = "debug", skip(db, key))]
+#[hotpath::measure]
+pub(super) fn panic_candidates_file<'db>(
+    db: &'db dyn SemanticDatabase,
+    key: FileKey<'db>,
+) -> Option<FileCandidates> {
+    carried(db, key, "panic_candidates_file", |source| {
+        file_candidates(key.tree(db), key.root(db), source)
+    })
+}
+
+/// A file's panic sites, under the functions the proofs reach: its candidates and that set, and no
+/// syntax.
 #[salsa::tracked(persist, returns(ref))]
 #[instrument(level = "debug", skip(db, key))]
 #[hotpath::measure]
@@ -75,8 +90,7 @@ pub(super) fn panic_scan_file<'db>(
     db: &'db dyn SemanticDatabase,
     key: ScanKey<'db>,
 ) -> Option<FileScan> {
-    let file = key.file(db);
-    carried(db, file, "panic_scan_file", |source| {
-        file_scan(file.root(db), file.tree(db), source, key.reachable(db))
-    })
+    let candidates = panic_candidates_file(db, key.file(db)).as_ref()?;
+    tracing::debug!(target: "cordial::semantic::queries", function = %key.file(db).path(db).display(), query = "panic_scan_file", "semantic query executed");
+    Some(candidates.resolve(key.reachable(db)))
 }

@@ -14,7 +14,8 @@ use super::crate_files::{CrateKey, FileKey, carried};
 use super::queries::SemanticDatabase;
 use crate::FileSnapshot;
 use crate::etiquettes::antipatterns::{
-    AntipatternCandidate, ContractFile, CrateFacts, FileFacts, file_candidates, file_clauses,
+    AntipatternCandidate, ContractFile, CrateFacts, FileFacts, PendingCandidate, file_clauses,
+    pending_candidates,
 };
 
 /// A file's walk, under the crate's joined facts.
@@ -73,7 +74,32 @@ pub(super) fn antipattern_crate_facts<'db>(
     Some(CrateFacts::join(parts.into_iter()))
 }
 
-/// A file's candidates under the crate's facts.
+/// A file's candidates before the crate's facts are applied, with the file's fingerprint.
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq, Eq)]
+pub(super) struct FilePending {
+    pub(super) snapshot: FileSnapshot,
+    pub(super) pending: Vec<PendingCandidate>,
+}
+
+/// What a file's walk finds, without reading the crate's facts, so that the syntax is read once for
+/// the facts and the candidates.
+#[salsa::tracked(persist, returns(ref))]
+#[instrument(level = "debug", skip(db, key))]
+#[hotpath::measure]
+pub(super) fn antipattern_pending_file<'db>(
+    db: &'db dyn SemanticDatabase,
+    key: FileKey<'db>,
+) -> Option<FilePending> {
+    carried(db, key, "antipattern_pending_file", |source| {
+        Ok(FilePending {
+            snapshot: FileSnapshot::new(source.path().to_path_buf(), source.source_digest()),
+            pending: pending_candidates(source, key.tree(db), key.root(db))?,
+        })
+    })
+}
+
+/// A file's candidates under the crate's facts: its pending candidates and those facts, and no
+/// syntax.
 #[salsa::tracked(persist, returns(ref))]
 #[instrument(level = "debug", skip(db, key))]
 #[hotpath::measure]
@@ -81,12 +107,11 @@ pub(super) fn antipattern_sites_file<'db>(
     db: &'db dyn SemanticDatabase,
     key: WalkKey<'db>,
 ) -> Option<FileSites> {
-    let file = key.file(db);
-    carried(db, file, "antipattern_sites_file", |source| {
-        Ok(FileSites {
-            snapshot: FileSnapshot::new(source.path().to_path_buf(), source.source_digest()),
-            sites: file_candidates(source, file.tree(db), file.root(db), key.facts(db))?,
-        })
+    let found = antipattern_pending_file(db, key.file(db)).as_ref()?;
+    tracing::debug!(target: "cordial::semantic::queries", function = %key.file(db).path(db).display(), query = "antipattern_sites_file", "semantic query executed");
+    Some(FileSites {
+        snapshot: found.snapshot.clone(),
+        sites: PendingCandidate::resolve(&found.pending, key.facts(db)),
     })
 }
 

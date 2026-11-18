@@ -1,5 +1,5 @@
 //! Type shapes and stable compatibility labels over canonical syntax.
-use super::{AntipatternCandidate, AntipatternRuleId, Collector, Context};
+use super::{AntipatternCandidate, AntipatternRuleId, Collector, Context, PendingCandidate};
 use crate::{CordialResult, etiquettes::antipatterns::scan::truncate_snippet};
 use ra_ap_syntax::{AstNode, ast, ast::HasGenericArgs};
 
@@ -113,7 +113,10 @@ impl Collector<'_, '_> {
                 self.source.line(ty.syntax().text_range().start()),
                 truncate_snippet(&snippet, 96),
             )?;
-            self.sites.push(AntipatternCandidate::Record(site));
+            self.sites
+                .push(PendingCandidate::Settled(AntipatternCandidate::Record(
+                    site,
+                )));
         }
         Ok(())
     }

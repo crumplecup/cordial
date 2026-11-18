@@ -1,4 +1,4 @@
-use super::{Context, Scanner, proof::ProofCollector};
+use super::{Context, PanicCandidate, Scanner, proof::ProofCollector};
 use crate::CordialResult;
 use crate::etiquettes::panics::PanicSiteRecord;
 use ra_ap_syntax::{AstNode, ast};
@@ -13,11 +13,12 @@ impl Scanner<'_, '_> {
         context: &Context,
     ) -> CordialResult<()> {
         self.source.with_recovered_verus(invocation, |source| {
-            let mut inner = Scanner::new(source, self.root, self.reachable, self.embedded);
+            let mut inner = Scanner::new(source, self.root, self.embedded);
             inner.assertion_lines.clone_from(&self.assertion_lines);
             inner.walk(source.tree().syntax(), context)?;
             self.assertion_lines.extend(inner.assertion_lines);
-            self.records.extend(inner.records);
+            self.candidates
+                .push(PanicCandidate::Nested(inner.candidates));
             Ok(())
         })
     }
@@ -39,17 +40,19 @@ impl Scanner<'_, '_> {
                 let mut proofs = ProofCollector::default();
                 proofs.walk(source.tree().syntax(), &source.panic_macro_syntax(), false);
                 let reachable = proofs.finish().reachable();
-                let mut inner = Scanner::new(source, self.root, &reachable, true);
+                let mut inner = Scanner::new(source, self.root, true);
                 let mut context = context.clone();
                 context.not_kani = false;
                 inner.walk(source.tree().syntax(), &context)?;
+                // The program's own proofs settle its sites here: they do not read the crate's.
+                let mut settled = PanicCandidate::resolve(&inner.candidates, &reachable);
                 #[cfg(feature = "verus_ir")]
                 {
                     let verus =
                         source.verus_facts(&context.label(), &crate::loader::written_as_verus);
                     let records = crate::etiquettes::panics::verus_findings(&verus, self.root)?;
                     for record in records {
-                        inner.records.push(
+                        settled.push(
                             PanicSiteRecord::builder()
                                 .kind(record.kind())
                                 .context(record.context().clone())
@@ -61,12 +64,12 @@ impl Scanner<'_, '_> {
                         );
                     }
                 }
-                Ok(inner.records)
+                Ok(settled)
             })
             .transpose()?
             .unwrap_or_default();
         for record in records {
-            self.records.push(
+            self.candidates.push(PanicCandidate::Settled(
                 PanicSiteRecord::builder()
                     .kind(record.kind())
                     .context(record.context().clone())
@@ -75,7 +78,7 @@ impl Scanner<'_, '_> {
                     .snippet(record.snippet().clone())
                     .cfg_test(record.cfg_test())
                     .build()?,
-            );
+            ));
         }
         Ok(())
     }

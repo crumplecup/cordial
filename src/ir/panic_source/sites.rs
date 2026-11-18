@@ -1,4 +1,4 @@
-use super::{Context, Scanner, syntax};
+use super::{Context, PanicCandidate, Scanner, syntax};
 use crate::CordialResult;
 use crate::etiquettes::panics::{PanicKind, PanicSiteRecord};
 use ra_ap_syntax::{AstNode, ast, ast::HasArgList};
@@ -101,29 +101,19 @@ impl Scanner<'_, '_> {
         snippet: String,
         context: &Context,
     ) -> CordialResult<()> {
-        if !context.not_kani
-            && context
-                .functions
-                .last()
-                .is_some_and(|name| self.reachable.contains(name))
-        {
-            return Ok(());
-        }
+        let function = if context.not_kani {
+            None
+        } else {
+            context.functions.last().cloned()
+        };
         let file = self
             .source
             .path()
             .strip_prefix(self.root)
             .unwrap_or(self.source.path())
             .to_path_buf();
-        if kind == PanicKind::Unwrap
-            && self.records.last().is_some_and(|last| {
-                last.kind() == kind && last.line() == line && last.file() == &file
-            })
-        {
-            return Ok(());
-        }
-        self.records.push(
-            PanicSiteRecord::builder()
+        self.candidates.push(PanicCandidate::Site {
+            record: PanicSiteRecord::builder()
                 .kind(kind)
                 .context(context.label())
                 .file(file)
@@ -131,7 +121,8 @@ impl Scanner<'_, '_> {
                 .snippet(snippet)
                 .cfg_test(context.cfg_test)
                 .build()?,
-        );
+            function,
+        });
         Ok(())
     }
 }

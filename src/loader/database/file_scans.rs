@@ -142,6 +142,7 @@ impl SourceDatabase {
                     root.clone(),
                 );
                 let _ = super::panic_queries::panic_proofs_file(db, key);
+                let _ = super::panic_queries::panic_candidates_file(db, key);
             }
             #[cfg(feature = "antipatterns")]
             {
@@ -154,6 +155,7 @@ impl SourceDatabase {
                         root.clone(),
                     );
                     let _ = super::antipattern_queries::antipattern_facts_file(db, key);
+                    let _ = super::antipattern_queries::antipattern_pending_file(db, key);
                 }
                 if let Some(tree) = &visit.contracts {
                     let key = super::crate_files::FileKey::new(

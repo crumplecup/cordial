@@ -1,6 +1,6 @@
 //! Antipattern evidence from loader-issued canonical Rust syntax.
 use super::catalog::{
-    AntipatternCandidate, AntipatternCatalog, AntipatternSyntaxFacts, StaticField,
+    AntipatternCandidate, AntipatternCatalog, AntipatternSyntaxFacts, StaticField, StaticFieldShape,
 };
 use super::{AntipatternRuleId, AntipatternSiteRecord};
 use crate::loader::{DatabaseSource, module_path_from_src_file};
@@ -60,15 +60,87 @@ struct Context {
     modules: Vec<String>,
     implementation: Option<String>,
     functions: Vec<String>,
-    foreign: bool,
+    /// The trait of the `impl` the walk is in, if it is one of a trait.
+    owner_trait: Option<String>,
     siblings: HashMap<String, HashSet<String>>,
 }
 
 struct Collector<'a, 'db> {
     source: &'a DatabaseSource<'db>,
     root: &'a Path,
-    facts: &'a CrateFacts,
-    sites: Vec<AntipatternCandidate>,
+    sites: Vec<PendingCandidate>,
+}
+
+/// An antipattern candidate before the crate's facts are applied.
+///
+/// A file's walk does not read the crate's facts: it keeps what the facts would decide, and the
+/// decision is made afterwards over the candidates alone (see [`PendingCandidate::resolve`]), so
+/// the file's syntax is read once for the facts and the candidates.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub(crate) enum PendingCandidate {
+    /// Not decided by the facts.
+    Settled(AntipatternCandidate),
+    /// A site in a function of an `impl` of `trait_name`: the policy owns the function only if the
+    /// crate declares that trait, and a foreign trait's signature is not the crate's to choose.
+    OfTrait {
+        trait_name: String,
+        site: AntipatternSiteRecord,
+    },
+    /// A `&'static` field of `type_name`, which the facts decide: whether it is disallowed (under the
+    /// crate's traits), whether the type is a constant and not a runtime value (then it is not
+    /// reported), and whether it is an error type.
+    Field {
+        site: AntipatternSiteRecord,
+        shape: StaticFieldShape,
+        type_name: String,
+        location: bool,
+        /// For each `&'static` in the field's type, the traits its spine names, or none where the
+        /// reference has no type, which no trait excuses.
+        references: Vec<Option<Vec<String>>>,
+    },
+}
+
+impl PendingCandidate {
+    /// The candidates the facts leave, as the walk would have found them reading the facts.
+    #[tracing::instrument(level = "debug", skip_all)]
+    #[hotpath::measure]
+    pub(crate) fn resolve(pending: &[Self], facts: &CrateFacts) -> Vec<AntipatternCandidate> {
+        pending
+            .iter()
+            .filter_map(|candidate| match candidate {
+                Self::Settled(found) => Some(found.clone()),
+                Self::OfTrait { trait_name, site } => facts
+                    .traits
+                    .contains(trait_name)
+                    .then(|| AntipatternCandidate::Record(site.clone())),
+                Self::Field {
+                    site,
+                    shape,
+                    type_name,
+                    location,
+                    references,
+                } => {
+                    let disallowed = references.iter().any(|spine| {
+                        spine.as_ref().is_none_or(|names| {
+                            !names.iter().any(|name| facts.traits.contains(name))
+                        })
+                    });
+                    if !disallowed
+                        || (!location
+                            && facts.constants.contains(type_name)
+                            && !facts.runtime.contains(type_name))
+                    {
+                        return None;
+                    }
+                    Some(AntipatternCandidate::StaticField(StaticField::new(
+                        site.clone(),
+                        facts.errors.contains(type_name),
+                        *shape,
+                    )))
+                }
+            })
+            .collect()
+    }
 }
 
 impl AntipatternCatalog {
@@ -116,8 +188,8 @@ pub(super) fn collect_file(
     )?))
 }
 
-/// One file's antipattern candidates, given the crate's facts: a function of the
-/// file's syntax and those facts.
+/// One file's antipattern candidates, given the crate's facts: the candidates of the file's syntax
+/// and those facts.
 #[tracing::instrument(level = "debug", skip_all, err(level = "warn"))]
 #[hotpath::measure]
 pub(crate) fn file_candidates(
@@ -126,10 +198,24 @@ pub(crate) fn file_candidates(
     root: &Path,
     facts: &CrateFacts,
 ) -> CordialResult<Vec<AntipatternCandidate>> {
+    Ok(PendingCandidate::resolve(
+        &pending_candidates(source, tree, root)?,
+        facts,
+    ))
+}
+
+/// One file's antipattern candidates before the crate's facts are applied: a function of the file's
+/// syntax alone.
+#[tracing::instrument(level = "debug", skip_all, err(level = "warn"))]
+#[hotpath::measure]
+pub(crate) fn pending_candidates(
+    source: &DatabaseSource<'_>,
+    tree: &Path,
+    root: &Path,
+) -> CordialResult<Vec<PendingCandidate>> {
     let mut collector = Collector {
         source,
         root,
-        facts,
         sites: Vec::new(),
     };
     let context = Context {
@@ -176,11 +262,7 @@ impl Collector<'_, '_> {
             }
         } else if let Some(implementation) = ast::Impl::cast(node.clone()) {
             context.implementation = implementation.self_ty().as_ref().map(types::label);
-            context.foreign = implementation
-                .trait_()
-                .as_ref()
-                .map(types::label)
-                .is_some_and(|name| !self.facts.traits.contains(&name));
+            context.owner_trait = implementation.trait_().as_ref().map(types::label);
             if let Some(list) = implementation.assoc_item_list() {
                 context.siblings = functions::siblings(list.syntax());
             }

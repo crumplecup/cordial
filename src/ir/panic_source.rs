@@ -1,7 +1,7 @@
 //! Snapshot-bound panic and proof-exemption evidence retained by the loader.
 
 use crate::FileSnapshot;
-use crate::etiquettes::panics::PanicSiteRecord;
+use crate::etiquettes::panics::{PanicKind, PanicSiteRecord};
 use crate::loader::DatabaseSource;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
@@ -11,7 +11,7 @@ mod assertions;
 mod embedded;
 mod native;
 mod proof;
-pub(crate) use native::{FileScan, file_proofs, file_scan};
+pub(crate) use native::{FileCandidates, FileScan, file_candidates, file_proofs};
 mod sites;
 mod syntax;
 
@@ -102,8 +102,63 @@ struct Context {
 struct Scanner<'a, 'db> {
     source: &'a DatabaseSource<'db>,
     root: &'a Path,
-    reachable: &'a BTreeSet<String>,
     embedded: bool,
     assertion_lines: BTreeSet<u32>,
-    records: Vec<PanicSiteRecord>,
+    candidates: Vec<PanicCandidate>,
+}
+
+/// A panic site before the crate's proofs say whether it is reported.
+///
+/// A file's scan does not read the crate's proof graph while it walks the syntax: it keeps each site
+/// with the function it is in, and what the graph says of that function is applied afterwards, to the
+/// candidates alone (see [`PanicCandidate::resolve`]), so the file's syntax is read once.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub(crate) enum PanicCandidate {
+    /// Reported unless a proof reaches `function`, the innermost function the site is in (none in
+    /// code a proof harness gates, or outside any function); two of one kind on a line are one site.
+    Site {
+        record: PanicSiteRecord,
+        function: Option<String>,
+    },
+    /// Reported as it is: what an embedded program's own proofs have already settled.
+    Settled(PanicSiteRecord),
+    /// What a scan of recovered syntax found, settled together as it was found.
+    Nested(Vec<PanicCandidate>),
+}
+
+impl PanicCandidate {
+    /// The records the candidates make under the functions the crate's proofs reach.
+    #[tracing::instrument(level = "debug", skip_all)]
+    #[hotpath::measure]
+    pub(crate) fn resolve(
+        candidates: &[Self],
+        reachable: &BTreeSet<String>,
+    ) -> Vec<PanicSiteRecord> {
+        let mut records: Vec<PanicSiteRecord> = Vec::new();
+        for candidate in candidates {
+            match candidate {
+                Self::Site { record, function } => {
+                    if function
+                        .as_ref()
+                        .is_some_and(|name| reachable.contains(name))
+                    {
+                        continue;
+                    }
+                    if record.kind() == PanicKind::Unwrap
+                        && records.last().is_some_and(|last| {
+                            last.kind() == record.kind()
+                                && last.line() == record.line()
+                                && last.file() == record.file()
+                        })
+                    {
+                        continue;
+                    }
+                    records.push(record.clone());
+                }
+                Self::Settled(record) => records.push(record.clone()),
+                Self::Nested(inner) => records.extend(Self::resolve(inner, reachable)),
+            }
+        }
+        records
+    }
 }

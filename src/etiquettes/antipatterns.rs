@@ -41,7 +41,7 @@ mod native;
 pub(crate) use catalog::AntipatternCandidate;
 pub(crate) use contract_bounds::{ContractFile, file_clauses, join_clauses};
 pub(crate) use native::input_paths as native_input_paths;
-pub(crate) use native::{CrateFacts, FileFacts, file_candidates};
+pub(crate) use native::{CrateFacts, FileFacts, PendingCandidate, pending_candidates};
 mod probe;
 mod reporter;
 mod scan;

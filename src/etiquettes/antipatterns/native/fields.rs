@@ -1,14 +1,10 @@
 //! Static field contracts retain their source shape, independent of policy.
-use super::{AntipatternCandidate, AntipatternRuleId, Collector, Context, StaticField, types};
-use crate::{
-    CordialResult,
-    etiquettes::antipatterns::{catalog::StaticFieldShape, scan::truncate_snippet},
-};
+use super::{AntipatternRuleId, Collector, Context, PendingCandidate, StaticFieldShape, types};
+use crate::{CordialResult, etiquettes::antipatterns::scan::truncate_snippet};
 use ra_ap_syntax::{
     AstNode, ast,
     ast::{HasGenericArgs, HasName},
 };
-use std::collections::BTreeSet;
 
 impl Collector<'_, '_> {
     #[tracing::instrument(level = "debug", skip_all, err(level = "warn"))]
@@ -33,16 +29,13 @@ impl Collector<'_, '_> {
         };
         let type_name = owner.split("::").next().unwrap_or(owner);
         for (name, ty) in fields {
-            if !disallowed(&ty, &self.facts.traits) {
+            // What the facts decide is kept with the candidate: with no `&'static` in the type
+            // there is nothing for them to decide.
+            let references = static_references(&ty);
+            if references.is_empty() {
                 continue;
             }
             let location = is_location(&ty);
-            if !location
-                && self.facts.constants.contains(type_name)
-                && !self.facts.runtime.contains(type_name)
-            {
-                continue;
-            }
             let shape = if location {
                 StaticFieldShape::Location
             } else if static_string(&ty) {
@@ -58,12 +51,13 @@ impl Collector<'_, '_> {
                 self.source.line(ty.syntax().text_range().start()),
                 truncate_snippet(&label(&ty), 96),
             )?;
-            self.sites
-                .push(AntipatternCandidate::StaticField(StaticField::new(
-                    site,
-                    self.facts.errors.contains(type_name),
-                    shape,
-                )));
+            self.sites.push(PendingCandidate::Field {
+                site,
+                shape,
+                type_name: type_name.to_owned(),
+                location,
+                references,
+            });
         }
         Ok(())
     }
@@ -75,32 +69,23 @@ fn static_ref(ty: &ast::RefType) -> bool {
         .is_some_and(|lifetime| lifetime.syntax().text() == "'static")
 }
 
-#[tracing::instrument(level = "trace", skip(ty, traits))]
-fn local_spine(ty: &ast::Type, traits: &BTreeSet<String>) -> bool {
+/// The traits a type names along its spine: through `&'static`, parentheses, arrays and slices to a
+/// trait object, whose bounds they are.
+#[tracing::instrument(level = "trace", skip(ty))]
+fn spine_names(ty: &ast::Type) -> Vec<String> {
     match ty {
-        ast::Type::DynTraitType(object) => types::bounds(object)
-            .iter()
-            .any(|name| traits.contains(name)),
+        ast::Type::DynTraitType(object) => types::bounds(object),
         ast::Type::RefType(reference) => {
-            static_ref(reference)
-                && reference
-                    .ty()
-                    .as_ref()
-                    .is_some_and(|ty| local_spine(ty, traits))
+            if static_ref(reference) {
+                reference.ty().as_ref().map(spine_names).unwrap_or_default()
+            } else {
+                Vec::new()
+            }
         }
-        ast::Type::ParenType(inner) => inner
-            .ty()
-            .as_ref()
-            .is_some_and(|ty| local_spine(ty, traits)),
-        ast::Type::ArrayType(inner) => inner
-            .ty()
-            .as_ref()
-            .is_some_and(|ty| local_spine(ty, traits)),
-        ast::Type::SliceType(inner) => inner
-            .ty()
-            .as_ref()
-            .is_some_and(|ty| local_spine(ty, traits)),
-        _ => false,
+        ast::Type::ParenType(inner) => inner.ty().as_ref().map(spine_names).unwrap_or_default(),
+        ast::Type::ArrayType(inner) => inner.ty().as_ref().map(spine_names).unwrap_or_default(),
+        ast::Type::SliceType(inner) => inner.ty().as_ref().map(spine_names).unwrap_or_default(),
+        _ => Vec::new(),
     }
 }
 
@@ -151,18 +136,26 @@ fn children(ty: &ast::Type) -> Vec<ast::Type> {
     }
 }
 
-#[tracing::instrument(level = "trace", skip(ty, traits))]
-fn disallowed(ty: &ast::Type, traits: &BTreeSet<String>) -> bool {
+/// For each `&'static` in the type (the type itself and those in it), the traits its spine names, or
+/// none where the reference has no type. The field is disallowed if any of them is not excused by a
+/// trait the crate declares: that is decided where the crate's traits are known.
+#[tracing::instrument(level = "trace", skip(ty))]
+fn static_references(ty: &ast::Type) -> Vec<Option<Vec<String>>> {
+    let mut found = Vec::new();
+    collect_references(ty, &mut found);
+    found
+}
+
+#[tracing::instrument(level = "trace", skip(ty, found))]
+fn collect_references(ty: &ast::Type, found: &mut Vec<Option<Vec<String>>>) {
     if let ast::Type::RefType(reference) = ty
         && static_ref(reference)
-        && reference
-            .ty()
-            .as_ref()
-            .is_none_or(|inner| !local_spine(inner, traits))
     {
-        return true;
+        found.push(reference.ty().as_ref().map(spine_names));
     }
-    children(ty).iter().any(|inner| disallowed(inner, traits))
+    for inner in children(ty) {
+        collect_references(&inner, found);
+    }
 }
 
 #[tracing::instrument(level = "trace", skip(ty))]

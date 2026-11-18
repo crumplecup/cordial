@@ -140,10 +140,14 @@ fn the_steps_never_parse_a_file_for_the_collectors_that_read_only_its_tree() -> 
     // is exact, so that a step that starts to parse again, or stops, is told.
     let remaining: Vec<&str> = by_step.keys().map(String::as_str).collect();
     let asked: Vec<&String> = said.iter().filter(|key| key.contains("project_")).collect();
-    // Panics read the file's tree again under the crate's reachable set (`panic_scan_file`), which the
-    // pass does not yet take away; the antipatterns' second visit will show here once the panics one
-    // is gone and the files are asked for in the order of the steps.
-    assert_eq!(remaining, vec!["project_panics"], "{by_step:?}\n{asked:#?}");
+    // The architecture step finds the files of the crate by reading the syntax of each for its `mod`
+    // declarations (`error_module_files`), which is not yet a query: it is the first to need a tree
+    // the pass has dropped. The second visits of panics and antipatterns are gone.
+    assert_eq!(
+        remaining,
+        vec!["project_error_architecture"],
+        "{by_step:?}\n{asked:#?}"
+    );
     Ok(())
 }
 

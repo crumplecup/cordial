@@ -1,5 +1,7 @@
 //! Function-signature policy, including cfg alternatives and ABI exemptions.
-use super::{AntipatternCandidate, AntipatternRuleId, Collector, Context, compact};
+use super::{
+    AntipatternCandidate, AntipatternRuleId, Collector, Context, PendingCandidate, compact,
+};
 use crate::CordialResult;
 use ra_ap_syntax::{
     AstNode, SyntaxNode, ast,
@@ -53,16 +55,14 @@ impl Collector<'_, '_> {
     #[tracing::instrument(level = "debug", skip_all, err(level = "warn"))]
     #[hotpath::measure]
     pub(super) fn function(&mut self, function: &ast::Fn, context: &Context) -> CordialResult<()> {
-        if context.foreign
-            || function.attrs().any(|attr| {
-                attr.path().is_some_and(|path| {
-                    matches!(
-                        compact(path.syntax()).as_str(),
-                        "proc_macro" | "proc_macro_derive" | "proc_macro_attribute"
-                    )
-                })
+        if function.attrs().any(|attr| {
+            attr.path().is_some_and(|path| {
+                matches!(
+                    compact(path.syntax()).as_str(),
+                    "proc_macro" | "proc_macro_derive" | "proc_macro_attribute"
+                )
             })
-        {
+        }) {
             return Ok(());
         }
         let opaque = function
@@ -106,7 +106,14 @@ impl Collector<'_, '_> {
                             self.source.line(binding.syntax().text_range().start()),
                             text,
                         )?;
-                        self.sites.push(AntipatternCandidate::Record(site));
+                        // In an `impl` of a trait, the facts say whether the crate owns the trait.
+                        self.sites.push(match &context.owner_trait {
+                            Some(trait_name) => PendingCandidate::OfTrait {
+                                trait_name: trait_name.clone(),
+                                site,
+                            },
+                            None => PendingCandidate::Settled(AntipatternCandidate::Record(site)),
+                        });
                     }
                 }
             }

@@ -251,4 +251,4 @@ mod panic_source;
 #[cfg(feature = "panics")]
 pub use panic_source::{ATTR_SOURCE_PANICS, PanicProofGraph, SourcePanics};
 #[cfg(feature = "panics")]
-pub(crate) use panic_source::{FileScan, file_proofs, file_scan};
+pub(crate) use panic_source::{FileCandidates, FileScan, file_candidates, file_proofs};

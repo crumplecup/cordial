@@ -71,8 +71,48 @@ pub(crate) struct FileScan {
     pub(crate) records: Vec<crate::etiquettes::panics::PanicSiteRecord>,
 }
 
-/// One file's panic sites, given the functions the proofs reach: a function of
-/// the file's syntax and that set.
+#[derive(serde::Serialize, serde::Deserialize)]
+/// What scanning one file's syntax found, before the proofs say which are reported.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct FileCandidates {
+    pub(crate) snapshot: FileSnapshot,
+    pub(crate) candidates: Vec<super::PanicCandidate>,
+}
+
+impl FileCandidates {
+    /// The file's scan under the functions the proofs reach, which needs no syntax.
+    #[tracing::instrument(level = "debug", skip_all)]
+    #[hotpath::measure(impl_type = "FileCandidates")]
+    pub(crate) fn resolve(&self, reachable: &BTreeSet<String>) -> FileScan {
+        FileScan {
+            snapshot: self.snapshot.clone(),
+            records: super::PanicCandidate::resolve(&self.candidates, reachable),
+        }
+    }
+}
+
+/// One file's panic sites before the proofs are applied: a function of the file's syntax alone.
+#[tracing::instrument(level = "debug", skip_all, err(level = "warn"))]
+#[hotpath::measure]
+pub(crate) fn file_candidates(
+    tree: &Path,
+    root: &Path,
+    file: &DatabaseSource<'_>,
+) -> CordialResult<FileCandidates> {
+    let context = Context {
+        modules: module_path_from_src_file(tree, file.path()),
+        ..Context::default()
+    };
+    let mut scan = Scanner::new(file, root, false);
+    scan.walk(file.tree().syntax(), &context)?;
+    Ok(FileCandidates {
+        snapshot: FileSnapshot::new(file.path().to_path_buf(), file.source_digest()),
+        candidates: scan.candidates,
+    })
+}
+
+/// One file's panic sites, given the functions the proofs reach: the candidates of the file's
+/// syntax and that set.
 #[tracing::instrument(level = "debug", skip_all, err(level = "warn"))]
 #[hotpath::measure]
 pub(crate) fn file_scan(
@@ -81,16 +121,7 @@ pub(crate) fn file_scan(
     file: &DatabaseSource<'_>,
     reachable: &BTreeSet<String>,
 ) -> CordialResult<FileScan> {
-    let context = Context {
-        modules: module_path_from_src_file(tree, file.path()),
-        ..Context::default()
-    };
-    let mut scan = Scanner::new(file, root, reachable, false);
-    scan.walk(file.tree().syntax(), &context)?;
-    Ok(FileScan {
-        snapshot: FileSnapshot::new(file.path().to_path_buf(), file.source_digest()),
-        records: scan.records,
-    })
+    Ok(file_candidates(tree, root, file)?.resolve(reachable))
 }
 
 impl Context {
@@ -108,21 +139,15 @@ impl Context {
 }
 
 impl<'a, 'db> Scanner<'a, 'db> {
-    #[tracing::instrument(level = "debug", skip(source, reachable))]
+    #[tracing::instrument(level = "debug", skip(source))]
     #[hotpath::measure]
-    pub(super) fn new(
-        source: &'a DatabaseSource<'db>,
-        root: &'a Path,
-        reachable: &'a BTreeSet<String>,
-        embedded: bool,
-    ) -> Self {
+    pub(super) fn new(source: &'a DatabaseSource<'db>, root: &'a Path, embedded: bool) -> Self {
         Self {
             source,
             root,
-            reachable,
             embedded,
             assertion_lines: BTreeSet::new(),
-            records: Vec::new(),
+            candidates: Vec::new(),
         }
     }
 
