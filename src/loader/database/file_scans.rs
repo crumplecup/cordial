@@ -112,6 +112,12 @@ impl SourceDatabase {
             return Ok(());
         }
         let visits = self.visits(target)?;
+        tracing::info!(
+            target: "cordial::cache",
+            files = visits.len(),
+            scanned = visits.iter().filter(|(_, _, visit)| visit.scanned).count(),
+            "file scans: the files the collectors read"
+        );
         let root = target.crate_root().to_path_buf();
         #[cfg(feature = "internal_error_chain")]
         let proc_macro = target.kinds().contains(&crate::CrateKind::ProcMacro);

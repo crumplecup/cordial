@@ -157,19 +157,14 @@ mod support {
     pub mod semantic_metrics;
 }
 
-/// What a restored run must not compute: each of the per-file queries the projection runs.
-const PER_FILE: [&str; 17] = [
+/// What a restored run must not compute: the per-file queries the projection runs. The collectors
+/// that read only a file's tree (error sites, chains and types, apply, observability, visibility,
+/// policy, verus) read one fused extraction of the file, which is what says it ran.
+const PER_FILE: [&str; 10] = [
     "file_facts:",
     "file_items:",
-    "error_sites_file:",
-    "error_chains_file:",
-    "error_types_file:",
+    "extract_file:",
     "error_compliance_file:",
-    "error_apply_file:",
-    "observability_file:",
-    "visibility_file:",
-    "policy_file:",
-    "verus_file:",
     "antipattern_facts_file:",
     "antipattern_sites_file:",
     "panic_proofs_file:",
