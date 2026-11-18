@@ -51,6 +51,12 @@ pub struct SemanticCargoOptions {
     /// steps that merge them: each step then asks for it, file by file, and the first to ask
     /// computes it. For the tests of what the pass does.
     skip_file_scan_priming: bool,
+    /// At the end of the evidence stage, where memory is highest, drop the values of each query in
+    /// turn and say what the process gave back (see [`crate::itemize`]). The run goes on with what
+    /// it dropped computed again, and the state it saves lacks what was persisted and dropped, so
+    /// this is for measuring a run and not for one that is kept. `CORDIAL_MEMORY_LEDGER` asks for
+    /// the same.
+    memory_ledger: bool,
 }
 
 impl SemanticCargoOptions {

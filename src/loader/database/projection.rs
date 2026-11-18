@@ -95,6 +95,7 @@ impl SourceDatabase {
         };
         self.prime_function_evidence();
         self.audit_reused_evidence();
+        self.itemize_memory("evidence");
         self.evict_regenerable("evidence");
         #[cfg(any(
             feature = "error_sites",

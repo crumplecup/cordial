@@ -6,7 +6,14 @@
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+use cordial::{
+    CrateTarget, MetricsLayer, SemanticCargoOptions, SourceDatabase, StoreLayout, read_run_metrics,
+    write_run_metrics,
+};
+use miette::{IntoDiagnostic, Result};
 use salsa::{Database, Storage};
+use tracing_subscriber::Layer;
+use tracing_subscriber::layer::SubscriberExt;
 
 #[salsa::input(persist, singleton)]
 struct Source {
@@ -104,4 +111,64 @@ fn the_ledger_credits_the_memory_to_the_query_that_held_it() {
     let before = BIG_RUNS.load(Ordering::SeqCst);
     read(&db);
     assert_eq!(BIG_RUNS.load(Ordering::SeqCst) - before, BIGS);
+}
+
+/// A run that asks for it says, at the end of the evidence stage, what each query held and what the
+/// process held besides: the ledger's rows and its totals.
+#[test]
+fn a_run_that_asks_for_it_says_what_each_query_held() -> Result<()> {
+    cordial::init_tracing();
+    let root = tempfile::tempdir().into_diagnostic()?;
+    std::fs::create_dir_all(root.path().join("src")).into_diagnostic()?;
+    std::fs::write(
+        root.path().join("Cargo.toml"),
+        "[package]\nname='ledgered'\nversion='0.1.0'\nedition='2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
+    let library: String = (0..30)
+        .map(|index| format!("pub fn f{index}() -> usize {{ {index} }}\n"))
+        .collect();
+    std::fs::write(root.path().join("src/lib.rs"), library).into_diagnostic()?;
+    let subscriber = tracing_subscriber::registry()
+        .with(MetricsLayer.with_filter(cordial::metrics_filter_with(true)));
+    let _subscriber = tracing::subscriber::set_default(subscriber);
+    let options = SemanticCargoOptions::default().with_memory_ledger(true);
+    let mut session = SourceDatabase::load_saved(root.path(), &options, None).into_diagnostic()?;
+    session
+        .project(
+            &CrateTarget::new("ledgered", root.path()),
+            &[root.path().join("src/lib.rs")],
+        )
+        .into_diagnostic()?;
+
+    let store = tempfile::tempdir().into_diagnostic()?;
+    let layout = StoreLayout::from_root(store.path().to_path_buf(), "ledgered".to_owned());
+    write_run_metrics(&layout).into_diagnostic()?;
+    let metrics = read_run_metrics(&layout);
+    let values = metrics.values();
+    let rows = values
+        .iter()
+        .filter(|(key, _)| key.starts_with("ledger.") && key.ends_with(".memos"))
+        .count();
+    assert!(rows > 5, "a row for each query that held values: {rows}");
+    let total = |name: &str| values.iter().find(|(key, _)| *key == name).map(|(_, v)| *v);
+    assert!(
+        total("ledger.evidence.file_texts").is_some_and(|texts| texts > 0),
+        "the files' texts"
+    );
+    assert!(
+        total("ledger.evidence.threads").is_some_and(|threads| threads > 0),
+        "the threads"
+    );
+    // Whether the floor is below the start is for the toy database above, whose values are large
+    // enough to tell from the process's own noise; here both are said.
+    assert!(
+        total("ledger.evidence.before_kib").is_some(),
+        "what was held before"
+    );
+    assert!(
+        total("ledger.evidence.floor_kib").is_some(),
+        "and what was left"
+    );
+    Ok(())
 }

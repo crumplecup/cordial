@@ -6,6 +6,7 @@
 //! asked to, and a run is one revision: without asking, every tree it ever parsed stays in
 //! memory.
 
+use ra_ap_ide_db::base_db::SourceDatabase as RaSourceDatabase;
 use tracing::instrument;
 
 use super::SourceDatabase;
@@ -13,6 +14,9 @@ use super::SourceDatabase;
 /// The environment variable that caps how many values each query keeps of those that keep the
 /// most recently used (rust-analyzer marks them for an editor: 128 files, 512 expansions).
 pub const LRU_CAP_VARIABLE: &str = "CORDIAL_LRU_CAP";
+
+/// The environment variable that asks a run for a ledger of what each query holds.
+pub const LEDGER_VARIABLE: &str = "CORDIAL_MEMORY_LEDGER";
 
 /// The environment variable that asks a run to evict between its phases.
 pub const EVICT_VARIABLE: &str = "CORDIAL_EVICT_LRU";
@@ -60,6 +64,59 @@ impl SourceDatabase {
         self.evict_quietly(after);
         self.spill_under_pressure(after);
         self.drop_regenerable_if_still_pressed(after);
+    }
+
+    /// If the run asks for it, drop the values of each query in turn and say what the process gave
+    /// back for each, with what else the process holds that no query's value is.
+    #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure(impl_type = "SourceDatabase")]
+    pub(super) fn itemize_memory(&mut self, after: &str) {
+        let asked = self
+            .cargo_options
+            .as_ref()
+            .is_some_and(|options| *options.memory_ledger())
+            || std::env::var_os(LEDGER_VARIABLE).is_some();
+        if !asked {
+            return;
+        }
+        let texts: (usize, usize) = self
+            .vfs
+            .iter()
+            .map(|(file, _)| self.db.file_text(file).text(&self.db).len())
+            .fold((0, 0), |(files, bytes), len| (files + 1, bytes + len));
+        let threads = std::fs::read_to_string("/proc/self/status")
+            .ok()
+            .and_then(|status| {
+                status
+                    .lines()
+                    .find_map(|line| line.strip_prefix("Threads:"))
+                    .and_then(|rest| rest.trim().parse::<u64>().ok())
+            })
+            .unwrap_or(0);
+        let Some(ledger) = crate::itemize(&mut self.db, &[]) else {
+            return;
+        };
+        for row in ledger.rows() {
+            tracing::info!(
+                target: "cordial::ledger",
+                ingredient = row.query().as_str(),
+                step = after,
+                memos = row.memos(),
+                freed_kib = row.freed_kib().max(0).unsigned_abs(),
+                settle_ms = row.settle_ms(),
+                "what dropping a query's values gave back"
+            );
+        }
+        tracing::info!(
+            target: "cordial::ledger",
+            step = after,
+            before_kib = ledger.before_kib(),
+            floor_kib = ledger.floor_kib(),
+            file_texts = texts.0 as u64,
+            file_text_kib = (texts.1 / 1024) as u64,
+            threads,
+            "what a run held before and after every query's values were dropped"
+        );
     }
 
     /// If the run is still nearing its memory limit after the eviction and the spill, drop the
