@@ -21,7 +21,7 @@ use tracing::instrument;
 
 /// A `#[cfg(..)]` gate: the item it is on, the predicate composed with those of everything around
 /// it, and the names written inside it.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub(super) struct CfgHost {
     pub(super) range: TextRange,
     pub(super) predicate: CfgExpr,
@@ -32,7 +32,7 @@ pub(super) struct CfgHost {
 }
 
 /// What a file's attributes say about its gates.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub(super) struct FileGates {
     /// The clauses each attribute's item is active under, each list once.
     pub(super) clause_sets: BTreeSet<Vec<Clause>>,
@@ -71,7 +71,7 @@ impl FileGates {
 }
 
 /// The gates of the file `scope` describes, read from its text.
-#[salsa::tracked(returns(ref))]
+#[salsa::tracked(persist, returns(ref))]
 #[instrument(level = "debug", skip(db, scope))]
 #[hotpath::measure]
 fn gates_in<'db>(db: &'db dyn SemanticDatabase, scope: ItemKey<'db>) -> FileGates {

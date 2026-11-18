@@ -28,7 +28,9 @@ use tracing::instrument;
 const CLAUSE_LIMIT: usize = 64;
 
 /// One way to make a predicate true: atoms that must be on and atoms that must be off.
-#[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub(super) struct Clause {
     on: BTreeSet<CfgAtom>,
     off: BTreeSet<CfgAtom>,

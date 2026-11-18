@@ -162,12 +162,10 @@ fn a_cold_run_parses_each_contexts_copy_of_the_files_for_the_passes() -> Result<
     Ok(())
 }
 
-/// A restored run takes the functions of each copy from the saved lists and parses no copy. What it
-/// still runs is the reading of the gates of the original files, once for each file, each run: the
-/// query that reads them is not saved, so each is a parse of a file the run has no other reason to
-/// parse.
+/// A restored run takes the functions of each copy and the gates of each original from the saved
+/// state: the passes over contexts parse nothing and read no gates.
 #[test]
-fn a_restored_run_parses_no_copy_but_reads_the_gates_of_the_originals() -> Result<()> {
+fn a_restored_run_parses_nothing_for_the_passes_over_contexts() -> Result<()> {
     let found = parses_in_contexts(true, true)?;
     assert_eq!(by_pass(&found), std::collections::BTreeMap::new());
     let gates: u64 = found
@@ -179,7 +177,7 @@ fn a_restored_run_parses_no_copy_but_reads_the_gates_of_the_originals() -> Resul
         })
         .map(|(_, count)| *count)
         .sum();
-    assert_eq!(gates, 2, "the gates read for the two files: {found:#?}");
+    assert_eq!(gates, 0, "the gates were read again: {found:#?}");
     Ok(())
 }
 
