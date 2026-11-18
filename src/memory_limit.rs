@@ -12,7 +12,7 @@
 //! programs hold, so a share of it keeps a buffer for the machine.
 
 use std::io::Write as _;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering};
 use std::time::Duration;
 
 use tracing::instrument;
@@ -34,6 +34,66 @@ static LIMIT_BYTES: AtomicU64 = AtomicU64::new(0);
 /// Whether the run is nearing its limit, as the watchdog last judged it. Work reads this and not
 /// the process's memory: it is one load, and the watchdog's reading is never more than a sample old.
 static PRESSURE: AtomicBool = AtomicBool::new(false);
+
+/// How hard the run is pressed, as a rung of the ladder (see `docs/planning/cold-cache.md`): each
+/// does what the one before does, and more.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
+pub enum Pressure {
+    /// Below the first rung.
+    #[default]
+    None,
+    /// From 60% of the limit: evict, spill, take smaller chunks.
+    Soft,
+    /// From 75%: a quarter of the workers, and what is not persisted is dropped after each chunk.
+    Hard,
+    /// From 85%: one worker and the smallest chunks.
+    Severe,
+}
+
+impl Pressure {
+    fn from_bits(bits: u8) -> Self {
+        match bits {
+            1 => Self::Soft,
+            2 => Self::Hard,
+            3.. => Self::Severe,
+            0 => Self::None,
+        }
+    }
+}
+
+/// The share of the limit, in percent, from which each rung begins (Soft, Hard, Severe), and the
+/// share below which a run on it leaves it: lower, so the work does not alternate around one figure.
+const BEGINS_AT: [u64; 3] = [EASE_OFF_PERCENT, 75, 85];
+const LEAVES_BELOW: [u64; 3] = [RELIEF_PERCENT, 60, 70];
+
+/// The rung a process using `resident_kib` of `limit` bytes is on, given the one it was on: it climbs
+/// as soon as a rung's share is reached, and comes down a rung only when it is below that rung's
+/// leaving share. A limit of zero is none.
+#[instrument(level = "trace")]
+pub fn judge_level(was: Pressure, resident_kib: u64, limit: u64) -> Pressure {
+    if limit == 0 {
+        return Pressure::None;
+    }
+    let percent_times_limit = resident_kib.saturating_mul(1024).saturating_mul(100);
+    let reached = BEGINS_AT
+        .iter()
+        .filter(|share| percent_times_limit >= limit.saturating_mul(**share))
+        .count();
+    let mut level = reached.max(was as usize);
+    while level > reached
+        && level > 0
+        && percent_times_limit < limit.saturating_mul(LEAVES_BELOW[level - 1])
+    {
+        level -= 1;
+    }
+    Pressure::from_bits(u8::try_from(level).unwrap_or(3))
+}
+
+/// The rung the watchdog last put the run on.
+static LEVEL: AtomicU8 = AtomicU8::new(0);
+
+/// The rung a test asks for.
+static LEVEL_FORCED: AtomicU8 = AtomicU8::new(0);
 
 /// Pressure a test asks for, so that what the work does under it can be seen without a run that
 /// uses that much memory.
@@ -257,6 +317,24 @@ pub fn nearing_now() -> bool {
 #[instrument(level = "debug")]
 pub fn feel_pressure(on: bool) {
     PRESSURE_FORCED.store(on, Ordering::Relaxed);
+    LEVEL_FORCED.store(u8::from(on), Ordering::Relaxed);
+}
+
+/// Make the run feel the pressure of `level`, for the tests of what the work does on each rung.
+#[instrument(level = "debug")]
+pub fn feel_pressure_at(level: Pressure) {
+    PRESSURE_FORCED.store(level > Pressure::None, Ordering::Relaxed);
+    LEVEL_FORCED.store(level as u8, Ordering::Relaxed);
+}
+
+/// The rung the run is on now: the watchdog's, or the one a test asked for if it is higher.
+#[instrument(level = "trace")]
+pub fn pressure() -> Pressure {
+    Pressure::from_bits(
+        LEVEL
+            .load(Ordering::Relaxed)
+            .max(LEVEL_FORCED.load(Ordering::Relaxed)),
+    )
 }
 
 /// The next judgement of pressure given the last one: it begins at [`EASE_OFF_PERCENT`] of the
@@ -296,6 +374,20 @@ fn watch(budget: &Budget) {
             // No reading on this platform: nothing to bound by.
             return;
         };
+        let rung = judge_level(
+            Pressure::from_bits(LEVEL.load(Ordering::Relaxed)),
+            memory.resident_kib(),
+            budget.bytes,
+        );
+        if rung as u8 != LEVEL.load(Ordering::Relaxed) {
+            LEVEL.store(rung as u8, Ordering::Relaxed);
+            tracing::info!(
+                target: "cordial::eviction",
+                rung = rung as u8,
+                resident_kib = memory.resident_kib(),
+                "the run's rung of the pressure ladder changed"
+            );
+        }
         let was = PRESSURE.load(Ordering::Relaxed);
         let now = judge(was, memory.resident_kib(), budget.bytes);
         if now != was {

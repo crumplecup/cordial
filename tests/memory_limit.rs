@@ -7,8 +7,8 @@ mod support {
 
 use clap::Parser;
 use cordial::{
-    Cli, DEFAULT_MEMORY_LIMIT, MEMORY_LIMIT_EXIT, MemoryLimit, budget_of, exceeds, judge,
-    load_cordial_config, nearing, parse_limit, parse_meminfo, parse_size,
+    Cli, DEFAULT_MEMORY_LIMIT, MEMORY_LIMIT_EXIT, MemoryLimit, Pressure, budget_of, exceeds, judge,
+    judge_level, load_cordial_config, nearing, parse_limit, parse_meminfo, parse_size,
     resolve_memory_limit_with,
 };
 use miette::{IntoDiagnostic, Result};
@@ -97,6 +97,60 @@ fn pressure_begins_at_sixty_percent_and_ends_only_below_forty_five() {
     assert!(judge(true, kib_at(45), limit), "nor does 45%");
     assert!(!judge(true, kib_at(44), limit), "44% does");
     assert!(!judge(true, u64::MAX, 0), "with no limit there is none");
+}
+
+#[test]
+fn the_rungs_of_the_ladder_begin_at_sixty_seventy_five_and_eighty_five_percent() {
+    let limit = GIB;
+    let kib_at = |percent: u64| (GIB / 1024 * percent).div_ceil(100);
+    let from_none = |percent: u64| judge_level(Pressure::None, kib_at(percent), limit);
+    assert_eq!(from_none(59), Pressure::None);
+    assert_eq!(from_none(60), Pressure::Soft);
+    assert_eq!(from_none(75), Pressure::Hard);
+    assert_eq!(from_none(85), Pressure::Severe);
+    assert_eq!(from_none(99), Pressure::Severe);
+    assert_eq!(
+        judge_level(Pressure::Severe, u64::MAX, 0),
+        Pressure::None,
+        "no limit, no rung"
+    );
+}
+
+#[test]
+fn a_run_comes_down_a_rung_only_when_it_is_well_below_it() {
+    let limit = GIB;
+    let kib_at = |percent: u64| (GIB / 1024 * percent).div_ceil(100);
+    // On the last rung 80% is not enough to leave it, 69% is, and then it is on the one below.
+    assert_eq!(
+        judge_level(Pressure::Severe, kib_at(80), limit),
+        Pressure::Severe
+    );
+    assert_eq!(
+        judge_level(Pressure::Severe, kib_at(69), limit),
+        Pressure::Hard
+    );
+    // The second rung stays at 65% and is left below 60%, for the first; that is left below 45%.
+    assert_eq!(
+        judge_level(Pressure::Hard, kib_at(65), limit),
+        Pressure::Hard
+    );
+    assert_eq!(
+        judge_level(Pressure::Hard, kib_at(59), limit),
+        Pressure::Soft
+    );
+    assert_eq!(
+        judge_level(Pressure::Soft, kib_at(50), limit),
+        Pressure::Soft
+    );
+    assert_eq!(
+        judge_level(Pressure::Soft, kib_at(44), limit),
+        Pressure::None
+    );
+    // It can drop several rungs at once if memory fell a long way.
+    assert_eq!(
+        judge_level(Pressure::Severe, kib_at(10), limit),
+        Pressure::None
+    );
 }
 
 #[test]

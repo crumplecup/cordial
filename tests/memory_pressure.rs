@@ -21,11 +21,12 @@ use tracing_subscriber::layer::SubscriberExt;
 /// Fewer functions than the least a chunk holds, so that without pressure they are one chunk.
 const FUNCTIONS: usize = 40;
 
-/// Whether the run feels pressure: what a test changes and nothing else.
+/// Whether the run feels pressure, and on which rung: what a test changes and nothing else.
 #[derive(Clone, Copy)]
 enum Pressure {
     Felt,
     Absent,
+    At(cordial::Pressure),
 }
 
 /// What the priming of a crate of [`FUNCTIONS`] functions said of its chunks.
@@ -41,6 +42,11 @@ struct Chunks {
     caps: u64,
     /// How many of those evictions there were (the run's own, not each query's).
     eviction_events: u64,
+    /// How many workers each part of the priming ran, summed, and how many parts there were.
+    workers: u64,
+    parts: u64,
+    /// How many values of queries that are not persisted were dropped between chunks.
+    dropped: u64,
 }
 
 fn priming_under(pressure: Pressure) -> Result<Chunks> {
@@ -59,7 +65,11 @@ fn priming_under(pressure: Pressure) -> Result<Chunks> {
     let subscriber = tracing_subscriber::registry()
         .with(MetricsLayer.with_filter(cordial::metrics_filter_with(true)));
     let _subscriber = tracing::subscriber::set_default(subscriber);
-    feel_pressure(matches!(pressure, Pressure::Felt));
+    cordial::feel_pressure_at(match pressure {
+        Pressure::Absent => cordial::Pressure::None,
+        Pressure::Felt => cordial::Pressure::Soft,
+        Pressure::At(level) => level,
+    });
     let options = SemanticCargoOptions::default();
     let mut session = SourceDatabase::load_saved(root.path(), &options, None).into_diagnostic()?;
     session
@@ -88,6 +98,9 @@ fn priming_under(pressure: Pressure) -> Result<Chunks> {
         evictions: sum(&|key| key.starts_with("eviction.prime_chunk.") && key.ends_with(".events")),
         caps: sum(&|key| key == "eviction.prime_chunk.cap"),
         eviction_events: sum(&|key| key == "eviction.prime_chunk.events"),
+        workers: sum(&|key| key == "semantic.priming.workers"),
+        parts: sum(&|key| key == "prime.events"),
+        dropped: sum(&|key| key == "eviction.prime_chunk.dropped_regenerable"),
     })
 }
 
@@ -140,7 +153,11 @@ fn run_under(
 ) -> Result<(String, u64, u64)> {
     let state = tempfile::tempdir().into_diagnostic()?;
     let saved = SavedState::at(state.path().join("analysis-state"));
-    feel_pressure(matches!(pressure, Pressure::Felt));
+    cordial::feel_pressure_at(match pressure {
+        Pressure::Absent => cordial::Pressure::None,
+        Pressure::Felt => cordial::Pressure::Soft,
+        Pressure::At(level) => level,
+    });
     let graph = {
         let mut session =
             SourceDatabase::load_saved(root, options, Some(saved)).into_diagnostic()?;
@@ -253,6 +270,59 @@ fn a_context_run_under_pressure_drops_what_is_regenerable_and_finds_the_same_gra
         in_order(&pressed),
         in_order(&plain),
         "and the graph is the one without"
+    );
+    Ok(())
+}
+
+/// What the priming does on each rung: all the workers, then a quarter of them, then one; and from
+/// the second rung what is not persisted is dropped after each chunk.
+#[test]
+fn on_the_first_rung_the_priming_keeps_all_its_workers_and_drops_nothing_between_chunks()
+-> Result<()> {
+    let chunks = priming_under(Pressure::At(cordial::Pressure::Soft))?;
+    assert!(chunks.parts > 0);
+    assert_eq!(
+        chunks.dropped, 0,
+        "nothing that is not persisted is dropped between chunks"
+    );
+    if std::thread::available_parallelism().map_or(1, usize::from) > 1 {
+        assert!(
+            chunks.workers > chunks.parts,
+            "more than one worker for a part"
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn on_the_second_rung_the_priming_has_a_quarter_of_the_workers_and_drops_between_chunks()
+-> Result<()> {
+    let chunks = priming_under(Pressure::At(cordial::Pressure::Hard))?;
+    let available = std::thread::available_parallelism().map_or(1, usize::from);
+    let quarter = u64::try_from((available / 4).max(1)).unwrap_or(1);
+    assert!(chunks.parts > 0);
+    assert!(
+        chunks.workers <= chunks.parts * quarter,
+        "no more than a quarter of the workers for a part: {} workers in {} parts of at most {quarter}",
+        chunks.workers,
+        chunks.parts
+    );
+    assert!(
+        chunks.dropped > 0,
+        "what is not persisted was dropped between chunks"
+    );
+    Ok(())
+}
+
+#[test]
+fn on_the_last_rung_the_priming_has_one_worker_and_takes_one_function_at_a_time_if_it_must()
+-> Result<()> {
+    let chunks = priming_under(Pressure::At(cordial::Pressure::Severe))?;
+    assert!(chunks.parts > 0);
+    assert_eq!(chunks.workers, chunks.parts, "one worker for every part");
+    assert!(
+        chunks.dropped > 0,
+        "and what is not persisted was dropped between chunks"
     );
     Ok(())
 }

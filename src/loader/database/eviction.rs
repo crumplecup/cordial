@@ -130,6 +130,11 @@ impl SourceDatabase {
         if !crate::memory_limit::nearing_now() {
             return;
         }
+        self.drop_regenerable(after);
+    }
+
+    /// Drop the values of every query that is not persisted, and say what it gave back.
+    fn drop_regenerable(&mut self, after: &str) {
         let before = crate::process_memory::sample();
         let started = std::time::Instant::now();
         let dropped = salsa::Database::drop_regenerable_values(&mut self.db);
@@ -167,6 +172,11 @@ impl SourceDatabase {
             self.evict_quietly("prime chunk");
         }
         self.spill_under_pressure("prime chunk");
+        if crate::memory_limit::pressure() >= crate::Pressure::Hard {
+            // From the second rung, what is not persisted is dropped after each chunk, whatever it
+            // costs the next to build it again.
+            self.drop_regenerable("prime chunk");
+        }
         pressed
     }
 

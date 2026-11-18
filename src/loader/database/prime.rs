@@ -151,7 +151,7 @@ impl SourceDatabase {
             );
             rest = &rest[done..];
             size = if self.evict_between_chunks() {
-                (size / 2).max(LEAST_UNDER_PRESSURE)
+                (size / 2).max(least_at(crate::memory_limit::pressure()))
             } else {
                 // Relieved: back to the usual step, doubling so that one calm sample does not.
                 (size * 2).min(usual)
@@ -176,9 +176,11 @@ impl SourceDatabase {
         one: &(impl Fn(&RootDatabase, &T) + Sync),
         may_stop: bool,
     ) -> usize {
-        let workers = std::thread::available_parallelism()
-            .map_or(1, usize::from)
-            .min(functions.len().max(1));
+        let workers = workers_at(
+            std::thread::available_parallelism().map_or(1, usize::from),
+            crate::memory_limit::pressure(),
+        )
+        .min(functions.len().max(1));
         tracing::debug!(
             target: "cordial::semantic::priming",
             functions = functions.len(),
@@ -214,6 +216,28 @@ impl SourceDatabase {
 /// The fewest functions a chunk holds when the process is nearing its memory limit.
 const LEAST_UNDER_PRESSURE: usize = 8;
 
+/// The fewest on the last rung, where one function at a time is what there is room for.
+const LEAST_WHEN_SEVERE: usize = 1;
+
+/// The fewest functions a chunk holds on the rung of the pressure ladder the run is on.
+fn least_at(level: crate::Pressure) -> usize {
+    if level >= crate::Pressure::Severe {
+        LEAST_WHEN_SEVERE
+    } else {
+        LEAST_UNDER_PRESSURE
+    }
+}
+
+/// How many workers run on the rung the run is on: all of them, then a quarter, then one. Every
+/// worker holds a tree, expansions and an inference at once, so fewer is less held at the peak.
+fn workers_at(available: usize, level: crate::Pressure) -> usize {
+    match level {
+        crate::Pressure::None | crate::Pressure::Soft => available,
+        crate::Pressure::Hard => (available / 4).max(1),
+        crate::Pressure::Severe => 1,
+    }
+}
+
 /// How many functions go between two evictions: enough that the workers' start-up is nothing
 /// to it, few enough that what a chunk parses is a small part of the whole.
 fn chunk_size(functions: usize) -> usize {
@@ -236,7 +260,7 @@ fn evaluate<T>(
     attach_db(db, || {
         loop {
             if may_stop
-                && next.load(Ordering::Relaxed) >= LEAST_UNDER_PRESSURE
+                && next.load(Ordering::Relaxed) >= least_at(crate::memory_limit::pressure())
                 && crate::memory_limit::pressured()
             {
                 break;
