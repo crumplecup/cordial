@@ -86,6 +86,11 @@ impl SourceDatabase for TestDB {
         files.set_file_text(self, file_id, text);
     }
 
+    fn set_file_text_arc(&mut self, file_id: base_db::FileId, text: Arc<str>) {
+        let files = Arc::clone(&self.files);
+        files.set_file_text_arc(self, file_id, text);
+    }
+
     fn set_file_text_with_durability(
         &mut self,
         file_id: base_db::FileId,

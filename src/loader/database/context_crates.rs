@@ -324,17 +324,18 @@ impl SourceDatabase {
                     "{COPY_PATH_PREFIX}{index}{}",
                     real.as_str()
                 ));
-                let text = self.db.file_text(original).text(&self.db).to_string();
+                // The copy holds the allocation the original's text is in, not a copy of it.
+                let text = self.db.file_text(original).text(&self.db).clone();
                 self.vfs
-                    .set_file_contents(copy_path.clone(), Some(text.clone().into_bytes()));
+                    .set_file_contents(copy_path.clone(), Some(text.as_bytes().to_vec()));
                 let (copy, _) = self
                     .vfs
                     .file_id(&copy_path)
                     .ok_or_else(|| CordialError::not_found(real.as_str().into()))?;
                 // A copy the database already holds is written only if it differs.
                 if known.and_then(|known| known.get(&original)) == Some(&copy) {
-                    if &**self.db.file_text(copy).text(&self.db) != text.as_str() {
-                        self.db.set_file_text(copy, &text);
+                    if **self.db.file_text(copy).text(&self.db) != *text {
+                        self.db.set_file_text_arc(copy, text.clone());
                     }
                     if self.db.file_source_root(copy).source_root_id(&self.db) != root_id {
                         self.db.set_file_source_root_with_durability(
@@ -344,7 +345,7 @@ impl SourceDatabase {
                         );
                     }
                 } else {
-                    self.db.set_file_text(copy, &text);
+                    self.db.set_file_text_arc(copy, text.clone());
                     self.db
                         .set_file_source_root_with_durability(copy, root_id, Durability::LOW);
                 }
@@ -363,6 +364,21 @@ impl SourceDatabase {
                 Durability::LOW,
             );
         }
+        let shared = copies
+            .iter()
+            .filter(|(original, copy)| {
+                triomphe::Arc::ptr_eq(
+                    self.db.file_text(**original).text(&self.db),
+                    self.db.file_text(**copy).text(&self.db),
+                )
+            })
+            .count();
+        tracing::debug!(
+            target: "cordial::context_crates",
+            copies = copies.len(),
+            text_shared = shared,
+            "the files copied for a context, and how many of them hold the original's text itself"
+        );
         Ok(copies)
     }
 
@@ -375,8 +391,16 @@ impl SourceDatabase {
             .iter()
             .filter_map(|added| added.copy_of(original))
             .collect();
+        // The original has the new text by now: its copies take its allocation. Were it another
+        // (a text not applied to it), they share one of their own.
+        let original_text = self.db.file_text(original).text(&self.db).clone();
+        let shared = if *original_text == *text {
+            original_text
+        } else {
+            triomphe::Arc::from(text)
+        };
         for copy in copies {
-            self.db.set_file_text(copy, text);
+            self.db.set_file_text_arc(copy, shared.clone());
         }
     }
 

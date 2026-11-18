@@ -167,6 +167,21 @@ fn a_cold_run_parses_each_contexts_copy_of_the_files_for_the_passes() -> Result<
         asked,
         "the copies the passes ask a parse of"
     );
+    let value = |name: &str| {
+        found
+            .iter()
+            .find(|(key, _)| key == name)
+            .map(|(_, count)| *count)
+    };
+    assert!(
+        value("context_crates.copies").is_some_and(|copies| copies > 0),
+        "contexts copied files"
+    );
+    assert_eq!(
+        value("context_crates.text_shared"),
+        value("context_crates.copies"),
+        "each copy holds the original's text itself, not a copy of it"
+    );
     assert!(
         found.iter().any(|(key, _)| key.ends_with(TEXT_PARSE)),
         "the text of the original is parsed somewhere, or the name above matches nothing"

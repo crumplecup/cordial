@@ -20,6 +20,10 @@ pub struct EditionedFileId {
 /// What a parse is of: a text and the edition it is read in, and nothing of the file it is in.
 /// Interned, so that files with the same text (a cfg context's copies of the workspace's files)
 /// are one key, and the parse of the text is made once and shared.
+///
+/// It is never freed within a database, but holds the allocation the file's text is already in (a
+/// copy of a file shares the original's), so it adds a pointer for each distinct text and keeps an
+/// edited file's earlier text only until the process ends.
 #[salsa::interned(debug, unsafe(no_lifetime), revisions = usize::MAX)]
 pub struct ParseInput {
     #[returns(ref)]

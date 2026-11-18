@@ -161,6 +161,28 @@ impl Files {
         };
     }
 
+    /// Give the file the text `text` itself, not a copy of it: files that have the same text (a
+    /// cfg context's copies of a file) then hold one allocation between them. An unchanged text
+    /// is left as it is, so that what read it is not invalidated.
+    pub fn set_file_text_arc(
+        &self,
+        db: &mut dyn SourceDatabase,
+        file_id: vfs::FileId,
+        text: Arc<str>,
+    ) {
+        match self.files.entry(file_id) {
+            Entry::Occupied(mut occupied) => {
+                if **occupied.get().text(db) != *text {
+                    occupied.get_mut().set_text(db).to(text);
+                }
+            }
+            Entry::Vacant(vacant) => {
+                let text = FileText::new(db, text, file_id);
+                vacant.insert(text);
+            }
+        };
+    }
+
     pub fn set_file_text_with_durability(
         &self,
         db: &mut dyn SourceDatabase,
@@ -336,6 +358,10 @@ pub trait SourceDatabase: salsa::Database + std::fmt::Debug {
     fn file_text(&self, file_id: vfs::FileId) -> FileText;
 
     fn set_file_text(&mut self, file_id: vfs::FileId, text: &str);
+
+    /// [`Self::set_file_text`] with the allocation `text` is in, so files with the same text
+    /// share it.
+    fn set_file_text_arc(&mut self, file_id: vfs::FileId, text: Arc<str>);
 
     fn set_file_text_with_durability(
         &mut self,

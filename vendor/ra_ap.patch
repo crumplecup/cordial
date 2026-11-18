@@ -50,7 +50,7 @@
          for (file_id, text) in self.files_changed {
 --- a/ra_ap_base_db-0.0.358/src/editioned_file_id.rs
 +++ ra_ap_base_db/src/editioned_file_id.rs
-@@ -10,13 +10,34 @@
+@@ -10,13 +10,38 @@
  
  use crate::SourceDatabase;
  
@@ -65,6 +65,10 @@
 +/// What a parse is of: a text and the edition it is read in, and nothing of the file it is in.
 +/// Interned, so that files with the same text (a cfg context's copies of the workspace's files)
 +/// are one key, and the parse of the text is made once and shared.
++///
++/// It is never freed within a database, but holds the allocation the file's text is already in (a
++/// copy of a file shares the original's), so it adds a pointer for each distinct text and keeps an
++/// edited file's earlier text only until the process ends.
 +#[salsa::interned(debug, unsafe(no_lifetime), revisions = usize::MAX)]
 +pub struct ParseInput {
 +    #[returns(ref)]
@@ -86,7 +90,7 @@
  #[salsa::tracked]
  impl EditionedFileId {
      #[salsa::tracked(lru = 128, returns(clone))]
-@@ -24,7 +45,7 @@
+@@ -24,7 +49,7 @@
          let _p = tracing::info_span!("parse", ?self).entered();
          let (file_id, edition) = self.unpack(db);
          let text = db.file_text(file_id).text(db);
@@ -350,7 +354,36 @@
              }
              Entry::Vacant(vacant) => {
                  let text = FileText::new(db, Arc::from(text), file_id);
-@@ -107,7 +170,9 @@
+@@ -98,6 +161,28 @@
+         };
+     }
+ 
++    /// Give the file the text `text` itself, not a copy of it: files that have the same text (a
++    /// cfg context's copies of a file) then hold one allocation between them. An unchanged text
++    /// is left as it is, so that what read it is not invalidated.
++    pub fn set_file_text_arc(
++        &self,
++        db: &mut dyn SourceDatabase,
++        file_id: vfs::FileId,
++        text: Arc<str>,
++    ) {
++        match self.files.entry(file_id) {
++            Entry::Occupied(mut occupied) => {
++                if **occupied.get().text(db) != *text {
++                    occupied.get_mut().set_text(db).to(text);
++                }
++            }
++            Entry::Vacant(vacant) => {
++                let text = FileText::new(db, text, file_id);
++                vacant.insert(text);
++            }
++        };
++    }
++
+     pub fn set_file_text_with_durability(
+         &self,
+         db: &mut dyn SourceDatabase,
+@@ -107,7 +192,9 @@
      ) {
          match self.files.entry(file_id) {
              Entry::Occupied(mut occupied) => {
@@ -361,7 +394,7 @@
              }
              Entry::Vacant(vacant) => {
                  let text =
-@@ -138,7 +203,13 @@
+@@ -138,7 +225,13 @@
      ) {
          match self.source_roots.entry(source_root_id) {
              Entry::Occupied(mut occupied) => {
@@ -376,7 +409,7 @@
              }
              Entry::Vacant(vacant) => {
                  let source_root =
-@@ -183,11 +254,13 @@
+@@ -183,11 +276,13 @@
      ) {
          match self.file_source_roots.entry(id) {
              Entry::Occupied(mut occupied) => {
@@ -395,7 +428,7 @@
              }
              Entry::Vacant(vacant) => {
                  let file_source_root =
-@@ -200,7 +273,7 @@
+@@ -200,7 +295,7 @@
  
  /// The set of roots for crates.io libraries.
  /// Files in libraries are assumed to never change.
@@ -404,7 +437,7 @@
  pub struct LibraryRoots {
      #[returns(ref)]
      pub roots: FxHashSet<SourceRootId>,
-@@ -208,29 +281,53 @@
+@@ -208,29 +303,53 @@
  
  /// The set of "local" (that is, from the current workspace) roots.
  /// Files in local roots are assumed to change frequently.
@@ -462,7 +495,18 @@
  }
  
  #[salsa::db]
-@@ -308,6 +405,7 @@
+@@ -240,6 +359,10 @@
+ 
+     fn set_file_text(&mut self, file_id: vfs::FileId, text: &str);
+ 
++    /// [`Self::set_file_text`] with the allocation `text` is in, so files with the same text
++    /// share it.
++    fn set_file_text_arc(&mut self, file_id: vfs::FileId, text: Arc<str>);
++
+     fn set_file_text_with_durability(
+         &mut self,
+         file_id: vfs::FileId,
+@@ -308,6 +431,7 @@
  
  /// Crate related data shared by the whole workspace.
  #[derive(Debug, PartialEq, Eq, Hash, Clone)]
@@ -470,7 +514,7 @@
  pub struct CrateWorkspaceData {
      pub target: Result<target::TargetData, target::TargetLoadError>,
      /// Toolchain version used to compile the crate.
-@@ -331,7 +429,7 @@
+@@ -331,7 +455,7 @@
      krate.workspace_data(db).toolchain.as_ref().and_then(|v| ReleaseChannel::from_str(&v.pre).ok())
  }
  
@@ -479,7 +523,7 @@
  struct AllCrates {
      #[returns(clone)]
      crates: std::sync::Arc<[Crate]>,
-@@ -349,11 +447,63 @@
+@@ -349,11 +473,63 @@
          .to(crates.into_iter().collect());
  }
  
@@ -545,7 +589,7 @@
  }
  
  // FIXME: VFS rewrite should allow us to get rid of this wrapper
-@@ -371,8 +521,15 @@
+@@ -371,8 +547,15 @@
          db: &'db dyn SourceDatabase,
          id: InternedSourceRootId<'db>,
      ) -> Box<[Crate]> {
@@ -3666,7 +3710,19 @@
 +}
 --- a/ra_ap_ide_db-0.0.358/src/lib.rs
 +++ ra_ap_ide_db/src/lib.rs
-@@ -190,6 +190,23 @@
+@@ -131,6 +131,11 @@
+         files.set_file_text(self, file_id, text);
+     }
+ 
++    fn set_file_text_arc(&mut self, file_id: vfs::FileId, text: Arc<str>) {
++        let files = Arc::clone(&self.files);
++        files.set_file_text_arc(self, file_id, text);
++    }
++
+     fn set_file_text_with_durability(
+         &mut self,
+         file_id: vfs::FileId,
+@@ -190,6 +195,23 @@
  }
  
  impl RootDatabase {
@@ -4181,3 +4237,31 @@
  #[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq, Hash)]
  struct VirtualPath(String);
  
+--- a/ra_ap_hir_ty-0.0.358/src/test_db.rs
++++ ra_ap_hir_ty/src/test_db.rs
+@@ -86,6 +86,11 @@
+         files.set_file_text(self, file_id, text);
+     }
+ 
++    fn set_file_text_arc(&mut self, file_id: base_db::FileId, text: Arc<str>) {
++        let files = Arc::clone(&self.files);
++        files.set_file_text_arc(self, file_id, text);
++    }
++
+     fn set_file_text_with_durability(
+         &mut self,
+         file_id: base_db::FileId,
+--- a/ra_ap_hir_def-0.0.358/src/test_db.rs
++++ ra_ap_hir_def/src/test_db.rs
+@@ -95,6 +95,11 @@
+         files.set_file_text(self, file_id, text);
+     }
+ 
++    fn set_file_text_arc(&mut self, file_id: base_db::FileId, text: Arc<str>) {
++        let files = Arc::clone(&self.files);
++        files.set_file_text_arc(self, file_id, text);
++    }
++
+     fn set_file_text_with_durability(
+         &mut self,
+         file_id: base_db::FileId,
