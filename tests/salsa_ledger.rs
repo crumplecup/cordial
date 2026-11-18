@@ -77,7 +77,9 @@ fn read(db: &Db) {
 /// How many memos of each query hold a value in memory, and the drop of the queries `only` names.
 fn held(db: &mut Db, drop: bool, only: &[&str]) -> Vec<(&'static str, u64)> {
     let mut found = Vec::new();
-    db.values_in_memory(drop, only, &mut |query, count| found.push((query, count)));
+    db.values_in_memory(drop, true, only, &mut |query, count| {
+        found.push((query, count))
+    });
     found
 }
 
@@ -182,5 +184,46 @@ fn a_restored_memo_decodes_again_after_a_drop_and_computes_nothing() {
         DESCRIBED.load(Ordering::SeqCst) - described_before,
         0,
         "and nothing was computed"
+    );
+}
+
+/// What is dropped between phases of a run is what a query computes again and a saved state does
+/// not hold: a persisted memo with no value would be missing from the state the run saves.
+#[test]
+fn the_regenerable_values_are_dropped_and_the_persisted_ones_are_kept_for_the_saved_state() {
+    let mut db = Db::default();
+    Source::new(&db, 1);
+    read(&db);
+
+    assert_eq!(
+        db.drop_regenerable_values(),
+        PLAIN_KEYS as u64,
+        "only the query that is not persisted was dropped"
+    );
+    let left = held(&mut db, false, &[]);
+    assert_eq!(count(&left, "plain"), 0);
+    assert_eq!(
+        count(&left, "described"),
+        DESCRIBED_KEYS as u64,
+        "the persisted values stay"
+    );
+
+    // The state saved now has every persisted memo, and a restore computes none of them again.
+    let saved = serde_json::to_string(&<dyn Database>::as_serialize(&mut db))
+        .unwrap_or_else(|error| panic!("serializing: {error}"));
+    let mut restored = Db::default();
+    <dyn Database>::deserialize(
+        &mut restored,
+        &mut serde_json::Deserializer::from_str(&saved),
+    )
+    .unwrap_or_else(|error| panic!("deserializing: {error}"));
+    let before = DESCRIBED.load(Ordering::SeqCst);
+    for n in 0..DESCRIBED_KEYS {
+        let _ = described(&restored, Key::new(&restored, n));
+    }
+    assert_eq!(
+        DESCRIBED.load(Ordering::SeqCst) - before,
+        0,
+        "the persisted memos were in the state"
     );
 }

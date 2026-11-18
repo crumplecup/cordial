@@ -509,6 +509,7 @@ impl Zalsa {
     pub fn values_in_memory(
         &mut self,
         drop: bool,
+        include_persisted: bool,
         only: &[&str],
         mut after: impl FnMut(&'static str, u64),
     ) {
@@ -517,7 +518,7 @@ impl Zalsa {
                 continue;
             }
             // SAFETY: `&mut self` is exclusive access to the storage, and the ingredient is its own.
-            let held = unsafe { ingredient.values_in_memory(self, drop) };
+            let held = unsafe { ingredient.values_in_memory(self, drop, include_persisted) };
             if held > 0 {
                 after(ingredient.debug_name(), held);
             }

@@ -582,7 +582,7 @@
      }
 --- salsa-0.28.5/src/database.rs
 +++ salsa/src/database.rs
-@@ -47,6 +47,30 @@
+@@ -47,6 +47,41 @@
          zalsa_mut.evict_lru();
      }
  
@@ -594,11 +594,22 @@
 +    fn values_in_memory(
 +        &mut self,
 +        drop: bool,
++        include_persisted: bool,
 +        only: &[&str],
 +        after: &mut dyn FnMut(&'static str, u64),
 +    ) {
 +        let zalsa_mut = self.zalsa_mut();
-+        zalsa_mut.values_in_memory(drop, only, |query, held| after(query, held));
++        zalsa_mut.values_in_memory(drop, include_persisted, only, |query, held| after(query, held));
++    }
++
++    /// Drop the values of every query that is not persisted: what a query computes again when
++    /// something reads it, and that a saved state does not hold. Returns how many were dropped.
++    ///
++    /// **WARNING:** Just like an ordinary write, this method triggers cancellation.
++    fn drop_regenerable_values(&mut self) -> u64 {
++        let mut dropped = 0;
++        self.values_in_memory(true, false, &[], &mut |_, held| dropped += held);
++        dropped
 +    }
 +
 +    /// Write the values of persisted memos to the spill store (see [`crate::set_spill_store`]) and
@@ -613,7 +624,7 @@
      /// A "synthetic write" causes the system to act *as though* some
      /// input of durability `durability` has changed, triggering a new revision.
      /// This is mostly useful for profiling scenarios.
-@@ -175,6 +199,97 @@
+@@ -175,6 +210,97 @@
      use serde::ser::SerializeMap;
  
      impl dyn Database {
@@ -711,7 +722,7 @@
          /// Returns a type implementing [`serde::Serialize`], that can be used to serialize the
          /// current state of the database.
          ///
-@@ -183,6 +298,26 @@
+@@ -183,6 +309,26 @@
              SerializeDatabase::new(self)
          }
  
@@ -738,7 +749,7 @@
          /// Deserialize the database using a [`serde::Deserializer`].
          ///
          /// This method will modify the database in-place based on the serialized data.
-@@ -369,8 +504,16 @@
+@@ -369,8 +515,16 @@
                  // to the ingredient as well as the database.
                  let mut ingredient = zalsa.take_ingredient(index);
  
@@ -2448,7 +2459,7 @@
  
          self.deleted_entries.clear();
      }
-@@ -548,6 +605,135 @@
+@@ -548,6 +605,144 @@
          C::PERSIST
      }
  
@@ -2459,7 +2470,16 @@
 +        }
 +    }
 +
-+    unsafe fn values_in_memory(&self, zalsa: &Zalsa, drop: bool) -> u64 {
++    unsafe fn values_in_memory(
++        &self,
++        zalsa: &Zalsa,
++        drop: bool,
++        include_persisted: bool,
++    ) -> u64 {
++        if drop && C::PERSIST && !include_persisted {
++            // Not dropped, and not reported as if it were.
++            return 0;
++        }
 +        let mut held = 0;
 +        for entry in <C::SalsaStruct<'_> as SalsaStructInDb>::entries(zalsa) {
 +            let memo_ingredient_index = self.memo_ingredient_indices.get(entry.ingredient_index());
@@ -2584,7 +2604,7 @@
      fn should_serialize(&self, zalsa: &Zalsa) -> bool {
          if !C::PERSIST {
              return false;
-@@ -595,44 +781,6 @@
+@@ -595,44 +790,6 @@
      }
  }
  
@@ -2629,7 +2649,7 @@
  fn flatten_cycle_head_dependencies(
      ingredient: &dyn FunctionIngredient,
      zalsa: &Zalsa,
-@@ -744,7 +892,9 @@
+@@ -744,7 +901,9 @@
  #[cfg(feature = "persistence")]
  mod persistence {
      use super::{Configuration, IngredientImpl, Memo};
@@ -2640,7 +2660,7 @@
      use crate::plumbing::{MemoIngredientMap, SalsaStructInDb};
      use crate::zalsa::Zalsa;
      use crate::zalsa_local::persistence::PersistentQueryOrigin;
-@@ -764,6 +914,14 @@
+@@ -764,6 +923,14 @@
          pub ingredient: &'db IngredientImpl<C>,
      }
  
@@ -2655,7 +2675,7 @@
      impl<C> serde::Serialize for SerializeIngredient<'_, C>
      where
          C: Configuration,
-@@ -774,26 +932,9 @@
+@@ -774,26 +941,9 @@
          {
              let Self { ingredient, zalsa } = self;
  
@@ -2685,7 +2705,7 @@
  
              for entry in <C::SalsaStruct<'_> as SalsaStructInDb>::entries(zalsa) {
                  let memo_ingredient_index = ingredient
-@@ -806,97 +947,305 @@
+@@ -806,97 +956,305 @@
                      memo_ingredient_index,
                  );
  
@@ -3052,7 +3072,7 @@
      }
  
      pub struct DeserializeIngredient<'db, C>
-@@ -937,7 +1286,23 @@
+@@ -937,7 +1295,23 @@
          {
              let DeserializeIngredient { zalsa, ingredient } = self;
  
@@ -3098,7 +3118,7 @@
      );
  
      /// Returns the function-specific interface for this ingredient, if any.
-@@ -191,6 +191,76 @@
+@@ -191,6 +191,84 @@
          false
      }
  
@@ -3110,7 +3130,15 @@
 +    ///
 +    /// The database must be the one that owns this ingredient, and the caller must have exclusive
 +    /// access to its storage for the duration of the call.
-+    unsafe fn values_in_memory(&self, _zalsa: &Zalsa, _drop: bool) -> u64 {
++    ///
++    /// A persisted query's values are dropped only if `include_persisted`: a persisted memo with no
++    /// value is not in the state a run saves.
++    unsafe fn values_in_memory(
++        &self,
++        _zalsa: &Zalsa,
++        _drop: bool,
++        _include_persisted: bool,
++    ) -> u64 {
 +        0
 +    }
 +
@@ -3775,7 +3803,7 @@
      #[allow(unused)]
      pub(crate) fn ingredients(&self) -> impl Iterator<Item = &dyn Ingredient> {
          self.ingredients_vec
-@@ -465,6 +501,48 @@
+@@ -465,6 +501,49 @@
      }
  
      /// **NOT SEMVER STABLE**
@@ -3787,6 +3815,7 @@
 +    pub fn values_in_memory(
 +        &mut self,
 +        drop: bool,
++        include_persisted: bool,
 +        only: &[&str],
 +        mut after: impl FnMut(&'static str, u64),
 +    ) {
@@ -3795,7 +3824,7 @@
 +                continue;
 +            }
 +            // SAFETY: `&mut self` is exclusive access to the storage, and the ingredient is its own.
-+            let held = unsafe { ingredient.values_in_memory(self, drop) };
++            let held = unsafe { ingredient.values_in_memory(self, drop, include_persisted) };
 +            if held > 0 {
 +                after(ingredient.debug_name(), held);
 +            }

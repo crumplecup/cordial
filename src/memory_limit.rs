@@ -243,6 +243,16 @@ pub fn pressured() -> bool {
     PRESSURE.load(Ordering::Relaxed) || PRESSURE_FORCED.load(Ordering::Relaxed)
 }
 
+/// Whether the run is nearing its limit as it is now: read from the process, and not the watchdog's
+/// last judgement, which is up to a sample old (what an eviction has just given back is not in it).
+#[instrument(level = "trace")]
+pub fn nearing_now() -> bool {
+    PRESSURE_FORCED.load(Ordering::Relaxed)
+        || crate::process_memory::sample().is_some_and(|memory| {
+            nearing(memory.resident_kib(), LIMIT_BYTES.load(Ordering::Relaxed))
+        })
+}
+
 /// Make the run feel pressure (or stop feeling it), for the tests of what the work does under it.
 #[instrument(level = "debug")]
 pub fn feel_pressure(on: bool) {

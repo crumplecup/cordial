@@ -612,7 +612,16 @@ where
         }
     }
 
-    unsafe fn values_in_memory(&self, zalsa: &Zalsa, drop: bool) -> u64 {
+    unsafe fn values_in_memory(
+        &self,
+        zalsa: &Zalsa,
+        drop: bool,
+        include_persisted: bool,
+    ) -> u64 {
+        if drop && C::PERSIST && !include_persisted {
+            // Not dropped, and not reported as if it were.
+            return 0;
+        }
         let mut held = 0;
         for entry in <C::SalsaStruct<'_> as SalsaStructInDb>::entries(zalsa) {
             let memo_ingredient_index = self.memo_ingredient_indices.get(entry.ingredient_index());

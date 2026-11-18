@@ -199,7 +199,15 @@ pub trait Ingredient: Any + fmt::Debug + Send + Sync {
     ///
     /// The database must be the one that owns this ingredient, and the caller must have exclusive
     /// access to its storage for the duration of the call.
-    unsafe fn values_in_memory(&self, _zalsa: &Zalsa, _drop: bool) -> u64 {
+    ///
+    /// A persisted query's values are dropped only if `include_persisted`: a persisted memo with no
+    /// value is not in the state a run saves.
+    unsafe fn values_in_memory(
+        &self,
+        _zalsa: &Zalsa,
+        _drop: bool,
+        _include_persisted: bool,
+    ) -> u64 {
         0
     }
 

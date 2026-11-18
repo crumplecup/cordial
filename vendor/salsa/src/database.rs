@@ -55,11 +55,22 @@ pub trait Database: Send + ZalsaDatabase + AsDynDatabase {
     fn values_in_memory(
         &mut self,
         drop: bool,
+        include_persisted: bool,
         only: &[&str],
         after: &mut dyn FnMut(&'static str, u64),
     ) {
         let zalsa_mut = self.zalsa_mut();
-        zalsa_mut.values_in_memory(drop, only, |query, held| after(query, held));
+        zalsa_mut.values_in_memory(drop, include_persisted, only, |query, held| after(query, held));
+    }
+
+    /// Drop the values of every query that is not persisted: what a query computes again when
+    /// something reads it, and that a saved state does not hold. Returns how many were dropped.
+    ///
+    /// **WARNING:** Just like an ordinary write, this method triggers cancellation.
+    fn drop_regenerable_values(&mut self) -> u64 {
+        let mut dropped = 0;
+        self.values_in_memory(true, false, &[], &mut |_, held| dropped += held);
+        dropped
     }
 
     /// Write the values of persisted memos to the spill store (see [`crate::set_spill_store`]) and

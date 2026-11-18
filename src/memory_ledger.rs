@@ -53,7 +53,7 @@ const SETTLED_WITHIN_KIB: u64 = 512;
 /// Some of what is dropped is given back by another thread a little later (the syntax crate drops
 /// trees in batches), so one reading right after a drop would miss it.
 #[instrument(level = "trace")]
-fn settled() -> Option<(u64, u64)> {
+pub(crate) fn settled() -> Option<(u64, u64)> {
     let started = Instant::now();
     let mut last = crate::process_memory::sample()?.resident_kib();
     loop {
@@ -77,7 +77,7 @@ pub fn itemize(db: &mut dyn salsa::Database, only: &[&str]) -> Option<Ledger> {
     let (before, _) = settled()?;
     let mut last = before;
     let mut rows = Vec::new();
-    db.values_in_memory(true, only, &mut |query, memos| {
+    db.values_in_memory(true, true, only, &mut |query, memos| {
         let Some((now, waited)) = settled() else {
             return;
         };

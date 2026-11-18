@@ -59,6 +59,33 @@ impl SourceDatabase {
         }
         self.evict_quietly(after);
         self.spill_under_pressure(after);
+        self.drop_regenerable_if_still_pressed(after);
+    }
+
+    /// If the run is still nearing its memory limit after the eviction and the spill, drop the
+    /// values of every query that is not persisted: they are computed again when something reads
+    /// them, and a saved state does not hold them. For the ends of stages, and not between the
+    /// chunks of a pass, where the next chunk would build them all again.
+    #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure(impl_type = "SourceDatabase")]
+    pub(super) fn drop_regenerable_if_still_pressed(&mut self, after: &str) {
+        if !crate::memory_limit::nearing_now() {
+            return;
+        }
+        let before = crate::process_memory::sample();
+        let started = std::time::Instant::now();
+        let dropped = salsa::Database::drop_regenerable_values(&mut self.db);
+        let settled = crate::memory_ledger::settled();
+        let micros = u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX);
+        tracing::info!(
+            target: "cordial::eviction",
+            step = after,
+            micros,
+            dropped_regenerable = dropped,
+            resident_before_kib = before.map_or(0, |sample| sample.resident_kib()),
+            resident_after_kib = settled.map_or(0, |(resident, _)| resident),
+            "dropped the values of every query that is not persisted"
+        );
     }
 
     /// Whether this run evicts between its stages: as its options say, or as the environment asks
