@@ -12,7 +12,7 @@
 //! programs hold, so a share of it keeps a buffer for the machine.
 
 use std::io::Write as _;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Duration;
 
 use tracing::instrument;
@@ -30,6 +30,18 @@ pub const MEMORY_LIMIT_EXIT: i32 = 75;
 /// The limit in force for this run, in bytes (zero: none), kept so that the work can ease off
 /// before the watchdog stops it.
 static LIMIT_BYTES: AtomicU64 = AtomicU64::new(0);
+
+/// Whether the run is nearing its limit, as the watchdog last judged it. Work reads this and not
+/// the process's memory: it is one load, and the watchdog's reading is never more than a sample old.
+static PRESSURE: AtomicBool = AtomicBool::new(false);
+
+/// Pressure a test asks for, so that what the work does under it can be seen without a run that
+/// uses that much memory.
+static PRESSURE_FORCED: AtomicBool = AtomicBool::new(false);
+
+/// The share of the limit, in percent, below which a run that was under pressure is relieved of it.
+/// Lower than [`EASE_OFF_PERCENT`], so the work does not alternate on every sample around one figure.
+pub const RELIEF_PERCENT: u64 = 45;
 
 /// The share of the limit, in percent, from which the work gives back what it can compute again
 /// and takes smaller steps, so the watchdog's stop is the last resort and not the usual end.
@@ -216,11 +228,36 @@ pub fn nearing(resident_kib: u64, limit: u64) -> bool {
             >= limit.saturating_mul(EASE_OFF_PERCENT)
 }
 
-/// Whether this process, as it is now, is nearing the limit of this run.
+/// Whether a process using `resident_kib` is back under [`RELIEF_PERCENT`] of `limit` bytes.
 #[instrument(level = "trace")]
-pub fn nearing_this_runs_limit() -> bool {
-    crate::process_memory::sample()
-        .is_some_and(|memory| nearing(memory.resident_kib(), LIMIT_BYTES.load(Ordering::Relaxed)))
+pub fn relieved(resident_kib: u64, limit: u64) -> bool {
+    limit == 0
+        || resident_kib.saturating_mul(1024).saturating_mul(100)
+            < limit.saturating_mul(RELIEF_PERCENT)
+}
+
+/// Whether the run is nearing its limit now: the work gives back what it can compute again and
+/// takes smaller steps while this is so.
+#[instrument(level = "trace")]
+pub fn pressured() -> bool {
+    PRESSURE.load(Ordering::Relaxed) || PRESSURE_FORCED.load(Ordering::Relaxed)
+}
+
+/// Make the run feel pressure (or stop feeling it), for the tests of what the work does under it.
+#[instrument(level = "debug")]
+pub fn feel_pressure(on: bool) {
+    PRESSURE_FORCED.store(on, Ordering::Relaxed);
+}
+
+/// The next judgement of pressure given the last one: it begins at [`EASE_OFF_PERCENT`] of the
+/// limit and ends below [`RELIEF_PERCENT`].
+#[instrument(level = "trace")]
+pub fn judge(was_pressured: bool, resident_kib: u64, limit: u64) -> bool {
+    if was_pressured {
+        !relieved(resident_kib, limit)
+    } else {
+        nearing(resident_kib, limit)
+    }
 }
 
 /// Start the watchdog for `budget`. It lives as long as the process.
@@ -249,6 +286,17 @@ fn watch(budget: &Budget) {
             // No reading on this platform: nothing to bound by.
             return;
         };
+        let was = PRESSURE.load(Ordering::Relaxed);
+        let now = judge(was, memory.resident_kib(), budget.bytes);
+        if now != was {
+            PRESSURE.store(now, Ordering::Relaxed);
+            tracing::info!(
+                target: "cordial::eviction",
+                pressured = now,
+                resident_kib = memory.resident_kib(),
+                "the run's memory pressure changed"
+            );
+        }
         if exceeds(memory.resident_kib(), budget.bytes) {
             stop(memory.resident_kib(), budget);
         }

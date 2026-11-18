@@ -43,9 +43,11 @@ impl SourceDatabase {
     /// Whether this run evicts between its stages: as its options say, or as the environment asks
     /// for an experiment.
     fn evicts(&self) -> bool {
-        self.cargo_options
-            .as_ref()
-            .is_some_and(|options| *options.evicts_between_chunks())
+        crate::memory_limit::pressured()
+            || self
+                .cargo_options
+                .as_ref()
+                .is_some_and(|options| *options.evicts_between_chunks())
             || std::env::var_os(EVICT_VARIABLE).is_some()
     }
 
@@ -54,14 +56,8 @@ impl SourceDatabase {
     /// that the pass takes smaller chunks while it lasts.
     #[instrument(level = "trace", skip(self))]
     pub(super) fn evict_between_chunks(&mut self) -> bool {
-        let pressed = crate::memory_limit::nearing_this_runs_limit();
-        if pressed {
-            tracing::info!(
-                target: "cordial::eviction",
-                "nearing the memory limit: evicting and taking smaller chunks"
-            );
-        }
-        if pressed || self.evicts() {
+        let pressed = crate::memory_limit::pressured();
+        if self.evicts() {
             self.evict_quietly("prime chunk");
         }
         pressed

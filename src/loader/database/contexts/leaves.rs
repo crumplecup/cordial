@@ -143,6 +143,7 @@ impl SourceDatabase {
             if outcome.is_err() {
                 break;
             }
+            self.evict_regenerable("leaf context");
             for next in asked(
                 &self.db,
                 &context,

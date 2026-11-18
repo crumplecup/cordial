@@ -100,7 +100,7 @@ impl SourceDatabase {
         one: impl Fn(&RootDatabase, &T) + Sync,
     ) {
         let before = queries::evidence_executed();
-        self.prime_part(functions, &one);
+        self.prime_part(functions, &one, false);
         self.say_primed(label, before, functions.len());
     }
 
@@ -127,25 +127,35 @@ impl SourceDatabase {
         items: &[T],
         one: &(impl Fn(&RootDatabase, &T) + Sync),
     ) {
-        let mut size = chunk_size(items.len());
+        let usual = chunk_size(items.len());
+        let mut size = usual;
         let mut rest = items;
         let mut index = 0;
         while !rest.is_empty() {
-            let (part, after) = rest.split_at(size.min(rest.len()));
+            let (part, _) = rest.split_at(size.min(rest.len()));
             index += 1;
+            // Under pressure the workers stop early and the rest of the chunk waits for the next.
+            let done = match self.prime_part(part, one, true) {
+                // No worker started: the projection evaluates what was not, as it says it will.
+                0 => part.len(),
+                done => done,
+            };
             tracing::debug!(
                 target: "cordial::prime",
                 label,
                 chunk = index,
                 files = part.len(),
-                remaining = after.len(),
+                done,
+                remaining = rest.len() - done,
                 "priming a chunk"
             );
-            self.prime_part(part, one);
-            if self.evict_between_chunks() {
-                size = (size / 2).max(LEAST_UNDER_PRESSURE);
-            }
-            rest = after;
+            rest = &rest[done..];
+            size = if self.evict_between_chunks() {
+                (size / 2).max(LEAST_UNDER_PRESSURE)
+            } else {
+                // Relieved: back to the usual step, doubling so that one calm sample does not.
+                (size * 2).min(usual)
+            };
         }
     }
 
@@ -156,8 +166,16 @@ impl SourceDatabase {
         ));
     }
 
-    /// Run `one` over `functions` on worker threads, each once, and wait for them.
-    fn prime_part<T: Sync>(&self, functions: &[T], one: &(impl Fn(&RootDatabase, &T) + Sync)) {
+    /// Run `one` over `functions` on worker threads, each once, and wait for them. Returns how
+    /// many it ran. All of them, unless `may_stop` and the run is under memory pressure, when the
+    /// workers take no new function once [`LEAST_UNDER_PRESSURE`] are taken, so that the caller can
+    /// evict before the rest.
+    fn prime_part<T: Sync>(
+        &self,
+        functions: &[T],
+        one: &(impl Fn(&RootDatabase, &T) + Sync),
+        may_stop: bool,
+    ) -> usize {
         let workers = std::thread::available_parallelism()
             .map_or(1, usize::from)
             .min(functions.len().max(1));
@@ -179,7 +197,7 @@ impl SourceDatabase {
                     .stack_size(WORKER_STACK_BYTES)
                     .spawn_scoped(scope, move || {
                         tracing::dispatcher::with_default(&dispatch, || {
-                            evaluate(&db, functions, next, one);
+                            evaluate(&db, functions, next, one, may_stop);
                         });
                     });
                 if let Err(error) = spawned {
@@ -189,6 +207,7 @@ impl SourceDatabase {
                 }
             }
         });
+        next.load(Ordering::Relaxed).min(functions.len())
     }
 }
 
@@ -203,7 +222,8 @@ fn chunk_size(functions: usize) -> usize {
     functions.div_ceil(CHUNKS).max(LEAST)
 }
 
-/// Take functions from the shared counter until none are left.
+/// Take functions from the shared counter until none are left, or, if `may_stop`, until the run
+/// is under memory pressure and [`LEAST_UNDER_PRESSURE`] have been taken.
 #[instrument(level = "debug", skip(db, functions, next, one))]
 #[hotpath::measure]
 fn evaluate<T>(
@@ -211,9 +231,19 @@ fn evaluate<T>(
     functions: &[T],
     next: &AtomicUsize,
     one: &impl Fn(&RootDatabase, &T),
+    may_stop: bool,
 ) {
     attach_db(db, || {
-        while let Some(function) = functions.get(next.fetch_add(1, Ordering::Relaxed)) {
+        loop {
+            if may_stop
+                && next.load(Ordering::Relaxed) >= LEAST_UNDER_PRESSURE
+                && crate::memory_limit::pressured()
+            {
+                break;
+            }
+            let Some(function) = functions.get(next.fetch_add(1, Ordering::Relaxed)) else {
+                break;
+            };
             one(db, function);
         }
     });

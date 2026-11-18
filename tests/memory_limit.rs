@@ -7,7 +7,7 @@ mod support {
 
 use clap::Parser;
 use cordial::{
-    Cli, DEFAULT_MEMORY_LIMIT, MEMORY_LIMIT_EXIT, MemoryLimit, budget_of, exceeds,
+    Cli, DEFAULT_MEMORY_LIMIT, MEMORY_LIMIT_EXIT, MemoryLimit, budget_of, exceeds, judge,
     load_cordial_config, nearing, parse_limit, parse_meminfo, parse_size,
     resolve_memory_limit_with,
 };
@@ -82,6 +82,21 @@ fn a_process_eases_off_at_sixty_percent_of_its_limit_before_it_is_stopped() {
     );
     assert!(!exceeds(kib_at(60), limit), "and is not yet over the limit");
     assert!(!nearing(u64::MAX, 0), "zero is no limit");
+}
+
+#[test]
+fn pressure_begins_at_sixty_percent_and_ends_only_below_forty_five() {
+    let limit = GIB;
+    let kib_at = |percent: u64| (GIB / 1024 * percent).div_ceil(100);
+    assert!(judge(false, kib_at(60), limit), "60% begins it");
+    assert!(!judge(false, kib_at(59), limit), "59% does not");
+    assert!(
+        judge(true, kib_at(50), limit),
+        "once begun, 50% does not end it"
+    );
+    assert!(judge(true, kib_at(45), limit), "nor does 45%");
+    assert!(!judge(true, kib_at(44), limit), "44% does");
+    assert!(!judge(true, u64::MAX, 0), "with no limit there is none");
 }
 
 #[test]
