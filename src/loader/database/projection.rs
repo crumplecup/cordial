@@ -128,6 +128,16 @@ impl SourceDatabase {
         drop(ordinary_watch);
         crate::process_memory::log("ordinary projection done");
         self.evict_regenerable("ordinary projection");
+        if crate::memory_limit::pressured() {
+            // What the steps read of the graph's bulk attributes goes back to bytes.
+            let dropped = graph.drop_decoded_attrs();
+            tracing::info!(
+                target: "cordial::eviction",
+                step = "ordinary projection",
+                dropped_decoded = dropped,
+                "the graph's bulk attributes that were read are bytes again"
+            );
+        }
         self.log_tables();
         // Gated code is analysed by changing the database's cfg input, which
         // needs the exclusive borrow the ordinary pass does not have.

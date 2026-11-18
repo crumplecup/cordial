@@ -212,6 +212,9 @@ impl SourceDatabase {
             crate::process_memory::log("cfg context harvested");
             let stage = std::time::Instant::now();
             self.evict_regenerable("cfg context");
+            if crate::memory_limit::pressured() {
+                graph.drop_decoded_attrs();
+            }
             let evicted = stage.elapsed();
             let stage = std::time::Instant::now();
             #[cfg(feature = "tracing")]

@@ -152,6 +152,17 @@ impl CrateIr {
         Ok(())
     }
 
+    /// Put the bulk attributes of every node that were read back to the bytes they are held as (see
+    /// [`NodeWeight::drop_decoded`]). Returns how many.
+    #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure(impl_type = "CrateIr")]
+    pub fn drop_decoded_attrs(&mut self) -> usize {
+        self.graph
+            .node_weights_mut()
+            .map(NodeWeight::drop_decoded)
+            .sum()
+    }
+
     /// Set a JSON attribute on a node.
     #[instrument(level = "trace", skip(self, node, value), err(level = "warn"))]
     pub fn set_attr(

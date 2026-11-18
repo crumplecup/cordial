@@ -40,9 +40,9 @@ Kinds: **regenerable** (computed again from something smaller: the cold tier is 
 | 8 | Definition maps | regenerable | Same. Serializing them needs every id they hold persisted | Dropped at stage ends; serializing not planned |
 | 9 | File texts (Salsa inputs) | irreducible, re-readable | Drop and read again from the path; edited and virtual files stay | Not started |
 | 10 | Interned data (names, types, item keys, macro call locations) | irreducible | Needs Salsa's interned collection at revision boundaries | Not started |
-| 11 | The IR graph's node attributes | persistable | Keep ids and edges hot; spill the attributes to `redb` and fetch on demand | Not started |
+| 11 | The IR graph's node attributes | persistable | A function's semantic facts (the bulk) are held as bytes, a third or less of the JSON value, decoded on a read and put back to bytes under pressure at the ends of stages; spilling the bytes themselves is the next step | Packed and dropped; spill not started |
 | 12 | Workers' in-flight work | transient | Fewer workers as pressure rises | Below |
-| 13 | Allocator arenas | overhead | Return freed memory to the system | Not started |
+| 13 | Allocator arenas | overhead | Return freed memory to the system | Tested (`allocator_returns_memory`): glibc gives back memory made on workers and freed on another thread, so no swap is justified; pages left partly used by live objects stay resident, as with any allocator |
 
 ## Order of work
 

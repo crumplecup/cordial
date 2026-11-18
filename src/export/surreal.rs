@@ -55,7 +55,7 @@ impl SurrealGraphExport {
                     node_id(snapshot.crate_name().as_str(), index),
                     format_node_kind(node.kind()),
                     node.name().clone(),
-                    attrs_to_json(node.attrs()),
+                    attrs_to_json(&node.attrs()),
                 )
             })
             .collect();

@@ -298,15 +298,10 @@ fn assert_edit_invalidates_only_dependents(
     for query in [
         "file_facts:",
         "file_items:",
-        "error_sites_file:",
-        "error_chains_file:",
-        "error_types_file:",
+        // The collectors that read only a file's tree (error sites, chains and types, apply,
+        // observability, visibility, policy, verus) read one fused extraction, which says it ran.
+        "extract_file:",
         "error_compliance_file:",
-        "error_apply_file:",
-        "observability_file:",
-        "visibility_file:",
-        "policy_file:",
-        "verus_file:",
         "antipattern_facts_file:",
         "antipattern_sites_file:",
         "antipattern_contracts_file:",

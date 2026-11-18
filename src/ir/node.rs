@@ -145,7 +145,105 @@ pub struct NodeWeight {
     span: Option<crate::objects::FileSpan>,
     /// JSON attributes attached to this node.
     #[new(default)]
-    attrs: Vec<(String, serde_json::Value)>,
+    #[getter(skip)]
+    #[serde(with = "attrs_wire")]
+    attrs: Vec<(String, Attr)>,
+}
+
+/// The attributes that are bulk: a function's semantic facts, of which a graph holds one or two for
+/// every function. They are kept encoded (a fraction of the memory of the JSON value) and decoded when
+/// something reads them; [`NodeWeight::drop_decoded`] puts them back to bytes.
+const PACKED_KEYS: [&str; 2] = [
+    super::semantic::ATTR_SEMANTIC_FUNCTION,
+    super::semantic_context::ATTR_SEMANTIC_CONTEXT_FUNCTIONS,
+];
+
+/// One attribute: a JSON value, or, for a bulk key, its encoding and the value decoded from it.
+#[derive(Debug, Clone)]
+enum Attr {
+    Value(serde_json::Value),
+    Packed(Packed),
+}
+
+#[derive(Debug, Clone)]
+struct Packed {
+    bytes: Box<[u8]>,
+    decoded: std::sync::OnceLock<serde_json::Value>,
+}
+
+impl PartialEq for Attr {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Value(left), Self::Value(right)) => left == right,
+            (Self::Packed(left), Self::Packed(right)) => left.bytes == right.bytes,
+            (Self::Value(value), Self::Packed(packed))
+            | (Self::Packed(packed), Self::Value(value)) => {
+                rmp_serde::to_vec(value).is_ok_and(|bytes| *bytes == *packed.bytes)
+            }
+        }
+    }
+}
+
+impl Eq for Attr {}
+
+impl Attr {
+    /// `value` for `key`, packed when the key is a bulk one and the value encodes.
+    fn of(key: &str, value: serde_json::Value) -> Self {
+        if PACKED_KEYS.contains(&key)
+            && let Ok(bytes) = rmp_serde::to_vec(&value)
+        {
+            return Self::Packed(Packed {
+                bytes: bytes.into_boxed_slice(),
+                decoded: std::sync::OnceLock::new(),
+            });
+        }
+        Self::Value(value)
+    }
+
+    /// The value: as it is, or decoded (once) from its bytes.
+    fn value(&self) -> Option<&serde_json::Value> {
+        match self {
+            Self::Value(value) => Some(value),
+            Self::Packed(packed) => {
+                if packed.decoded.get().is_none() {
+                    let value = rmp_serde::from_slice(&packed.bytes).ok()?;
+                    let _ = packed.decoded.set(value);
+                }
+                packed.decoded.get()
+            }
+        }
+    }
+}
+
+/// How attributes are written and read: as the JSON values they always were, whatever they are held
+/// as, so that what is saved and exported does not change.
+mod attrs_wire {
+    use super::Attr;
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    pub(super) fn serialize<S: Serializer>(
+        attrs: &[(String, Attr)],
+        serializer: S,
+    ) -> Result<S::Ok, S::Error> {
+        let values: Vec<(&String, &serde_json::Value)> = attrs
+            .iter()
+            .filter_map(|(key, attr)| attr.value().map(|value| (key, value)))
+            .collect();
+        values.serialize(serializer)
+    }
+
+    pub(super) fn deserialize<'de, D: Deserializer<'de>>(
+        deserializer: D,
+    ) -> Result<Vec<(String, Attr)>, D::Error> {
+        let values = Vec::<(String, serde_json::Value)>::deserialize(deserializer)?;
+        Ok(values
+            .into_iter()
+            .map(|(key, value)| {
+                let attr = Attr::of(&key, value);
+                (key, attr)
+            })
+            .collect())
+    }
 }
 
 impl NodeWeight {
@@ -155,7 +253,8 @@ impl NodeWeight {
     /// are allowed when later enrichers refine earlier loader facts.
     #[instrument(level = "trace", skip(self, value))]
     pub fn set_attr(&mut self, key: &str, value: serde_json::Value) {
-        self.attrs.push((key.to_string(), value));
+        let attr = Attr::of(key, value);
+        self.attrs.push((key.to_string(), attr));
     }
 
     /// Latest attribute value stored under `key`.
@@ -165,7 +264,46 @@ impl NodeWeight {
             .iter()
             .rev()
             .find(|(k, _)| k == key)
-            .map(|(_, v)| v)
+            .and_then(|(_, attr)| attr.value())
+    }
+
+    /// Every attribute as the JSON value it is, in the order they were set (a copy: bulk attributes
+    /// are held encoded).
+    #[instrument(level = "trace", skip(self))]
+    pub fn attrs(&self) -> Vec<(String, serde_json::Value)> {
+        self.attrs
+            .iter()
+            .filter_map(|(key, attr)| attr.value().map(|value| (key.clone(), value.clone())))
+            .collect()
+    }
+
+    /// Put the bulk attributes that were read back to the bytes they are held as, so that what a
+    /// stage read does not stay in memory as JSON until the node is dropped. Returns how many.
+    #[instrument(level = "trace", skip(self))]
+    pub fn drop_decoded(&mut self) -> usize {
+        let mut dropped = 0;
+        for (_, attr) in &mut self.attrs {
+            if let Attr::Packed(packed) = attr
+                && packed.decoded.take().is_some()
+            {
+                dropped += 1;
+            }
+        }
+        dropped
+    }
+
+    /// How many of the node's bulk attributes are held as bytes only, and how many of them as a
+    /// decoded value as well: for the tests of what packing does.
+    #[instrument(level = "trace", skip(self))]
+    pub fn packed(&self) -> (usize, usize) {
+        let (mut packed, mut decoded) = (0, 0);
+        for (_, attr) in &self.attrs {
+            if let Attr::Packed(held) = attr {
+                packed += 1;
+                decoded += usize::from(held.decoded.get().is_some());
+            }
+        }
+        (packed, decoded)
     }
 }
 
