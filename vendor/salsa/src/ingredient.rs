@@ -191,6 +191,22 @@ pub trait Ingredient: Any + fmt::Debug + Send + Sync {
         false
     }
 
+    /// Write the values of this ingredient's persisted memos to `store` and drop them from memory
+    /// (see [`crate::spill`]).
+    ///
+    /// # Safety
+    ///
+    /// The database must be the one that owns this ingredient, and the caller must have exclusive
+    /// access to its storage for the duration of the call: no query may run, and no reference to a
+    /// memo's value may be held.
+    unsafe fn spill_persisted(
+        &self,
+        _zalsa: &Zalsa,
+        _store: &dyn crate::spill::SpillStore,
+        _counters: &crate::spill::SpillCounters,
+    ) {
+    }
+
     /// Verify, at the current revision, every persisted memo of this ingredient that was last
     /// verified at an earlier one, so that what is saved of it (its dependencies as they are now)
     /// goes with the revision they are valid at. A query a memo reads may have run again since the

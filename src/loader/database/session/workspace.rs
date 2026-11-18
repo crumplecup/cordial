@@ -104,6 +104,7 @@ impl SourceDatabase {
             saved,
             saved_once: false,
             persisted_at_load: salsa::persisted_executions(),
+            spill: None,
             #[cfg(feature = "cfg_hygiene")]
             workspace_root: Some(root),
         })

@@ -1,6 +1,14 @@
 --- salsa-0.28.5/Cargo.toml
 +++ salsa/Cargo.toml
-@@ -60,549 +60,6 @@
+@@ -50,6 +50,7 @@
+ persistence = [
+     "dep:serde",
+     "dep:erased-serde",
++    "dep:rmp-serde",
+     "salsa-macros/persistence",
+     "thin-vec/serde",
+ ]
+@@ -60,549 +61,6 @@
  name = "salsa"
  path = "src/lib.rs"
  
@@ -550,6 +558,17 @@
  [dependencies.boxcar]
  version = "0.2.14"
  
+@@ -620,6 +78,10 @@
+ version = "0.4.6"
+ optional = true
+ 
++[dependencies.rmp-serde]
++version = "1"
++optional = true
++
+ [dependencies.hashbrown]
+ version = "0.17"
+ 
 --- salsa-0.28.5/src/accumulator.rs
 +++ salsa/src/accumulator.rs
 @@ -116,7 +116,7 @@
@@ -563,7 +582,23 @@
      }
 --- salsa-0.28.5/src/database.rs
 +++ salsa/src/database.rs
-@@ -175,6 +175,97 @@
+@@ -47,6 +47,15 @@
+         zalsa_mut.evict_lru();
+     }
+ 
++    /// Write the values of persisted memos to the spill store (see [`crate::set_spill_store`]) and
++    /// drop them from memory: the next query that reads one finds it valid and reads its value back.
++    ///
++    /// **WARNING:** Just like an ordinary write, this method triggers cancellation.
++    fn spill_persisted(&mut self) -> crate::SpillReport {
++        let zalsa_mut = self.zalsa_mut();
++        zalsa_mut.spill_persisted()
++    }
++
+     /// A "synthetic write" causes the system to act *as though* some
+     /// input of durability `durability` has changed, triggering a new revision.
+     /// This is mostly useful for profiling scenarios.
+@@ -175,6 +184,97 @@
      use serde::ser::SerializeMap;
  
      impl dyn Database {
@@ -661,7 +696,7 @@
          /// Returns a type implementing [`serde::Serialize`], that can be used to serialize the
          /// current state of the database.
          ///
-@@ -183,6 +274,26 @@
+@@ -183,6 +283,26 @@
              SerializeDatabase::new(self)
          }
  
@@ -688,7 +723,7 @@
          /// Deserialize the database using a [`serde::Deserializer`].
          ///
          /// This method will modify the database in-place based on the serialized data.
-@@ -369,8 +480,16 @@
+@@ -369,8 +489,16 @@
                  // to the ingredient as well as the database.
                  let mut ingredient = zalsa.take_ingredient(index);
  
@@ -1655,6 +1690,15 @@
  
          zalsa.event(&|| {
              Event::new(EventKind::WillExecute {
+@@ -149,7 +152,7 @@
+             match old_memo.header.previous_iteration(
+                 database_key_index,
+                 cancellation_count,
+-                old_memo.value.is_some(),
++                old_memo.holds_value(),
+             ) {
+                 Some(previous_iteration) => {
+                     if previous_iteration.reuse_as_provisional {
 @@ -332,15 +335,50 @@
  
          // Query was not previously executed, or value is potentially
@@ -1708,6 +1752,24 @@
      reuse_as_provisional: bool,
 --- salsa-0.28.5/src/function/maybe_changed_after.rs
 +++ salsa/src/function/maybe_changed_after.rs
+@@ -115,7 +115,7 @@
+                 database_key_index,
+                 revision,
+                 #[cfg(feature = "detailed-trace")]
+-                memo.value.is_some(),
++                memo.holds_value(),
+             ) {
+                 return result;
+             }
+@@ -244,7 +244,7 @@
+             } => {
+                 let old_memo = old_memo.downcast::<C>();
+ 
+-                if old_memo.value.is_none() {
++                if !old_memo.holds_value() {
+                     return Some(VerifyResult::changed());
+                 }
+ 
 @@ -507,6 +507,7 @@
                  }
  
@@ -1785,7 +1847,7 @@
  
      /// Evicts the existing memo for the given key, replacing it
      /// with an equivalent memo that has no value. If the memo is untracked
-@@ -90,18 +68,35 @@
+@@ -90,18 +68,36 @@
      pub(super) fn evict_value_from_memo_for(
          table: MemoTableWithTypesMut<'_>,
          memo_ingredient_index: MemoIngredientIndex,
@@ -1796,7 +1858,8 @@
              if memo.header.can_evict_value() {
                  // Set the memo value to `None`.
 -                memo.value = None;
-+                outcome = if memo.value.take().is_some() {
++                let spilled = memo.spilled.take().is_some();
++                outcome = if memo.value.take().is_some() || spilled {
 +                    Eviction::Dropped
 +                } else {
 +                    Eviction::NoValue
@@ -1824,7 +1887,25 @@
  /// A memoized query result.
  ///
  /// # Layout
-@@ -168,7 +163,7 @@
+@@ -120,6 +116,17 @@
+ 
+     /// The result of the query, if we decide to memoize it.
+     pub(super) value: Option<C::Output<'static>>,
++
++    /// Where the value is kept, when it was spilled to the store (see [`crate::spill`]): the memo
++    /// then has no `value` but is valid as it was, and its value is read back when asked for.
++    pub(super) spilled: Option<Box<Spilled<C>>>,
++}
++
++/// A value that is in the store, and the copy of it that was read back, if any.
++#[derive(Debug)]
++pub(super) struct Spilled<C: Configuration> {
++    pub(super) key: crate::spill::SpillKey,
++    pub(super) restored: std::sync::OnceLock<C::Output<'static>>,
+ }
+ 
+ /// A shared, type-erased handle to a [`Memo`].
+@@ -168,7 +175,7 @@
  
      /// Returns the configuration-independent header without a table lookup.
      #[inline(always)]
@@ -1833,7 +1914,7 @@
          // SAFETY: `data` points to the base address of a `Memo` allocation valid for `'memo`, with
          // spatial provenance covering the allocation, and `Memo::header` has offset zero.
          unsafe { self.data.cast::<MemoHeader>().as_ref() }
-@@ -203,7 +198,7 @@
+@@ -203,7 +210,7 @@
  }
  
  #[derive(Debug)]
@@ -1842,7 +1923,7 @@
      /// Last revision when this memo was verified; this begins
      /// as the current revision.
      pub(super) verified_at: AtomicRevision,
-@@ -225,10 +220,25 @@
+@@ -225,10 +232,25 @@
      }
  
      #[inline]
@@ -1869,6 +1950,125 @@
      fn can_evict_value(&self) -> bool {
          // Careful: Cannot evict memos whose values were
          // assigned as output of another query
+@@ -341,32 +363,99 @@
+                 unsafe { std::mem::transmute::<C::Output<'_>, C::Output<'static>>(value) }
+             }),
+             header: MemoHeader::new(revision_now, revisions),
++            spilled: None,
+         }
+     }
+ 
++    /// The value, read back from the store if it was spilled.
+     pub(super) fn value(&self) -> Option<&C::Output<'_>> {
+-        self.value.as_ref().map(|value| {
+-            // SAFETY: Guaranteed by `Configuration`; the restored lifetime is
+-            // bounded by the borrow of this memo.
+-            unsafe { std::mem::transmute::<&C::Output<'static>, &C::Output<'_>>(value) }
+-        })
++        let value = match self.value.as_ref() {
++            Some(value) => value,
++            None => {
++                let spilled = self.spilled.as_ref()?;
++                spilled.restored.get_or_init(|| restore::<C>(spilled.key))
++            }
++        };
++        // SAFETY: Guaranteed by `Configuration`; the restored lifetime is
++        // bounded by the borrow of this memo.
++        Some(unsafe { std::mem::transmute::<&C::Output<'static>, &C::Output<'_>>(value) })
++    }
++
++    /// Whether the memo has a value, in memory or in the store.
++    pub(super) fn holds_value(&self) -> bool {
++        self.value.is_some() || self.spilled.is_some()
+     }
+ 
+     /// Returns `true` if this memo should be serialized.
+     pub(super) fn should_serialize(&self) -> bool {
+         // TODO: Serialization is a good opportunity to prune old query results based on
+         // the `verified_at` revision.
+-        self.value.is_some() && !self.header.may_be_provisional()
++        self.holds_value() && !self.header.may_be_provisional()
+     }
+ 
+     pub(super) fn tracing_debug(&self) -> impl std::fmt::Debug + use<'_, C> {
+-        self.header.tracing_debug(self.value.is_some())
++        self.header.tracing_debug(self.holds_value())
++    }
++
++    /// Write the value to the store and drop it from memory, or, if it was read back, drop that
++    /// copy (the store has it). Needs exclusive access to the memo. Nothing is done to a memo whose
++    /// value cannot be computed again, or is provisional, or whose query is not persisted.
++    #[cfg(feature = "persistence")]
++    pub(super) fn spill(
++        &mut self,
++        key: crate::spill::SpillKey,
++        store: &dyn crate::spill::SpillStore,
++        counters: &crate::spill::SpillCounters,
++    ) {
++        use std::sync::atomic::Ordering::Relaxed;
++        if !C::PERSIST || !self.header.can_evict_value() || self.header.may_be_provisional() {
++            return;
++        }
++        if let Some(value) = self.value.take() {
++            let mut bytes = Vec::new();
++            let written = C::serialize(
++                &value,
++                &mut rmp_serde::Serializer::new(&mut bytes),
++            );
++            if written.is_err() {
++                // A value that cannot be encoded stays where it is.
++                self.value = Some(value);
++                return;
++            }
++            store.put(key, &bytes);
++            counters.written.fetch_add(1, Relaxed);
++            counters.bytes.fetch_add(bytes.len() as u64, Relaxed);
++            self.spilled = Some(Box::new(Spilled {
++                key,
++                restored: std::sync::OnceLock::new(),
++            }));
++        } else if let Some(spilled) = self.spilled.as_mut()
++            && spilled.restored.take().is_some()
++        {
++            counters.dropped_again.fetch_add(1, Relaxed);
++        }
++    }
++}
++
++/// Read a spilled value back from the store.
++fn restore<C: Configuration>(key: crate::spill::SpillKey) -> C::Output<'static> {
++    #[cfg(feature = "persistence")]
++    {
++        let bytes = crate::spill::spill_store()
++            .and_then(|store| store.get(key))
++            .unwrap_or_else(|| panic!("a spilled value is not in the store: {key:?}"));
++        C::deserialize(&mut rmp_serde::Deserializer::new(bytes.as_slice()))
++            .unwrap_or_else(|error| panic!("a spilled value could not be decoded: {key:?}: {error}"))
++    }
++    #[cfg(not(feature = "persistence"))]
++    {
++        panic!("a spilled value needs the persistence feature: {key:?}")
+     }
+ }
+ 
+ impl<C: Configuration> crate::table::memo::Memo for Memo<C> {
+     fn has_value(&self) -> bool {
+-        self.value.is_some()
++        self.holds_value()
+     }
+ 
+     fn remove_outputs(&self, zalsa: &Zalsa, executor: DatabaseKeyIndex) {
+@@ -635,8 +724,9 @@
+     // Memos are stored a lot, make sure their size doesn't randomly increase.
+     const _: [(); std::mem::size_of::<super::MemoHeader>()] =
+         [(); std::mem::size_of::<[usize; 4]>()];
++    // A word more than it was: the spilled value's place (a null pointer when there is none).
+     const _: [(); std::mem::size_of::<super::Memo<DummyConfiguration>>()] =
+-        [(); std::mem::size_of::<[usize; 5]>()];
++        [(); std::mem::size_of::<[usize; 6]>()];
+     const _: [(); std::mem::size_of::<super::ErasedMemo<'static>>()] =
+         [(); std::mem::size_of::<[usize; 4]>()];
+ 
 --- salsa-0.28.5/src/function.rs
 +++ salsa/src/function.rs
 @@ -10,6 +10,7 @@
@@ -1952,6 +2152,15 @@
      fn sync_table(&self) -> &SyncTable {
          &self.sync_table
      }
+@@ -401,7 +445,7 @@
+         let memo =
+             self.get_memo_from_table_for(zalsa, input, self.memo_ingredient_index(zalsa, input))?;
+ 
+-        if memo.value.is_none() && memo.header.may_be_provisional() {
++        if !memo.holds_value() && memo.header.may_be_provisional() {
+             return Some(ProvisionalStatus::Poisoned {
+                 iteration: memo.header.revisions.iteration(),
+                 verified_at: memo.header.verified_at.load(),
 @@ -441,16 +485,12 @@
          zalsa: &Zalsa,
          edge: QueryEdge,
@@ -2006,7 +2215,7 @@
  
          self.deleted_entries.clear();
      }
-@@ -548,6 +605,77 @@
+@@ -548,6 +605,112 @@
          C::PERSIST
      }
  
@@ -2015,6 +2224,41 @@
 +        if let Some(caster) = zalsa.views().try_downcaster_for::<C::DbView>() {
 +            self.view_caster.get_or_init(|| *caster);
 +        }
++    }
++
++    unsafe fn spill_persisted(
++        &self,
++        zalsa: &Zalsa,
++        store: &dyn crate::spill::SpillStore,
++        counters: &crate::spill::SpillCounters,
++    ) {
++        #[cfg(feature = "persistence")]
++        {
++            if !C::PERSIST {
++                return;
++            }
++            let storage = zalsa.spill_storage();
++            for entry in <C::SalsaStruct<'_> as SalsaStructInDb>::entries(zalsa) {
++                let memo_ingredient_index =
++                    self.memo_ingredient_indices.get(entry.ingredient_index());
++                let Some(mut memo) = zalsa
++                    .memo_table_for::<C::SalsaStruct<'_>>(entry.key_index())
++                    .get::<Memo<C>>(memo_ingredient_index)
++                else {
++                    continue;
++                };
++                let key = crate::spill::SpillKey {
++                    storage,
++                    ingredient: self.index.as_u32(),
++                    id: entry.key_index().as_bits(),
++                };
++                // SAFETY: The caller has exclusive access to the storage, so nothing else
++                // reaches this memo.
++                unsafe { memo.as_mut() }.spill(key, store, counters);
++            }
++        }
++        #[cfg(not(feature = "persistence"))]
++        let _ = (zalsa, store, counters);
 +    }
 +
 +    unsafe fn verify_persisted_by_closure(&self, zalsa: &Zalsa, db: RawDatabase<'_>) {
@@ -2084,7 +2328,7 @@
      fn should_serialize(&self, zalsa: &Zalsa) -> bool {
          if !C::PERSIST {
              return false;
-@@ -595,44 +723,6 @@
+@@ -595,44 +758,6 @@
      }
  }
  
@@ -2129,7 +2373,7 @@
  fn flatten_cycle_head_dependencies(
      ingredient: &dyn FunctionIngredient,
      zalsa: &Zalsa,
-@@ -744,7 +834,9 @@
+@@ -744,7 +869,9 @@
  #[cfg(feature = "persistence")]
  mod persistence {
      use super::{Configuration, IngredientImpl, Memo};
@@ -2140,7 +2384,7 @@
      use crate::plumbing::{MemoIngredientMap, SalsaStructInDb};
      use crate::zalsa::Zalsa;
      use crate::zalsa_local::persistence::PersistentQueryOrigin;
-@@ -764,6 +856,14 @@
+@@ -764,6 +891,14 @@
          pub ingredient: &'db IngredientImpl<C>,
      }
  
@@ -2155,7 +2399,7 @@
      impl<C> serde::Serialize for SerializeIngredient<'_, C>
      where
          C: Configuration,
-@@ -774,26 +874,9 @@
+@@ -774,26 +909,9 @@
          {
              let Self { ingredient, zalsa } = self;
  
@@ -2185,7 +2429,7 @@
  
              for entry in <C::SalsaStruct<'_> as SalsaStructInDb>::entries(zalsa) {
                  let memo_ingredient_index = ingredient
-@@ -806,97 +889,305 @@
+@@ -806,97 +924,305 @@
                      memo_ingredient_index,
                  );
  
@@ -2552,7 +2796,7 @@
      }
  
      pub struct DeserializeIngredient<'db, C>
-@@ -937,7 +1228,23 @@
+@@ -937,7 +1263,23 @@
          {
              let DeserializeIngredient { zalsa, ingredient } = self;
  
@@ -2598,10 +2842,26 @@
      );
  
      /// Returns the function-specific interface for this ingredient, if any.
-@@ -191,6 +191,48 @@
+@@ -191,6 +191,64 @@
          false
      }
  
++    /// Write the values of this ingredient's persisted memos to `store` and drop them from memory
++    /// (see [`crate::spill`]).
++    ///
++    /// # Safety
++    ///
++    /// The database must be the one that owns this ingredient, and the caller must have exclusive
++    /// access to its storage for the duration of the call: no query may run, and no reference to a
++    /// memo's value may be held.
++    unsafe fn spill_persisted(
++        &self,
++        _zalsa: &Zalsa,
++        _store: &dyn crate::spill::SpillStore,
++        _counters: &crate::spill::SpillCounters,
++    ) {
++    }
++
 +    /// Verify, at the current revision, every persisted memo of this ingredient that was last
 +    /// verified at an earlier one, so that what is saved of it (its dependencies as they are now)
 +    /// goes with the revision they are valid at. A query a memo reads may have run again since the
@@ -2742,10 +3002,20 @@
  mod function;
  mod hash;
  mod id;
-@@ -294,6 +299,29 @@
+@@ -275,6 +280,7 @@
+ mod revision;
+ mod runtime;
+ mod salsa_struct;
++mod spill;
+ mod salsa_value;
+ mod storage;
+ mod sync;
+@@ -294,6 +300,31 @@
  #[cfg(feature = "salsa_unstable")]
  pub use self::database::{IngredientInfo, PageInfo};
  
++pub use self::spill::{SpillKey, SpillReport, SpillStore, set_spill_store};
++
 +/// Keep at most `cap` values of each query that evicts the least recently used (0 to keep what
 +/// each is marked with), at the next eviction.
 +pub fn cap_lru_capacities(cap: usize) {
@@ -3147,7 +3417,16 @@
                  verified_final: revisions.verified_final,
 --- salsa-0.28.5/src/zalsa.rs
 +++ salsa/src/zalsa.rs
-@@ -76,7 +76,7 @@
+@@ -59,6 +59,8 @@
+ #[cfg(not(feature = "inventory"))]
+ pub struct StorageNonce;
+ 
++static SPILL_STORAGES: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
++
+ // Generator for storage nonces.
+ #[cfg(not(feature = "inventory"))]
+ static NONCE: crate::nonce::NonceGenerator<StorageNonce> = crate::nonce::NonceGenerator::new();
+@@ -76,7 +78,7 @@
      /// The maximum supported ingredient index.
      ///
      /// This reserves one bit for an optional tag.
@@ -3156,7 +3435,17 @@
  
      /// Create an ingredient index from a `u32`.
      pub(crate) fn new(v: u32) -> Self {
-@@ -171,6 +171,11 @@
+@@ -144,6 +146,9 @@
+ pub struct Zalsa {
+     views_of: Views,
+ 
++    /// Tells this database's spilled values from those of the others in the process.
++    spill_storage: u32,
++
+     #[cfg(not(feature = "inventory"))]
+     nonce: crate::nonce::Nonce<StorageNonce>,
+ 
+@@ -171,6 +176,11 @@
      runtime: Runtime,
  
      event_callback: Option<Box<dyn Fn(crate::Event) + Send + Sync>>,
@@ -3168,7 +3457,11 @@
  }
  
  /// All fields on Zalsa are locked behind [`Mutex`]es and [`RwLock`]s and cannot enter
-@@ -194,6 +199,7 @@
+@@ -191,9 +201,11 @@
+             ingredient_to_id_struct_type_id_map: Default::default(),
+             ingredients_vec: Vec::new(),
+             ingredients_requiring_reset: Vec::new(),
++            spill_storage: SPILL_STORAGES.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
              runtime: Runtime::default(),
              memo_ingredient_indices: Default::default(),
              event_callback,
@@ -3176,7 +3469,18 @@
              #[cfg(not(feature = "inventory"))]
              nonce: NONCE.nonce(),
          };
-@@ -283,6 +289,26 @@
+@@ -226,6 +238,10 @@
+         self.nonce
+     }
+ 
++    pub(crate) fn spill_storage(&self) -> u32 {
++        self.spill_storage
++    }
++
+     pub(crate) fn runtime(&self) -> &Runtime {
+         &self.runtime
+     }
+@@ -283,6 +299,26 @@
              [memo_ingredient_index.as_usize()]
      }
  
@@ -3203,3 +3507,171 @@
      #[allow(unused)]
      pub(crate) fn ingredients(&self) -> impl Iterator<Item = &dyn Ingredient> {
          self.ingredients_vec
+@@ -465,6 +501,24 @@
+     }
+ 
+     /// **NOT SEMVER STABLE**
++    ///
++    /// Spill the values of every persisted memo to the store set with
++    /// [`crate::set_spill_store`] (nothing if none is set).
++    #[doc(hidden)]
++    pub fn spill_persisted(&mut self) -> crate::spill::SpillReport {
++        let Some(store) = crate::spill::spill_store() else {
++            return crate::spill::SpillReport::default();
++        };
++        let counters = crate::spill::SpillCounters::default();
++        for ingredient in self.ingredients() {
++            // SAFETY: `&mut self` is exclusive access to the storage, and the ingredient is its own.
++            unsafe { ingredient.spill_persisted(self, &*store, &counters) };
++        }
++        store.flush();
++        counters.report()
++    }
++
++    /// **NOT SEMVER STABLE**
+     #[doc(hidden)]
+     pub fn evict_lru(&mut self) {
+         #[cfg(feature = "detailed-trace")]
+--- salsa-0.28.5/src/function/fetch.rs
++++ salsa/src/function/fetch.rs
+@@ -81,7 +81,9 @@
+     ) -> Option<&'db Memo<C>> {
+         let memo = self.get_memo_from_table_for(zalsa, id, memo_ingredient_index)?;
+ 
+-        memo.value.as_ref()?;
++        if !memo.holds_value() {
++            return None;
++        }
+ 
+         let database_key_index = self.database_key_index(id);
+ 
+@@ -139,7 +141,7 @@
+         let opt_old_memo = self.get_memo_from_table_for(zalsa, id, memo_ingredient_index);
+ 
+         if let Some(old_memo) = opt_old_memo
+-            && old_memo.value.is_some()
++            && old_memo.holds_value()
+             && old_memo.header.verify_memo(
+                 db.into(),
+                 &claim_guard,
+@@ -188,7 +190,7 @@
+                 if let Some(memo) = &memo_guard {
+                     let revisions = &memo.header.revisions;
+                     // Don't replace a poisoned memo from this execution with a new initial value.
+-                    if memo.value.is_none()
++                    if !memo.holds_value()
+                         && memo.header.may_be_provisional()
+                         && memo.header.verified_at.load() == zalsa.current_revision()
+                         && revisions.iteration().cancellation_count() == cancellation_count
+@@ -200,7 +202,7 @@
+                     // but that would require inserting itself as a cycle head, which either requires clone
+                     // on the value OR a concurrent `Vec` for cycle heads.
+                     if memo.header.verified_at.load() == zalsa.current_revision()
+-                        && memo.value.is_some()
++                        && memo.holds_value()
+                         && revisions.iteration().cancellation_count() == cancellation_count
+                         && revisions.cycle_heads().contains(&database_key_index)
+                     {
+@@ -228,7 +230,7 @@
+                     .and_then(|old_memo| {
+                         let revisions = &old_memo.header.revisions;
+                         if old_memo.header.verified_at.load() == zalsa.current_revision()
+-                            && old_memo.value.is_some()
++                            && old_memo.holds_value()
+                             && revisions.iteration().cancellation_count() == cancellation_count
+                         {
+                             Some(revisions.iteration())
+--- salsa-0.28.5/src/function/specify.rs
++++ salsa/src/function/specify.rs
+@@ -88,7 +88,7 @@
+ 
+         if let Some(old_memo) = old_memo
+             && old_memo.header.verified_at.load() == revision
+-            && old_memo.value.is_some()
++            && old_memo.holds_value()
+         {
+             // A value produced by another query wins this revision.
+             let QueryOriginRef::Assigned(owner) = old_memo.header.origin() else {
+--- salsa-0.28.5/src/spill.rs
++++ salsa/src/spill.rs
+@@ -0,0 +1,80 @@
++//! Giving the values of persisted memos to a store when memory is short, and taking them back when
++//! something asks.
++//!
++//! A memo that is spilled keeps everything that says whether it is still valid (what it read, when it
++//! was verified) and loses only its value, which is written to the store. The next query that reads
++//! the memo finds it valid, and its value is read back from the store and decoded, not computed again.
++//! A value that was read back and is spilled again is not written again: the store still holds it.
++//!
++//! Only the values of persisted queries can be spilled, since they are the ones that can be encoded.
++
++use std::sync::atomic::{AtomicU64, Ordering};
++use std::sync::{Arc, RwLock};
++
++/// Where a memo's value is kept in a store: the database it is of, the query, and the key it was
++/// asked with.
++#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
++pub struct SpillKey {
++    /// The database's storage (databases of one process are kept apart by it).
++    pub storage: u32,
++    /// The query.
++    pub ingredient: u32,
++    /// The key the query was asked with.
++    pub id: u64,
++}
++
++/// A place values are spilled to, which must give back what was put in it.
++pub trait SpillStore: Send + Sync {
++    /// Keep `bytes` under `key`, replacing what was there.
++    fn put(&self, key: SpillKey, bytes: &[u8]);
++
++    /// What was put under `key`.
++    fn get(&self, key: SpillKey) -> Option<Vec<u8>>;
++
++    /// Called when a spill is over, so that a store that keeps what it was given in memory to write
++    /// it together can write the rest.
++    fn flush(&self) {}
++}
++
++static STORE: RwLock<Option<Arc<dyn SpillStore>>> = RwLock::new(None);
++
++/// Use `store` for the values spilled from now on (and read back), or none.
++pub fn set_spill_store(store: Option<Arc<dyn SpillStore>>) {
++    if let Ok(mut current) = STORE.write() {
++        *current = store;
++    }
++}
++
++pub(crate) fn spill_store() -> Option<Arc<dyn SpillStore>> {
++    STORE.read().ok().and_then(|store| store.clone())
++}
++
++/// What a spill did.
++#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
++pub struct SpillReport {
++    /// Values written to the store and dropped from memory.
++    pub written: u64,
++    /// The bytes written.
++    pub bytes: u64,
++    /// Values that had been read back and were dropped again: the store already held them.
++    pub dropped_again: u64,
++}
++
++/// A spill's counts, added to by the ingredients (which are visited one at a time).
++#[derive(Default)]
++#[doc(hidden)]
++pub struct SpillCounters {
++    pub(crate) written: AtomicU64,
++    pub(crate) bytes: AtomicU64,
++    pub(crate) dropped_again: AtomicU64,
++}
++
++impl SpillCounters {
++    pub(crate) fn report(&self) -> SpillReport {
++        SpillReport {
++            written: self.written.load(Ordering::Relaxed),
++            bytes: self.bytes.load(Ordering::Relaxed),
++            dropped_again: self.dropped_again.load(Ordering::Relaxed),
++        }
++    }
++}

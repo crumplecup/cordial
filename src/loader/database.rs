@@ -69,6 +69,7 @@ mod scan_queries;
 mod session;
 #[cfg(feature = "internal_error_chain")]
 mod signature_queries;
+mod spill;
 #[cfg(feature = "tracing")]
 mod tracing_queries;
 mod types;
@@ -144,6 +145,8 @@ pub struct SourceDatabase {
     // How many persisted queries the process had executed when this session was made, so that
     // a restored session can tell whether it has computed anything a saved state lacks.
     persisted_at_load: u64,
+    // The file spilled values are in, once a run has spilled any.
+    spill: Option<spill::Spilling>,
     // Whether the database was restored from a saved state.
     restored: bool,
     #[cfg(feature = "cfg_hygiene")]

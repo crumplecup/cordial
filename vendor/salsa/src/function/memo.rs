@@ -73,7 +73,8 @@ impl<C: Configuration> IngredientImpl<C> {
         let map = |memo: &mut Memo<C>| {
             if memo.header.can_evict_value() {
                 // Set the memo value to `None`.
-                outcome = if memo.value.take().is_some() {
+                let spilled = memo.spilled.take().is_some();
+                outcome = if memo.value.take().is_some() || spilled {
                     Eviction::Dropped
                 } else {
                     Eviction::NoValue
@@ -115,6 +116,17 @@ pub struct Memo<C: Configuration> {
 
     /// The result of the query, if we decide to memoize it.
     pub(super) value: Option<C::Output<'static>>,
+
+    /// Where the value is kept, when it was spilled to the store (see [`crate::spill`]): the memo
+    /// then has no `value` but is valid as it was, and its value is read back when asked for.
+    pub(super) spilled: Option<Box<Spilled<C>>>,
+}
+
+/// A value that is in the store, and the copy of it that was read back, if any.
+#[derive(Debug)]
+pub(super) struct Spilled<C: Configuration> {
+    pub(super) key: crate::spill::SpillKey,
+    pub(super) restored: std::sync::OnceLock<C::Output<'static>>,
 }
 
 /// A shared, type-erased handle to a [`Memo`].
@@ -351,32 +363,99 @@ impl<C: Configuration> Memo<C> {
                 unsafe { std::mem::transmute::<C::Output<'_>, C::Output<'static>>(value) }
             }),
             header: MemoHeader::new(revision_now, revisions),
+            spilled: None,
         }
     }
 
+    /// The value, read back from the store if it was spilled.
     pub(super) fn value(&self) -> Option<&C::Output<'_>> {
-        self.value.as_ref().map(|value| {
-            // SAFETY: Guaranteed by `Configuration`; the restored lifetime is
-            // bounded by the borrow of this memo.
-            unsafe { std::mem::transmute::<&C::Output<'static>, &C::Output<'_>>(value) }
-        })
+        let value = match self.value.as_ref() {
+            Some(value) => value,
+            None => {
+                let spilled = self.spilled.as_ref()?;
+                spilled.restored.get_or_init(|| restore::<C>(spilled.key))
+            }
+        };
+        // SAFETY: Guaranteed by `Configuration`; the restored lifetime is
+        // bounded by the borrow of this memo.
+        Some(unsafe { std::mem::transmute::<&C::Output<'static>, &C::Output<'_>>(value) })
+    }
+
+    /// Whether the memo has a value, in memory or in the store.
+    pub(super) fn holds_value(&self) -> bool {
+        self.value.is_some() || self.spilled.is_some()
     }
 
     /// Returns `true` if this memo should be serialized.
     pub(super) fn should_serialize(&self) -> bool {
         // TODO: Serialization is a good opportunity to prune old query results based on
         // the `verified_at` revision.
-        self.value.is_some() && !self.header.may_be_provisional()
+        self.holds_value() && !self.header.may_be_provisional()
     }
 
     pub(super) fn tracing_debug(&self) -> impl std::fmt::Debug + use<'_, C> {
-        self.header.tracing_debug(self.value.is_some())
+        self.header.tracing_debug(self.holds_value())
+    }
+
+    /// Write the value to the store and drop it from memory, or, if it was read back, drop that
+    /// copy (the store has it). Needs exclusive access to the memo. Nothing is done to a memo whose
+    /// value cannot be computed again, or is provisional, or whose query is not persisted.
+    #[cfg(feature = "persistence")]
+    pub(super) fn spill(
+        &mut self,
+        key: crate::spill::SpillKey,
+        store: &dyn crate::spill::SpillStore,
+        counters: &crate::spill::SpillCounters,
+    ) {
+        use std::sync::atomic::Ordering::Relaxed;
+        if !C::PERSIST || !self.header.can_evict_value() || self.header.may_be_provisional() {
+            return;
+        }
+        if let Some(value) = self.value.take() {
+            let mut bytes = Vec::new();
+            let written = C::serialize(
+                &value,
+                &mut rmp_serde::Serializer::new(&mut bytes),
+            );
+            if written.is_err() {
+                // A value that cannot be encoded stays where it is.
+                self.value = Some(value);
+                return;
+            }
+            store.put(key, &bytes);
+            counters.written.fetch_add(1, Relaxed);
+            counters.bytes.fetch_add(bytes.len() as u64, Relaxed);
+            self.spilled = Some(Box::new(Spilled {
+                key,
+                restored: std::sync::OnceLock::new(),
+            }));
+        } else if let Some(spilled) = self.spilled.as_mut()
+            && spilled.restored.take().is_some()
+        {
+            counters.dropped_again.fetch_add(1, Relaxed);
+        }
+    }
+}
+
+/// Read a spilled value back from the store.
+fn restore<C: Configuration>(key: crate::spill::SpillKey) -> C::Output<'static> {
+    #[cfg(feature = "persistence")]
+    {
+        let bytes = crate::spill::spill_store()
+            .and_then(|store| store.get(key))
+            .unwrap_or_else(|| panic!("a spilled value is not in the store: {key:?}"));
+        C::deserialize(&mut rmp_serde::Deserializer::new(bytes.as_slice()))
+            .unwrap_or_else(|error| panic!("a spilled value could not be decoded: {key:?}: {error}"))
+    }
+    #[cfg(not(feature = "persistence"))]
+    {
+        panic!("a spilled value needs the persistence feature: {key:?}")
     }
 }
 
 impl<C: Configuration> crate::table::memo::Memo for Memo<C> {
     fn has_value(&self) -> bool {
-        self.value.is_some()
+        self.holds_value()
     }
 
     fn remove_outputs(&self, zalsa: &Zalsa, executor: DatabaseKeyIndex) {
@@ -645,8 +724,9 @@ mod _memory_usage {
     // Memos are stored a lot, make sure their size doesn't randomly increase.
     const _: [(); std::mem::size_of::<super::MemoHeader>()] =
         [(); std::mem::size_of::<[usize; 4]>()];
+    // A word more than it was: the spilled value's place (a null pointer when there is none).
     const _: [(); std::mem::size_of::<super::Memo<DummyConfiguration>>()] =
-        [(); std::mem::size_of::<[usize; 5]>()];
+        [(); std::mem::size_of::<[usize; 6]>()];
     const _: [(); std::mem::size_of::<super::ErasedMemo<'static>>()] =
         [(); std::mem::size_of::<[usize; 4]>()];
 

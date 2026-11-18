@@ -88,7 +88,7 @@ where
 
         if let Some(old_memo) = old_memo
             && old_memo.header.verified_at.load() == revision
-            && old_memo.value.is_some()
+            && old_memo.holds_value()
         {
             // A value produced by another query wins this revision.
             let QueryOriginRef::Assigned(owner) = old_memo.header.origin() else {

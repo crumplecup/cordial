@@ -38,6 +38,7 @@ impl SourceDatabase {
             return;
         }
         self.evict_quietly(after);
+        self.spill_under_pressure(after);
     }
 
     /// Whether this run evicts between its stages: as its options say, or as the environment asks
@@ -60,7 +61,50 @@ impl SourceDatabase {
         if self.evicts() {
             self.evict_quietly("prime chunk");
         }
+        self.spill_under_pressure("prime chunk");
         pressed
+    }
+
+    /// If the run is under memory pressure, give the values of persisted memos to the spill file,
+    /// which Salsa reads them back from when a query asks for the memo. Needs the database
+    /// exclusively, like an eviction, and is for the same moments. Does nothing without a run
+    /// cache to put the file in.
+    #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure(impl_type = "SourceDatabase")]
+    pub(super) fn spill_under_pressure(&mut self, after: &str) {
+        if !crate::memory_limit::pressured() {
+            return;
+        }
+        if self.spill.is_none() {
+            let Some(saved) = self.saved.as_ref() else {
+                return;
+            };
+            match super::spill::Spilling::begin(&saved.spill_path()) {
+                Ok(spilling) => self.spill = Some(spilling),
+                Err(error) => {
+                    tracing::warn!(error = ?error, "could not open the file for spilled values");
+                    return;
+                }
+            }
+        }
+        let before = crate::process_memory::sample();
+        let started = std::time::Instant::now();
+        let report = salsa::Database::spill_persisted(&mut self.db);
+        let micros = u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX);
+        let resident = |sample: Option<crate::process_memory::MemorySample>| {
+            sample.map_or(0, |sample| sample.resident_kib())
+        };
+        tracing::info!(
+            target: "cordial::eviction",
+            step = after,
+            micros,
+            spilled = report.written,
+            spilled_bytes = report.bytes,
+            dropped_again = report.dropped_again,
+            resident_before_kib = resident(before),
+            resident_after_kib = resident(crate::process_memory::sample()),
+            "spilled the values of persisted memos"
+        );
     }
 
     fn evict_quietly(&mut self, after: &str) {

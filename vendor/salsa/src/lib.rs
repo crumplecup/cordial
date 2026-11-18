@@ -280,6 +280,7 @@ mod return_mode;
 mod revision;
 mod runtime;
 mod salsa_struct;
+mod spill;
 mod salsa_value;
 mod storage;
 mod sync;
@@ -298,6 +299,8 @@ pub use salsa_macros::{SalsaValue, Supertype, accumulator, db, input, interned, 
 
 #[cfg(feature = "salsa_unstable")]
 pub use self::database::{IngredientInfo, PageInfo};
+
+pub use self::spill::{SpillKey, SpillReport, SpillStore, set_spill_store};
 
 /// Keep at most `cap` values of each query that evicts the least recently used (0 to keep what
 /// each is marked with), at the next eviction.

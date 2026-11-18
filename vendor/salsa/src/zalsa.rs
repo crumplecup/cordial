@@ -59,6 +59,8 @@ pub fn views<Db: ?Sized + Database>(db: &Db) -> &Views {
 #[cfg(not(feature = "inventory"))]
 pub struct StorageNonce;
 
+static SPILL_STORAGES: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
 // Generator for storage nonces.
 #[cfg(not(feature = "inventory"))]
 static NONCE: crate::nonce::NonceGenerator<StorageNonce> = crate::nonce::NonceGenerator::new();
@@ -144,6 +146,9 @@ impl MemoIngredientIndex {
 pub struct Zalsa {
     views_of: Views,
 
+    /// Tells this database's spilled values from those of the others in the process.
+    spill_storage: u32,
+
     #[cfg(not(feature = "inventory"))]
     nonce: crate::nonce::Nonce<StorageNonce>,
 
@@ -196,6 +201,7 @@ impl Zalsa {
             ingredient_to_id_struct_type_id_map: Default::default(),
             ingredients_vec: Vec::new(),
             ingredients_requiring_reset: Vec::new(),
+            spill_storage: SPILL_STORAGES.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
             runtime: Runtime::default(),
             memo_ingredient_indices: Default::default(),
             event_callback,
@@ -230,6 +236,10 @@ impl Zalsa {
     #[cfg(not(feature = "inventory"))]
     pub(crate) fn nonce(&self) -> crate::nonce::Nonce<StorageNonce> {
         self.nonce
+    }
+
+    pub(crate) fn spill_storage(&self) -> u32 {
+        self.spill_storage
     }
 
     pub(crate) fn runtime(&self) -> &Runtime {
@@ -488,6 +498,24 @@ impl Zalsa {
         }
 
         new_revision
+    }
+
+    /// **NOT SEMVER STABLE**
+    ///
+    /// Spill the values of every persisted memo to the store set with
+    /// [`crate::set_spill_store`] (nothing if none is set).
+    #[doc(hidden)]
+    pub fn spill_persisted(&mut self) -> crate::spill::SpillReport {
+        let Some(store) = crate::spill::spill_store() else {
+            return crate::spill::SpillReport::default();
+        };
+        let counters = crate::spill::SpillCounters::default();
+        for ingredient in self.ingredients() {
+            // SAFETY: `&mut self` is exclusive access to the storage, and the ingredient is its own.
+            unsafe { ingredient.spill_persisted(self, &*store, &counters) };
+        }
+        store.flush();
+        counters.report()
     }
 
     /// **NOT SEMVER STABLE**

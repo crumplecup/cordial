@@ -81,7 +81,9 @@ where
     ) -> Option<&'db Memo<C>> {
         let memo = self.get_memo_from_table_for(zalsa, id, memo_ingredient_index)?;
 
-        memo.value.as_ref()?;
+        if !memo.holds_value() {
+            return None;
+        }
 
         let database_key_index = self.database_key_index(id);
 
@@ -139,7 +141,7 @@ where
         let opt_old_memo = self.get_memo_from_table_for(zalsa, id, memo_ingredient_index);
 
         if let Some(old_memo) = opt_old_memo
-            && old_memo.value.is_some()
+            && old_memo.holds_value()
             && old_memo.header.verify_memo(
                 db.into(),
                 &claim_guard,
@@ -188,7 +190,7 @@ where
                 if let Some(memo) = &memo_guard {
                     let revisions = &memo.header.revisions;
                     // Don't replace a poisoned memo from this execution with a new initial value.
-                    if memo.value.is_none()
+                    if !memo.holds_value()
                         && memo.header.may_be_provisional()
                         && memo.header.verified_at.load() == zalsa.current_revision()
                         && revisions.iteration().cancellation_count() == cancellation_count
@@ -200,7 +202,7 @@ where
                     // but that would require inserting itself as a cycle head, which either requires clone
                     // on the value OR a concurrent `Vec` for cycle heads.
                     if memo.header.verified_at.load() == zalsa.current_revision()
-                        && memo.value.is_some()
+                        && memo.holds_value()
                         && revisions.iteration().cancellation_count() == cancellation_count
                         && revisions.cycle_heads().contains(&database_key_index)
                     {
@@ -228,7 +230,7 @@ where
                     .and_then(|old_memo| {
                         let revisions = &old_memo.header.revisions;
                         if old_memo.header.verified_at.load() == zalsa.current_revision()
-                            && old_memo.value.is_some()
+                            && old_memo.holds_value()
                             && revisions.iteration().cancellation_count() == cancellation_count
                         {
                             Some(revisions.iteration())

@@ -51,6 +51,14 @@ impl SavedState {
         Self { dir: dir.into() }
     }
 
+    /// Where this run's spilled values go: a file named for the process, in a directory beside the
+    /// state (in the run cache, which is on the disk, and not in `/tmp`, which may be memory).
+    pub(super) fn spill_path(&self) -> PathBuf {
+        self.dir
+            .with_file_name("analysis-spill")
+            .join(format!("{}.redb", std::process::id()))
+    }
+
     /// Save `database`, replacing what was saved. Written beside the state and moved into
     /// place, with the key last, so a reader never sees half of one. Returns the bytes
     /// written.

@@ -11,8 +11,8 @@
 //! counters from reaching the other.
 
 use cordial::{
-    CrateTarget, MetricsLayer, SemanticCargoOptions, SourceDatabase, StoreLayout, feel_pressure,
-    read_run_metrics, write_run_metrics,
+    CrateTarget, MetricsLayer, SavedState, SemanticCargoOptions, SourceDatabase, StoreLayout,
+    feel_pressure, read_run_metrics, write_run_metrics,
 };
 use miette::{IntoDiagnostic, Result};
 use tracing_subscriber::Layer;
@@ -106,4 +106,86 @@ fn under_pressure_the_priming_takes_smaller_chunks_and_evicts_between_them() -> 
     );
     assert!(chunks.evictions > 0, "the run evicted between chunks");
     Ok(())
+}
+
+/// The graph of the crate projected under `pressure`, with a saved state to keep the database's
+/// persisted memos for, and how many values the run spilled by then (the process's count: one
+/// test, one process, so the second run's is the first's and its own).
+fn graph_under(root: &std::path::Path, pressure: Pressure) -> Result<(String, u64)> {
+    let state = tempfile::tempdir().into_diagnostic()?;
+    let saved = SavedState::at(state.path().join("analysis-state"));
+    feel_pressure(matches!(pressure, Pressure::Felt));
+    let options = SemanticCargoOptions::default();
+    let graph = {
+        let mut session =
+            SourceDatabase::load_saved(root, &options, Some(saved)).into_diagnostic()?;
+        let graph = session
+            .project(
+                &CrateTarget::new("pressed", root),
+                &[root.join("src/lib.rs")],
+            )
+            .into_diagnostic()?;
+        format!("{graph:?}")
+    };
+    feel_pressure(false);
+    // The file spilled values were in goes with the run's database.
+    let left: Vec<_> = std::fs::read_dir(state.path().join("analysis-spill"))
+        .map(|entries| entries.flatten().map(|entry| entry.path()).collect())
+        .unwrap_or_default();
+    assert!(left.is_empty(), "the spill file outlived the run: {left:?}");
+    let store = tempfile::tempdir().into_diagnostic()?;
+    let layout = StoreLayout::from_root(store.path().to_path_buf(), "pressed".to_owned());
+    write_run_metrics(&layout).into_diagnostic()?;
+    let spilled = read_run_metrics(&layout)
+        .values()
+        .iter()
+        .filter(|(key, _)| key.starts_with("eviction.") && key.ends_with(".spilled"))
+        .map(|(_, count)| *count)
+        .sum();
+    Ok((graph, spilled))
+}
+
+/// Values given to the spill file and read back make no difference to what the run finds.
+#[test]
+fn spilled_values_are_read_back_and_the_graph_is_the_same() -> Result<()> {
+    cordial::init_tracing();
+    let root = tempfile::tempdir().into_diagnostic()?;
+    std::fs::create_dir_all(root.path().join("src")).into_diagnostic()?;
+    std::fs::write(
+        root.path().join("Cargo.toml"),
+        "[package]\nname='pressed'\nversion='0.1.0'\nedition='2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
+    let library: String = (0..FUNCTIONS)
+        .map(|index| format!("pub fn f{index}() -> usize {{ {index} }}\n"))
+        .collect();
+    std::fs::write(root.path().join("src/lib.rs"), library).into_diagnostic()?;
+    let subscriber = tracing_subscriber::registry()
+        .with(MetricsLayer.with_filter(cordial::metrics_filter_with(true)));
+    let _subscriber = tracing::subscriber::set_default(subscriber);
+
+    let (plain, spilled_plain) = graph_under(root.path(), Pressure::Absent)?;
+    assert_eq!(spilled_plain, 0, "nothing is spilled without pressure");
+    let (pressed, spilled) = graph_under(root.path(), Pressure::Felt)?;
+    assert!(spilled > 0, "values were spilled under pressure");
+    assert_eq!(
+        in_order(&pressed),
+        in_order(&plain),
+        "the graph is the one without"
+    );
+    Ok(())
+}
+
+/// A graph's text in a form that does not depend on the order a hash map was printed in: what comes
+/// before its indexes as it is, and the words of the indexes sorted (the braces and commas go where
+/// the order puts them).
+fn in_order(graph: &str) -> (String, Vec<String>) {
+    let (nodes, indexes) = graph.split_once(" indexes: ").unwrap_or((graph, ""));
+    let mut words: Vec<String> = indexes
+        .split(|c: char| !(c.is_alphanumeric() || c == '_'))
+        .filter(|word| !word.is_empty())
+        .map(str::to_owned)
+        .collect();
+    words.sort();
+    (nodes.to_owned(), words)
 }

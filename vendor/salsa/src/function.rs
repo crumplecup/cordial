@@ -445,7 +445,7 @@ where
         let memo =
             self.get_memo_from_table_for(zalsa, input, self.memo_ingredient_index(zalsa, input))?;
 
-        if memo.value.is_none() && memo.header.may_be_provisional() {
+        if !memo.holds_value() && memo.header.may_be_provisional() {
             return Some(ProvisionalStatus::Poisoned {
                 iteration: memo.header.revisions.iteration(),
                 verified_at: memo.header.verified_at.load(),
@@ -610,6 +610,41 @@ where
         if let Some(caster) = zalsa.views().try_downcaster_for::<C::DbView>() {
             self.view_caster.get_or_init(|| *caster);
         }
+    }
+
+    unsafe fn spill_persisted(
+        &self,
+        zalsa: &Zalsa,
+        store: &dyn crate::spill::SpillStore,
+        counters: &crate::spill::SpillCounters,
+    ) {
+        #[cfg(feature = "persistence")]
+        {
+            if !C::PERSIST {
+                return;
+            }
+            let storage = zalsa.spill_storage();
+            for entry in <C::SalsaStruct<'_> as SalsaStructInDb>::entries(zalsa) {
+                let memo_ingredient_index =
+                    self.memo_ingredient_indices.get(entry.ingredient_index());
+                let Some(mut memo) = zalsa
+                    .memo_table_for::<C::SalsaStruct<'_>>(entry.key_index())
+                    .get::<Memo<C>>(memo_ingredient_index)
+                else {
+                    continue;
+                };
+                let key = crate::spill::SpillKey {
+                    storage,
+                    ingredient: self.index.as_u32(),
+                    id: entry.key_index().as_bits(),
+                };
+                // SAFETY: The caller has exclusive access to the storage, so nothing else
+                // reaches this memo.
+                unsafe { memo.as_mut() }.spill(key, store, counters);
+            }
+        }
+        #[cfg(not(feature = "persistence"))]
+        let _ = (zalsa, store, counters);
     }
 
     unsafe fn verify_persisted_by_closure(&self, zalsa: &Zalsa, db: RawDatabase<'_>) {

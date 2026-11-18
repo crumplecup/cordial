@@ -47,6 +47,15 @@ pub trait Database: Send + ZalsaDatabase + AsDynDatabase {
         zalsa_mut.evict_lru();
     }
 
+    /// Write the values of persisted memos to the spill store (see [`crate::set_spill_store`]) and
+    /// drop them from memory: the next query that reads one finds it valid and reads its value back.
+    ///
+    /// **WARNING:** Just like an ordinary write, this method triggers cancellation.
+    fn spill_persisted(&mut self) -> crate::SpillReport {
+        let zalsa_mut = self.zalsa_mut();
+        zalsa_mut.spill_persisted()
+    }
+
     /// A "synthetic write" causes the system to act *as though* some
     /// input of durability `durability` has changed, triggering a new revision.
     /// This is mostly useful for profiling scenarios.

@@ -115,7 +115,7 @@ where
                 database_key_index,
                 revision,
                 #[cfg(feature = "detailed-trace")]
-                memo.value.is_some(),
+                memo.holds_value(),
             ) {
                 return result;
             }
@@ -244,7 +244,7 @@ where
             } => {
                 let old_memo = old_memo.downcast::<C>();
 
-                if old_memo.value.is_none() {
+                if !old_memo.holds_value() {
                     return Some(VerifyResult::changed());
                 }
 

@@ -377,6 +377,7 @@ dependencies = [
  "ra_ap_syntax",
  "ra_ap_vfs",
  "rayon",
+ "redb",
  "rmp-serde",
  "rustdoc-types",
  "salsa",
@@ -2245,6 +2246,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "redb"
+version = "4.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "096b1dd5ec053c9c2a5a26a93aafeadf73ebcb710ea54dc3151f17a8e20535ef"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "redox_syscall"
 version = "0.5.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2402,6 +2412,7 @@ dependencies = [
  "parking_lot",
  "portable-atomic",
  "rayon",
+ "rmp-serde",
  "rustc-hash 2.1.3",
  "salsa-macro-rules",
  "salsa-macros",
