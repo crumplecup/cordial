@@ -1655,21 +1655,11 @@
  
          zalsa.event(&|| {
              Event::new(EventKind::WillExecute {
-@@ -332,15 +335,72 @@
+@@ -332,15 +335,50 @@
  
          // Query was not previously executed, or value is potentially
          // stale, or value is absent. Let's execute!
-+        // The memory the query allocates while it runs is tagged with its ingredient, if the
-+        // program's allocator tags.
-+        let tags = crate::allocation_tags();
-+        let previous_tag = tags.map(|tags| {
-+            (tags.set_tag)(active_query.database_key_index.ingredient_index().as_u32() + 1)
-+        });
-+        let result = Self::execute_timed(db, zalsa, active_query, opt_old_header.is_some());
-+        if let (Some(tags), Some(previous)) = (tags, previous_tag) {
-+            (tags.set_tag)(previous);
-+        }
-+        result
++        Self::execute_timed(db, zalsa, active_query, opt_old_header.is_some())
 +    }
 +
 +    fn execute_timed<'db>(
@@ -1689,9 +1679,6 @@
 +        // What this query took on its own: the time it ran less the time of the queries it
 +        // started, which are told to it through the thread's running total.
 +        let outer = CHILDREN_NANOS.replace(0);
-+        let outer_bytes = CHILDREN_BYTES.replace(0);
-+        let probe = crate::allocation_probe();
-+        let bytes_before = probe.map_or(0, |probe| probe());
 +        let started = std::time::Instant::now();
          let new_value = C::execute(
              db,
@@ -1699,18 +1686,11 @@
          );
 +        let total = u64::try_from(started.elapsed().as_nanos()).unwrap_or(u64::MAX);
 +        let children = CHILDREN_NANOS.replace(outer.saturating_add(total));
-+        // The same for memory: the bytes this thread holds more of than it did, less those the
-+        // queries this one started are accountable for. Freed is what it released of earlier ones.
-+        let held = probe.map_or(0, |probe| probe()) - bytes_before;
-+        let children_bytes = CHILDREN_BYTES.replace(outer_bytes.saturating_add(held));
-+        let own = held - children_bytes;
 +        ::tracing::info!(
 +            target: "salsa::execution",
 +            ingredient = C::DEBUG_NAME,
 +            nanos = total.saturating_sub(children),
 +            again = u64::from(again),
-+            retained = u64::try_from(own).unwrap_or(0),
-+            freed = u64::try_from(-own).unwrap_or(0),
 +            "a query executed"
 +        );
  
@@ -1721,8 +1701,6 @@
 +crate::sync::thread_local! {
 +    /// The time the queries started by the one now running have taken, in nanoseconds.
 +    static CHILDREN_NANOS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
-+    /// The net bytes held by the queries started by the one now running.
-+    static CHILDREN_BYTES: std::cell::Cell<i64> = const { std::cell::Cell::new(0) };
 +}
 +
  struct PreviousIteration {
@@ -1995,12 +1973,11 @@
          }
      }
  
-@@ -503,13 +543,34 @@
+@@ -503,13 +543,30 @@
      }
  
      fn reset_for_new_revision(&mut self, table: &mut Table) {
 +        let (mut nominated, mut dropped, mut no_value, mut refused) = (0_u64, 0_u64, 0_u64, 0_u64);
-+        let held = crate::allocated_net_bytes();
          self.eviction.for_each_evicted(|evict| {
              let ingredient_index = table.ingredient_index(evict);
 -            Self::evict_value_from_memo_for(
@@ -2023,16 +2000,13 @@
 +                dropped,
 +                no_value,
 +                refused,
-+                freed = held
-+                    .zip(crate::allocated_net_bytes())
-+                    .map_or(0, |(held, now)| u64::try_from(held - now).unwrap_or(0)),
 +                "values evicted"
 +            );
 +        }
  
          self.deleted_entries.clear();
      }
-@@ -548,6 +609,77 @@
+@@ -548,6 +605,77 @@
          C::PERSIST
      }
  
@@ -2110,7 +2084,7 @@
      fn should_serialize(&self, zalsa: &Zalsa) -> bool {
          if !C::PERSIST {
              return false;
-@@ -595,44 +727,6 @@
+@@ -595,44 +723,6 @@
      }
  }
  
@@ -2155,7 +2129,7 @@
  fn flatten_cycle_head_dependencies(
      ingredient: &dyn FunctionIngredient,
      zalsa: &Zalsa,
-@@ -744,7 +838,9 @@
+@@ -744,7 +834,9 @@
  #[cfg(feature = "persistence")]
  mod persistence {
      use super::{Configuration, IngredientImpl, Memo};
@@ -2166,7 +2140,7 @@
      use crate::plumbing::{MemoIngredientMap, SalsaStructInDb};
      use crate::zalsa::Zalsa;
      use crate::zalsa_local::persistence::PersistentQueryOrigin;
-@@ -764,6 +860,14 @@
+@@ -764,6 +856,14 @@
          pub ingredient: &'db IngredientImpl<C>,
      }
  
@@ -2181,7 +2155,7 @@
      impl<C> serde::Serialize for SerializeIngredient<'_, C>
      where
          C: Configuration,
-@@ -774,26 +878,9 @@
+@@ -774,26 +874,9 @@
          {
              let Self { ingredient, zalsa } = self;
  
@@ -2211,7 +2185,7 @@
  
              for entry in <C::SalsaStruct<'_> as SalsaStructInDb>::entries(zalsa) {
                  let memo_ingredient_index = ingredient
-@@ -806,97 +893,305 @@
+@@ -806,97 +889,305 @@
                      memo_ingredient_index,
                  );
  
@@ -2578,7 +2552,7 @@
      }
  
      pub struct DeserializeIngredient<'db, C>
-@@ -937,7 +1232,23 @@
+@@ -937,7 +1228,23 @@
          {
              let DeserializeIngredient { zalsa, ingredient } = self;
  
@@ -2768,24 +2742,10 @@
  mod function;
  mod hash;
  mod id;
-@@ -294,6 +299,174 @@
+@@ -294,6 +299,29 @@
  #[cfg(feature = "salsa_unstable")]
  pub use self::database::{IngredientInfo, PageInfo};
  
-+/// The function that reads how many bytes the calling thread has allocated and not yet freed,
-+/// when the program has an allocator that counts them.
-+static ALLOCATION_PROBE: std::sync::OnceLock<fn() -> i64> = std::sync::OnceLock::new();
-+
-+/// Tell Salsa how to read the net bytes the calling thread has allocated, so that the events
-+/// that say how long a query took also say how much memory its execution left behind.
-+pub fn set_allocation_probe(probe: fn() -> i64) {
-+    let _ = ALLOCATION_PROBE.set(probe);
-+}
-+
-+pub(crate) fn allocation_probe() -> Option<fn() -> i64> {
-+    ALLOCATION_PROBE.get().copied()
-+}
-+
 +/// Keep at most `cap` values of each query that evicts the least recently used (0 to keep what
 +/// each is marked with), at the next eviction.
 +pub fn cap_lru_capacities(cap: usize) {
@@ -2807,137 +2767,6 @@
 +        Ok(label) if !label.is_empty() => format!("{label} {ingredient}"),
 +        _ => ingredient.to_owned(),
 +    }
-+}
-+
-+/// What the program offers for attributing memory to the queries that allocated it.
-+#[derive(Clone, Copy)]
-+pub struct AllocationTags {
-+    /// Sets the tag the calling thread's allocations carry, and gives the one it had.
-+    pub set_tag: fn(u32) -> u32,
-+    /// The bytes held now, by tag.
-+    pub held_by_tag: fn() -> Vec<(u32, i64)>,
-+    /// The bytes held now, in all.
-+    pub held_in_all: fn() -> i64,
-+    /// The most held at once so far.
-+    pub peak_held: fn() -> i64,
-+    /// Bytes freed, by the tag that allocated them and the tag executing when they were freed.
-+    pub freed_pairs: fn() -> Vec<(u32, u32, i64)>,
-+    /// Bytes freed, by the tag that allocated them and how long they lived.
-+    pub freed_by_age: fn() -> Vec<(u32, [i64; 5])>,
-+}
-+
-+static ALLOCATION_TAGS: std::sync::OnceLock<AllocationTags> = std::sync::OnceLock::new();
-+
-+/// Tell Salsa that the program's allocator tags allocations, so that each query's execution sets
-+/// the tag to its ingredient while it runs.
-+pub fn set_allocation_tags(tags: AllocationTags) {
-+    let _ = ALLOCATION_TAGS.set(tags);
-+}
-+
-+pub(crate) fn allocation_tags() -> Option<AllocationTags> {
-+    ALLOCATION_TAGS.get().copied()
-+}
-+
-+/// The bytes the program holds now, in all, if its allocator counts them.
-+pub fn held_in_all() -> Option<i64> {
-+    allocation_tags().map(|tags| (tags.held_in_all)())
-+}
-+
-+/// The most the program has held at once, if its allocator counts it.
-+pub fn held_peak() -> Option<i64> {
-+    allocation_tags().map(|tags| (tags.peak_held)())
-+}
-+
-+/// Bytes freed by the tag that allocated them and how long they lived, in five age buckets.
-+pub fn freed_by_age() -> Vec<(u32, [i64; 5])> {
-+    allocation_tags().map_or_else(Vec::new, |tags| (tags.freed_by_age)())
-+}
-+
-+/// Bytes freed by tag pair, as the program's allocator has counted them: who allocated, who was
-+/// executing when it was freed.
-+pub fn freed_pairs() -> Vec<(u32, u32, i64)> {
-+    allocation_tags().map_or_else(Vec::new, |tags| (tags.freed_pairs)())
-+}
-+
-+/// The bytes held now by tag, as the program's allocator has them; see [`ingredient_name`].
-+pub fn held_by_tag() -> Vec<(u32, i64)> {
-+    allocation_tags().map_or_else(Vec::new, |tags| (tags.held_by_tag)())
-+}
-+
-+/// Tags from here up stand for the steps of the program that has queries run for it, not for
-+/// ingredients (which are numbered from 1 up from the first).
-+const STEP_TAG_BASE: u32 = 8192;
-+
-+static STEP_NAMES: std::sync::Mutex<Vec<&'static str>> = std::sync::Mutex::new(Vec::new());
-+
-+/// Make the allocations of the calling thread carry the tag of the step called `name` (until a
-+/// query runs, or the step is left), and give the tag it had; `None` if the program's allocator
-+/// does not tag. A program does this for the spans it wants its memory told by, so that what is
-+/// held by no query is told by the step that made it.
-+pub fn enter_heap_step(name: &'static str) -> Option<u32> {
-+    let tags = allocation_tags()?;
-+    Some((tags.set_tag)(heap_step_tag(name)?))
-+}
-+
-+/// The tag the step called `name` is told by.
-+pub fn heap_step_tag(name: &'static str) -> Option<u32> {
-+    let index = {
-+        let mut names = STEP_NAMES.lock().ok()?;
-+        match names.iter().position(|known| *known == name) {
-+            Some(index) => index,
-+            None => {
-+                names.push(name);
-+                names.len() - 1
-+            }
-+        }
-+    };
-+    Some(STEP_TAG_BASE + u32::try_from(index).ok()?)
-+}
-+
-+/// Go back to the tag [`enter_heap_step`] gave.
-+pub fn leave_heap_step(previous: u32) {
-+    if let Some(tags) = allocation_tags() {
-+        (tags.set_tag)(previous);
-+    }
-+}
-+
-+/// The name of the ingredient (or step of the program) a tag stands for, or `outside queries` for
-+/// tag 0.
-+pub fn ingredient_name(db: &dyn Database, tag: u32) -> String {
-+    if tag >= STEP_TAG_BASE {
-+        let name = STEP_NAMES
-+            .lock()
-+            .ok()
-+            .and_then(|names| names.get((tag - STEP_TAG_BASE) as usize).copied());
-+        return format!("step {}", name.unwrap_or("unknown"));
-+    }
-+    match tag.checked_sub(1) {
-+        None => "outside queries".to_owned(),
-+        Some(index) => db
-+            .zalsa()
-+            .lookup_ingredient(crate::zalsa::IngredientIndex::new(index))
-+            .debug_name()
-+            .to_owned(),
-+    }
-+}
-+
-+/// The bytes held now by the queries that allocated them, with the name of each ingredient, most
-+/// first; the bytes no query was executing for are under the name `outside queries`.
-+pub fn held_by_ingredient(db: &dyn Database) -> Vec<(String, i64)> {
-+    let Some(tags) = allocation_tags() else {
-+        return Vec::new();
-+    };
-+    let mut held: Vec<(String, i64)> = (tags.held_by_tag)()
-+        .into_iter()
-+        .map(|(tag, bytes)| (ingredient_name(db, tag), bytes))
-+        .collect();
-+    held.sort_by_key(|(_, bytes)| std::cmp::Reverse(*bytes));
-+    held
-+}
-+
-+/// The net bytes the calling thread has allocated, if the program counts them.
-+pub fn allocated_net_bytes() -> Option<i64> {
-+    allocation_probe().map(|probe| probe())
 +}
 +
  #[cfg(feature = "accumulator")]

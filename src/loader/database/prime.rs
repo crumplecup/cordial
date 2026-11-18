@@ -130,10 +130,14 @@ impl SourceDatabase {
         let size = chunk_size(items.len());
         let chunks = items.len().div_ceil(size);
         for (index, part) in items.chunks(size).enumerate() {
-            crate::peak_heap::note_stage(format!(
-                "priming {label}, chunk {} of {chunks}",
-                index + 1
-            ));
+            tracing::debug!(
+                target: "cordial::prime",
+                label,
+                chunk = index + 1,
+                chunks,
+                files = part.len(),
+                "priming a chunk"
+            );
             self.prime_part(part, one);
             self.evict_between_chunks();
         }
@@ -168,9 +172,6 @@ impl SourceDatabase {
                     .name(format!("cordial-prime-{index}"))
                     .stack_size(WORKER_STACK_BYTES)
                     .spawn_scoped(scope, move || {
-                        // For the life of the thread, its thread-local destructors too: what it
-                        // allocates and frees outside a query is told as the worker's.
-                        let _ = salsa::enter_heap_step("prime_worker");
                         tracing::dispatcher::with_default(&dispatch, || {
                             evaluate(&db, functions, next, one);
                         });

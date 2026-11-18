@@ -30,7 +30,6 @@ mod feature_probe;
 mod filter;
 #[cfg(feature = "homecoming_std")]
 mod framework_std;
-mod heap_steps;
 mod hooks;
 pub mod host;
 mod ir;
@@ -38,7 +37,6 @@ mod live_status;
 mod loader;
 mod memory_limit;
 mod objects;
-mod peak_heap;
 pub mod perf;
 mod plugin;
 mod plugins;
@@ -285,14 +283,12 @@ pub use etiquettes::framework_std::{AMENABLE_STD_ETIQUETTE, AmenableStdReporter}
 pub use etiquettes::quality_etiquettes;
 #[cfg(feature = "amenable_ext")]
 pub use etiquettes::{AMENABLE_EXT_JIFF_ETIQUETTE, ExtReporter};
-pub use heap_steps::{HeapStepLayer, heap_step_filter};
 pub use live_status::{LiveLayer, LiveStatus, live_filter};
 pub use memory_limit::{
     Budget, DEFAULT_MEMORY_LIMIT, MEMORY_LIMIT_EXIT, MemoryLimit, budget_of, enforce, exceeds,
     parse_limit, parse_meminfo, parse_size, resolve as resolve_memory_limit,
     resolve_with as resolve_memory_limit_with,
 };
-pub use peak_heap::start_sampling as start_heap_sampling;
 #[cfg(all(feature = "rustdoc", feature = "impl_coverage"))]
 pub use plugin::classify_elicit_complete_gap;
 #[cfg(feature = "elicitation")]

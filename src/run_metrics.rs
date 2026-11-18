@@ -141,7 +141,6 @@ pub fn metrics_filter_with(steps: bool) -> Targets {
         .with_target("cordial::phase_queries", tracing::Level::INFO)
         .with_target("cordial::audit", tracing::Level::INFO)
         .with_target("cordial::eviction", tracing::Level::INFO)
-        .with_target("cordial::heap", tracing::Level::INFO)
         .with_target("salsa::eviction", tracing::Level::DEBUG)
         .with_target("cordial::semantic::fallback", tracing::Level::INFO)
         .with_target("cordial::cache", tracing::Level::DEBUG)
