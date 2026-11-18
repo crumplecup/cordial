@@ -188,6 +188,22 @@ pub fn meter_kib() -> Option<u64> {
     crate::process_memory::sample().map(|memory| meter_of(memory.resident_kib()))
 }
 
+/// What a function of the priming is taken to retain, in kibibytes, before anything of the run is
+/// known: a chunk that grows by more than the headroom cannot be stopped, since the ladder acts
+/// between chunks, so the first one is small.
+pub const FIRST_GROWTH_KIB: u64 = 4 * 1024;
+
+/// How many functions the next chunk may take: as many as fit in half of `headroom_kib` (the
+/// estimate is rough) at `growth_kib_per_function`, the growth the last chunk showed, and at least
+/// one; never more than `usual`.
+#[instrument(level = "trace")]
+pub fn functions_within(headroom_kib: i64, growth_kib_per_function: u64, usual: usize) -> usize {
+    let fitting = u64::try_from(headroom_kib).unwrap_or(0) / growth_kib_per_function.max(1) / 2;
+    usize::try_from(fitting)
+        .unwrap_or(usize::MAX)
+        .clamp(1, usual.max(1))
+}
+
 /// The rung the watchdog last put the run on.
 static LEVEL: AtomicU8 = AtomicU8::new(0);
 

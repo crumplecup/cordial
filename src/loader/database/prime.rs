@@ -131,15 +131,30 @@ impl SourceDatabase {
         let mut size = usual;
         let mut rest = items;
         let mut index = 0;
+        // What a function of this pass has retained, as the last chunk showed.
+        let mut growth = crate::FIRST_GROWTH_KIB;
         while !rest.is_empty() {
-            let (part, _) = rest.split_at(size.min(rest.len()));
+            // The ladder acts between chunks, so a chunk is as long as what the headroom allows at the
+            // growth seen: a chunk that grows past it cannot be stopped.
+            let taken = crate::memory_limit::headroom_kib().map_or(size, |headroom| {
+                size.min(crate::functions_within(headroom, growth, size))
+            });
+            let (part, _) = rest.split_at(taken.min(rest.len()));
             index += 1;
+            let held_before = crate::memory_limit::meter_kib();
             // Under pressure the workers stop early and the rest of the chunk waits for the next.
             let done = match self.prime_part(part, one, true) {
                 // No worker started: the projection evaluates what was not, as it says it will.
                 0 => part.len(),
                 done => done,
             };
+            if let (Some(before), Some(after)) = (held_before, crate::memory_limit::meter_kib()) {
+                let observed =
+                    after.saturating_sub(before) / u64::try_from(done).unwrap_or(1).max(1);
+                // What was seen, but not less than half of what was before: one cheap chunk is not
+                // a reason to take a chunk that is not.
+                growth = observed.max(growth / 2).max(1);
+            }
             tracing::debug!(
                 target: "cordial::prime",
                 label,

@@ -7,9 +7,10 @@ mod support {
 
 use clap::Parser;
 use cordial::{
-    Backoff, Cli, DEFAULT_MEMORY_LIMIT, FUTILE_KIB, MEMORY_LIMIT_EXIT, MemoryLimit, Pressure,
-    WORKER_KIB, budget_of, exceeds, judge, judge_level, load_cordial_config, nearing, parse_limit,
-    parse_meminfo, parse_size, resolve_memory_limit_with, workers_within,
+    Backoff, Cli, DEFAULT_MEMORY_LIMIT, FIRST_GROWTH_KIB, FUTILE_KIB, MEMORY_LIMIT_EXIT,
+    MemoryLimit, Pressure, WORKER_KIB, budget_of, exceeds, functions_within, judge, judge_level,
+    load_cordial_config, nearing, parse_limit, parse_meminfo, parse_size,
+    resolve_memory_limit_with, workers_within,
 };
 use miette::{IntoDiagnostic, Result};
 
@@ -227,6 +228,36 @@ fn a_round_that_gives_something_back_starts_the_waiting_again() {
         "and what gave back enough starts again with a round that acts"
     );
     assert_eq!(backoff, Backoff::new());
+}
+
+#[test]
+fn a_chunk_takes_as_many_functions_as_half_the_headroom_holds_at_the_growth_seen() {
+    let mib = |mebibytes: i64| mebibytes * 1024;
+    assert_eq!(
+        functions_within(mib(400), FIRST_GROWTH_KIB, 134),
+        50,
+        "400 MB at the first growth taken, 4 MB a function, half of it"
+    );
+    assert_eq!(
+        functions_within(mib(400), 400 * 1024, 134),
+        1,
+        "at least one"
+    );
+    assert_eq!(
+        functions_within(mib(100_000), 1024, 134),
+        134,
+        "never more than the usual"
+    );
+    assert_eq!(
+        functions_within(-mib(50), 4 * 1024, 134),
+        1,
+        "past the line, one"
+    );
+    assert_eq!(
+        functions_within(mib(400), 0, 134),
+        134,
+        "a growth of nothing is not a limit"
+    );
 }
 
 #[test]
