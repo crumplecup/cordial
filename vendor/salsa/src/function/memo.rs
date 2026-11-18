@@ -392,6 +392,26 @@ impl<C: Configuration> Memo<C> {
         Some(unsafe { std::mem::transmute::<&C::Output<'static>, &C::Output<'_>>(value) })
     }
 
+    /// Whether a value is in memory as a value, as computed or decoded.
+    pub(super) fn in_memory(&self) -> bool {
+        self.value.is_some()
+            || self
+                .spilled
+                .as_ref()
+                .is_some_and(|spilled| spilled.restored.get().is_some())
+    }
+
+    /// Drop the value in memory. A memo that has the value as bytes can decode it again; one that
+    /// does not is computed again when something reads it. Needs exclusive access to the memo, and
+    /// does nothing to one whose value cannot be computed again.
+    pub(super) fn drop_in_memory_value(&mut self) {
+        if let Some(spilled) = self.spilled.as_mut() {
+            spilled.restored.take();
+        } else if self.header.can_evict_value() && !self.header.may_be_provisional() {
+            self.value = None;
+        }
+    }
+
     /// Whether the memo has a value, in memory or in the store.
     pub(super) fn holds_value(&self) -> bool {
         self.value.is_some() || self.spilled.is_some()

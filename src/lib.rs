@@ -35,6 +35,7 @@ pub mod host;
 mod ir;
 mod live_status;
 mod loader;
+mod memory_ledger;
 mod memory_limit;
 mod objects;
 pub mod perf;
@@ -400,6 +401,7 @@ pub use loader::{
     SourceDatabase, SourceFile, SourceLoadView, SourceLoader, SourceSyntax, SyncOutcome,
     module_path_from_src_file, quality_scan_trees,
 };
+pub use memory_ledger::{Ledger, LedgerRow, itemize};
 pub use objects::{
     Artifact, Disposition, FileSpan, Finding, FindingSink, IrAnchor, MapFindingSink, Marker,
     NodeAnchor, Rule, SourceSpan, TextArtifact,

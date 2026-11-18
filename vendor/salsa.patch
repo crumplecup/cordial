@@ -582,10 +582,25 @@
      }
 --- salsa-0.28.5/src/database.rs
 +++ salsa/src/database.rs
-@@ -47,6 +47,15 @@
+@@ -47,6 +47,30 @@
          zalsa_mut.evict_lru();
      }
  
++    /// For each query, how many memos hold a value in memory; and, if `drop`, drop them, one
++    /// query at a time, calling `after` with the query's name and the count when each is done. The
++    /// queries run again when something reads what was dropped.
++    ///
++    /// **WARNING:** Just like an ordinary write, this method triggers cancellation.
++    fn values_in_memory(
++        &mut self,
++        drop: bool,
++        only: &[&str],
++        after: &mut dyn FnMut(&'static str, u64),
++    ) {
++        let zalsa_mut = self.zalsa_mut();
++        zalsa_mut.values_in_memory(drop, only, |query, held| after(query, held));
++    }
++
 +    /// Write the values of persisted memos to the spill store (see [`crate::set_spill_store`]) and
 +    /// drop them from memory: the next query that reads one finds it valid and reads its value back.
 +    ///
@@ -598,7 +613,7 @@
      /// A "synthetic write" causes the system to act *as though* some
      /// input of durability `durability` has changed, triggering a new revision.
      /// This is mostly useful for profiling scenarios.
-@@ -175,6 +184,97 @@
+@@ -175,6 +199,97 @@
      use serde::ser::SerializeMap;
  
      impl dyn Database {
@@ -696,7 +711,7 @@
          /// Returns a type implementing [`serde::Serialize`], that can be used to serialize the
          /// current state of the database.
          ///
-@@ -183,6 +283,26 @@
+@@ -183,6 +298,26 @@
              SerializeDatabase::new(self)
          }
  
@@ -723,7 +738,7 @@
          /// Deserialize the database using a [`serde::Deserializer`].
          ///
          /// This method will modify the database in-place based on the serialized data.
-@@ -369,8 +489,16 @@
+@@ -369,8 +504,16 @@
                  // to the ingredient as well as the database.
                  let mut ingredient = zalsa.take_ingredient(index);
  
@@ -1961,7 +1976,7 @@
      fn can_evict_value(&self) -> bool {
          // Careful: Cannot evict memos whose values were
          // assigned as output of another query
-@@ -341,32 +374,127 @@
+@@ -341,32 +374,147 @@
                  unsafe { std::mem::transmute::<C::Output<'_>, C::Output<'static>>(value) }
              }),
              header: MemoHeader::new(revision_now, revisions),
@@ -1986,6 +2001,26 @@
 +        // SAFETY: Guaranteed by `Configuration`; the restored lifetime is
 +        // bounded by the borrow of this memo.
 +        Some(unsafe { std::mem::transmute::<&C::Output<'static>, &C::Output<'_>>(value) })
++    }
++
++    /// Whether a value is in memory as a value, as computed or decoded.
++    pub(super) fn in_memory(&self) -> bool {
++        self.value.is_some()
++            || self
++                .spilled
++                .as_ref()
++                .is_some_and(|spilled| spilled.restored.get().is_some())
++    }
++
++    /// Drop the value in memory. A memo that has the value as bytes can decode it again; one that
++    /// does not is computed again when something reads it. Needs exclusive access to the memo, and
++    /// does nothing to one whose value cannot be computed again.
++    pub(super) fn drop_in_memory_value(&mut self) {
++        if let Some(spilled) = self.spilled.as_mut() {
++            spilled.restored.take();
++        } else if self.header.can_evict_value() && !self.header.may_be_provisional() {
++            self.value = None;
++        }
 +    }
 +
 +    /// Whether the memo has a value, in memory or in the store.
@@ -2097,7 +2132,7 @@
      }
  
      fn remove_outputs(&self, zalsa: &Zalsa, executor: DatabaseKeyIndex) {
-@@ -404,7 +532,10 @@
+@@ -404,7 +552,10 @@
  
      /// A reference to the fields of a [`Memo`], with its [`QueryRevisions`] transformed.
      pub(crate) struct MappedMemo<'memo, C: Configuration> {
@@ -2108,7 +2143,7 @@
          pub(crate) verified_at: AtomicRevision,
          pub(crate) revisions: MappedQueryRevisions<'memo>,
      }
-@@ -414,7 +545,9 @@
+@@ -414,7 +565,9 @@
              &self,
              serialized_origin: PersistentQueryOrigin,
          ) -> MappedMemo<'_, C> {
@@ -2119,7 +2154,7 @@
              let Memo { ref header, .. } = *self;
              let MemoHeader {
                  ref verified_at,
-@@ -423,6 +556,7 @@
+@@ -423,6 +576,7 @@
  
              MappedMemo {
                  value,
@@ -2127,7 +2162,7 @@
                  verified_at: AtomicRevision::from(verified_at.load()),
                  revisions: revisions.with_origin(serialized_origin),
              }
-@@ -451,18 +585,44 @@
+@@ -451,18 +605,44 @@
                  }
              }
  
@@ -2176,7 +2211,7 @@
              s.serialize_field("verified_at", &verified_at)?;
              s.serialize_field("revisions", &revisions)?;
              s.end()
-@@ -479,36 +639,62 @@
+@@ -479,36 +659,62 @@
          {
              #[derive(Deserialize)]
              #[serde(rename = "Memo")]
@@ -2256,7 +2291,7 @@
          }
      }
  }
-@@ -635,8 +821,9 @@
+@@ -635,8 +841,9 @@
      // Memos are stored a lot, make sure their size doesn't randomly increase.
      const _: [(); std::mem::size_of::<super::MemoHeader>()] =
          [(); std::mem::size_of::<[usize; 4]>()];
@@ -2413,7 +2448,7 @@
  
          self.deleted_entries.clear();
      }
-@@ -548,6 +605,112 @@
+@@ -548,6 +605,135 @@
          C::PERSIST
      }
  
@@ -2422,6 +2457,29 @@
 +        if let Some(caster) = zalsa.views().try_downcaster_for::<C::DbView>() {
 +            self.view_caster.get_or_init(|| *caster);
 +        }
++    }
++
++    unsafe fn values_in_memory(&self, zalsa: &Zalsa, drop: bool) -> u64 {
++        let mut held = 0;
++        for entry in <C::SalsaStruct<'_> as SalsaStructInDb>::entries(zalsa) {
++            let memo_ingredient_index = self.memo_ingredient_indices.get(entry.ingredient_index());
++            let Some(mut memo) = zalsa
++                .memo_table_for::<C::SalsaStruct<'_>>(entry.key_index())
++                .get::<Memo<C>>(memo_ingredient_index)
++            else {
++                continue;
++            };
++            // SAFETY: The caller has exclusive access to the storage, so nothing else reaches this
++            // memo.
++            let memo = unsafe { memo.as_mut() };
++            if memo.in_memory() {
++                held += 1;
++                if drop {
++                    memo.drop_in_memory_value();
++                }
++            }
++        }
++        held
 +    }
 +
 +    unsafe fn spill_persisted(
@@ -2526,7 +2584,7 @@
      fn should_serialize(&self, zalsa: &Zalsa) -> bool {
          if !C::PERSIST {
              return false;
-@@ -595,44 +758,6 @@
+@@ -595,44 +781,6 @@
      }
  }
  
@@ -2571,7 +2629,7 @@
  fn flatten_cycle_head_dependencies(
      ingredient: &dyn FunctionIngredient,
      zalsa: &Zalsa,
-@@ -744,7 +869,9 @@
+@@ -744,7 +892,9 @@
  #[cfg(feature = "persistence")]
  mod persistence {
      use super::{Configuration, IngredientImpl, Memo};
@@ -2582,7 +2640,7 @@
      use crate::plumbing::{MemoIngredientMap, SalsaStructInDb};
      use crate::zalsa::Zalsa;
      use crate::zalsa_local::persistence::PersistentQueryOrigin;
-@@ -764,6 +891,14 @@
+@@ -764,6 +914,14 @@
          pub ingredient: &'db IngredientImpl<C>,
      }
  
@@ -2597,7 +2655,7 @@
      impl<C> serde::Serialize for SerializeIngredient<'_, C>
      where
          C: Configuration,
-@@ -774,26 +909,9 @@
+@@ -774,26 +932,9 @@
          {
              let Self { ingredient, zalsa } = self;
  
@@ -2627,7 +2685,7 @@
  
              for entry in <C::SalsaStruct<'_> as SalsaStructInDb>::entries(zalsa) {
                  let memo_ingredient_index = ingredient
-@@ -806,97 +924,305 @@
+@@ -806,97 +947,305 @@
                      memo_ingredient_index,
                  );
  
@@ -2994,7 +3052,7 @@
      }
  
      pub struct DeserializeIngredient<'db, C>
-@@ -937,7 +1263,23 @@
+@@ -937,7 +1286,23 @@
          {
              let DeserializeIngredient { zalsa, ingredient } = self;
  
@@ -3040,10 +3098,22 @@
      );
  
      /// Returns the function-specific interface for this ingredient, if any.
-@@ -191,6 +191,64 @@
+@@ -191,6 +191,76 @@
          false
      }
  
++    /// How many of this ingredient's memos hold a value in memory, and, if `drop`, drop those
++    /// values (a memo whose value cannot be decoded again from bytes is computed again when
++    /// something reads it). Memos whose value cannot be computed again are left alone.
++    ///
++    /// # Safety
++    ///
++    /// The database must be the one that owns this ingredient, and the caller must have exclusive
++    /// access to its storage for the duration of the call.
++    unsafe fn values_in_memory(&self, _zalsa: &Zalsa, _drop: bool) -> u64 {
++        0
++    }
++
 +    /// Write the values of this ingredient's persisted memos to `store` and drop them from memory
 +    /// (see [`crate::spill`]).
 +    ///
@@ -3705,10 +3775,34 @@
      #[allow(unused)]
      pub(crate) fn ingredients(&self) -> impl Iterator<Item = &dyn Ingredient> {
          self.ingredients_vec
-@@ -465,6 +501,24 @@
+@@ -465,6 +501,48 @@
      }
  
      /// **NOT SEMVER STABLE**
++    ///
++    /// For each query, how many memos hold a value in memory, and, if `drop`, drop those values
++    /// of the queries `only` names (all if it is empty), one query at a time, calling `after` with
++    /// the query's name and the count when each is done, so that what that freed can be measured.
++    #[doc(hidden)]
++    pub fn values_in_memory(
++        &mut self,
++        drop: bool,
++        only: &[&str],
++        mut after: impl FnMut(&'static str, u64),
++    ) {
++        for ingredient in self.ingredients() {
++            if !only.is_empty() && !only.contains(&ingredient.debug_name()) {
++                continue;
++            }
++            // SAFETY: `&mut self` is exclusive access to the storage, and the ingredient is its own.
++            let held = unsafe { ingredient.values_in_memory(self, drop) };
++            if held > 0 {
++                after(ingredient.debug_name(), held);
++            }
++        }
++    }
++
++    /// **NOT SEMVER STABLE**
 +    ///
 +    /// Spill the values of every persisted memo to the store set with
 +    /// [`crate::set_spill_store`] (nothing if none is set).

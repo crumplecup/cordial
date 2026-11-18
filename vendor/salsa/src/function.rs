@@ -612,6 +612,29 @@ where
         }
     }
 
+    unsafe fn values_in_memory(&self, zalsa: &Zalsa, drop: bool) -> u64 {
+        let mut held = 0;
+        for entry in <C::SalsaStruct<'_> as SalsaStructInDb>::entries(zalsa) {
+            let memo_ingredient_index = self.memo_ingredient_indices.get(entry.ingredient_index());
+            let Some(mut memo) = zalsa
+                .memo_table_for::<C::SalsaStruct<'_>>(entry.key_index())
+                .get::<Memo<C>>(memo_ingredient_index)
+            else {
+                continue;
+            };
+            // SAFETY: The caller has exclusive access to the storage, so nothing else reaches this
+            // memo.
+            let memo = unsafe { memo.as_mut() };
+            if memo.in_memory() {
+                held += 1;
+                if drop {
+                    memo.drop_in_memory_value();
+                }
+            }
+        }
+        held
+    }
+
     unsafe fn spill_persisted(
         &self,
         zalsa: &Zalsa,

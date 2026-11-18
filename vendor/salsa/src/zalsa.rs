@@ -502,6 +502,30 @@ impl Zalsa {
 
     /// **NOT SEMVER STABLE**
     ///
+    /// For each query, how many memos hold a value in memory, and, if `drop`, drop those values
+    /// of the queries `only` names (all if it is empty), one query at a time, calling `after` with
+    /// the query's name and the count when each is done, so that what that freed can be measured.
+    #[doc(hidden)]
+    pub fn values_in_memory(
+        &mut self,
+        drop: bool,
+        only: &[&str],
+        mut after: impl FnMut(&'static str, u64),
+    ) {
+        for ingredient in self.ingredients() {
+            if !only.is_empty() && !only.contains(&ingredient.debug_name()) {
+                continue;
+            }
+            // SAFETY: `&mut self` is exclusive access to the storage, and the ingredient is its own.
+            let held = unsafe { ingredient.values_in_memory(self, drop) };
+            if held > 0 {
+                after(ingredient.debug_name(), held);
+            }
+        }
+    }
+
+    /// **NOT SEMVER STABLE**
+    ///
     /// Spill the values of every persisted memo to the store set with
     /// [`crate::set_spill_store`] (nothing if none is set).
     #[doc(hidden)]

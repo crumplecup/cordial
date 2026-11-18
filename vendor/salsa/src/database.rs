@@ -47,6 +47,21 @@ pub trait Database: Send + ZalsaDatabase + AsDynDatabase {
         zalsa_mut.evict_lru();
     }
 
+    /// For each query, how many memos hold a value in memory; and, if `drop`, drop them, one
+    /// query at a time, calling `after` with the query's name and the count when each is done. The
+    /// queries run again when something reads what was dropped.
+    ///
+    /// **WARNING:** Just like an ordinary write, this method triggers cancellation.
+    fn values_in_memory(
+        &mut self,
+        drop: bool,
+        only: &[&str],
+        after: &mut dyn FnMut(&'static str, u64),
+    ) {
+        let zalsa_mut = self.zalsa_mut();
+        zalsa_mut.values_in_memory(drop, only, |query, held| after(query, held));
+    }
+
     /// Write the values of persisted memos to the spill store (see [`crate::set_spill_store`]) and
     /// drop them from memory: the next query that reads one finds it valid and reads its value back.
     ///

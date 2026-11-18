@@ -191,6 +191,18 @@ pub trait Ingredient: Any + fmt::Debug + Send + Sync {
         false
     }
 
+    /// How many of this ingredient's memos hold a value in memory, and, if `drop`, drop those
+    /// values (a memo whose value cannot be decoded again from bytes is computed again when
+    /// something reads it). Memos whose value cannot be computed again are left alone.
+    ///
+    /// # Safety
+    ///
+    /// The database must be the one that owns this ingredient, and the caller must have exclusive
+    /// access to its storage for the duration of the call.
+    unsafe fn values_in_memory(&self, _zalsa: &Zalsa, _drop: bool) -> u64 {
+        0
+    }
+
     /// Write the values of this ingredient's persisted memos to `store` and drop them from memory
     /// (see [`crate::spill`]).
     ///
