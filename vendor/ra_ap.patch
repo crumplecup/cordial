@@ -50,7 +50,7 @@
          for (file_id, text) in self.files_changed {
 --- a/ra_ap_base_db-0.0.358/src/editioned_file_id.rs
 +++ ra_ap_base_db/src/editioned_file_id.rs
-@@ -10,7 +10,7 @@
+@@ -10,13 +10,34 @@
  
  use crate::SourceDatabase;
  
@@ -59,6 +59,42 @@
  #[derive(PartialOrd, Ord)]
  pub struct EditionedFileId {
      #[returns(copy)]
+     field: span::EditionedFileId,
+ }
+ 
++/// What a parse is of: a text and the edition it is read in, and nothing of the file it is in.
++/// Interned, so that files with the same text (a cfg context's copies of the workspace's files)
++/// are one key, and the parse of the text is made once and shared.
++#[salsa::interned(debug, unsafe(no_lifetime), revisions = usize::MAX)]
++pub struct ParseInput {
++    #[returns(ref)]
++    text: triomphe::Arc<str>,
++    #[returns(copy)]
++    edition: Edition,
++}
++
++/// The parse of a text. A file's `parse` holds a clone of it (the syntax tree is shared, not
++/// copied), so the tree lives as long as any file that has it; this query's own memo is only the
++/// place the next file with the same text finds it, and is dropped under the least recently used
++/// cap like any other.
++#[salsa::tracked(lru = 128, returns(clone))]
++fn parse_text(db: &dyn SourceDatabase, input: ParseInput) -> syntax::Parse<ast::SourceFile> {
++    let _p = tracing::info_span!("parse_text").entered();
++    ast::SourceFile::parse(input.text(db), input.edition(db))
++}
++
+ #[salsa::tracked]
+ impl EditionedFileId {
+     #[salsa::tracked(lru = 128, returns(clone))]
+@@ -24,7 +45,7 @@
+         let _p = tracing::info_span!("parse", ?self).entered();
+         let (file_id, edition) = self.unpack(db);
+         let text = db.file_text(file_id).text(db);
+-        ast::SourceFile::parse(text, edition)
++        parse_text(db, ParseInput::new(db, text, edition))
+     }
+ 
+     // firewall query
 --- a/ra_ap_base_db-0.0.358/src/input.rs
 +++ ra_ap_base_db/src/input.rs
 @@ -23,7 +23,7 @@

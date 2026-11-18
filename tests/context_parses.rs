@@ -121,12 +121,12 @@ fn run_in_contexts(second_run: bool, with_tests: bool) -> Result<(Vec<(String, u
 
 /// The parses that ran for the passes over contexts, by the pass's step that asked: the chain from
 /// the query that parsed to the step, without the frame every projection runs in.
-fn by_pass(found: &[(String, u64)]) -> std::collections::BTreeMap<String, u64> {
+fn by_pass(found: &[(String, u64)], query: &str) -> std::collections::BTreeMap<String, u64> {
     let mut steps = std::collections::BTreeMap::new();
     for (key, count) in found {
         let Some(chain) = key
             .strip_prefix("steps.")
-            .and_then(|rest| rest.strip_suffix("> EditionedFileId::parse_"))
+            .and_then(|rest| rest.strip_suffix(query))
         else {
             continue;
         };
@@ -147,18 +147,35 @@ fn by_pass(found: &[(String, u64)]) -> std::collections::BTreeMap<String, u64> {
     steps
 }
 
-/// A run that starts from nothing parses each context's copy of a file for the functions in it,
-/// once for each context: the passes cannot share a parse with the original, whose file id is
-/// another. This names what is parsed so that taking the parses away shows.
+/// The file-level query each copy of a file runs, and the query that does the parsing of a text.
+const FILES_PARSE: &str = "> EditionedFileId::parse_";
+const TEXT_PARSE: &str = "> parse_text";
+
+/// A context's copy of a file has the text of the original and another file id. Each copy still
+/// asks for its own parse (a memo of the file), but the parse is of the text, made once and shared:
+/// the passes make none of their own.
 #[test]
 fn a_cold_run_parses_each_contexts_copy_of_the_files_for_the_passes() -> Result<()> {
-    let steps = by_pass(&parses_in_contexts(false, true)?);
-    let expected: std::collections::BTreeMap<String, u64> = [
+    let found = parses_in_contexts(false, true)?;
+    let asked: std::collections::BTreeMap<String, u64> = [
         ("functions_in_copy < harvest".to_owned(), 2),
         ("functions_in_copy < read_leaves".to_owned(), 4),
     ]
     .into();
-    assert_eq!(steps, expected, "the copies the passes parse");
+    assert_eq!(
+        by_pass(&found, FILES_PARSE),
+        asked,
+        "the copies the passes ask a parse of"
+    );
+    assert!(
+        found.iter().any(|(key, _)| key.ends_with(TEXT_PARSE)),
+        "the text of the original is parsed somewhere, or the name above matches nothing"
+    );
+    assert_eq!(
+        by_pass(&found, TEXT_PARSE),
+        std::collections::BTreeMap::new(),
+        "the parses they make: none, the text was parsed for the original"
+    );
     Ok(())
 }
 
@@ -167,7 +184,10 @@ fn a_cold_run_parses_each_contexts_copy_of_the_files_for_the_passes() -> Result<
 #[test]
 fn a_restored_run_parses_nothing_for_the_passes_over_contexts() -> Result<()> {
     let found = parses_in_contexts(true, true)?;
-    assert_eq!(by_pass(&found), std::collections::BTreeMap::new());
+    assert_eq!(
+        by_pass(&found, FILES_PARSE),
+        std::collections::BTreeMap::new()
+    );
     let gates: u64 = found
         .iter()
         .filter(|(key, _)| {
