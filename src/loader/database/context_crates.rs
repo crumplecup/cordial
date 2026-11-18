@@ -392,7 +392,7 @@ impl SourceDatabase {
                 .ok_or_else(|| CordialError::not_found(copy_path.to_string().into()))?;
             // A copy the database already holds is written only if it differs.
             if known.and_then(|known| known.get(&original)) == Some(&copy) {
-                if **self.db.file_text(copy).text(&self.db) != *text {
+                if *self.db.file_text(copy).text(&self.db) != *text {
                     self.db.set_file_text_arc(copy, text.clone());
                 }
                 if self.db.file_source_root(copy).source_root_id(&self.db) != root_id {
@@ -422,8 +422,8 @@ impl SourceDatabase {
             .iter()
             .filter(|(original, copy)| {
                 triomphe::Arc::ptr_eq(
-                    self.db.file_text(**original).text(&self.db),
-                    self.db.file_text(**copy).text(&self.db),
+                    &self.db.file_text(**original).text(&self.db),
+                    &self.db.file_text(**copy).text(&self.db),
                 )
             })
             .count();

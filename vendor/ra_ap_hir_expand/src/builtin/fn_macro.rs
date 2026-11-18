@@ -899,7 +899,8 @@ fn include_str_expand(
     };
 
     let text = db.file_text(file_id.file_id(db));
-    let text = &**text.text(db);
+    let text = text.text(db);
+    let text = &*text;
 
     ExpandResult::ok(quote!(call_site =>#text))
 }

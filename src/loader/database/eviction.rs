@@ -240,6 +240,16 @@ impl SourceDatabase {
         salsa::set_eviction_label(after);
         salsa::Database::trigger_lru_eviction(&mut self.db);
         salsa::set_eviction_label("");
+        if crate::memory_limit::pressured() {
+            let (files, bytes) = self.drop_library_texts();
+            tracing::info!(
+                target: "cordial::eviction",
+                after,
+                library_texts = files,
+                library_text_bytes = bytes,
+                "the texts of library files left memory"
+            );
+        }
         let micros = u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX);
         let resident = |sample: Option<crate::process_memory::MemorySample>| {
             sample.map_or(0, |sample| sample.resident_kib())

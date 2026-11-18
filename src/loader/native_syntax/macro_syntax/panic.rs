@@ -48,8 +48,13 @@ impl DatabaseSource<'_> {
             return None;
         }
         let lines = ra_ap_ide_db::line_index::LineIndex::new(&value);
-        let source =
-            DatabaseSource::new(self.database(), self.path(), &value, parsed.tree(), &lines);
+        let source = DatabaseSource::new(
+            self.database(),
+            self.path(),
+            triomphe::Arc::<str>::from(&*value),
+            parsed.tree(),
+            &lines,
+        );
         Some(collect(&source))
     }
 

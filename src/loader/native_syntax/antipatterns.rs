@@ -110,9 +110,14 @@ impl DatabaseSource<'_> {
             return None;
         }
         let lines = ra_ap_ide_db::line_index::LineIndex::new(&text);
-        let source =
-            DatabaseSource::new(self.database(), self.path(), &text, parsed.tree(), &lines)
-                .locate_macro_body(self, &body)?;
+        let source = DatabaseSource::new(
+            self.database(),
+            self.path(),
+            text.as_str().into(),
+            parsed.tree(),
+            &lines,
+        )
+        .locate_macro_body(self, &body)?;
         Some(collect(&source))
     }
 }

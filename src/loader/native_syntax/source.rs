@@ -18,7 +18,9 @@ pub(crate) struct DatabaseSource<'db> {
     ))]
     database: &'db ra_ap_ide_db::RootDatabase,
     path: &'db Path,
-    source: &'db str,
+    /// The text of the file: held here, since the database may not keep it in memory.
+    #[getter(skip)]
+    source: triomphe::Arc<str>,
     tree: ast::SourceFile,
     line_index: &'db ra_ap_ide_db::line_index::LineIndex,
     #[getter(skip)]
@@ -39,7 +41,7 @@ impl<'db> DatabaseSource<'db> {
         ))]
         database: &'db ra_ap_ide_db::RootDatabase,
         path: &'db Path,
-        source: &'db str,
+        source: triomphe::Arc<str>,
         tree: ast::SourceFile,
         line_index: &'db ra_ap_ide_db::line_index::LineIndex,
     ) -> Self {
@@ -53,12 +55,17 @@ impl<'db> DatabaseSource<'db> {
             ))]
             database,
             path,
-            source,
             tree,
             line_index,
             line_base: 0,
             source_digest: Sha256::digest(source.as_bytes()).into(),
+            source,
         }
+    }
+
+    /// The text of the file.
+    pub(crate) fn source(&self) -> &str {
+        &self.source
     }
 
     /// Locate an issued grammar island in its enclosing canonical source.
@@ -73,7 +80,7 @@ impl<'db> DatabaseSource<'db> {
             return None;
         }
         let text = parent.text(body.syntax());
-        if text.get(1..text.len().saturating_sub(1))? != self.source {
+        if text.get(1..text.len().saturating_sub(1))? != &*self.source {
             return None;
         }
         self.line_base = parent

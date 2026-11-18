@@ -128,7 +128,7 @@ impl SourceDatabase {
             } else if Flips::of_file(&self.db, *file, pairs, Reach::Written).is_flipped() {
                 reuse.flipped += 1;
                 changed.insert(*file);
-            } else if reads_cfg_otherwise(self.db.file_text(*file).text(&self.db)) {
+            } else if reads_cfg_otherwise(&self.db.file_text(*file).text(&self.db)) {
                 reuse.unsure += 1;
                 changed.insert(*file);
             }

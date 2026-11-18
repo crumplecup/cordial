@@ -66,6 +66,9 @@ macro_rules! impl_intern_key {
     };
 }
 
+mod file_contents;
+pub use file_contents::FileContents;
+
 pub const DEFAULT_FILE_TEXT_LRU_CAP: u16 = 16;
 pub const DEFAULT_PARSE_LRU_CAP: u16 = 128;
 pub const DEFAULT_BORROWCK_LRU_CAP: u16 = 2024;
@@ -150,12 +153,12 @@ impl Files {
             Entry::Occupied(mut occupied) => {
                 // Salsa does not compare a new input with the old one; an unchanged
                 // text must not invalidate what read it.
-                if **occupied.get().text(db) != *text {
-                    occupied.get_mut().set_text(db).to(Arc::from(text));
+                if *occupied.get().text(db) != *text {
+                    occupied.get_mut().set_contents(db).to(FileContents::resident(Arc::from(text)));
                 }
             }
             Entry::Vacant(vacant) => {
-                let text = FileText::new(db, Arc::from(text), file_id);
+                let text = FileText::new(db, FileContents::resident(Arc::from(text)), file_id);
                 vacant.insert(text);
             }
         };
@@ -172,12 +175,12 @@ impl Files {
     ) {
         match self.files.entry(file_id) {
             Entry::Occupied(mut occupied) => {
-                if **occupied.get().text(db) != *text {
-                    occupied.get_mut().set_text(db).to(text);
+                if *occupied.get().text(db) != *text {
+                    occupied.get_mut().set_contents(db).to(FileContents::resident(text));
                 }
             }
             Entry::Vacant(vacant) => {
-                let text = FileText::new(db, text, file_id);
+                let text = FileText::new(db, FileContents::resident(text), file_id);
                 vacant.insert(text);
             }
         };
@@ -192,13 +195,18 @@ impl Files {
     ) {
         match self.files.entry(file_id) {
             Entry::Occupied(mut occupied) => {
-                if **occupied.get().text(db) != *text {
-                    occupied.get_mut().set_text(db).with_durability(durability).to(Arc::from(text));
+                if *occupied.get().text(db) != *text {
+                    occupied
+                        .get_mut()
+                        .set_contents(db)
+                        .with_durability(durability)
+                        .to(FileContents::resident(Arc::from(text)));
                 }
             }
             Entry::Vacant(vacant) => {
-                let text =
-                    FileText::builder(Arc::from(text), file_id).durability(durability).new(db);
+                let text = FileText::builder(FileContents::resident(Arc::from(text)), file_id)
+                    .durability(durability)
+                    .new(db);
                 vacant.insert(text);
             }
         };
@@ -311,17 +319,17 @@ pub struct LocalRoots {
 
 /// Persist a file's text as a plain string: `Arc<str>` has no `Deserialize`.
 fn serialize_file_text<S: serde::Serializer>(
-    value: &(Arc<str>, vfs::FileId),
+    value: &(FileContents, vfs::FileId),
     serializer: S,
 ) -> Result<S::Ok, S::Error> {
-    serde::Serialize::serialize(&(&*value.0, value.1), serializer)
+    serde::Serialize::serialize(&(&*value.0.get(), value.1), serializer)
 }
 
 fn deserialize_file_text<'de, D: serde::Deserializer<'de>>(
     deserializer: D,
-) -> Result<(Arc<str>, vfs::FileId), D::Error> {
+) -> Result<(FileContents, vfs::FileId), D::Error> {
     let (text, file_id): (String, vfs::FileId) = serde::Deserialize::deserialize(deserializer)?;
-    Ok((Arc::from(text.as_str()), file_id))
+    Ok((FileContents::resident(Arc::from(text.as_str())), file_id))
 }
 
 #[salsa::input(
@@ -329,9 +337,16 @@ fn deserialize_file_text<'de, D: serde::Deserializer<'de>>(
     persist(serialize = serialize_file_text, deserialize = deserialize_file_text)
 )]
 pub struct FileText {
-    #[returns(ref)]
-    pub text: Arc<str>,
+    #[returns(clone)]
+    pub contents: FileContents,
     pub file_id: vfs::FileId,
+}
+
+impl FileText {
+    /// The text of the file, read from the disk if it was dropped from memory.
+    pub fn text(self, db: &dyn salsa::Database) -> Arc<str> {
+        self.contents(db).get()
+    }
 }
 
 #[salsa::input(debug, persist)]

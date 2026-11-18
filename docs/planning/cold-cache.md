@@ -38,7 +38,7 @@ Kinds: **regenerable** (computed again from something smaller: the cold tier is 
 | 6 | `ast_id_map`, item trees, attribute flags | regenerable | LRU cap; dropped at level 2 | Cap done where RA marks it |
 | 7 | Bodies, signatures, expression scopes, inference results | regenerable | Dropped at the end of each chunk at level 2 and 3 | Stage ends done; chunk ends below |
 | 8 | Definition maps | regenerable | Same. Serializing them needs every id they hold persisted | Dropped at stage ends; serializing not planned |
-| 9 | File texts (Salsa inputs) | irreducible, re-readable | Drop and read again from the path; edited and virtual files stay | Not started |
+| 9 | File texts (Salsa inputs) | irreducible, re-readable | `FileContents`: a library file's text leaves memory under pressure and is read from its path when asked (a changed length panics); the workspace's files and texts made up in memory stay | Done |
 | 10 | Interned data (names, types, item keys, macro call locations) | irreducible | Needs Salsa's interned collection at revision boundaries | Not started |
 | 11 | The IR graph's node attributes | persistable | A function's semantic facts (the bulk) are held as bytes, a third or less of the JSON value, decoded on a read and put back to bytes under pressure at the ends of stages; spilling the bytes themselves is the next step | Packed and dropped; spill not started |
 | 12 | Workers' in-flight work | transient | Fewer workers as pressure rises | Below |

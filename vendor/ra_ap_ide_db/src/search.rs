@@ -525,7 +525,7 @@ impl<'a, 'db> FindUsages<'a, 'db> {
             .map(|(&file_id, &search_range)| {
                 let text = db.file_text(file_id.file_id(db)).text(db);
                 let search_range =
-                    search_range.unwrap_or_else(|| TextRange::up_to(TextSize::of(&**text)));
+                    search_range.unwrap_or_else(|| TextRange::up_to(TextSize::of(&*text)));
 
                 (text.clone(), file_id, search_range)
             })
@@ -1108,12 +1108,12 @@ impl<'a, 'db> FindUsages<'a, 'db> {
                 let file_text = sema.db.file_text(file_id.file_id(self.sema.db));
                 let text = file_text.text(sema.db);
                 let search_range =
-                    search_range.unwrap_or_else(|| TextRange::up_to(TextSize::of(&**text)));
+                    search_range.unwrap_or_else(|| TextRange::up_to(TextSize::of(&*text)));
 
                 let tree = LazyCell::new(|| sema.parse(file_id).syntax().clone());
                 let finder = &Finder::new("self");
 
-                for offset in Self::match_indices(text, finder, search_range) {
+                for offset in Self::match_indices(&text, finder, search_range) {
                     for name_ref in Self::find_nodes(sema, "self", file_id, &tree, offset)
                         .filter_map(ast::NameRef::cast)
                     {

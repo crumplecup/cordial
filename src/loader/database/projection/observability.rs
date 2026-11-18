@@ -52,7 +52,7 @@ impl SourceDatabase {
                 return Ok(SourceObservability::invalid_file(
                     path,
                     root,
-                    self.db.file_text(file).text(&self.db),
+                    &self.db.file_text(file).text(&self.db),
                 ));
             }
             return Err(anyhow::Error::new(error.clone()).into());

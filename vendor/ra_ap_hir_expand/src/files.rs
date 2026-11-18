@@ -77,13 +77,14 @@ impl FileRange {
     }
 
     #[inline]
-    pub fn file_text(self, db: &dyn SourceDatabase) -> &triomphe::Arc<str> {
+    pub fn file_text(self, db: &dyn SourceDatabase) -> triomphe::Arc<str> {
         db.file_text(self.file_id.file_id(db)).text(db)
     }
 
+    /// The text in the range: a copy, since the file's text may not be in memory.
     #[inline]
-    pub fn text(self, db: &dyn SourceDatabase) -> &str {
-        &self.file_text(db)[self.range]
+    pub fn text(self, db: &dyn SourceDatabase) -> String {
+        self.file_text(db)[self.range].to_owned()
     }
 }
 

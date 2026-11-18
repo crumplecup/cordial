@@ -159,16 +159,24 @@ const PACKED_KEYS: [&str; 2] = [
 ];
 
 /// One attribute: a JSON value, or, for a bulk key, its encoding and the value decoded from it.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 enum Attr {
     Value(serde_json::Value),
     Packed(Packed),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 struct Packed {
     bytes: Box<[u8]>,
     decoded: std::sync::OnceLock<serde_json::Value>,
+}
+
+/// An attribute prints as its value, not as how it is held: whether it was decoded yet is not
+/// something that distinguishes two graphs.
+impl std::fmt::Debug for Attr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Debug::fmt(&self.value(), f)
+    }
 }
 
 impl PartialEq for Attr {

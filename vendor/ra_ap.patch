@@ -59,6 +59,15 @@
  #[derive(PartialOrd, Ord)]
  pub struct EditionedFileId {
      #[returns(copy)]
+@@ -24,7 +24,7 @@
+         let _p = tracing::info_span!("parse", ?self).entered();
+         let (file_id, edition) = self.unpack(db);
+         let text = db.file_text(file_id).text(db);
+-        ast::SourceFile::parse(text, edition)
++        ast::SourceFile::parse(&text, edition)
+     }
+ 
+     // firewall query
 --- a/ra_ap_base_db-0.0.358/src/input.rs
 +++ ra_ap_base_db/src/input.rs
 @@ -23,7 +23,7 @@
@@ -235,7 +244,17 @@
          #[derive(PartialOrd, Ord)]
          pub struct $id {
              #[returns(ref)]
-@@ -76,7 +77,65 @@
+@@ -65,6 +66,9 @@
+     };
+ }
+ 
++mod file_contents;
++pub use file_contents::FileContents;
++
+ pub const DEFAULT_FILE_TEXT_LRU_CAP: u16 = 16;
+ pub const DEFAULT_PARSE_LRU_CAP: u16 = 128;
+ pub const DEFAULT_BORROWCK_LRU_CAP: u16 = 2024;
+@@ -76,7 +80,65 @@
      file_source_roots: Arc<DashMap<vfs::FileId, FileSourceRootInput, BuildHasherDefault<FxHasher>>>,
  }
  
@@ -301,23 +320,24 @@
      pub fn file_text(&self, file_id: vfs::FileId) -> FileText {
          match self.files.get(&file_id) {
              Some(text) => *text,
-@@ -89,7 +148,11 @@
+@@ -89,10 +151,36 @@
      pub fn set_file_text(&self, db: &mut dyn SourceDatabase, file_id: vfs::FileId, text: &str) {
          match self.files.entry(file_id) {
              Entry::Occupied(mut occupied) => {
 -                occupied.get_mut().set_text(db).to(Arc::from(text));
 +                // Salsa does not compare a new input with the old one; an unchanged
 +                // text must not invalidate what read it.
-+                if **occupied.get().text(db) != *text {
-+                    occupied.get_mut().set_text(db).to(Arc::from(text));
++                if *occupied.get().text(db) != *text {
++                    occupied.get_mut().set_contents(db).to(FileContents::resident(Arc::from(text)));
 +                }
-             }
-             Entry::Vacant(vacant) => {
-                 let text = FileText::new(db, Arc::from(text), file_id);
-@@ -98,6 +161,28 @@
-         };
-     }
- 
++            }
++            Entry::Vacant(vacant) => {
++                let text = FileText::new(db, FileContents::resident(Arc::from(text)), file_id);
++                vacant.insert(text);
++            }
++        };
++    }
++
 +    /// Give the file the text `text` itself, not a copy of it: files that have the same text (a
 +    /// cfg context's copies of a file) then hold one allocation between them. An unchanged text
 +    /// is left as it is, so that what read it is not invalidated.
@@ -329,32 +349,39 @@
 +    ) {
 +        match self.files.entry(file_id) {
 +            Entry::Occupied(mut occupied) => {
-+                if **occupied.get().text(db) != *text {
-+                    occupied.get_mut().set_text(db).to(text);
++                if *occupied.get().text(db) != *text {
++                    occupied.get_mut().set_contents(db).to(FileContents::resident(text));
 +                }
-+            }
-+            Entry::Vacant(vacant) => {
-+                let text = FileText::new(db, text, file_id);
-+                vacant.insert(text);
-+            }
-+        };
-+    }
-+
-     pub fn set_file_text_with_durability(
-         &self,
-         db: &mut dyn SourceDatabase,
-@@ -107,7 +192,9 @@
+             }
+             Entry::Vacant(vacant) => {
+-                let text = FileText::new(db, Arc::from(text), file_id);
++                let text = FileText::new(db, FileContents::resident(text), file_id);
+                 vacant.insert(text);
+             }
+         };
+@@ -107,11 +195,18 @@
      ) {
          match self.files.entry(file_id) {
              Entry::Occupied(mut occupied) => {
 -                occupied.get_mut().set_text(db).with_durability(durability).to(Arc::from(text));
-+                if **occupied.get().text(db) != *text {
-+                    occupied.get_mut().set_text(db).with_durability(durability).to(Arc::from(text));
++                if *occupied.get().text(db) != *text {
++                    occupied
++                        .get_mut()
++                        .set_contents(db)
++                        .with_durability(durability)
++                        .to(FileContents::resident(Arc::from(text)));
 +                }
              }
              Entry::Vacant(vacant) => {
-                 let text =
-@@ -138,7 +225,13 @@
+-                let text =
+-                    FileText::builder(Arc::from(text), file_id).durability(durability).new(db);
++                let text = FileText::builder(FileContents::resident(Arc::from(text)), file_id)
++                    .durability(durability)
++                    .new(db);
+                 vacant.insert(text);
+             }
+         };
+@@ -138,7 +233,13 @@
      ) {
          match self.source_roots.entry(source_root_id) {
              Entry::Occupied(mut occupied) => {
@@ -369,7 +396,7 @@
              }
              Entry::Vacant(vacant) => {
                  let source_root =
-@@ -183,11 +276,13 @@
+@@ -183,11 +284,13 @@
      ) {
          match self.file_source_roots.entry(id) {
              Entry::Occupied(mut occupied) => {
@@ -388,7 +415,7 @@
              }
              Entry::Vacant(vacant) => {
                  let file_source_root =
-@@ -200,7 +295,7 @@
+@@ -200,7 +303,7 @@
  
  /// The set of roots for crates.io libraries.
  /// Files in libraries are assumed to never change.
@@ -397,7 +424,7 @@
  pub struct LibraryRoots {
      #[returns(ref)]
      pub roots: FxHashSet<SourceRootId>,
-@@ -208,29 +303,53 @@
+@@ -208,29 +311,60 @@
  
  /// The set of "local" (that is, from the current workspace) roots.
  /// Files in local roots are assumed to change frequently.
@@ -411,17 +438,17 @@
 -#[salsa::input(debug)]
 +/// Persist a file's text as a plain string: `Arc<str>` has no `Deserialize`.
 +fn serialize_file_text<S: serde::Serializer>(
-+    value: &(Arc<str>, vfs::FileId),
++    value: &(FileContents, vfs::FileId),
 +    serializer: S,
 +) -> Result<S::Ok, S::Error> {
-+    serde::Serialize::serialize(&(&*value.0, value.1), serializer)
++    serde::Serialize::serialize(&(&*value.0.get(), value.1), serializer)
 +}
 +
 +fn deserialize_file_text<'de, D: serde::Deserializer<'de>>(
 +    deserializer: D,
-+) -> Result<(Arc<str>, vfs::FileId), D::Error> {
++) -> Result<(FileContents, vfs::FileId), D::Error> {
 +    let (text, file_id): (String, vfs::FileId) = serde::Deserialize::deserialize(deserializer)?;
-+    Ok((Arc::from(text.as_str()), file_id))
++    Ok((FileContents::resident(Arc::from(text.as_str())), file_id))
 +}
 +
 +#[salsa::input(
@@ -429,12 +456,21 @@
 +    persist(serialize = serialize_file_text, deserialize = deserialize_file_text)
 +)]
  pub struct FileText {
-     #[returns(ref)]
-     pub text: Arc<str>,
+-    #[returns(ref)]
+-    pub text: Arc<str>,
++    #[returns(clone)]
++    pub contents: FileContents,
      pub file_id: vfs::FileId,
  }
  
 -#[salsa::input(debug)]
++impl FileText {
++    /// The text of the file, read from the disk if it was dropped from memory.
++    pub fn text(self, db: &dyn salsa::Database) -> Arc<str> {
++        self.contents(db).get()
++    }
++}
++
 +#[salsa::input(debug, persist)]
  pub struct FileSourceRootInput {
      #[returns(copy)]
@@ -455,7 +491,7 @@
  }
  
  #[salsa::db]
-@@ -240,6 +359,10 @@
+@@ -240,6 +374,10 @@
  
      fn set_file_text(&mut self, file_id: vfs::FileId, text: &str);
  
@@ -466,7 +502,7 @@
      fn set_file_text_with_durability(
          &mut self,
          file_id: vfs::FileId,
-@@ -308,6 +431,7 @@
+@@ -308,6 +446,7 @@
  
  /// Crate related data shared by the whole workspace.
  #[derive(Debug, PartialEq, Eq, Hash, Clone)]
@@ -474,7 +510,7 @@
  pub struct CrateWorkspaceData {
      pub target: Result<target::TargetData, target::TargetLoadError>,
      /// Toolchain version used to compile the crate.
-@@ -331,7 +455,7 @@
+@@ -331,7 +470,7 @@
      krate.workspace_data(db).toolchain.as_ref().and_then(|v| ReleaseChannel::from_str(&v.pre).ok())
  }
  
@@ -483,7 +519,7 @@
  struct AllCrates {
      #[returns(clone)]
      crates: std::sync::Arc<[Crate]>,
-@@ -349,11 +473,63 @@
+@@ -349,11 +488,63 @@
          .to(crates.into_iter().collect());
  }
  
@@ -549,7 +585,7 @@
  }
  
  // FIXME: VFS rewrite should allow us to get rid of this wrapper
-@@ -371,8 +547,15 @@
+@@ -371,8 +562,15 @@
          db: &'db dyn SourceDatabase,
          id: InternedSourceRootId<'db>,
      ) -> Box<[Crate]> {
@@ -2088,6 +2124,16 @@
          pub enum $EXPANDER {
              $($kind),*
          }
+@@ -899,7 +899,8 @@
+     };
+ 
+     let text = db.file_text(file_id.file_id(db));
+-    let text = &**text.text(db);
++    let text = text.text(db);
++    let text = &*text;
+ 
+     ExpandResult::ok(quote!(call_site =>#text))
+ }
 --- a/ra_ap_hir_expand-0.0.358/src/files.rs
 +++ ra_ap_hir_expand/src/files.rs
 @@ -18,7 +18,7 @@
@@ -2099,6 +2145,24 @@
  pub struct InFileWrapper<FileKind, T> {
      pub file_id: FileKind,
      pub value: T,
+@@ -77,13 +77,14 @@
+     }
+ 
+     #[inline]
+-    pub fn file_text(self, db: &dyn SourceDatabase) -> &triomphe::Arc<str> {
++    pub fn file_text(self, db: &dyn SourceDatabase) -> triomphe::Arc<str> {
+         db.file_text(self.file_id.file_id(db)).text(db)
+     }
+ 
++    /// The text in the range: a copy, since the file's text may not be in memory.
+     #[inline]
+-    pub fn text(self, db: &dyn SourceDatabase) -> &str {
+-        &self.file_text(db)[self.range]
++    pub fn text(self, db: &dyn SourceDatabase) -> String {
++        self.file_text(db)[self.range].to_owned()
+     }
+ }
+ 
 --- a/ra_ap_hir_expand-0.0.358/src/lib.rs
 +++ ra_ap_hir_expand/src/lib.rs
 @@ -21,6 +21,7 @@
@@ -3759,6 +3823,15 @@
      pub fn new(lru_capacity: Option<u16>) -> RootDatabase {
          let mut db = RootDatabase {
              storage: ManuallyDrop::new(salsa::Storage::default()),
+@@ -265,7 +287,7 @@
+         file_id: InternedFileId<'db>,
+     ) -> Arc<LineIndex> {
+         let text = db.file_text(file_id.id(db)).text(db);
+-        Arc::new(LineIndex::new(text))
++        Arc::new(LineIndex::new(&text))
+     }
+     line_index(db, InternedFileId::new(db, file_id))
+ }
 --- a/ra_ap_intern-0.0.358/Cargo.toml
 +++ ra_ap_intern/Cargo.toml
 @@ -30,6 +30,10 @@
@@ -4278,3 +4351,140 @@
      fn set_file_text_with_durability(
          &mut self,
          file_id: base_db::FileId,
+--- a/ra_ap_base_db-0.0.358/src/file_contents.rs
++++ ra_ap_base_db/src/file_contents.rs
+@@ -0,0 +1,108 @@
++//! A file's text, which can leave memory and be read again from the file it came from.
++//!
++//! A library file (a dependency or the sysroot) never changes during a run, and most of them are read
++//! once and not again, so its text need not stay in memory: it is dropped, and read from the disk when
++//! something asks for it. A file that has no source (one edited in memory, or made up) is always
++//! resident.
++
++use std::path::PathBuf;
++use std::sync::{OnceLock, RwLock};
++
++use triomphe::Arc;
++
++/// The text of a file, resident or on the disk.
++#[derive(Clone)]
++pub struct FileContents(Arc<Inner>);
++
++struct Inner {
++    /// The text, while it is in memory.
++    resident: RwLock<Option<Arc<str>>>,
++    /// Where the text can be read from again, once it is known to be on the disk as it is here.
++    source: OnceLock<PathBuf>,
++    /// How long the text is, to know a file that changed under the run.
++    len: usize,
++}
++
++impl std::fmt::Debug for FileContents {
++    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
++        f.debug_struct("FileContents")
++            .field("len", &self.0.len)
++            .field("resident", &self.is_resident())
++            .finish()
++    }
++}
++
++impl FileContents {
++    /// A text that is in memory, and stays there until it is given a source.
++    pub fn resident(text: Arc<str>) -> Self {
++        Self(Arc::new(Inner {
++            len: text.len(),
++            resident: RwLock::new(Some(text)),
++            source: OnceLock::new(),
++        }))
++    }
++
++    /// The text, read from the disk if it is not in memory.
++    ///
++    /// # Panics
++    ///
++    /// If the text was dropped and the file is not there as it was: a run does not go on with a text
++    /// it cannot trust.
++    pub fn get(&self) -> Arc<str> {
++        if let Ok(resident) = self.0.resident.read()
++            && let Some(text) = resident.as_ref()
++        {
++            return Arc::clone(text);
++        }
++        let Some(path) = self.0.source.get() else {
++            panic!("a file's text was dropped without a source to read it from");
++        };
++        let text = std::fs::read_to_string(path)
++            .unwrap_or_else(|error| panic!("could not read {} again: {error}", path.display()));
++        assert!(
++            text.len() == self.0.len,
++            "{} changed while the analysis ran: it was {} bytes and is {}",
++            path.display(),
++            self.0.len,
++            text.len()
++        );
++        let text: Arc<str> = Arc::from(text);
++        if let Ok(mut resident) = self.0.resident.write() {
++            *resident = Some(Arc::clone(&text));
++        }
++        text
++    }
++
++    /// Whether the text is in memory.
++    pub fn is_resident(&self) -> bool {
++        self.0.resident.read().is_ok_and(|resident| resident.is_some())
++    }
++
++    /// How long the text is.
++    pub fn len(&self) -> usize {
++        self.0.len
++    }
++
++    /// Whether the text is empty.
++    pub fn is_empty(&self) -> bool {
++        self.0.len == 0
++    }
++
++    /// Say where the text can be read from again, and drop it from memory. A text that already has a
++    /// source keeps that one. Returns how many bytes left memory (none if it was not in memory).
++    pub fn make_cold(&self, source: PathBuf) -> usize {
++        let _ = self.0.source.set(source);
++        self.drop_resident()
++    }
++
++    /// Drop the text from memory if it has a source to read it from. Returns how many bytes left.
++    pub fn drop_resident(&self) -> usize {
++        if self.0.source.get().is_none() {
++            return 0;
++        }
++        match self.0.resident.write() {
++            Ok(mut resident) => resident.take().map_or(0, |text| text.len()),
++            Err(_) => 0,
++        }
++    }
++}
+--- a/ra_ap_ide_db-0.0.358/src/search.rs
++++ ra_ap_ide_db/src/search.rs
+@@ -525,7 +525,7 @@
+             .map(|(&file_id, &search_range)| {
+                 let text = db.file_text(file_id.file_id(db)).text(db);
+                 let search_range =
+-                    search_range.unwrap_or_else(|| TextRange::up_to(TextSize::of(&**text)));
++                    search_range.unwrap_or_else(|| TextRange::up_to(TextSize::of(&*text)));
+ 
+                 (text.clone(), file_id, search_range)
+             })
+@@ -1108,12 +1108,12 @@
+                 let file_text = sema.db.file_text(file_id.file_id(self.sema.db));
+                 let text = file_text.text(sema.db);
+                 let search_range =
+-                    search_range.unwrap_or_else(|| TextRange::up_to(TextSize::of(&**text)));
++                    search_range.unwrap_or_else(|| TextRange::up_to(TextSize::of(&*text)));
+ 
+                 let tree = LazyCell::new(|| sema.parse(file_id).syntax().clone());
+                 let finder = &Finder::new("self");
+ 
+-                for offset in Self::match_indices(text, finder, search_range) {
++                for offset in Self::match_indices(&text, finder, search_range) {
+                     for name_ref in Self::find_nodes(sema, "self", file_id, &tree, offset)
+                         .filter_map(ast::NameRef::cast)
+                     {
