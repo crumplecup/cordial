@@ -1,7 +1,8 @@
 //! Architecture module selection and collection use canonical database trees.
 use super::SourceDatabase;
 use crate::loader::database::architecture_queries as queries;
-use crate::loader::database::crate_files::CrateKey;
+use crate::loader::database::crate_files::{CrateKey, FileKey};
+use crate::loader::database::module_queries;
 use crate::{
     CordialResult, CrateTarget, FileSnapshot, ir::SourceErrorArchitecture, loader::DatabaseSource,
 };
@@ -91,10 +92,16 @@ impl SourceDatabase {
         let src = root.join("src");
         let library = src.join("lib.rs");
         let binary = src.join("main.rs");
-        let entry = if library.is_file() {
-            library
-        } else if binary.is_file() {
-            binary
+        // The entry is the file of the crate the database holds.
+        let held = |path: &Path| {
+            self.file_id(path)
+                .ok()
+                .map(|file| (file, path.to_path_buf()))
+        };
+        let entry = if let Some(entry) = held(&library) {
+            entry
+        } else if let Some(entry) = held(&binary) {
+            entry
         } else {
             let mut paths = walkdir::WalkDir::new(&src)
                 .into_iter()
@@ -108,8 +115,24 @@ impl SourceDatabase {
             paths.sort();
             return Ok(paths);
         };
+        // The files the `mod` declarations lead to, followed through what the database holds: a query.
+        // Where it cannot say (a file with syntax errors, a declaration it cannot read) the files
+        // are followed through the syntax, which reports why.
+        let key = module_queries::ModuleTreeKey::new(
+            &self.db,
+            FileKey::new(
+                &self.db,
+                entry.0,
+                entry.1.clone(),
+                src.clone(),
+                root.to_path_buf(),
+            ),
+        );
+        if let Some(files) = module_queries::module_tree(&self.db, key) {
+            return Ok(files.clone());
+        }
         let mut files = BTreeSet::new();
-        self.architecture_modules(&entry, root, &mut files)?;
+        self.architecture_modules(&entry.1, root, &mut files)?;
         Ok(files.into_iter().collect())
     }
     #[tracing::instrument(level = "trace", skip(self, files, path), err(level = "warn"))]

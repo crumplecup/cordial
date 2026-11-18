@@ -43,6 +43,8 @@ mod identity;
 mod islands;
 mod item_key;
 mod items;
+#[cfg(feature = "internal_error_chain")]
+mod module_queries;
 mod options;
 #[cfg(feature = "panics")]
 mod panic_queries;

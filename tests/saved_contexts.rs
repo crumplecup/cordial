@@ -91,9 +91,10 @@ fn a_restored_run_takes_the_contexts_up_again_and_computes_nothing_for_them() ->
         })
         .collect();
     // The joins over a crate's files are not saved; they are rebuilt from the saved parts.
-    const JOINS: [&str; 5] = [
+    const JOINS: [&str; 6] = [
         "antipattern_crate_facts:",
         "architecture_catalog:",
+        "module_tree:",
         "panic_graph:",
         "panic_reachable:",
         "signature_index:",
@@ -261,9 +262,10 @@ fn a_restored_run_reuses_what_several_contexts_over_dependent_crates_computed() 
         run_many(root.path(), &saved)?,
         "the second run starts from the first's state"
     );
-    const JOINS: [&str; 5] = [
+    const JOINS: [&str; 6] = [
         "antipattern_crate_facts:",
         "architecture_catalog:",
+        "module_tree:",
         "panic_graph:",
         "panic_reachable:",
         "signature_index:",
@@ -516,7 +518,7 @@ fn a_restored_run_executes_few_rust_analyzer_queries() -> Result<()> {
     // What a restored run still asks rust-analyzer for is what it takes to name each function
     // (parse, item trees, attributes, macro expansion) so its saved evidence can be found: the
     // steps below. Anything else asking for analysis in a restored run is new work to account for.
-    const NAMING: [&str; 21] = [
+    const NAMING: [&str; 22] = [
         "local_functions",
         "derived_site",
         "inner_",
@@ -529,10 +531,12 @@ fn a_restored_run_executes_few_rust_analyzer_queries() -> Result<()> {
         "places_in",
         // What the ordinary build's crates declare, listed once for all the contexts.
         "places_declared_in",
-        // One each: the joins over a crate's files, rebuilt from the saved parts, the source
-        // captured for the run, and the warm-up's own question of the saved evidence.
+        // One each: the joins over a crate's files, rebuilt from the saved parts (the files its
+        // `mod` declarations lead to among them), the source captured for the run, and the
+        // warm-up's own question of the saved evidence.
         "antipattern_crate_facts",
         "architecture_catalog",
+        "module_tree",
         "captured_source",
         "panic_graph",
         "panic_reachable",
@@ -546,8 +550,9 @@ fn a_restored_run_executes_few_rust_analyzer_queries() -> Result<()> {
         // The gates of a file, read from its text once for the original and every copy of it.
         "gates_in",
         // The line index of one file: the first step to read a file's text computes it, which was
-        // `captured_source` while the antipatterns of a restored run were read the direct way.
-        "error_source",
+        // `captured_source` while the antipatterns of a restored run were read the direct way, and
+        // `error_source` while the files of the crate were found by reading their syntax.
+        "source_of",
     ];
     let others: Vec<_> = by_step
         .keys()

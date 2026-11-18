@@ -184,6 +184,8 @@ impl SourceDatabase {
                 };
                 if visit.architecture {
                     let _ = super::architecture_queries::architecture_file(db, key());
+                    // Where the crate's `mod` declarations lead, read once with the rest.
+                    let _ = super::module_queries::module_declarations_file(db, key());
                 }
                 if visit.signatures {
                     let _ = super::signature_queries::signature_file(db, key());

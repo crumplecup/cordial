@@ -1,6 +1,6 @@
 # One pass, one parse
 
-Status: **Active**. Design and first slices; nothing is changed in the code yet.
+Status: **Active**. Slices 1 to 3 are in the code; what is left is listed at the end.
 
 ## The problem
 
@@ -89,10 +89,40 @@ projection queries recover the downstream cut-off, not the recomputation.
 - The IR it produces equals the IR of today's, on the specimens and on elicit_doc.
 - The edit battery of `tests/edit_reuse.rs` passes: an edit still reaches only what read it.
 
-## Slices
+## What was built
 
-1. The `scanned` family (eleven collectors with the same carrier) as `Extracted`, with the
-   projection queries, and the priming pass; the acceptance test on the 220-file crate.
-2. `tracing_inventory_file`, `architecture_file`, `signature_file`, `path_inclusion_file`.
-3. Panics and antipatterns: the filter-over-facts split.
-4. The direct sweeps.
+1. **`extract_file`** runs the eight collectors that read only a file's tree (error sites, chains,
+   types and apply; observability; verus; visibility; the policy part) on one carrier from one parse.
+   Their queries are projections over it with the signatures they had, so the steps are unchanged.
+2. **The priming pass** (`file_scans.rs`) asks, for each file, every first-visit query that applies to
+   it, together on one worker so that they share the parse, in chunks with an eviction between them
+   (`SemanticCargoOptions::with_evicts_between_chunks`). It asks the saved queries, not the extraction,
+   so a restored run computes nothing. Compliance, the panic proofs and candidates, the antipattern
+   facts, contracts and pending candidates, the architecture and signature parts and the module
+   declarations are asked there too, and the tracing inventories from the step that has the outline.
+3. **The second visits are gone.** Panics keep each site with the function it is in, final records
+   and nested scans in order (`PanicCandidate`), and the reachable set of the crate's proofs is
+   applied afterwards, de-duplication included, to the saved candidates. Antipatterns keep, for a site
+   in a trait impl, the trait, and for a static field the traits its references name and the owner's
+   name (`PendingCandidate`); the crate's traits, constants, runtime and error types are applied
+   afterwards.
+4. **Module discovery is a query.** What a `mod` declaration may lead to is read from the syntax
+   (`ModuleTarget`, saved per file); whether a file exists is answered from the file set of the source
+   root of the declaring file, which is an input of the database; `module_tree` follows the
+   declarations from the entry file. Nothing in it reads the file system. A new `.rs` file the database
+   never loaded is a reload in `sync_from_disk`, so the file set does not change within a session.
+5. **The parse-error validation** of the panics step uses rust-analyzer's `parse_errors` firewall query.
+
+The acceptance is a test (`tests/one_parse.rs`), with a ratchet that names any step that parses a file
+for a collector (none, on the specimen) and a control that fails when the pass is skipped.
+
+## What is left
+
+- The sweeps that read the tree without a query: `cli_layout`, and the fallbacks that run when a query
+  declines a file (`*_direct`, `error_signatures`, `error_architecture`'s direct path). The specimen's
+  features do not reach `cli_layout`, so the ratchet does not name it.
+- The listing of files by walking directories (`scanned_files`, `input_paths`, `panic_inputs`, the
+  entry-less branch of `error_module_files`) is still a file-system read; it could be the source
+  root's file set filtered by path, as module discovery now is.
+- The leaf and context passes copy files per context and have their own sweeps.
+- Not yet measured on elicit_doc or on cordial.
