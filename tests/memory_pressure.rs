@@ -36,6 +36,11 @@ struct Chunks {
     waited: u64,
     /// How many times it evicted between chunks.
     evictions: u64,
+    /// The caps on what the queries that keep the most recently used keep, summed over those
+    /// evictions (so one more than a cap's worth for each is what each eviction applied).
+    caps: u64,
+    /// How many of those evictions there were (the run's own, not each query's).
+    eviction_events: u64,
 }
 
 fn priming_under(pressure: Pressure) -> Result<Chunks> {
@@ -81,6 +86,8 @@ fn priming_under(pressure: Pressure) -> Result<Chunks> {
         taken: sum(&|key| key == "prime.events"),
         waited: sum(&|key| key == "prime.remaining"),
         evictions: sum(&|key| key.starts_with("eviction.prime_chunk.") && key.ends_with(".events")),
+        caps: sum(&|key| key == "eviction.prime_chunk.cap"),
+        eviction_events: sum(&|key| key == "eviction.prime_chunk.events"),
     })
 }
 
@@ -105,6 +112,14 @@ fn under_pressure_the_priming_takes_smaller_chunks_and_evicts_between_them() -> 
         chunks.taken
     );
     assert!(chunks.evictions > 0, "the run evicted between chunks");
+    // Each eviction kept no more than the pressure's cap of the trees and expansions, and not what
+    // rust-analyzer marks them for.
+    assert!(chunks.eviction_events > 0);
+    assert_eq!(
+        chunks.caps,
+        chunks.eviction_events * 16,
+        "every eviction under pressure applied the pressure's cap"
+    );
     Ok(())
 }
 

@@ -423,8 +423,7 @@ impl<C: Configuration> Memo<C> {
                 return;
             }
             store.put(key, &bytes);
-            counters.written.fetch_add(1, Relaxed);
-            counters.bytes.fetch_add(bytes.len() as u64, Relaxed);
+            counters.wrote(C::DEBUG_NAME, bytes.len() as u64);
             self.spilled = Some(Box::new(Spilled {
                 key,
                 restored: std::sync::OnceLock::new(),

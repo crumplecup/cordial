@@ -50,7 +50,7 @@ pub(crate) fn spill_store() -> Option<Arc<dyn SpillStore>> {
 }
 
 /// What a spill did.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct SpillReport {
     /// Values written to the store and dropped from memory.
     pub written: u64,
@@ -58,23 +58,64 @@ pub struct SpillReport {
     pub bytes: u64,
     /// Values that had been read back and were dropped again: the store already held them.
     pub dropped_again: u64,
+    /// What each query wrote: its name, how many values, and their bytes, the largest first.
+    pub by_query: Vec<SpilledQuery>,
+}
+
+/// What one query wrote in a spill.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SpilledQuery {
+    /// The query's name.
+    pub query: &'static str,
+    /// How many values.
+    pub values: u64,
+    /// Their encoded bytes.
+    pub bytes: u64,
 }
 
 /// A spill's counts, added to by the ingredients (which are visited one at a time).
-#[derive(Default)]
 #[doc(hidden)]
+#[derive(Default)]
 pub struct SpillCounters {
     pub(crate) written: AtomicU64,
     pub(crate) bytes: AtomicU64,
     pub(crate) dropped_again: AtomicU64,
+    by_query: std::sync::Mutex<std::collections::BTreeMap<&'static str, (u64, u64)>>,
 }
 
 impl SpillCounters {
+    /// Count a value of `query` written, `bytes` long.
+    pub(crate) fn wrote(&self, query: &'static str, bytes: u64) {
+        self.written.fetch_add(1, Ordering::Relaxed);
+        self.bytes.fetch_add(bytes, Ordering::Relaxed);
+        if let Ok(mut by_query) = self.by_query.lock() {
+            let entry = by_query.entry(query).or_default();
+            entry.0 += 1;
+            entry.1 += bytes;
+        }
+    }
+
     pub(crate) fn report(&self) -> SpillReport {
+        let mut by_query: Vec<SpilledQuery> = self
+            .by_query
+            .lock()
+            .map(|by_query| {
+                by_query
+                    .iter()
+                    .map(|(query, (values, bytes))| SpilledQuery {
+                        query,
+                        values: *values,
+                        bytes: *bytes,
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        by_query.sort_by_key(|spilled| std::cmp::Reverse(spilled.bytes));
         SpillReport {
             written: self.written.load(Ordering::Relaxed),
             bytes: self.bytes.load(Ordering::Relaxed),
             dropped_again: self.dropped_again.load(Ordering::Relaxed),
+            by_query,
         }
     }
 }

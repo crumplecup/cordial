@@ -86,6 +86,10 @@ fn read_twice(between: Between) -> (usize, usize, usize, Vec<String>, Db, Arc<Co
     if matches!(between, Between::Spill) {
         let report = db.spill_persisted();
         assert_eq!(report.written, KEYS as u64, "every value was written");
+        assert_eq!(report.by_query.len(), 1, "of one query");
+        assert_eq!(report.by_query[0].query, "described");
+        assert_eq!(report.by_query[0].values, KEYS as u64);
+        assert_eq!(report.by_query[0].bytes, report.bytes);
     }
     let values = read(&db);
     let executed = EXECUTED.load(Ordering::SeqCst) - before;
