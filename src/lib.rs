@@ -286,10 +286,10 @@ pub use etiquettes::quality_etiquettes;
 pub use etiquettes::{AMENABLE_EXT_JIFF_ETIQUETTE, ExtReporter};
 pub use live_status::{LiveLayer, LiveStatus, live_filter};
 pub use memory_limit::{
-    Budget, DEFAULT_MEMORY_LIMIT, MEMORY_LIMIT_EXIT, MemoryLimit, Pressure, budget_of, enforce,
-    exceeds, feel_pressure, feel_pressure_at, judge, judge_level, nearing, parse_limit,
+    Budget, DEFAULT_MEMORY_LIMIT, MEMORY_LIMIT_EXIT, MemoryLimit, Pressure, WORKER_KIB, budget_of,
+    enforce, exceeds, feel_pressure, feel_pressure_at, judge, judge_level, nearing, parse_limit,
     parse_meminfo, parse_size, pressure, pressured, relieved, resolve as resolve_memory_limit,
-    resolve_with as resolve_memory_limit_with,
+    resolve_with as resolve_memory_limit_with, workers_within,
 };
 #[cfg(all(feature = "rustdoc", feature = "impl_coverage"))]
 pub use plugin::classify_elicit_complete_gap;

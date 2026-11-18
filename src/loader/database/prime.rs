@@ -176,11 +176,16 @@ impl SourceDatabase {
         one: &(impl Fn(&RootDatabase, &T) + Sync),
         may_stop: bool,
     ) -> usize {
-        let workers = workers_at(
-            std::thread::available_parallelism().map_or(1, usize::from),
-            crate::memory_limit::pressure(),
-        )
-        .min(functions.len().max(1));
+        let available = std::thread::available_parallelism().map_or(1, usize::from);
+        // The pool is sized before the chunk starts, by what fits below the second rung: reacting
+        // when the rungs are crossed is too late, with every worker already in the middle of a
+        // function.
+        let fitting = crate::memory_limit::headroom_kib().map_or(available, |headroom| {
+            crate::workers_within(headroom, available)
+        });
+        let workers = workers_at(available, crate::memory_limit::pressure())
+            .min(fitting)
+            .min(functions.len().max(1));
         tracing::debug!(
             target: "cordial::semantic::priming",
             functions = functions.len(),

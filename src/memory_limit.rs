@@ -89,6 +89,35 @@ pub fn judge_level(was: Pressure, resident_kib: u64, limit: u64) -> Pressure {
     Pressure::from_bits(u8::try_from(level).unwrap_or(3))
 }
 
+/// What one worker of the priming holds while it works, in kibibytes: a syntax tree, expansions and
+/// an inference, at once. Taken from a run that went from the first rung to being stopped in under
+/// four seconds, with eight workers, as the memory it grew by (about 260 MB) divided among them.
+pub const WORKER_KIB: u64 = 32 * 1024;
+
+/// How many workers fit in `headroom_kib` of memory below the second rung's line: as many as
+/// [`WORKER_KIB`] goes into it, and at least one, since a run with none would not finish. `available`
+/// is how many there could be with all the memory in the world.
+#[instrument(level = "trace")]
+pub fn workers_within(headroom_kib: i64, available: usize) -> usize {
+    let fitting = u64::try_from(headroom_kib).unwrap_or(0) / WORKER_KIB;
+    usize::try_from(fitting)
+        .unwrap_or(usize::MAX)
+        .clamp(1, available.max(1))
+}
+
+/// The memory left below the second rung's line, in kibibytes (negative when the run is past it),
+/// or `None` when the run has no limit or its memory cannot be read.
+#[instrument(level = "trace")]
+pub fn headroom_kib() -> Option<i64> {
+    let limit = LIMIT_BYTES.load(Ordering::Relaxed);
+    if limit == 0 {
+        return None;
+    }
+    let resident = i64::try_from(crate::process_memory::sample()?.resident_kib()).ok()?;
+    let line = i64::try_from(limit / 1024 * BEGINS_AT[1] / 100).ok()?;
+    Some(line - resident)
+}
+
 /// The rung the watchdog last put the run on.
 static LEVEL: AtomicU8 = AtomicU8::new(0);
 
@@ -419,5 +448,7 @@ fn stop(resident_kib: u64, budget: &Budget) -> ! {
         status.line()
     );
     crate::run_metrics::write_ended("memory limit", &status.phase());
+    // The profile of the run that was stopped is the one that says where its memory went.
+    crate::profiling::finish();
     std::process::exit(MEMORY_LIMIT_EXIT)
 }

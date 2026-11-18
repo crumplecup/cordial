@@ -109,7 +109,10 @@ impl Cli {
                         .join(format!("cordial-hotpath-{}.json", std::process::id()))
                 });
             tracing::info!(path = %path.display(), "hotpath report");
-            crate::profiling::guard("cordial", path)
+            // Held where the memory watchdog can write the report too: it exits the process, which
+            // does not drop what a function holds.
+            crate::profiling::hold(crate::profiling::guard("cordial", path));
+            crate::profiling::Held
         };
         #[cfg(feature = "quality")]
         let json_worklist = matches!(

@@ -7,9 +7,9 @@ mod support {
 
 use clap::Parser;
 use cordial::{
-    Cli, DEFAULT_MEMORY_LIMIT, MEMORY_LIMIT_EXIT, MemoryLimit, Pressure, budget_of, exceeds, judge,
-    judge_level, load_cordial_config, nearing, parse_limit, parse_meminfo, parse_size,
-    resolve_memory_limit_with,
+    Cli, DEFAULT_MEMORY_LIMIT, MEMORY_LIMIT_EXIT, MemoryLimit, Pressure, WORKER_KIB, budget_of,
+    exceeds, judge, judge_level, load_cordial_config, nearing, parse_limit, parse_meminfo,
+    parse_size, resolve_memory_limit_with, workers_within,
 };
 use miette::{IntoDiagnostic, Result};
 
@@ -150,6 +150,29 @@ fn a_run_comes_down_a_rung_only_when_it_is_well_below_it() {
     assert_eq!(
         judge_level(Pressure::Severe, kib_at(10), limit),
         Pressure::None
+    );
+}
+
+#[test]
+fn the_workers_are_as_many_as_fit_below_the_second_rung_and_at_least_one() {
+    let kib = |workers: u64| i64::try_from(workers * WORKER_KIB).unwrap_or(i64::MAX);
+    assert_eq!(workers_within(kib(5), 8), 5, "as many as fit");
+    assert_eq!(
+        workers_within(kib(5) + 1, 8),
+        5,
+        "a part of one does not make one"
+    );
+    assert_eq!(workers_within(kib(100), 8), 8, "never more than there are");
+    assert_eq!(
+        workers_within(kib(1) - 1, 8),
+        1,
+        "a run with none would not finish"
+    );
+    assert_eq!(workers_within(-500_000, 8), 1, "past the line, one");
+    assert_eq!(
+        workers_within(kib(3), 0),
+        1,
+        "and one if nothing was available to count"
     );
 }
 
