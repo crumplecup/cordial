@@ -84,7 +84,10 @@ impl SourceDatabase {
     }
     #[tracing::instrument(level = "debug", skip(self), err(level = "warn"))]
     #[hotpath::measure]
-    pub(super) fn error_module_files(&self, root: &Path) -> CordialResult<Vec<PathBuf>> {
+    pub(in crate::loader::database) fn error_module_files(
+        &self,
+        root: &Path,
+    ) -> CordialResult<Vec<PathBuf>> {
         let src = root.join("src");
         let library = src.join("lib.rs");
         let binary = src.join("main.rs");

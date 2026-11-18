@@ -608,6 +608,9 @@ pub(super) fn prime_extraction(
     path: &std::path::Path,
     root: &std::path::Path,
 ) {
+    // The errors of the parse, which the steps check for each file, so that they need not hold the
+    // tree for it.
+    let _ = super::edition::edition_of(db, file).parse_errors(db);
     // Through what each collector saves, and not the extraction, which is not saved: what a
     // restored run has is valid, and nothing is computed; where it is not, the first to ask computes
     // the extraction and the others read it.
@@ -648,4 +651,27 @@ pub(super) fn prime_extraction(
         feature = "cli_layout"
     ))]
     let _ = policy_file(db, key);
+}
+
+#[cfg(feature = "internal_error_chain")]
+/// Compute what the compliance collector finds in one file, if it is not known. Its key has the crate's
+/// name and whether it is a proc-macro crate, which the other collectors' keys do not.
+pub(super) fn prime_compliance(
+    db: &RootDatabase,
+    file: ra_ap_vfs::FileId,
+    path: &std::path::Path,
+    root: &std::path::Path,
+    name: &str,
+    proc_macro: bool,
+) {
+    let key = ScanKey::new(
+        db,
+        file,
+        path.to_path_buf(),
+        scan_tree(root, path),
+        root.to_path_buf(),
+        name.to_owned(),
+        proc_macro,
+    );
+    let _ = error_compliance_file(db, key);
 }

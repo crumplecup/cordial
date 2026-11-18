@@ -538,10 +538,11 @@ fn a_restored_run_executes_few_rust_analyzer_queries() -> Result<()> {
         "panic_reachable",
         "persisted_evidence",
         "signature_index",
-        // A file's edition, and the one file the panic projection parses: one query each. Neither
-        // builds a definition map, as asking a file's module for its crate did.
+        // A file's edition, and the one file whose parse errors the priming asks for (the panic
+        // projection did, and then found them ready): one query each. Neither builds a definition
+        // map, as asking a file's module for its crate did.
         "edition_of",
-        "project_panics",
+        "evaluate",
         // The gates of a file, read from its text once for the original and every copy of it.
         "gates_in",
         // The line index of one file: the first step to read a file's text computes it, which was

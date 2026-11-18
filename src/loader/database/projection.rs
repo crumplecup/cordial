@@ -113,7 +113,7 @@ impl SourceDatabase {
             feature = "derives",
             feature = "cli_layout"
         ))]
-        self.prime_file_scans(target.crate_root())?;
+        self.prime_file_scans(target)?;
         let ordinary_watch = crate::process_memory::Watch::start("ordinary projection".to_owned());
         let (mut graph, outline) = attach_db(&self.db, || {
             self.project_attached(
@@ -158,6 +158,7 @@ impl SourceDatabase {
         self.project_contexts(paths, outline.functions(), graph)?;
         #[cfg(feature = "tracing")]
         {
+            self.prime_tracing_inventories(outline);
             self.project_tracing_inventories(outline, graph)?;
             self.project_leaves(graph)?;
             self.project_observability_calls(outline, graph)?;

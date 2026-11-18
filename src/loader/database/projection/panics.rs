@@ -21,8 +21,12 @@ impl SourceDatabase {
     ) -> CordialResult<SourcePanics> {
         let paths = self.panic_inputs(root)?;
         for (_, path) in &paths {
+            // The errors alone, which rust-analyzer keeps when it lets the tree go.
             let edition = super::super::edition::edition_of(&self.db, self.file_id(path)?);
-            if let Some(error) = edition.parse(&self.db).errors().first() {
+            if let Some(error) = edition
+                .parse_errors(&self.db)
+                .and_then(|errors| errors.first())
+            {
                 return Err(anyhow::Error::new(error.clone()).into());
             }
         }
@@ -101,7 +105,10 @@ impl SourceDatabase {
     /// The files the panic policy reads, with the scan tree each was found under.
     #[tracing::instrument(level = "debug", skip(self), err(level = "warn"))]
     #[hotpath::measure]
-    fn panic_inputs(&self, root: &Path) -> CordialResult<Vec<(PathBuf, PathBuf)>> {
+    pub(in crate::loader::database) fn panic_inputs(
+        &self,
+        root: &Path,
+    ) -> CordialResult<Vec<(PathBuf, PathBuf)>> {
         let mut paths = Vec::new();
         for tree in crate::loader::quality_scan_trees(root) {
             for entry in walkdir::WalkDir::new(&tree).sort_by_file_name() {

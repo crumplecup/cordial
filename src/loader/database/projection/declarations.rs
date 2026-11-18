@@ -82,6 +82,27 @@ impl SourceDatabase {
 
     /// Assemble each file's tracing inventory from the facts now in `graph`: a
     /// function's ordinary facts, or those of the first context that resolved it.
+    /// Compute each module file's tracing inventory, a chunk of files at a time, so that the step
+    /// that merges them reads what the queries saved and does not hold the tree of each file.
+    #[cfg(feature = "tracing")]
+    #[tracing::instrument(level = "debug", skip_all)]
+    #[hotpath::measure(impl_type = "SourceDatabase")]
+    pub(super) fn prime_tracing_inventories(&mut self, outline: &Outline) {
+        let files: Vec<(ra_ap_vfs::FileId, std::path::PathBuf)> = outline
+            .modules()
+            .iter()
+            .filter_map(|(path, _)| {
+                self.file_id(path)
+                    .ok()
+                    .map(|file| (file, path.to_path_buf()))
+            })
+            .collect();
+        self.run_in_chunks("tracing inventories", &files, &|db, (file, path)| {
+            let key = queries::FileKey::new(db, *file, path.clone());
+            let _ = tracing_queries::tracing_inventory_file(db, key);
+        });
+    }
+
     #[cfg(feature = "tracing")]
     #[tracing::instrument(level = "debug", skip_all, err(level = "warn"))]
     #[hotpath::measure(impl_type = "SourceDatabase")]
@@ -95,7 +116,6 @@ impl SourceDatabase {
             for (path, module) in outline.modules() {
                 let file = self.file_id(path)?;
                 let key = queries::FileKey::new(&self.db, file, path.clone());
-                let (_, source) = self.declaration_source(&sema, path)?;
                 let Some(facts) = queries::file_facts(&self.db, key) else {
                     return Err(crate::CordialError::workspace_source_facts_missing(
                         "file facts",
@@ -130,6 +150,9 @@ impl SourceDatabase {
                     // A context-only function, or a file the query declined: read
                     // it with the facts the graph holds, which reports why.
                     _ => {
+                        // Only here is the file's syntax read: what the query found is read
+                        // without it.
+                        let (_, source) = self.declaration_source(&sema, path)?;
                         let mut semantics = std::collections::HashMap::new();
                         for (range, node) in &ranges {
                             let facts = match crate::IrView::semantic_function(graph, *node)? {

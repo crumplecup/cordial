@@ -21,11 +21,25 @@ use tracing_subscriber::layer::SubscriberExt;
 
 const FILES: usize = 160;
 
+/// What the metrics say of the parses of a file in one projection.
+struct Parses {
+    /// All of them.
+    all: u64,
+    /// Those that ran for the extraction of the collectors.
+    by_extraction: u64,
+    /// Those that ran when a collector's query asked for it, and not the priming.
+    in_a_query: u64,
+    /// Those that ran for a step of the projection, by the step.
+    by_step: std::collections::BTreeMap<String, u64>,
+    /// The metrics they were read from.
+    said: Vec<String>,
+}
+
 /// A projection of the crate with eviction on, and what the metrics say of the parses of a file:
 /// all of them, those that ran for the extraction, and those that did when a collector's query asked
 /// for it (the chain then has no `evaluate` in it: when the priming runs it, a worker's `evaluate` is
 /// above the extraction).
-fn parses(skip_priming: bool) -> Result<(u64, u64, u64, Vec<String>)> {
+fn parses(skip_priming: bool) -> Result<Parses> {
     cordial::init_tracing();
     let root = crate_of_large_files("onepass", FILES, 1500)?;
     let state = tempfile::tempdir().into_diagnostic()?;
@@ -68,18 +82,51 @@ fn parses(skip_priming: bool) -> Result<(u64, u64, u64, Vec<String>)> {
         .filter(|(key, _)| key.starts_with("steps.") && key.ends_with("EditionedFileId::parse_"))
         .map(|(key, count)| format!("{key}={count}"))
         .collect();
-    Ok((
-        counted(&|_| true),
-        counted(&|key| key.contains("extract_file")),
-        counted(&|key| key.contains("extract_file <") && !key.contains("evaluate")),
-        all,
-    ))
+    // The step of the run that asked for each parse that ran for one of cordial's steps: the
+    // innermost span of a projection that is not the frame they all run in.
+    const FRAME: [&str; 6] = [
+        "project",
+        "project_selection",
+        "project_attached",
+        "project_after_ordinary",
+        "project_contexts",
+        "project_declarations",
+    ];
+    let mut by_step: std::collections::BTreeMap<String, u64> = std::collections::BTreeMap::new();
+    for (key, count) in metrics.values() {
+        let Some(chain) = key
+            .strip_prefix("steps.")
+            .and_then(|rest| rest.strip_suffix("> EditionedFileId::parse_"))
+        else {
+            continue;
+        };
+        let step = chain
+            .split(" < ")
+            .map(str::trim)
+            .find(|span| span.starts_with("project_") && !FRAME.contains(span));
+        if let Some(step) = step {
+            *by_step.entry(step.to_owned()).or_default() += count;
+        }
+    }
+    Ok(Parses {
+        all: counted(&|_| true),
+        by_extraction: counted(&|key| key.contains("extract_file")),
+        in_a_query: counted(&|key| key.contains("extract_file <") && !key.contains("evaluate")),
+        by_step,
+        said: all,
+    })
 }
 
 /// With the pass, the steps find what the collectors found: no parse runs for one inside a step.
 #[test]
 fn the_steps_never_parse_a_file_for_the_collectors_that_read_only_its_tree() -> Result<()> {
-    let (all, by_extraction, in_a_step, said) = parses(false)?;
+    let Parses {
+        all,
+        by_extraction,
+        in_a_query: in_a_step,
+        by_step,
+        said,
+    } = parses(false)?;
     // That the metrics see the parses at all, or a zero below says nothing.
     assert!(
         all >= u64::try_from(FILES).unwrap_or(0),
@@ -89,13 +136,25 @@ fn the_steps_never_parse_a_file_for_the_collectors_that_read_only_its_tree() -> 
         in_a_step, 0,
         "{in_a_step} parses ran for a collector's query ({by_extraction} for the extraction in all)\n{said:#?}"
     );
+    // The steps that still parse a file, which the passes to come take away one by one: the list
+    // is exact, so that a step that starts to parse again, or stops, is told.
+    let remaining: Vec<&str> = by_step.keys().map(String::as_str).collect();
+    let asked: Vec<&String> = said.iter().filter(|key| key.contains("project_")).collect();
+    // Panics read the file's tree again under the crate's reachable set (`panic_scan_file`), which the
+    // pass does not yet take away; the antipatterns' second visit will show here once the panics one
+    // is gone and the files are asked for in the order of the steps.
+    assert_eq!(remaining, vec!["project_panics"], "{by_step:?}\n{asked:#?}");
     Ok(())
 }
 
 /// Without the pass, the first step that asks computes it, and parses: the check above can fail.
 #[test]
 fn without_the_pass_the_first_step_that_asks_parses() -> Result<()> {
-    let (_, _, in_a_step, said) = parses(true)?;
+    let Parses {
+        in_a_query: in_a_step,
+        said,
+        ..
+    } = parses(true)?;
     assert!(
         in_a_step > 0,
         "no parse ran for a collector's query either way\n{said:#?}"
