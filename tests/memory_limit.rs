@@ -10,7 +10,7 @@ use cordial::{
     Backoff, Cli, DEFAULT_MEMORY_LIMIT, FIRST_GROWTH_KIB, FUTILE_KIB, MEMORY_LIMIT_EXIT,
     MemoryLimit, Pressure, WORKER_KIB, budget_of, exceeds, functions_within, judge, judge_level,
     load_cordial_config, nearing, parse_limit, parse_meminfo, parse_size,
-    resolve_memory_limit_with, workers_within,
+    resolve_memory_limit_with, resolve_memory_target, workers_within,
 };
 use miette::{IntoDiagnostic, Result};
 
@@ -257,6 +257,64 @@ fn a_chunk_takes_as_many_functions_as_half_the_headroom_holds_at_the_growth_seen
         functions_within(mib(400), 0, 134),
         134,
         "a growth of nothing is not a limit"
+    );
+}
+
+#[test]
+fn the_ladder_works_to_a_target_below_the_limit_and_the_run_is_stopped_at_the_limit() {
+    let available = Some(16 * GIB);
+    let limit = resolve_memory_limit_with(None, None, available);
+    assert_eq!(
+        limit.ladder_bytes(),
+        limit.bytes(),
+        "no target: the ladder works to the limit"
+    );
+
+    let target = MemoryLimit::Bytes(1536 << 20);
+    let low = resolve_memory_target(limit.clone(), Some(target), None, available);
+    assert_eq!(low.bytes(), limit.bytes(), "the limit is as it was");
+    assert_eq!(
+        low.ladder_bytes(),
+        1536 << 20,
+        "the ladder works to the target"
+    );
+
+    let configured = resolve_memory_target(limit.clone(), None, Some("2G"), available);
+    assert_eq!(
+        configured.ladder_bytes(),
+        2 * GIB,
+        "cordial.toml gives it too"
+    );
+
+    let above = resolve_memory_target(
+        limit.clone(),
+        Some(MemoryLimit::Bytes(64 * GIB)),
+        None,
+        available,
+    );
+    assert_eq!(
+        above.ladder_bytes(),
+        limit.bytes(),
+        "a target above the limit is the limit"
+    );
+
+    let share = resolve_memory_target(
+        limit.clone(),
+        Some(MemoryLimit::Percent(10.0)),
+        None,
+        available,
+    );
+    assert_eq!(share.bytes(), limit.bytes());
+    assert!(
+        share.ladder_bytes() < limit.bytes() && share.ladder_bytes() > 0,
+        "a share works too"
+    );
+
+    let none = resolve_memory_target(limit.clone(), Some(MemoryLimit::Bytes(0)), None, available);
+    assert_eq!(
+        none.ladder_bytes(),
+        limit.bytes(),
+        "a target of none is no target"
     );
 }
 

@@ -64,6 +64,11 @@ pub struct CordialConfig {
     /// `--memory-limit` flag and `CORDIAL_MEMORY_LIMIT` take precedence; the default is `75%`.
     #[serde(default)]
     memory_limit: Option<String>,
+    /// What the pressure ladder works to when that is less than `memory_limit`, in the same
+    /// forms; the run is stopped at the limit and not at this. The `--memory-target` flag and
+    /// `CORDIAL_MEMORY_TARGET` take precedence; the default is the limit.
+    #[serde(default)]
+    memory_target: Option<String>,
     /// Save what is computed for a function as depending on a fingerprint of its crate's
     /// definition map, so that an edit to a function's body makes the next run compute the
     /// functions of that file and not of the whole crate. A run that computed anything then

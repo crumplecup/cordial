@@ -240,6 +240,8 @@ pub enum MemoryLimit {
 pub struct Budget {
     bytes: u64,
     described: String,
+    /// What the pressure ladder works to, when that is less than the limit (zero: the limit).
+    target: u64,
 }
 
 impl Budget {
@@ -247,6 +249,26 @@ impl Budget {
     #[must_use]
     pub fn bytes(&self) -> u64 {
         self.bytes
+    }
+
+    /// What the pressure ladder works to, in bytes: the target if one was set and is below the
+    /// limit, else the limit. The run is stopped at the limit and not at the target, so a run can
+    /// be pressed hard at a small target and its behaviour seen all the way to the limit.
+    #[must_use]
+    pub fn ladder_bytes(&self) -> u64 {
+        if self.target == 0 || (self.bytes != 0 && self.target >= self.bytes) {
+            self.bytes
+        } else {
+            self.target
+        }
+    }
+
+    /// This budget with the ladder working to `target` (see [`Budget::ladder_bytes`]); a target
+    /// that is no limit leaves it as it was.
+    #[must_use]
+    pub fn with_target(mut self, target: &Budget) -> Self {
+        self.target = target.bytes;
+        self
     }
 }
 
@@ -302,7 +324,7 @@ pub fn parse_meminfo(meminfo: &str) -> Option<u64> {
 /// The memory available now, where the platform says.
 #[instrument(level = "debug")]
 #[hotpath::measure]
-fn available_memory() -> Option<u64> {
+pub fn available_memory() -> Option<u64> {
     parse_meminfo(&std::fs::read_to_string("/proc/meminfo").ok()?)
 }
 
@@ -314,10 +336,12 @@ pub fn budget_of(limit: MemoryLimit, available: Option<u64>) -> Budget {
         MemoryLimit::Bytes(0) | MemoryLimit::Percent(0.0) => Budget {
             bytes: 0,
             described: "no limit".to_owned(),
+            target: 0,
         },
         MemoryLimit::Bytes(bytes) => Budget {
             bytes,
             described: gibibytes(bytes),
+            target: 0,
         },
         MemoryLimit::Percent(percent) => match available {
             #[expect(
@@ -335,6 +359,7 @@ pub fn budget_of(limit: MemoryLimit, available: Option<u64>) -> Budget {
                         gibibytes(bytes),
                         gibibytes(available)
                     ),
+                    target: 0,
                 }
             }
             None => Budget {
@@ -343,6 +368,7 @@ pub fn budget_of(limit: MemoryLimit, available: Option<u64>) -> Budget {
                     "{} (the memory available could not be read, so {percent}% could not be worked out)",
                     gibibytes(FALLBACK_BYTES)
                 ),
+                target: 0,
             },
         },
     }
@@ -461,11 +487,39 @@ pub fn judge(was_pressured: bool, resident_kib: u64, limit: u64) -> bool {
     }
 }
 
+/// The budget for the pressure ladder's target: what `--memory-target` (or `CORDIAL_MEMORY_TARGET`)
+/// gave, else what `cordial.toml` says, else none, so that the ladder works to the limit.
+#[instrument(level = "debug")]
+#[hotpath::measure]
+pub fn resolve_target(
+    limit: Budget,
+    flag: Option<MemoryLimit>,
+    configured: Option<&str>,
+    available: Option<u64>,
+) -> Budget {
+    let target = flag.or_else(|| {
+        configured.and_then(|text| match parse_limit(text) {
+            Ok(target) => Some(target),
+            Err(reason) => {
+                let _ = writeln!(
+                    crate::host::stderr(),
+                    "cordial.toml: memory_target: {reason}; using the limit"
+                );
+                None
+            }
+        })
+    });
+    match target {
+        Some(target) => limit.with_target(&budget_of(target, available)),
+        None => limit,
+    }
+}
+
 /// Start the watchdog for `budget`. It lives as long as the process.
 #[instrument(level = "debug")]
 #[hotpath::measure]
 pub fn enforce(budget: Budget) {
-    LIMIT_BYTES.store(budget.bytes, Ordering::Relaxed);
+    LIMIT_BYTES.store(budget.ladder_bytes(), Ordering::Relaxed);
     if budget.bytes == 0 {
         return;
     }
@@ -491,7 +545,7 @@ fn watch(budget: &Budget) {
         let rung = judge_level(
             Pressure::from_bits(LEVEL.load(Ordering::Relaxed)),
             held,
-            budget.bytes,
+            budget.ladder_bytes(),
         );
         if rung as u8 != LEVEL.load(Ordering::Relaxed) {
             LEVEL.store(rung as u8, Ordering::Relaxed);
@@ -504,7 +558,7 @@ fn watch(budget: &Budget) {
             );
         }
         let was = PRESSURE.load(Ordering::Relaxed);
-        let now = judge(was, held, budget.bytes);
+        let now = judge(was, held, budget.ladder_bytes());
         if now != was {
             PRESSURE.store(now, Ordering::Relaxed);
             tracing::info!(

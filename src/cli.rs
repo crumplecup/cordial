@@ -66,6 +66,19 @@ pub struct Cli {
     )]
     pub memory_limit: Option<crate::MemoryLimit>,
 
+    /// The memory the pressure ladder (evicting, spilling, dropping what can be computed again)
+    /// works to, when that is less than the limit: the run is stopped at `--memory-limit` and not
+    /// here, so that how it behaves under pressure can be seen all the way to the limit. A size
+    /// such as 1536M or a share such as 20% (default: the limit, or `memory_target` in
+    /// `cordial.toml`).
+    #[arg(
+        long,
+        env = "CORDIAL_MEMORY_TARGET",
+        global = true,
+        value_parser = crate::parse_limit
+    )]
+    pub memory_target: Option<crate::MemoryLimit>,
+
     /// Nested clap subcommand.
     #[command(subcommand)]
     pub command: Commands,
@@ -83,9 +96,13 @@ impl Cli {
         let slug = project_slug_from_path(&project_root);
         let store_home = self.store_home.clone().unwrap_or_else(default_store_home);
         let configured = crate::load_cordial_config(&project_root, &store_home);
-        crate::enforce(crate::resolve_memory_limit(
-            self.memory_limit,
-            configured.memory_limit().as_deref(),
+        let limit =
+            crate::resolve_memory_limit(self.memory_limit, configured.memory_limit().as_deref());
+        crate::enforce(crate::resolve_memory_target(
+            limit,
+            self.memory_target,
+            configured.memory_target().as_deref(),
+            crate::available_memory(),
         ));
         let store_root = store_home.join(&slug);
         let store = StoreLayout::from_root(store_root.clone(), slug);
