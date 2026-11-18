@@ -1,8 +1,9 @@
 //! Canonical module declarations select files without reparsing source.
+#[cfg(feature = "internal_error_chain")]
 use crate::{CordialError, CordialResult};
 use ra_ap_syntax::{
     AstNode,
-    ast::{self, HasAttrs, HasModuleItem, HasName},
+    ast::{self, HasAttrs, HasName},
 };
 use std::path::{Path, PathBuf};
 
@@ -26,6 +27,7 @@ pub(crate) enum ModuleTarget {
 
 impl ModuleTarget {
     /// The file the declaration leads to, if it exists on the file system.
+    #[cfg(feature = "internal_error_chain")]
     #[tracing::instrument(level = "trace", skip(self), err(level = "warn"))]
     pub(crate) fn resolve(&self) -> CordialResult<Option<PathBuf>> {
         match self {
@@ -101,11 +103,13 @@ pub(crate) fn module_target(file: &Path, module: &ast::Module) -> ModuleTarget {
 /// The files a file's out-of-line `mod name;` declarations may lead to, in the order they are
 /// declared: through the inline modules of the file, and not through those a configuration
 /// excludes.
+#[cfg(feature = "internal_error_chain")]
 #[tracing::instrument(level = "trace", skip(items, file))]
 pub(crate) fn declared_modules(
     items: impl Iterator<Item = ast::Item>,
     file: &Path,
 ) -> Vec<ModuleTarget> {
+    use ra_ap_syntax::ast::HasModuleItem as _;
     let mut found = Vec::new();
     for module in items.filter_map(|item| match item {
         ast::Item::Module(module) => Some(module),
@@ -122,6 +126,7 @@ pub(crate) fn declared_modules(
     found
 }
 
+#[cfg(feature = "internal_error_chain")]
 #[tracing::instrument(level = "trace", skip(module, file), err(level = "warn"))]
 pub(crate) fn module_path(file: &Path, module: &ast::Module) -> CordialResult<Option<PathBuf>> {
     module_target(file, module).resolve()

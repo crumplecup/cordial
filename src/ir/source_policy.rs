@@ -8,7 +8,9 @@ mod cli_layout;
 #[cfg(feature = "cli_layout")]
 pub use cli_layout::CliLayoutFacts;
 #[cfg(feature = "cli_layout")]
-pub(crate) use cli_layout::{EntryItem, EntryKind, LayoutCatalog, TypeRec, VariantShape};
+pub(crate) use cli_layout::{
+    EntryItem, EntryKind, LayoutCatalog, LayoutFiles, NativeFile, TypeRec, VariantShape,
+};
 #[cfg(feature = "cfg_hygiene")]
 mod declarations;
 #[cfg(feature = "derives")]

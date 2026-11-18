@@ -1,5 +1,7 @@
-#[cfg(any(feature = "cli_layout", feature = "internal_error_chain"))]
+#[cfg(feature = "internal_error_chain")]
 pub(crate) use native_syntax::module_path as database_module_path;
+#[cfg(feature = "cli_layout")]
+pub(crate) use native_syntax::{ModuleTarget, module_target};
 use tracing::instrument;
 mod database;
 mod native_syntax;

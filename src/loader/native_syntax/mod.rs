@@ -52,7 +52,11 @@ mod meta_syntax;
 #[cfg(any(feature = "cli_layout", feature = "internal_error_chain"))]
 mod modules;
 #[cfg(any(feature = "cli_layout", feature = "internal_error_chain"))]
-pub(crate) use modules::{ModuleTarget, declared_modules, module_path};
+pub(crate) use modules::ModuleTarget;
+#[cfg(feature = "cli_layout")]
+pub(crate) use modules::module_target;
+#[cfg(feature = "internal_error_chain")]
+pub(crate) use modules::{declared_modules, module_path};
 #[cfg(feature = "verus_ir")]
 mod verus_syntax;
 #[cfg(all(feature = "verus_ir", feature = "visibility"))]

@@ -130,6 +130,8 @@ pub use source_policy::{
     DeriveMethodFacts, DeriveMethodFlags, DeriveModuleFacts, DeriveSetterShape, DeriveStructFacts,
     scan_derives_source,
 };
+#[cfg(feature = "cli_layout")]
+pub(crate) use source_policy::{LayoutFiles, NativeFile};
 #[cfg(feature = "visibility")]
 pub use source_policy::{VisibilityFacts, VisibilityKind, VisibilityModule};
 #[cfg(feature = "tracing")]

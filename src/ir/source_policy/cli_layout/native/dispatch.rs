@@ -1,25 +1,17 @@
-//! Resolve the existing CLI dispatch contract over canonical expressions.
+//! Resolve the existing CLI dispatch contract over the bodies of the `act` functions, as data.
 use super::super::catalog::{LayoutCatalog, TypeRec, VariantShape};
-use super::syntax;
-use ra_ap_syntax::{
-    AstNode, SyntaxNode,
-    ast::{self, HasArgList, HasLoopBody, HasName},
-};
+use super::act_shape::{ActMark, ActNode, ExprShape, PatShape};
 use std::collections::{BTreeMap, BTreeSet};
 #[tracing::instrument(level = "debug", skip(catalog, body))]
 #[hotpath::measure]
-pub(super) fn targets(
-    catalog: &LayoutCatalog,
-    owner: &str,
-    body: &ast::BlockExpr,
-) -> BTreeSet<String> {
+pub(super) fn targets(catalog: &LayoutCatalog, owner: &str, body: &ActNode) -> BTreeSet<String> {
     let mut resolver = Resolver {
         catalog,
         owner,
         bindings: BTreeMap::new(),
         called: BTreeSet::new(),
     };
-    resolver.walk(body.syntax());
+    resolver.walk(body);
     resolver.called
 }
 struct Resolver<'a> {
@@ -40,11 +32,10 @@ impl Resolver<'_> {
             .cloned()
     }
     #[tracing::instrument(level = "trace", skip(self, expr))]
-    fn expr_types(&self, expr: &ast::Expr) -> Vec<String> {
+    fn expr_types(&self, expr: &ExprShape) -> Vec<String> {
         match expr {
-            ast::Expr::PathExpr(p) => {
-                let names = p.path().map(|p| syntax::path_names(&p)).unwrap_or_default();
-                if names == ["self"] {
+            ExprShape::Path(names) => {
+                if names == &["self"] {
                     vec![self.owner.into()]
                 } else if names.len() == 1 {
                     self.bindings.get(&names[0]).cloned().unwrap_or_default()
@@ -52,40 +43,30 @@ impl Resolver<'_> {
                     Vec::new()
                 }
             }
-            ast::Expr::FieldExpr(f) => f
-                .expr()
-                .map(|e| self.expr_types(&e))
+            ExprShape::Field { base, name } => base
+                .as_ref()
+                .map(|e| self.expr_types(e))
                 .and_then(|types| self.primary(&types))
                 .and_then(|name| self.catalog.types().get(&name))
-                .and_then(|rec| f.name_ref().and_then(|name| rec.fields().get(name.text())))
+                .and_then(|rec| {
+                    name.as_ref()
+                        .and_then(|name| rec.fields().get(name.as_str()))
+                })
                 .cloned()
                 .unwrap_or_default(),
-            ast::Expr::MethodCallExpr(c)
-                if c.name_ref().is_some_and(|n| {
-                    matches!(
-                        n.text(),
-                        "as_ref" | "clone" | "into" | "unwrap" | "expect" | "as_mut" | "copied"
-                    )
-                }) =>
-            {
-                c.receiver()
-                    .map(|e| self.expr_types(&e))
-                    .unwrap_or_default()
-            }
-            ast::Expr::RefExpr(e) => e.expr().map(|e| self.expr_types(&e)).unwrap_or_default(),
-            ast::Expr::ParenExpr(e) => e.expr().map(|e| self.expr_types(&e)).unwrap_or_default(),
-            ast::Expr::TryExpr(e) => e.expr().map(|e| self.expr_types(&e)).unwrap_or_default(),
-            ast::Expr::PrefixExpr(e) => e.expr().map(|e| self.expr_types(&e)).unwrap_or_default(),
-            _ => Vec::new(),
+            ExprShape::Through(inner) => inner
+                .as_ref()
+                .map(|e| self.expr_types(e))
+                .unwrap_or_default(),
+            ExprShape::Other => Vec::new(),
         }
     }
-    #[tracing::instrument(level = "trace", skip(self, path))]
+    #[tracing::instrument(level = "trace", skip(self, names))]
     fn pattern_rec(
         &self,
-        path: &ast::Path,
+        names: &[String],
         scrutinee: Option<&str>,
     ) -> Option<(&TypeRec, Option<String>)> {
-        let names = syntax::path_names(path);
         let first = names.first()?;
         let last = names.last()?;
         let owner = if first == "Self" {
@@ -105,110 +86,89 @@ impl Resolver<'_> {
         (last == rec.ident()).then_some((rec, None))
     }
     #[tracing::instrument(level = "trace", skip(self, pat, out))]
-    fn pattern(&self, pat: &ast::Pat, ty: Option<&str>, out: &mut BTreeMap<String, Vec<String>>) {
+    fn pattern(&self, pat: &PatShape, ty: Option<&str>, out: &mut BTreeMap<String, Vec<String>>) {
         match pat {
-            ast::Pat::IdentPat(p) => {
-                if let (Some(name), Some(ty)) = (p.name(), ty) {
-                    out.insert(name.text().to_string(), vec![ty.into()]);
+            PatShape::Ident { name, sub } => {
+                if let (Some(name), Some(ty)) = (name, ty) {
+                    out.insert(name.clone(), vec![ty.into()]);
                 }
-                if let Some(sub) = p.pat() {
-                    self.pattern(&sub, ty, out);
+                if let Some(sub) = sub {
+                    self.pattern(sub, ty, out);
                 }
             }
-            ast::Pat::RecordPat(p) => {
-                let rec = p
-                    .path()
-                    .as_ref()
-                    .and_then(|path| self.pattern_rec(path, ty));
-                let fields = rec.and_then(|(rec, variant)| match variant {
+            PatShape::Record { path, fields } => {
+                let rec = path.as_ref().and_then(|names| self.pattern_rec(names, ty));
+                let known = rec.and_then(|(rec, variant)| match variant {
                     Some(v) => match rec.variants().get(&v) {
                         Some(VariantShape::Named(fields)) => Some(fields),
                         _ => None,
                     },
                     None => (!rec.fields().is_empty()).then_some(rec.fields()),
                 });
-                if let Some(list) = p.record_pat_field_list() {
-                    for field in list.fields() {
-                        let Some(pat) = field.pat() else { continue };
-                        let name = field.name_ref().map(|n| n.text().to_string()).or_else(|| {
-                            ast::IdentPat::cast(pat.syntax().clone())
-                                .and_then(|p| p.name())
-                                .map(|n| n.text().to_string())
-                        });
-                        let types = name
-                            .and_then(|name| fields.and_then(|f| f.get(&name)))
-                            .cloned()
-                            .unwrap_or_default();
-                        self.bind_types(&pat, &types, out);
-                    }
+                for (name, pat) in fields {
+                    let types = name
+                        .as_ref()
+                        .and_then(|name| known.and_then(|f| f.get(name)))
+                        .cloned()
+                        .unwrap_or_default();
+                    self.bind_types(pat, &types, out);
                 }
             }
-            ast::Pat::TupleStructPat(p) => {
-                let path = p.path();
+            PatShape::TupleStruct { path, fields } => {
                 if path
                     .as_ref()
-                    .and_then(|p| syntax::path_names(p).last().cloned())
+                    .and_then(|names| names.last().cloned())
                     .is_some_and(|n| matches!(n.as_str(), "Some" | "Ok"))
                 {
-                    if let Some(pat) = p.fields().next() {
-                        self.pattern(&pat, ty, out);
+                    if let Some(pat) = fields.first() {
+                        self.pattern(pat, ty, out);
                     }
                     return;
                 }
-                let rec = path.as_ref().and_then(|path| self.pattern_rec(path, ty));
-                let fields = rec
+                let rec = path.as_ref().and_then(|names| self.pattern_rec(names, ty));
+                let known = rec
                     .and_then(|(rec, v)| v.and_then(|v| rec.variants().get(&v)))
                     .and_then(|v| match v {
                         VariantShape::Unnamed(f) => Some(f),
                         _ => None,
                     });
-                for (i, pat) in p.fields().enumerate() {
-                    let types = fields.and_then(|f| f.get(i)).cloned().unwrap_or_default();
-                    self.bind_types(&pat, &types, out);
+                for (i, pat) in fields.iter().enumerate() {
+                    let types = known.and_then(|f| f.get(i)).cloned().unwrap_or_default();
+                    self.bind_types(pat, &types, out);
                 }
             }
-            ast::Pat::TuplePat(p) => {
-                for p in p.fields() {
-                    self.pattern(&p, ty, out);
+            PatShape::Tuple(pats) | PatShape::Or(pats) => {
+                for pat in pats {
+                    self.pattern(pat, ty, out);
                 }
             }
-            ast::Pat::RefPat(p) => {
-                if let Some(p) = p.pat() {
-                    self.pattern(&p, ty, out);
+            PatShape::Ref(inner) | PatShape::Paren(inner) => {
+                if let Some(pat) = inner {
+                    self.pattern(pat, ty, out);
                 }
             }
-            ast::Pat::OrPat(p) => {
-                for p in p.pats() {
-                    self.pattern(&p, ty, out);
-                }
-            }
-            ast::Pat::ParenPat(p) => {
-                if let Some(p) = p.pat() {
-                    self.pattern(&p, ty, out);
-                }
-            }
-            _ => {}
+            PatShape::Other => {}
         }
     }
     #[tracing::instrument(level = "trace", skip(self, pat, types, out))]
     fn bind_types(
         &self,
-        pat: &ast::Pat,
+        pat: &PatShape,
         types: &[String],
         out: &mut BTreeMap<String, Vec<String>>,
     ) {
         match pat {
-            ast::Pat::IdentPat(p) => {
-                if let Some(name) = p.name() {
-                    out.insert(name.text().to_string(), types.to_vec());
+            PatShape::Ident { name, sub } => {
+                if let Some(name) = name {
+                    out.insert(name.clone(), types.to_vec());
                 }
-                if let Some(p) = p.pat() {
-                    self.bind_types(&p, types, out);
+                if let Some(sub) = sub {
+                    self.bind_types(sub, types, out);
                 }
             }
-            ast::Pat::RefPat(p) => {
-                if let Some(p) = p.pat() {
-                    self.bind_types(&p, types, out);
+            PatShape::Ref(inner) => {
+                if let Some(pat) = inner {
+                    self.bind_types(pat, types, out);
                 }
             }
             _ => {
@@ -217,9 +177,9 @@ impl Resolver<'_> {
             }
         }
     }
-    #[tracing::instrument(level = "trace", skip(self, pat, expr, body))]
-    fn scoped(&mut self, pat: &ast::Pat, expr: &ast::Expr, body: &SyntaxNode) {
-        let ty = self.primary(&self.expr_types(expr));
+    #[tracing::instrument(level = "trace", skip(self, pat, scrutinee, body))]
+    fn scoped(&mut self, pat: &PatShape, scrutinee: &ExprShape, body: &ActNode) {
+        let ty = self.primary(&self.expr_types(scrutinee));
         let mut extra = BTreeMap::new();
         self.pattern(pat, ty.as_deref(), &mut extra);
         let old = self.bindings.clone();
@@ -228,97 +188,77 @@ impl Resolver<'_> {
         self.bindings = old;
     }
     #[tracing::instrument(level = "trace", skip(self, node))]
-    fn walk(&mut self, node: &SyntaxNode) {
-        if ast::TokenTree::can_cast(node.kind()) {
-            return;
-        }
-        if let Some(expr) = ast::Expr::cast(node.clone()) {
-            match expr {
-                ast::Expr::MethodCallExpr(call) => {
-                    if call.name_ref().is_some_and(|n| n.text() == "act")
-                        && let Some(receiver) = call.receiver()
-                    {
-                        self.called.extend(self.expr_types(&receiver));
+    fn walk(&mut self, node: &ActNode) {
+        match node {
+            ActNode::Nodes { mark, children } => {
+                match mark {
+                    Some(ActMark::Method(receiver)) => {
+                        self.called.extend(self.expr_types(receiver));
                     }
-                }
-                ast::Expr::CallExpr(call) => {
-                    if let Some(ast::Expr::PathExpr(path)) = call.expr()
-                        && let Some(path) = path.path()
-                    {
-                        let names = syntax::path_names(&path);
-                        if names.last().is_some_and(|n| n == "act") {
-                            if names.len() >= 2 {
-                                let name = &names[names.len() - 2];
-                                self.called.insert(if name == "Self" {
-                                    self.owner.into()
-                                } else {
-                                    name.clone()
-                                });
-                            }
-                            if let Some(arg) = call.arg_list().and_then(|a| a.args().next()) {
-                                self.called.extend(self.expr_types(&arg));
-                            }
+                    Some(ActMark::Call {
+                        owner,
+                        first_argument,
+                    }) => {
+                        if let Some(name) = owner {
+                            self.called.insert(if name == "Self" {
+                                self.owner.into()
+                            } else {
+                                name.clone()
+                            });
+                        }
+                        if let Some(arg) = first_argument {
+                            self.called.extend(self.expr_types(arg));
                         }
                     }
+                    None => {}
                 }
-                ast::Expr::MatchExpr(expr) => {
-                    if let Some(scrutinee) = expr.expr() {
-                        self.walk(scrutinee.syntax());
-                        if let Some(list) = expr.match_arm_list() {
-                            for arm in list.arms() {
-                                if let (Some(pat), Some(body)) = (arm.pat(), arm.expr()) {
-                                    self.scoped(&pat, &scrutinee, body.syntax());
-                                }
-                            }
-                        }
-                    }
-                    return;
+                for child in children {
+                    self.walk(child);
                 }
-                ast::Expr::IfExpr(expr) => {
-                    if let Some(ast::Expr::LetExpr(cond)) = expr.condition()
-                        && let (Some(pat), Some(scrutinee)) = (cond.pat(), cond.expr())
-                    {
-                        self.walk(scrutinee.syntax());
-                        if let Some(body) = expr.then_branch() {
-                            self.scoped(&pat, &scrutinee, body.syntax());
-                        }
-                        if let Some(branch) = expr.else_branch() {
-                            match branch {
-                                ast::ElseBranch::Block(b) => self.walk(b.syntax()),
-                                ast::ElseBranch::IfExpr(b) => self.walk(b.syntax()),
-                            }
-                        }
-                        return;
-                    }
-                }
-                ast::Expr::WhileExpr(expr) => {
-                    if let Some(ast::Expr::LetExpr(cond)) = expr.condition()
-                        && let (Some(pat), Some(scrutinee)) = (cond.pat(), cond.expr())
-                    {
-                        self.walk(scrutinee.syntax());
-                        if let Some(body) = expr.loop_body() {
-                            self.scoped(&pat, &scrutinee, body.syntax());
-                        }
-                        return;
-                    }
-                }
-                _ => {}
             }
-        }
-        if let Some(local) = ast::LetStmt::cast(node.clone()) {
-            if let Some(expr) = local.initializer() {
-                self.walk(expr.syntax());
-                let ty = self.primary(&self.expr_types(&expr));
-                let mut extra = BTreeMap::new();
-                if let Some(pat) = local.pat() {
-                    self.pattern(&pat, ty.as_deref(), &mut extra);
+            ActNode::Match { scrutinee, arms } => {
+                if let Some(scrutinee) = scrutinee {
+                    self.walk(&scrutinee.node);
+                    for (pat, body) in arms {
+                        self.scoped(pat, &scrutinee.shape, body);
+                    }
                 }
-                self.bindings.extend(extra);
             }
-            return;
-        }
-        for child in node.children() {
-            self.walk(&child);
+            ActNode::IfLet {
+                pattern,
+                scrutinee,
+                then,
+                otherwise,
+            } => {
+                self.walk(&scrutinee.node);
+                if let Some(body) = then {
+                    self.scoped(pattern, &scrutinee.shape, body);
+                }
+                if let Some(branch) = otherwise {
+                    self.walk(branch);
+                }
+            }
+            ActNode::WhileLet {
+                pattern,
+                scrutinee,
+                body,
+            } => {
+                self.walk(&scrutinee.node);
+                if let Some(body) = body {
+                    self.scoped(pattern, &scrutinee.shape, body);
+                }
+            }
+            ActNode::Let { init } => {
+                if let Some(init) = init {
+                    self.walk(&init.node);
+                    let ty = self.primary(&self.expr_types(&init.shape));
+                    let mut extra = BTreeMap::new();
+                    if let Some(pat) = &init.pattern {
+                        self.pattern(pat, ty.as_deref(), &mut extra);
+                    }
+                    self.bindings.extend(extra);
+                }
+            }
         }
     }
 }

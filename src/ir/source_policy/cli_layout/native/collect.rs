@@ -3,7 +3,7 @@ use super::super::{
     EntryItem, EntryKind,
     catalog::{FreeFnRec, TypeRec},
 };
-use super::{NativeFile, syntax};
+use super::{NativeFile, act_shape::ActNode, syntax};
 use crate::{CordialError, CordialResult, FileSnapshot, loader::DatabaseSource};
 use ra_ap_syntax::{
     AstNode, SyntaxNode,
@@ -193,7 +193,7 @@ fn walk(
                                 ident.clone(),
                                 file.path().to_path_buf(),
                                 file.line(method.syntax().text_range().start()),
-                                body,
+                                ActNode::of(body.syntax()).unwrap_or_else(ActNode::empty),
                             ));
                         }
                     }
@@ -207,9 +207,8 @@ fn walk(
                         .ancestors()
                         .any(|n| ast::BlockExpr::can_cast(n.kind())) =>
             {
-                if let Some(child) = crate::loader::database_module_path(file.path(), &module)? {
-                    out.children.push(child);
-                }
+                out.children
+                    .push(crate::loader::module_target(file.path(), &module));
             }
             ast::Item::MacroCall(_) => return Ok(()),
             _ => {}

@@ -12,13 +12,19 @@ use std::path::{Component, Path, PathBuf};
 use ra_ap_ide_db::RootDatabase;
 use ra_ap_ide_db::base_db::SourceDatabase as RaSourceDatabase;
 use ra_ap_vfs::{FileId, VfsPath};
+#[cfg(feature = "internal_error_chain")]
 use tracing::instrument;
 
+#[cfg(feature = "internal_error_chain")]
 use super::crate_files::{FileKey, carried};
+#[cfg(feature = "internal_error_chain")]
 use super::queries::SemanticDatabase;
-use crate::loader::native_syntax::{ModuleTarget, declared_modules};
+use crate::loader::native_syntax::ModuleTarget;
+#[cfg(feature = "internal_error_chain")]
+use crate::loader::native_syntax::declared_modules;
 
 /// The files a file's out-of-line `mod` declarations may lead to, from its syntax alone.
+#[cfg(feature = "internal_error_chain")]
 #[salsa::tracked(persist, returns(ref))]
 #[instrument(level = "debug", skip(db, key))]
 #[hotpath::measure]
@@ -33,6 +39,7 @@ pub(super) fn module_declarations_file<'db>(
 }
 
 /// The crate's entry file: the root of the tree of `mod` declarations.
+#[cfg(feature = "internal_error_chain")]
 #[salsa::interned(persist)]
 pub(super) struct ModuleTreeKey<'db> {
     #[returns(copy)]
@@ -82,8 +89,42 @@ fn followed(
     }
 }
 
+/// The file a declaration in `from` leads to, among those the database holds, with its path.
+#[cfg(feature = "cli_layout")]
+pub(super) fn follow(
+    db: &RootDatabase,
+    from: FileId,
+    target: &ModuleTarget,
+) -> Result<Option<(FileId, PathBuf)>, ()> {
+    followed(db, from, target)
+}
+
+/// Whether the source root of `from` holds the file at `path`.
+#[cfg(feature = "cli_layout")]
+pub(super) fn holds(db: &RootDatabase, from: FileId, path: &Path) -> bool {
+    held_file(db, from, &normalized(path)).is_some()
+}
+
+/// The Rust files the source root of `from` holds under `dir`, sorted.
+#[cfg(feature = "cli_layout")]
+pub(super) fn held_under(db: &RootDatabase, from: FileId, dir: &Path) -> Vec<PathBuf> {
+    let root = db.file_source_root(from).source_root_id(db);
+    let files = db.source_root(root).source_root(db);
+    let mut found: Vec<PathBuf> = files
+        .iter()
+        .filter_map(|file| {
+            let path = PathBuf::from(files.path_for_file(&file)?.as_path()?.as_str());
+            (path.starts_with(dir) && path.extension().is_some_and(|ext| ext == "rs"))
+                .then_some(path)
+        })
+        .collect();
+    found.sort();
+    found
+}
+
 /// The files of the crate, from its entry file by the `mod` declarations, sorted. `None` where a file
 /// cannot be read, so that the caller reads it the way that says why.
+#[cfg(feature = "internal_error_chain")]
 #[salsa::tracked(returns(ref))]
 #[instrument(level = "debug", skip(db, key))]
 #[hotpath::measure]

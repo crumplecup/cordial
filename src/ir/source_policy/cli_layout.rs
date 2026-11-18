@@ -3,6 +3,7 @@ mod catalog;
 mod native;
 use crate::FileSnapshot;
 pub(crate) use catalog::{LayoutCatalog, TypeRec, VariantShape};
+pub(crate) use native::{LayoutFiles, NativeFile};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 

@@ -52,6 +52,8 @@ struct Visit {
     antipatterns: Option<PathBuf>,
     #[cfg(feature = "antipatterns")]
     contracts: Option<PathBuf>,
+    #[cfg(feature = "cli_layout")]
+    layout: bool,
     #[cfg(feature = "internal_error_chain")]
     architecture: bool,
     #[cfg(feature = "internal_error_chain")]
@@ -66,7 +68,13 @@ impl SourceDatabase {
         let root = target.crate_root();
         let mut visits: BTreeMap<PathBuf, Visit> = BTreeMap::new();
         for path in scanned_files(root)? {
-            visits.entry(path).or_default().scanned = true;
+            let visit = visits.entry(path.clone()).or_default();
+            visit.scanned = true;
+            // The layout reads the files under `src`, which the scan trees include.
+            #[cfg(feature = "cli_layout")]
+            {
+                visit.layout = path.starts_with(root.join("src"));
+            }
         }
         #[cfg(feature = "panics")]
         for (tree, path) in self.panic_inputs(root)? {
@@ -122,7 +130,7 @@ impl SourceDatabase {
         let proc_macro = target.kinds().contains(&crate::CrateKind::ProcMacro);
         #[cfg(feature = "internal_error_chain")]
         let name = target.crate_name().to_owned();
-        #[cfg(feature = "antipatterns")]
+        #[cfg(any(feature = "antipatterns", feature = "cli_layout"))]
         let crate_name = target.crate_name().to_owned();
         self.run_in_chunks("file scans", &visits, &|db, (file, path, visit)| {
             // The compiler does not see that a build with none of the features reads nothing here.
@@ -170,6 +178,20 @@ impl SourceDatabase {
                         super::antipattern_queries::ContractKey::new(db, key, crate_name.clone()),
                     );
                 }
+            }
+            #[cfg(feature = "cli_layout")]
+            if visit.layout {
+                let key = super::crate_files::FileKey::new(
+                    db,
+                    *file,
+                    path.clone(),
+                    root.join("src"),
+                    root.clone(),
+                );
+                let _ = super::layout_queries::cli_layout_file(
+                    db,
+                    super::layout_queries::LayoutKey::new(db, key, crate_name.clone()),
+                );
             }
             #[cfg(feature = "internal_error_chain")]
             {

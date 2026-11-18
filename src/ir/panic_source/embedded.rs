@@ -45,7 +45,10 @@ impl Scanner<'_, '_> {
                 context.not_kani = false;
                 inner.walk(source.tree().syntax(), &context)?;
                 // The program's own proofs settle its sites here: they do not read the crate's.
+                #[cfg(feature = "verus_ir")]
                 let mut settled = PanicCandidate::resolve(&inner.candidates, &reachable);
+                #[cfg(not(feature = "verus_ir"))]
+                let settled = PanicCandidate::resolve(&inner.candidates, &reachable);
                 #[cfg(feature = "verus_ir")]
                 {
                     let verus =

@@ -47,8 +47,8 @@ Two collectors need the tree **twice**, the second time under a crate-level fact
 | panics | `panic_proofs_file` | `panic_graph` -> `panic_reachable` | `panic_scan_file(file, reachable)` |
 | antipatterns | `antipattern_facts_file` | `antipattern_crate_facts` | `antipattern_sites_file(file, facts)` |
 
-Steps that parse without a memoized query: `cli_layout`, and the fallbacks `*_direct` (a file a query
-declined), `error_signatures`, `error_architecture`, the leaf pass.
+Steps that parse without a memoized query: the fallbacks `*_direct` (a file a query declined),
+`error_signatures`, `error_architecture`, the leaf pass. (`cli_layout` was one; see "What was built".)
 
 The steps do not agree on a key: they pass the file, path and root, and differ in the scan `tree`
 (some pass an empty path) and, for compliance only, the crate name and a flag. A collector that
@@ -113,14 +113,24 @@ projection queries recover the downstream cut-off, not the recomputation.
    never loaded is a reload in `sync_from_disk`, so the file set does not change within a session.
 5. **The parse-error validation** of the panics step uses rust-analyzer's `parse_errors` firewall query.
 
+6. **The CLI layout is a saved per-file query** (`layout_queries.rs`, `cli_layout_file`), asked by the
+   priming for every file under `src`. What a file contributes was plain data except the bodies of its
+   `act` functions, which were syntax nodes held until the crate's types were all known: they pinned
+   every tree that has an `act` and made the result unsaveable. They are now data (`act_shape.rs`):
+   what the dispatch resolution reads of an expression (path, field, a method that keeps the type),
+   of a pattern (what it binds) and of the `match`, `if let`, `while let` and `let` that scope the
+   bindings; `dispatch.rs` runs the same resolution over it. The files it follows and the
+   existence checks of `lib.rs`, `main.rs` and `bin/` read the source root's file set (the
+   `LayoutFiles` trait, answered by `module_queries`), not the file system.
+
 The acceptance is a test (`tests/one_parse.rs`), with a ratchet that names any step that parses a file
 for a collector (none, on the specimen) and a control that fails when the pass is skipped.
 
 ## What is left
 
-- The sweeps that read the tree without a query: `cli_layout`, and the fallbacks that run when a query
-  declines a file (`*_direct`, `error_signatures`, `error_architecture`'s direct path). The specimen's
-  features do not reach `cli_layout`, so the ratchet does not name it.
+- The sweeps that read the tree without a query: the fallbacks that run when a query declines a file
+  (`*_direct`, `error_signatures`, `error_architecture`'s direct path). They run only for a file with
+  a syntax error, to say why, and are not on the way of a clean crate.
 - The listing of files by walking directories (`scanned_files`, `input_paths`, `panic_inputs`, the
   entry-less branch of `error_module_files`) is still a file-system read; it could be the source
   root's file set filtered by path, as module discovery now is.

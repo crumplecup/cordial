@@ -1,4 +1,5 @@
 //! Native CLI projection: canonical database syntax, with no parser fallback.
+mod act_shape;
 mod collect;
 mod dispatch;
 mod syntax;
@@ -8,63 +9,72 @@ use super::{
 };
 use crate::{
     CordialResult, FileSnapshot,
-    loader::{DatabaseSource, path_has_fixtures},
+    loader::{DatabaseSource, ModuleTarget, path_has_fixtures},
 };
-use ra_ap_syntax::ast;
+use act_shape::ActNode;
 use std::{
     collections::{BTreeMap, BTreeSet},
     path::{Path, PathBuf},
 };
 
-/// Transient loader assembly; syntax never crosses the shared-IR boundary.
-#[derive(derive_new::new)]
+/// What one file contributes to the crate's layout, before the types of every file are known: plain
+/// data, so that it is saved with the database. The bodies of the `act` functions are kept as data
+/// (see [`act_shape`]), and the files its `mod` declarations lead to as what they may be.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, derive_new::new)]
 pub(crate) struct NativeFile {
     types: Vec<TypeRec>,
     error_impls: BTreeSet<String>,
     free_fns: Vec<FreeFnRec>,
-    acts: Vec<(String, PathBuf, u32, ast::BlockExpr)>,
+    acts: Vec<(String, PathBuf, u32, ActNode)>,
     entries: Vec<EntryItem>,
-    children: Vec<PathBuf>,
+    children: Vec<ModuleTarget>,
     snapshot: FileSnapshot,
 }
+
+/// The questions the crate's collection asks of the files, which the loader answers from what the
+/// database holds.
+pub(crate) trait LayoutFiles {
+    /// What the file at `path` contributes.
+    fn read(&mut self, path: &Path) -> CordialResult<NativeFile>;
+    /// The file a declaration in `from` leads to, if the database holds it.
+    fn follow(&mut self, from: &Path, target: &ModuleTarget) -> CordialResult<Option<PathBuf>>;
+    /// Whether the database holds the file at `path`.
+    fn holds(&mut self, path: &Path) -> bool;
+    /// The Rust files the database holds under `dir`, sorted.
+    fn under(&mut self, dir: &Path) -> Vec<PathBuf>;
+}
 impl super::super::SourcePolicyInventory {
-    #[tracing::instrument(level = "debug", skip(read), err(level = "warn"))]
+    #[tracing::instrument(level = "debug", skip(source), err(level = "warn"))]
     #[hotpath::measure]
     pub(crate) fn collect_native_cli_layout(
         root: &Path,
         name: &str,
-        mut read: impl FnMut(&Path) -> CordialResult<NativeFile>,
+        source: &mut impl LayoutFiles,
     ) -> CordialResult<CliLayoutFacts> {
         let src = root.join("src");
         let lib = src.join("lib.rs");
         let main = src.join("main.rs");
         let bins = src.join("bin");
-        if !lib.is_file() || (!main.is_file() && !bins.is_dir()) {
+        let binaries = source.under(&bins);
+        if !source.holds(&lib) || (!source.holds(&main) && binaries.is_empty()) {
             return Ok(CliLayoutFacts::default());
         }
         let mut files = BTreeMap::new();
         let mut library = BTreeSet::new();
         let mut binary = BTreeSet::new();
         let mut entries = Vec::new();
-        tree(&lib, root, &mut library, &mut files, &mut read)?;
-        if main.is_file() {
-            tree(&main, root, &mut binary, &mut files, &mut read)?;
+        tree(&lib, root, &mut library, &mut files, source)?;
+        if source.holds(&main) {
+            tree(&main, root, &mut binary, &mut files, source)?;
             entries.push(main);
         }
-        if bins.is_dir() {
-            for entry in walkdir::WalkDir::new(&bins)
-                .into_iter()
-                .filter_map(Result::ok)
-                .filter(|e| e.file_type().is_file())
-            {
-                let path = entry.path();
-                if path.extension().is_none_or(|e| e != "rs") || path_has_fixtures(path, root) {
-                    continue;
-                }
-                tree(path, root, &mut binary, &mut files, &mut read)?;
-                if path.parent() == Some(bins.as_path()) {
-                    entries.push(path.to_path_buf());
-                }
+        for path in binaries {
+            if path_has_fixtures(&path, root) {
+                continue;
+            }
+            tree(&path, root, &mut binary, &mut files, source)?;
+            if path.parent() == Some(bins.as_path()) {
+                entries.push(path);
             }
         }
         let mut catalog = LayoutCatalog::new(name.into());
@@ -145,28 +155,30 @@ impl super::super::SourcePolicyInventory {
         collect::file(file, name)
     }
 }
-#[tracing::instrument(level = "debug", skip(seen, files, read, path), err(level = "warn"))]
+#[tracing::instrument(level = "debug", skip(seen, files, source, path), err(level = "warn"))]
 #[hotpath::measure]
 fn tree(
     path: &Path,
     root: &Path,
     seen: &mut BTreeSet<PathBuf>,
     files: &mut BTreeMap<PathBuf, NativeFile>,
-    read: &mut impl FnMut(&Path) -> CordialResult<NativeFile>,
+    source: &mut impl LayoutFiles,
 ) -> CordialResult<()> {
     if path_has_fixtures(path, root) || !seen.insert(path.to_path_buf()) {
         return Ok(());
     }
     if !files.contains_key(path) {
-        files.insert(path.to_path_buf(), read(path)?);
+        files.insert(path.to_path_buf(), source.read(path)?);
     }
-    let children = files
+    let targets = files
         .get(path)
         .ok_or_else(|| crate::CordialError::not_found(path.to_path_buf()))?
         .children
         .clone();
-    for child in children {
-        tree(&child, root, seen, files, read)?;
+    for target in targets {
+        if let Some(child) = source.follow(path, &target)? {
+            tree(&child, root, seen, files, source)?;
+        }
     }
     Ok(())
 }

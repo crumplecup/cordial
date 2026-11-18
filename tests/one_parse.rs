@@ -33,6 +33,8 @@ struct Parses {
     by_step: std::collections::BTreeMap<String, u64>,
     /// The metrics they were read from.
     said: Vec<String>,
+    /// The metrics that name the per-file query of the CLI layout: it ran.
+    layout: Vec<String>,
 }
 
 /// A projection of the crate with eviction on, and what the metrics say of the parses of a file:
@@ -40,8 +42,17 @@ struct Parses {
 /// for it (the chain then has no `evaluate` in it: when the priming runs it, a worker's `evaluate` is
 /// above the extraction).
 fn parses(skip_priming: bool) -> Result<Parses> {
+    parses_of(skip_priming, false)
+}
+
+/// The same, of a crate that has a `main.rs` too, so that the step that reads the CLI layout reads
+/// every file of the library (it reads nothing of a crate that has no entry point).
+fn parses_of(skip_priming: bool, with_entry: bool) -> Result<Parses> {
     cordial::init_tracing();
     let root = crate_of_large_files("onepass", FILES, 1500)?;
+    if with_entry {
+        std::fs::write(root.path().join("src/main.rs"), "fn main() {}\n").into_diagnostic()?;
+    }
     let state = tempfile::tempdir().into_diagnostic()?;
     let saved = SavedState::at(state.path().join("analysis-state"));
     let subscriber = tracing_subscriber::registry()
@@ -108,7 +119,14 @@ fn parses(skip_priming: bool) -> Result<Parses> {
             *by_step.entry(step.to_owned()).or_default() += count;
         }
     }
+    let layout = metrics
+        .values()
+        .iter()
+        .filter(|(key, _)| key.contains("cli_layout_file"))
+        .map(|(key, count)| format!("{key}={count}"))
+        .collect();
     Ok(Parses {
+        layout,
         all: counted(&|_| true),
         by_extraction: counted(&|key| key.contains("extract_file")),
         in_a_query: counted(&|key| key.contains("extract_file <") && !key.contains("evaluate")),
@@ -126,6 +144,7 @@ fn the_steps_never_parse_a_file_for_the_collectors_that_read_only_its_tree() -> 
         in_a_query: in_a_step,
         by_step,
         said,
+        ..
     } = parses(false)?;
     // That the metrics see the parses at all, or a zero below says nothing.
     assert!(
@@ -144,6 +163,26 @@ fn the_steps_never_parse_a_file_for_the_collectors_that_read_only_its_tree() -> 
     // to, it is named here; the sweeps that are not yet queries (the CLI layout among them) are
     // not in this crate's features, or would be named.
     assert_eq!(remaining, Vec::<&str>::new(), "{by_step:?}\n{asked:#?}");
+    Ok(())
+}
+
+/// The CLI layout reads each file of the crate for its types and its `act` functions, and it is one
+/// of the collectors the pass covers: the step that joins them parses nothing, and the file's part
+/// is a saved query like the others.
+#[test]
+fn the_cli_layout_reads_the_files_from_the_pass() -> Result<()> {
+    let Parses {
+        by_step,
+        said,
+        layout,
+        ..
+    } = parses_of(false, true)?;
+    assert!(
+        !layout.is_empty(),
+        "the CLI layout's per-file query never ran, so this crate does not reach it: {said:#?}"
+    );
+    let remaining: Vec<&str> = by_step.keys().map(String::as_str).collect();
+    assert_eq!(remaining, Vec::<&str>::new(), "{by_step:?}\n{said:#?}");
     Ok(())
 }
 

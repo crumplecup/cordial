@@ -13,7 +13,8 @@ mod contexts;
     feature = "antipatterns",
     feature = "panics",
     feature = "internal_error_chain",
-    feature = "derives"
+    feature = "derives",
+    feature = "cli_layout"
 ))]
 mod crate_files;
 mod def_map_cutoff;
@@ -43,7 +44,9 @@ mod identity;
 mod islands;
 mod item_key;
 mod items;
-#[cfg(feature = "internal_error_chain")]
+#[cfg(feature = "cli_layout")]
+mod layout_queries;
+#[cfg(any(feature = "internal_error_chain", feature = "cli_layout"))]
 mod module_queries;
 mod options;
 #[cfg(feature = "panics")]
