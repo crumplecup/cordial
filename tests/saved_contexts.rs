@@ -518,7 +518,7 @@ fn a_restored_run_executes_few_rust_analyzer_queries() -> Result<()> {
     // What a restored run still asks rust-analyzer for is what it takes to name each function
     // (parse, item trees, attributes, macro expansion) so its saved evidence can be found: the
     // steps below. Anything else asking for analysis in a restored run is new work to account for.
-    const NAMING: [&str; 22] = [
+    const NAMING: [&str; 23] = [
         "local_functions",
         "derived_site",
         "inner_",
@@ -553,6 +553,9 @@ fn a_restored_run_executes_few_rust_analyzer_queries() -> Result<()> {
         // `captured_source` while the antipatterns of a restored run were read the direct way, and
         // `error_source` while the files of the crate were found by reading their syntax.
         "source_of",
+        // The Rust files a crate has, listed once from the file set of its source root (an input of
+        // the database): what the collectors scan, which a walk of the directories used to say.
+        "held_rust_files",
     ];
     let others: Vec<_> = by_step
         .keys()

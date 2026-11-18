@@ -12,7 +12,8 @@ impl SourceDatabase {
         &self,
         target: &crate::CrateTarget,
     ) -> CordialResult<SourceErrorCompliance> {
-        SourceErrorCompliance::collect_with(target.crate_root(), |path, tree| {
+        let held = self.held_files(target.crate_root())?;
+        SourceErrorCompliance::collect_with(target.crate_root(), &held, |path, tree| {
             let key = ScanKey::new(
                 &self.db,
                 self.file_id(path)?,

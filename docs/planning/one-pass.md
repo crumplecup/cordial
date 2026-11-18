@@ -123,6 +123,14 @@ projection queries recover the downstream cut-off, not the recomputation.
    existence checks of `lib.rs`, `main.rs` and `bin/` read the source root's file set (the
    `LayoutFiles` trait, answered by `module_queries`), not the file system.
 
+7. **The files a crate has are a query** (`listing.rs`, `held_rust_files`), over the file set of the
+   source root of the crate's entry file, and the collectors take that list (`HeldFiles`) instead of
+   walking directories: error sites, chains, types, compliance, signatures and architecture,
+   observability, verus, panics, antipatterns, the priming pass and the entry-less branch of
+   `error_module_files`. A file the database does not hold is not scanned, which is what the
+   collectors already needed (they ask the database for each file's id). The walks that remain read
+   what to load, not what is loaded: `selection.rs` (`rust_files`), `populate.rs` and `sync.rs`.
+
 The acceptance is a test (`tests/one_parse.rs`), with a ratchet that names any step that parses a file
 for a collector (none, on the specimen) and a control that fails when the pass is skipped.
 
@@ -131,8 +139,5 @@ for a collector (none, on the specimen) and a control that fails when the pass i
 - The sweeps that read the tree without a query: the fallbacks that run when a query declines a file
   (`*_direct`, `error_signatures`, `error_architecture`'s direct path). They run only for a file with
   a syntax error, to say why, and are not on the way of a clean crate.
-- The listing of files by walking directories (`scanned_files`, `input_paths`, `panic_inputs`, the
-  entry-less branch of `error_module_files`) is still a file-system read; it could be the source
-  root's file set filtered by path, as module discovery now is.
 - The leaf and context passes copy files per context and have their own sweeps.
 - Not yet measured on elicit_doc or on cordial.

@@ -19,7 +19,11 @@ impl SourceDatabase {
         let contracts =
             crate::etiquettes::antipatterns::antipattern_contract_verifier(target.crate_name())
                 .is_some();
-        let paths = crate::etiquettes::antipatterns::native_input_paths(root, contracts)?;
+        let paths = crate::etiquettes::antipatterns::native_input_paths(
+            root,
+            contracts,
+            &self.held_files(root)?,
+        );
         match self.antipatterns_from_queries(root, target.crate_name(), &paths)? {
             Some(found) => Ok(found),
             None => self.antipatterns_directly(target, root, &paths),

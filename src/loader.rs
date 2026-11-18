@@ -41,6 +41,12 @@ pub(crate) use native_syntax::written_as_verus;
 mod library_root;
 #[cfg(feature = "crate_attrs")]
 pub use library_root::library_root_rs;
+#[cfg(any(
+    feature = "_quality_support",
+    feature = "verus_ir",
+    feature = "cli_layout"
+))]
+pub(crate) mod held_files;
 mod populate;
 mod scan_roots;
 mod source;

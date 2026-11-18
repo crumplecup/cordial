@@ -29,23 +29,16 @@ pub struct ErrorSignatureAssessment {
 
 impl SourceErrorSignatures {
     /// The source files this evidence is read from, in the order they are read.
-    #[tracing::instrument(level = "debug", err(level = "warn"))]
+    #[tracing::instrument(level = "debug", skip(held))]
     #[hotpath::measure]
-    pub(crate) fn input_paths(root: &Path) -> CordialResult<Vec<PathBuf>> {
-        let tree = root.join("src");
-        let mut paths = Vec::new();
-        if tree.is_dir() {
-            for entry in walkdir::WalkDir::new(&tree).sort_by_file_name() {
-                let entry = entry.map_err(anyhow::Error::new)?;
-                if entry.file_type().is_file()
-                    && entry.path().extension().is_some_and(|ext| ext == "rs")
-                    && !path_has_fixtures(entry.path(), root)
-                {
-                    paths.push(entry.path().to_path_buf());
-                }
-            }
-        }
-        Ok(paths)
+    pub(crate) fn input_paths(
+        root: &Path,
+        held: &crate::loader::held_files::HeldFiles,
+    ) -> Vec<PathBuf> {
+        held.under(&root.join("src"))
+            .filter(|path| !path_has_fixtures(path, root))
+            .cloned()
+            .collect()
     }
 
     /// The inventory of a crate whose index is joined from per-file parts.
@@ -66,12 +59,13 @@ impl SourceErrorSignatures {
     #[hotpath::measure]
     pub(crate) fn collect_with(
         root: &Path,
+        held: &crate::loader::held_files::HeldFiles,
         mut collect: impl FnMut(&mut SignatureChainIndex, &Path, &Path) -> CordialResult<FileSnapshot>,
     ) -> CordialResult<Self> {
         let tree = root.join("src");
         let mut files = Vec::new();
         let mut index = SignatureChainIndex::default();
-        for path in Self::input_paths(root)? {
+        for path in Self::input_paths(root, held) {
             files.push(collect(&mut index, &path, &tree)?);
         }
         Ok(Self {

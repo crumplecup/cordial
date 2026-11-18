@@ -15,7 +15,8 @@ impl SourceDatabase {
         root: &std::path::Path,
     ) -> CordialResult<SourceErrorSignatures> {
         let tree = root.join("src");
-        let files = SourceErrorSignatures::input_paths(root)?
+        let held = self.held_files(root)?;
+        let files = SourceErrorSignatures::input_paths(root, &held)
             .into_iter()
             .map(|path| Ok((self.file_id(&path)?, path, tree.clone())))
             .collect::<CordialResult<Vec<_>>>()?;
@@ -30,7 +31,7 @@ impl SourceDatabase {
             ));
         }
         let sema = Semantics::new(&self.db);
-        SourceErrorSignatures::collect_with(root, |index, path, tree| {
+        SourceErrorSignatures::collect_with(root, &held, |index, path, tree| {
             let file = self.file_id(path)?;
             let edition = super::super::edition::edition_of(&self.db, file);
             if let Some(error) = edition.parse(&self.db).errors().first() {

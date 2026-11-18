@@ -46,6 +46,12 @@ mod item_key;
 mod items;
 #[cfg(feature = "cli_layout")]
 mod layout_queries;
+#[cfg(any(
+    feature = "_quality_support",
+    feature = "verus_ir",
+    feature = "cli_layout"
+))]
+mod listing;
 #[cfg(any(feature = "internal_error_chain", feature = "cli_layout"))]
 mod module_queries;
 mod options;

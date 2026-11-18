@@ -32,19 +32,14 @@ impl SourceErrorCompliance {
     #[hotpath::measure]
     pub(crate) fn collect_with(
         root: &Path,
+        held: &crate::loader::held_files::HeldFiles,
         mut collect: impl FnMut(&Path, &Path) -> CordialResult<ErrorComplianceFile>,
     ) -> CordialResult<Self> {
         let tree = root.join("src");
         let mut files = Vec::new();
-        if tree.is_dir() {
-            for entry in walkdir::WalkDir::new(&tree).sort_by_file_name() {
-                let entry = entry.map_err(anyhow::Error::new)?;
-                if entry.file_type().is_file()
-                    && entry.path().extension().is_some_and(|ext| ext == "rs")
-                    && !path_has_fixtures(entry.path(), root)
-                {
-                    files.push(collect(entry.path(), &tree)?);
-                }
+        for path in held.under(&tree) {
+            if !path_has_fixtures(path, root) {
+                files.push(collect(path, &tree)?);
             }
         }
         files.sort_by(|a, b| a.snapshot.path().cmp(b.snapshot.path()));

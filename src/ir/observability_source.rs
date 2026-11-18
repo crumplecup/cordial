@@ -1,6 +1,5 @@
 //! Loader-owned, configuration-independent evidence for tracing policies.
 
-use crate::loader::quality_scan_trees;
 use crate::{CordialResult, FileSnapshot};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -93,24 +92,20 @@ impl SourceObservability {
     #[hotpath::measure]
     pub(crate) fn collect_with(
         root: &Path,
+        held: &crate::loader::held_files::HeldFiles,
         mut collect: impl FnMut(&Path, &Path) -> CordialResult<ObservabilityFile>,
     ) -> CordialResult<Self> {
         let mut files = Vec::new();
-        for tree in quality_scan_trees(root) {
-            for entry in walkdir::WalkDir::new(&tree).sort_by_file_name() {
-                let entry = entry.map_err(anyhow::Error::new)?;
-                if entry.file_type().is_file()
-                    && entry.path().extension().is_some_and(|ext| ext == "rs")
-                {
-                    files.push(collect(entry.path(), &tree)?);
-                }
+        for tree in held.scan_trees(root) {
+            for path in held.under(&tree) {
+                files.push(collect(path, &tree)?);
             }
         }
         files.sort_by(|a, b| a.relative.cmp(&b.relative));
         Ok(Self {
             crate_root: root.to_path_buf(),
-            has_lib: root.join("src/lib.rs").is_file(),
-            has_bin: root.join("src/main.rs").is_file() || root.join("src/bin").is_dir(),
+            has_lib: held.has(&root.join("src/lib.rs")),
+            has_bin: held.has(&root.join("src/main.rs")) || held.has_dir(&root.join("src/bin")),
             files,
         })
     }

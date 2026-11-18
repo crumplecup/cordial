@@ -10,7 +10,8 @@ impl SourceDatabase {
     #[tracing::instrument(level = "debug", skip(self), err(level = "warn"))]
     #[hotpath::measure(impl_type = "SourceDatabase")]
     pub(super) fn project_error_sites(&self, root: &Path) -> CordialResult<SourceErrorSites> {
-        SourceErrorSites::collect_with(root, |path, tree| {
+        let held = self.held_files(root)?;
+        SourceErrorSites::collect_with(root, &held, |path, tree| {
             let key = ScanKey::new(
                 &self.db,
                 self.file_id(path)?,

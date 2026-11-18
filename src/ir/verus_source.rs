@@ -1,5 +1,5 @@
 //! Snapshot-bound Verus dialect evidence owned by the shared graph.
-use crate::loader::{path_has_fixtures, quality_scan_trees};
+use crate::loader::path_has_fixtures;
 use crate::{CordialResult, FileSnapshot, VerusCrateIr};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -28,17 +28,14 @@ impl SourceVerus {
     #[hotpath::measure]
     pub(crate) fn collect_with(
         root: &Path,
+        held: &crate::loader::held_files::HeldFiles,
         mut collect: impl FnMut(&Path, &Path) -> CordialResult<VerusFile>,
     ) -> CordialResult<Self> {
         let mut files = Vec::new();
-        for tree in quality_scan_trees(root) {
-            for entry in walkdir::WalkDir::new(&tree).sort_by_file_name() {
-                let entry = entry.map_err(anyhow::Error::new)?;
-                if entry.file_type().is_file()
-                    && entry.path().extension().is_some_and(|ext| ext == "rs")
-                    && !path_has_fixtures(entry.path(), root)
-                {
-                    files.push(collect(entry.path(), &tree)?);
+        for tree in held.scan_trees(root) {
+            for path in held.under(&tree) {
+                if !path_has_fixtures(path, root) {
+                    files.push(collect(path, &tree)?);
                 }
             }
         }

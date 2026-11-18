@@ -109,18 +109,13 @@ impl SourceDatabase {
         &self,
         root: &Path,
     ) -> CordialResult<Vec<(PathBuf, PathBuf)>> {
+        let held = self.held_files(root)?;
         let mut paths = Vec::new();
-        for tree in crate::loader::quality_scan_trees(root) {
-            for entry in walkdir::WalkDir::new(&tree).sort_by_file_name() {
-                let entry = entry.map_err(anyhow::Error::new)?;
-                let path = entry.path();
-                if !entry.file_type().is_file()
-                    || path.extension().is_none_or(|ext| ext != "rs")
-                    || crate::loader::path_has_fixtures(path, root)
-                {
-                    continue;
+        for tree in held.scan_trees(root) {
+            for path in held.under(&tree) {
+                if !crate::loader::path_has_fixtures(path, root) {
+                    paths.push((tree.clone(), path.clone()));
                 }
-                paths.push((tree.clone(), path.to_path_buf()));
             }
         }
         paths.sort_by(|a, b| a.1.cmp(&b.1));

@@ -13,7 +13,8 @@ impl SourceDatabase {
         &self,
         root: &Path,
     ) -> CordialResult<SourceObservability> {
-        SourceObservability::collect_with(root, |path, tree| {
+        let held = self.held_files(root)?;
+        SourceObservability::collect_with(root, &held, |path, tree| {
             let key = ScanKey::new(
                 &self.db,
                 self.file_id(path)?,

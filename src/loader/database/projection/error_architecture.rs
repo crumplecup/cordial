@@ -103,17 +103,12 @@ impl SourceDatabase {
         } else if let Some(entry) = held(&binary) {
             entry
         } else {
-            let mut paths = walkdir::WalkDir::new(&src)
-                .into_iter()
-                .filter_map(Result::ok)
-                .filter(|e| {
-                    e.file_type().is_file() && e.path().extension().is_some_and(|e| e == "rs")
-                })
-                .filter(|e| !crate::loader::path_has_fixtures(e.path(), root))
-                .map(|e| e.into_path())
-                .collect::<Vec<_>>();
-            paths.sort();
-            return Ok(paths);
+            return Ok(self
+                .held_files(root)?
+                .under(&src)
+                .filter(|path| !crate::loader::path_has_fixtures(path, root))
+                .cloned()
+                .collect());
         };
         // The files the `mod` declarations lead to, followed through what the database holds: a query.
         // Where it cannot say (a file with syntax errors, a declaration it cannot read) the files

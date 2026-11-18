@@ -21,28 +21,28 @@ mod types;
 pub(crate) use facts::FileFacts;
 
 /// Shared selection for production collection and Cargo-backed projection.
-#[tracing::instrument(level = "debug", skip(root), err(level = "warn"))]
+#[tracing::instrument(level = "debug", skip(root, held))]
 #[hotpath::measure]
-pub(crate) fn input_paths(root: &Path, contracts: bool) -> CordialResult<Vec<(PathBuf, PathBuf)>> {
+pub(crate) fn input_paths(
+    root: &Path,
+    contracts: bool,
+    held: &crate::loader::held_files::HeldFiles,
+) -> Vec<(PathBuf, PathBuf)> {
     let mut paths = Vec::new();
-    for tree in crate::loader::quality_scan_trees(root) {
-        for entry in walkdir::WalkDir::new(&tree).sort_by_file_name() {
-            let entry = entry.map_err(anyhow::Error::new)?;
-            let path = entry.path();
-            if !entry.file_type().is_file()
-                || path.extension().is_none_or(|ext| ext != "rs")
-                || (crate::loader::path_has_fixtures(path, root)
-                    && !(contracts
-                        && path.starts_with(root.join("src"))
-                        && !path.components().any(|part| part.as_os_str() == "gallery")))
+    for tree in held.scan_trees(root) {
+        for path in held.under(&tree) {
+            if crate::loader::path_has_fixtures(path, root)
+                && !(contracts
+                    && path.starts_with(root.join("src"))
+                    && !path.components().any(|part| part.as_os_str() == "gallery"))
             {
                 continue;
             }
-            paths.push((tree.clone(), path.to_path_buf()));
+            paths.push((tree.clone(), path.clone()));
         }
     }
     paths.sort_by(|a, b| a.1.cmp(&b.1));
-    Ok(paths)
+    paths
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
