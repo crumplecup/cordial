@@ -122,11 +122,22 @@ pub struct Memo<C: Configuration> {
     pub(super) spilled: Option<Box<Spilled<C>>>,
 }
 
-/// A value that is in the store, and the copy of it that was read back, if any.
+/// A value that is not in memory as a value: it is encoded, in the store or held here, and the copy
+/// of it that was decoded, if any.
 #[derive(Debug)]
 pub(super) struct Spilled<C: Configuration> {
-    pub(super) key: crate::spill::SpillKey,
+    pub(super) at: SpilledAt,
     pub(super) restored: std::sync::OnceLock<C::Output<'static>>,
+}
+
+/// Where an encoded value is.
+#[derive(Debug)]
+pub(super) enum SpilledAt {
+    /// In the spill store, under this key.
+    Stored(crate::spill::SpillKey),
+    /// Held here as the bytes a saved state had it as, not decoded until something asks: a restored
+    /// memo is valid and its value is not known until a query reads it.
+    Held(Box<[u8]>),
 }
 
 /// A shared, type-erased handle to a [`Memo`].
@@ -373,7 +384,7 @@ impl<C: Configuration> Memo<C> {
             Some(value) => value,
             None => {
                 let spilled = self.spilled.as_ref()?;
-                spilled.restored.get_or_init(|| restore::<C>(spilled.key))
+                spilled.restored.get_or_init(|| restore::<C>(&spilled.at))
             }
         };
         // SAFETY: Guaranteed by `Configuration`; the restored lifetime is
@@ -425,30 +436,59 @@ impl<C: Configuration> Memo<C> {
             store.put(key, &bytes);
             counters.wrote(C::DEBUG_NAME, bytes.len() as u64);
             self.spilled = Some(Box::new(Spilled {
-                key,
+                at: SpilledAt::Stored(key),
                 restored: std::sync::OnceLock::new(),
             }));
-        } else if let Some(spilled) = self.spilled.as_mut()
-            && spilled.restored.take().is_some()
-        {
-            counters.dropped_again.fetch_add(1, Relaxed);
+        } else if let Some(spilled) = self.spilled.as_mut() {
+            if let SpilledAt::Held(bytes) = &spilled.at {
+                // The bytes a saved state had are given to the store, and the memo keeps its key.
+                store.put(key, bytes);
+                counters.wrote(C::DEBUG_NAME, bytes.len() as u64);
+                spilled.at = SpilledAt::Stored(key);
+                spilled.restored.take();
+            } else if spilled.restored.take().is_some() {
+                counters.dropped_again.fetch_add(1, Relaxed);
+            }
         }
+    }
+
+    /// The value as bytes when it is not in memory as a value: what a saved state had it as, or
+    /// what the store holds. `None` for a memo whose value is in memory.
+    #[cfg(feature = "persistence")]
+    pub(super) fn encoded(&self) -> Option<std::borrow::Cow<'_, [u8]>> {
+        let spilled = self.spilled.as_ref()?;
+        Some(match &spilled.at {
+            SpilledAt::Held(bytes) => std::borrow::Cow::Borrowed(bytes),
+            SpilledAt::Stored(key) => std::borrow::Cow::Owned(
+                crate::spill::spill_store()
+                    .and_then(|store| store.get(*key))
+                    .unwrap_or_else(|| panic!("a spilled value is not in the store: {key:?}")),
+            ),
+        })
     }
 }
 
-/// Read a spilled value back from the store.
-fn restore<C: Configuration>(key: crate::spill::SpillKey) -> C::Output<'static> {
+/// Decode a value that was spilled or restored without being decoded.
+fn restore<C: Configuration>(at: &SpilledAt) -> C::Output<'static> {
     #[cfg(feature = "persistence")]
     {
-        let bytes = crate::spill::spill_store()
-            .and_then(|store| store.get(key))
-            .unwrap_or_else(|| panic!("a spilled value is not in the store: {key:?}"));
-        C::deserialize(&mut rmp_serde::Deserializer::new(bytes.as_slice()))
-            .unwrap_or_else(|error| panic!("a spilled value could not be decoded: {key:?}: {error}"))
+        let fetched;
+        let bytes: &[u8] = match at {
+            SpilledAt::Held(bytes) => bytes,
+            SpilledAt::Stored(key) => {
+                fetched = crate::spill::spill_store()
+                    .and_then(|store| store.get(*key))
+                    .unwrap_or_else(|| panic!("a spilled value is not in the store: {key:?}"));
+                &fetched
+            }
+        };
+        C::deserialize(&mut rmp_serde::Deserializer::new(bytes))
+            .unwrap_or_else(|error| panic!("a spilled value could not be decoded: {error}"))
     }
     #[cfg(not(feature = "persistence"))]
     {
-        panic!("a spilled value needs the persistence feature: {key:?}")
+        let _ = at;
+        panic!("a spilled value needs the persistence feature")
     }
 }
 
@@ -492,7 +532,10 @@ mod persistence {
 
     /// A reference to the fields of a [`Memo`], with its [`QueryRevisions`] transformed.
     pub(crate) struct MappedMemo<'memo, C: Configuration> {
+        /// The value, when it is in memory as one.
         pub(crate) value: Option<&'memo C::Output<'memo>>,
+        /// The value as bytes, when it is not: a restored memo nothing has read, or a spilled one.
+        pub(crate) encoded: Option<std::borrow::Cow<'memo, [u8]>>,
         pub(crate) verified_at: AtomicRevision,
         pub(crate) revisions: MappedQueryRevisions<'memo>,
     }
@@ -502,7 +545,9 @@ mod persistence {
             &self,
             serialized_origin: PersistentQueryOrigin,
         ) -> MappedMemo<'_, C> {
-            let value = self.value();
+            // A value that is still bytes is saved as the bytes it is, and is not decoded to be encoded.
+            let encoded = self.encoded();
+            let value = if encoded.is_some() { None } else { self.value() };
             let Memo { ref header, .. } = *self;
             let MemoHeader {
                 ref verified_at,
@@ -511,6 +556,7 @@ mod persistence {
 
             MappedMemo {
                 value,
+                encoded,
                 verified_at: AtomicRevision::from(verified_at.load()),
                 revisions: revisions.with_origin(serialized_origin),
             }
@@ -539,18 +585,44 @@ mod persistence {
                 }
             }
 
+            struct AsBytes<'a>(&'a [u8]);
+
+            impl serde::Serialize for AsBytes<'_> {
+                fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+                where
+                    S: serde::Serializer,
+                {
+                    serializer.serialize_bytes(self.0)
+                }
+            }
+
             let MappedMemo {
                 value,
+                encoded,
                 verified_at,
                 revisions,
             } = self;
 
-            let value = value.expect(
-                "attempted to serialize memo where `Memo::should_serialize` returned `false`",
-            );
+            // The value is saved as bytes of its own, so that a restore can keep them until a query
+            // asks for the value.
+            let owned;
+            let bytes: &[u8] = match (encoded, value) {
+                (Some(encoded), _) => encoded,
+                (None, Some(value)) => {
+                    let mut buffer = Vec::new();
+                    SerializeValue::<C>(value)
+                        .serialize(&mut rmp_serde::Serializer::new(&mut buffer))
+                        .map_err(serde::ser::Error::custom)?;
+                    owned = buffer;
+                    &owned
+                }
+                (None, None) => panic!(
+                    "attempted to serialize memo where `Memo::should_serialize` returned `false`"
+                ),
+            };
 
             let mut s = serializer.serialize_struct("Memo", 3)?;
-            s.serialize_field("value", &SerializeValue::<C>(value))?;
+            s.serialize_field("value", &AsBytes(bytes))?;
             s.serialize_field("verified_at", &verified_at)?;
             s.serialize_field("revisions", &revisions)?;
             s.end()
@@ -567,36 +639,62 @@ mod persistence {
         {
             #[derive(Deserialize)]
             #[serde(rename = "Memo")]
-            pub struct DeserializeMemo<C: Configuration> {
-                #[serde(bound = "C: Configuration")]
-                value: DeserializeValue<C>,
+            pub struct DeserializeMemo {
+                value: EncodedValue,
                 verified_at: AtomicRevision,
                 revisions: QueryRevisions,
             }
 
-            struct DeserializeValue<C: Configuration>(C::Output<'static>);
+            /// The value as the bytes it was saved as.
+            struct EncodedValue(Vec<u8>);
 
-            impl<'de, C> serde::Deserialize<'de> for DeserializeValue<C>
-            where
-                C: Configuration,
-            {
+            impl<'de> serde::Deserialize<'de> for EncodedValue {
                 fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
                 where
                     D: serde::Deserializer<'de>,
                 {
-                    C::deserialize(deserializer)
-                        .map(DeserializeValue)
-                        .map_err(serde::de::Error::custom)
+                    struct Bytes;
+
+                    impl<'de> serde::de::Visitor<'de> for Bytes {
+                        type Value = EncodedValue;
+
+                        fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                            f.write_str("the bytes of a memo's value")
+                        }
+
+                        fn visit_bytes<E>(self, bytes: &[u8]) -> Result<EncodedValue, E> {
+                            Ok(EncodedValue(bytes.to_vec()))
+                        }
+
+                        fn visit_byte_buf<E>(self, bytes: Vec<u8>) -> Result<EncodedValue, E> {
+                            Ok(EncodedValue(bytes))
+                        }
+
+                        fn visit_seq<A>(self, mut seq: A) -> Result<EncodedValue, A::Error>
+                        where
+                            A: serde::de::SeqAccess<'de>,
+                        {
+                            let mut bytes = Vec::with_capacity(seq.size_hint().unwrap_or(0));
+                            while let Some(byte) = seq.next_element::<u8>()? {
+                                bytes.push(byte);
+                            }
+                            Ok(EncodedValue(bytes))
+                        }
+                    }
+
+                    deserializer.deserialize_bytes(Bytes)
                 }
             }
 
-            let memo = DeserializeMemo::<C>::deserialize(deserializer)?;
+            let memo = DeserializeMemo::deserialize(deserializer)?;
 
-            Ok(Memo::new(
-                Some(memo.value.0),
-                memo.verified_at.load(),
-                memo.revisions,
-            ))
+            // The value stays as the bytes it was saved as until a query reads the memo.
+            let mut restored = Memo::<C>::new(None, memo.verified_at.load(), memo.revisions);
+            restored.spilled = Some(Box::new(super::Spilled {
+                at: super::SpilledAt::Held(memo.value.0.into_boxed_slice()),
+                restored: std::sync::OnceLock::new(),
+            }));
+            Ok(restored)
         }
     }
 }
