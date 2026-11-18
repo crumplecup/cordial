@@ -5,8 +5,8 @@
 //! parses are, by the step of the run that asked, so that the passes can be made to share them.
 
 use cordial::{
-    CfgPlanning, CrateTarget, MetricsLayer, SavedState, SemanticCargoOptions, SemanticContextKey,
-    SourceDatabase, StoreLayout,
+    CfgPlanning, CrateIr, CrateTarget, IrView, MetricsLayer, SavedState, SemanticCargoOptions,
+    SemanticContextKey, SourceDatabase, StoreLayout,
 };
 use miette::{IntoDiagnostic, Result};
 use tracing_subscriber::Layer;
@@ -30,6 +30,12 @@ const TESTS: &str = "\
 #[test]
 fn calls_the_library() { gated::ordinary(); gated::plain(); }
 
+#[test]
+fn calls_it_again() { gated::plain(); }
+
+#[test]
+fn and_once_more() { gated::ordinary(); }
+
 #[cfg(kani)]
 #[test]
 fn only_under_kani() { gated::ordinary(); }
@@ -38,6 +44,11 @@ fn only_under_kani() { gated::ordinary(); }
 /// The metrics of a projection of the crate with a context, as `(chain, parses)` of those that
 /// parse a file, in a run with no saved state (`restored` is false) or one the first run saved.
 fn parses_in_contexts(second_run: bool, with_tests: bool) -> Result<Vec<(String, u64)>> {
+    Ok(run_in_contexts(second_run, with_tests)?.0)
+}
+
+/// The same, with the projection the last run made.
+fn run_in_contexts(second_run: bool, with_tests: bool) -> Result<(Vec<(String, u64)>, CrateIr)> {
     cordial::init_tracing();
     let root = tempfile::tempdir().into_diagnostic()?;
     for dir in ["src", "tests"] {
@@ -79,6 +90,7 @@ fn parses_in_contexts(second_run: bool, with_tests: bool) -> Result<Vec<(String,
             .collect())
     };
     let mut found = Vec::new();
+    let mut graph = None;
     let mut before = snapshot()?;
     for run in 0..runs {
         let subscriber = tracing_subscriber::registry()
@@ -86,9 +98,11 @@ fn parses_in_contexts(second_run: bool, with_tests: bool) -> Result<Vec<(String,
         let _subscriber = tracing::subscriber::set_default(subscriber);
         let mut session = SourceDatabase::load_saved(root.path(), &options, Some(saved.clone()))
             .into_diagnostic()?;
-        session
-            .project(&CrateTarget::new("gated", root.path()), &sources)
-            .into_diagnostic()?;
+        graph = Some(
+            session
+                .project(&CrateTarget::new("gated", root.path()), &sources)
+                .into_diagnostic()?,
+        );
         let now = snapshot()?;
         if run + 1 == runs {
             // What this run added to what the runs before it counted.
@@ -102,7 +116,7 @@ fn parses_in_contexts(second_run: bool, with_tests: bool) -> Result<Vec<(String,
         }
         before = now;
     }
-    Ok(found)
+    Ok((found, graph.ok_or_else(|| miette::miette!("no run"))?))
 }
 
 /// The parses that ran for the passes over contexts, by the pass's step that asked: the chain from
@@ -159,10 +173,41 @@ fn a_restored_run_parses_no_copy_but_reads_the_gates_of_the_originals() -> Resul
     let gates: u64 = found
         .iter()
         .filter(|(key, _)| {
-            key.starts_with("steps.gates_in < harvest") && key.ends_with("> gates_in")
+            key.starts_with("steps.gates_in <")
+                && key.contains("< harvest <")
+                && key.ends_with("> gates_in")
         })
         .map(|(_, count)| *count)
         .sum();
     assert_eq!(gates, 2, "the gates read for the two files: {found:#?}");
+    Ok(())
+}
+
+/// A leaf context after the first reads the functions of the test files that a gate it flips can
+/// change, and those it is first to have, not each one again: the others have the facts they had.
+/// The leaf functions are what they were, joined from the contexts.
+#[test]
+fn a_leaf_context_reads_only_what_its_gates_change() -> Result<()> {
+    let (found, graph) = run_in_contexts(false, true)?;
+    let count = |name: &str| {
+        found
+            .iter()
+            .find(|(key, _)| key == &format!("semantic.leaves.{name}"))
+            .map_or(0, |(_, count)| *count)
+    };
+    // Three functions under `test`, then the four of the context that also has `kani` on, of which
+    // only the one gated on it is read again.
+    assert_eq!(count("functions"), 7, "{found:#?}");
+    assert_eq!(count("read"), 4, "{found:#?}");
+    let leaves = graph.leaf_functions().into_diagnostic()?;
+    assert_eq!(
+        leaves.len(),
+        4,
+        "every test function is a leaf: {leaves:#?}"
+    );
+    assert!(
+        leaves.iter().all(|leaf| !leaf.callees().is_empty()),
+        "each calls the library: {leaves:#?}"
+    );
     Ok(())
 }

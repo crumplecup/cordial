@@ -8,8 +8,7 @@
 
 use super::LocalCfgs;
 use super::copy_functions::copy_functions;
-use super::flips::Flips;
-use super::gates::gates_of;
+use super::flips::{Flips, Reach};
 use super::merge::{Pending, declares_a_name_twice, group};
 use super::plan::{Covered, asked};
 use crate::loader::database::{
@@ -281,13 +280,7 @@ impl SourceDatabase {
                     saved_files += 1;
                     // The copy has the original's text: its gates are read once, from the original,
                     // and its syntax is the original's, which is parsed only if a function asks.
-                    let flips = match gates_of(&self.db, original) {
-                        Some(gates) => Flips::of(gates, pairs),
-                        None => Flips::collect(
-                            &edition_of(&self.db, original).parse(&self.db).tree(),
-                            pairs,
-                        ),
-                    };
+                    let flips = Flips::of_file(&self.db, original, pairs, Reach::Written);
                     let items = std::cell::OnceCell::new();
                     for record in records {
                         let range =
@@ -351,7 +344,7 @@ impl SourceDatabase {
                 );
                 rust_analyzer_files += 1;
                 let tree = sema.parse(sema.attach_first_edition(file));
-                let flips = Flips::collect(&tree, pairs);
+                let flips = Flips::collect(&tree, pairs, Reach::Written);
                 for function in tree.syntax().descendants().filter_map(ast::Fn::cast) {
                     let range = function.syntax().text_range();
                     let Some(node) = files.nodes.get(path, range) else {
@@ -443,7 +436,7 @@ impl SourceDatabase {
 /// The functions of `file`, by where each is: read from the file's parse.
 #[instrument(level = "trace", skip(db))]
 #[hotpath::measure]
-fn functions_by_range(
+pub(super) fn functions_by_range(
     db: &ra_ap_ide_db::RootDatabase,
     file: ra_ap_vfs::FileId,
 ) -> HashMap<TextRange, ast::Fn> {

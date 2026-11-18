@@ -5,7 +5,10 @@
 //! context once, reads each leaf function's calls, and restores the ordinary
 //! build. Nothing here adds a node to the library's graph.
 
+use super::LocalCfgs;
 use super::copy_functions::copy_functions;
+use super::flips::{Flips, Reach};
+use super::pass::functions_by_range;
 use super::plan::{Covered, asked};
 use crate::loader::database::{
     SourceDatabase,
@@ -14,12 +17,25 @@ use crate::loader::database::{
     queries::{evidence_of, persisted_evidence},
 };
 use crate::{CordialResult, CrateIr, FunctionLocation, LeafFunction, SemanticContextKey};
+use ra_ap_cfg::CfgOptions;
 use ra_ap_hir::{Semantics, attach_db};
-use ra_ap_syntax::{AstNode, ast, ast::HasName};
+use ra_ap_syntax::{AstNode, TextRange, ast, ast::HasName};
 use std::collections::{BTreeSet, VecDeque};
 use std::path::PathBuf;
 
 use tracing::instrument;
+
+/// What a leaf context after the first reads of the functions it has: the ones a gate it flips (from
+/// the first's cfg) can change, and those the contexts before it did not have.
+///
+/// A function with no flipped gate in it, around it, or in a name it mentions has the same facts
+/// as it had where it was first read, and joining them again adds nothing.
+struct Flipped<'a> {
+    /// Each local crate's cfg in the first context beside the one in this.
+    pairs: Vec<(CfgOptions, CfgOptions)>,
+    /// The functions the contexts before this read.
+    known: &'a BTreeSet<FunctionLocation>,
+}
 
 impl SourceDatabase {
     /// Read the crate's observability inventory again in the cfg context the
@@ -86,9 +102,11 @@ impl SourceDatabase {
             only.insert(self.file_id(path)?);
         }
         let base = SemanticContextKey::enabling(["test"]);
+        let cfgs = LocalCfgs::capture_excluding(&self.db, &self.shadow_crates());
+        let in_base: Vec<CfgOptions> = cfgs.pairs(&base).into_iter().map(|(_, cfg)| cfg).collect();
         let mut covered = Covered::default();
         let mut seen = vec![base.clone()];
-        let mut queue = VecDeque::from([base]);
+        let mut queue = VecDeque::from([base.clone()]);
         let mut outcome = Ok(());
         while let Some(context) = queue.pop_front() {
             let stage = std::time::Instant::now();
@@ -102,7 +120,17 @@ impl SourceDatabase {
             let entered = stage.elapsed();
             let stage = std::time::Instant::now();
             let mut found = Vec::new();
-            outcome = self.read_leaves(files, &added, &mut found);
+            let known: BTreeSet<FunctionLocation> =
+                leaves.iter().map(|leaf| leaf.location().clone()).collect();
+            let flipped = (context != base).then(|| Flipped {
+                pairs: in_base
+                    .iter()
+                    .cloned()
+                    .zip(cfgs.pairs(&context).into_iter().map(|(_, cfg)| cfg))
+                    .collect(),
+                known: &known,
+            });
+            outcome = self.read_leaves(files, &added, flipped.as_ref(), &mut found);
             tracing::info!(
                 target: "cordial::semantic::leaves",
                 %context,
@@ -132,12 +160,13 @@ impl SourceDatabase {
         outcome
     }
 
-    #[instrument(level = "debug", skip(self, files, leaves), err(level = "warn"))]
+    #[instrument(level = "debug", skip(self, files, only, leaves), err(level = "warn"))]
     #[hotpath::measure]
     fn read_leaves(
         &self,
         files: &[PathBuf],
         context: &crate::ContextCrates,
+        only: Option<&Flipped<'_>>,
         leaves: &mut Vec<LeafFunction>,
     ) -> CordialResult<()> {
         attach_db(&self.db, || {
@@ -169,14 +198,60 @@ impl SourceDatabase {
                 }
             }
             if every {
-                let keys: Vec<String> = saved
+                // The functions to read: all of them in the first context, and in the others those
+                // a flipped gate can change or the earlier contexts did not have.
+                let mut chosen = Vec::new();
+                let mut listed = 0usize;
+                for (path, records) in saved {
+                    listed += records.len();
+                    let kept: Vec<_> = match only {
+                        None => records.iter().collect(),
+                        Some(only) => {
+                            let original = self.file_id(path)?;
+                            let flips =
+                                Flips::of_file(&self.db, original, &only.pairs, Reach::Seen);
+                            let items = std::cell::OnceCell::new();
+                            records
+                                .iter()
+                                .filter(|record| {
+                                    let range = TextRange::new(
+                                        (*record.start()).into(),
+                                        (*record.end()).into(),
+                                    );
+                                    !only.known.contains(&FunctionLocation::new(
+                                        path.clone(),
+                                        *record.start(),
+                                    )) || flips.touches(range)
+                                        || (flips.has_names()
+                                            && items
+                                                .get_or_init(|| {
+                                                    functions_by_range(&self.db, original)
+                                                })
+                                                .get(&range)
+                                                .is_some_and(|function| {
+                                                    flips.mentions(function.syntax())
+                                                }))
+                                })
+                                .collect()
+                        }
+                    };
+                    chosen.push((path, kept));
+                }
+                tracing::info!(
+                    target: "cordial::semantic::leaves",
+                    functions = listed,
+                    read = chosen.iter().map(|(_, kept)| kept.len()).sum::<usize>(),
+                    first_context = only.is_none(),
+                    "the functions of the leaf files a context reads"
+                );
+                let keys: Vec<String> = chosen
                     .iter()
                     .flat_map(|(_, records)| records.iter().map(|record| record.key().clone()))
                     .collect();
                 self.prime("leaf files", &keys, |db, text| {
                     let _ = persisted_evidence(db, ItemKey::new(db, text.clone()));
                 });
-                for (path, records) in saved {
+                for (path, records) in chosen {
                     for record in records {
                         let key = ItemKey::new(&self.db, record.key().clone());
                         let Some(facts) = persisted_evidence(&self.db, key).as_ref() else {

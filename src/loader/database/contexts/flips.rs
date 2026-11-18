@@ -9,7 +9,7 @@
 
 use super::plan::guard;
 use ra_ap_cfg::CfgOptions;
-use ra_ap_syntax::{AstNode, SourceFile, SyntaxNode, TextRange, ast};
+use ra_ap_syntax::{AstNode, SourceFile, SyntaxNode, TextRange, ast, ast::HasName};
 use std::collections::BTreeSet;
 use tracing::instrument;
 
@@ -20,12 +20,25 @@ pub(super) struct Flips {
     names: BTreeSet<String>,
 }
 
+/// Which names of a flipped gate make the code that mentions them relevant.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Reach {
+    /// Every name written in the gate: the code that mentions any of them.
+    Written,
+    /// What other code sees of the gate: for a gated function, its own name.
+    Seen,
+}
+
 impl Flips {
     /// Gates of `tree` whose predicate differs between any `(ordinary, context)`
     /// cfg pair, with the names defined or used inside them.
     #[instrument(level = "debug", skip_all)]
     #[hotpath::measure(impl_type = "Flips")]
-    pub(super) fn collect(tree: &SourceFile, pairs: &[(CfgOptions, CfgOptions)]) -> Self {
+    pub(super) fn collect(
+        tree: &SourceFile,
+        pairs: &[(CfgOptions, CfgOptions)],
+        reach: Reach,
+    ) -> Self {
         let mut flips = Self::default();
         for attr in tree.syntax().descendants().filter_map(ast::Attr::cast) {
             if !matches!(attr.meta(), Some(ast::Meta::CfgMeta(_))) {
@@ -42,21 +55,23 @@ impl Flips {
                 continue;
             }
             flips.hosts.push(host.text_range());
-            flips.names.extend(host.descendants().filter_map(|node| {
-                ast::Name::cast(node.clone())
-                    .map(|name| name.text().to_string())
-                    .or_else(|| ast::NameRef::cast(node).map(|name| name.text().to_string()))
-            }));
+            flips.names.extend(host_names(&host, reach));
         }
         flips
     }
 
     /// The flips of the gates `hosts`, which are the ones that flip.
-    pub(super) fn from_hosts<'a>(hosts: impl Iterator<Item = &'a super::gates::CfgHost>) -> Self {
+    pub(super) fn from_hosts<'a>(
+        hosts: impl Iterator<Item = &'a super::gates::CfgHost>,
+        reach: Reach,
+    ) -> Self {
         let mut flips = Self::default();
         for host in hosts {
             flips.hosts.push(host.range);
-            flips.names.extend(host.names.iter().cloned());
+            flips.names.extend(match reach {
+                Reach::Written => host.written.iter().cloned(),
+                Reach::Seen => host.seen.iter().cloned(),
+            });
         }
         flips
     }
@@ -83,6 +98,31 @@ impl Flips {
                 ast::NameRef::cast(child).is_some_and(|name| self.names.contains(name.text()))
             })
     }
+}
+
+/// The names a gate on `host` makes relevant to the code that mentions them.
+///
+/// A gated function is there or not, and what other code sees of it is its name: what its own body
+/// calls or declares changes nothing for them. Any other gated item (an `impl`, a `use`, a type, a
+/// module) can change what the names it writes mean, so every name written in it counts.
+#[instrument(level = "trace", skip_all)]
+pub(super) fn host_names(host: &SyntaxNode, reach: Reach) -> BTreeSet<String> {
+    if reach == Reach::Seen
+        && let Some(function) = ast::Fn::cast(host.clone())
+    {
+        return function
+            .name()
+            .map(|name| name.text().to_string())
+            .into_iter()
+            .collect();
+    }
+    host.descendants()
+        .filter_map(|node| {
+            ast::Name::cast(node.clone())
+                .map(|name| name.text().to_string())
+                .or_else(|| ast::NameRef::cast(node).map(|name| name.text().to_string()))
+        })
+        .collect()
 }
 
 #[instrument(level = "debug", skip(cfg, predicate))]

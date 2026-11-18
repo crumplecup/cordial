@@ -6,7 +6,7 @@
 //! it is read once from the original (not once more for every copy of it in every context). It is
 //! a query of the database, so an edit to the file reads it again.
 
-use super::flips::Flips;
+use super::flips::{Flips, Reach};
 use super::plan::{Clause, clauses, guard};
 use crate::loader::database::edition::edition_of;
 use crate::loader::database::item_key::{self, ItemKey};
@@ -25,7 +25,10 @@ use tracing::instrument;
 pub(super) struct CfgHost {
     pub(super) range: TextRange,
     pub(super) predicate: CfgExpr,
-    pub(super) names: BTreeSet<String>,
+    /// Every name written in it.
+    pub(super) written: BTreeSet<String>,
+    /// The names other code sees of it.
+    pub(super) seen: BTreeSet<String>,
 }
 
 /// What a file's attributes say about its gates.
@@ -52,18 +55,15 @@ impl FileGates {
             if !matches!(attr.meta(), Some(ast::Meta::CfgMeta(_))) {
                 continue;
             }
-            let names = host
-                .descendants()
-                .filter_map(|node| {
-                    ast::Name::cast(node.clone())
-                        .map(|name| name.text().to_string())
-                        .or_else(|| ast::NameRef::cast(node).map(|name| name.text().to_string()))
-                })
-                .collect();
+            let (written, seen) = (
+                super::flips::host_names(&host, Reach::Written),
+                super::flips::host_names(&host, Reach::Seen),
+            );
             gates.cfg_hosts.push(CfgHost {
                 range: host.text_range(),
                 predicate,
-                names,
+                written,
+                seen,
             });
         }
         gates
@@ -93,6 +93,22 @@ pub(super) fn gates_of(db: &RootDatabase, file: FileId) -> Option<&FileGates> {
 }
 
 impl Flips {
+    /// The gates of `file` that differ between any `(ordinary, context)` cfg pair, from the file's
+    /// saved gates, or from its tree when they cannot be made.
+    #[instrument(level = "debug", skip(db, pairs))]
+    #[hotpath::measure]
+    pub(super) fn of_file(
+        db: &RootDatabase,
+        file: FileId,
+        pairs: &[(ra_ap_cfg::CfgOptions, ra_ap_cfg::CfgOptions)],
+        reach: Reach,
+    ) -> Self {
+        match gates_of(db, file) {
+            Some(gates) => Self::of(gates, pairs, reach),
+            None => Self::collect(&edition_of(db, file).parse(db).tree(), pairs, reach),
+        }
+    }
+
     /// The gates of `gates` that differ between any `(ordinary, context)` cfg pair: the same as
     /// reading them from the file's tree, from what was read once.
     #[instrument(level = "debug", skip_all)]
@@ -100,12 +116,16 @@ impl Flips {
     pub(super) fn of(
         gates: &FileGates,
         pairs: &[(ra_ap_cfg::CfgOptions, ra_ap_cfg::CfgOptions)],
+        reach: Reach,
     ) -> Self {
-        Self::from_hosts(gates.cfg_hosts.iter().filter(|host| {
-            pairs.iter().any(|(ordinary, context)| {
-                super::flips::predicate_holds(ordinary, &host.predicate)
-                    != super::flips::predicate_holds(context, &host.predicate)
-            })
-        }))
+        Self::from_hosts(
+            gates.cfg_hosts.iter().filter(|host| {
+                pairs.iter().any(|(ordinary, context)| {
+                    super::flips::predicate_holds(ordinary, &host.predicate)
+                        != super::flips::predicate_holds(context, &host.predicate)
+                })
+            }),
+            reach,
+        )
     }
 }
