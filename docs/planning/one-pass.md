@@ -134,10 +134,53 @@ projection queries recover the downstream cut-off, not the recomputation.
 The acceptance is a test (`tests/one_parse.rs`), with a ratchet that names any step that parses a file
 for a collector (none, on the specimen) and a control that fails when the pass is skipped.
 
+8. **The passes over contexts say what they cost** (`contexts/pass.rs`, `leaves.rs`): each context's
+   analysis logs the time to build the copy, harvest, evict, merge observability and plan, and how many
+   functions the copy has, has new, and kept facts for; each leaf context logs its build and read time.
+   `tests/context_parses.rs` names the parses they make: one per copy of a file per context on a cold
+   run, none on a restored run (the gates of the originals are a saved query, `gates_in`).
+9. **A leaf context after the first reads only what its gates can change** (`Flipped`, `Reach::Seen`):
+   the test functions that are new there, inside or around a flipped gate, or that mention a name a
+   flipped gate defines; a gated function counts for its own name and not for the names its body
+   calls. The harvest keeps `Reach::Written`: with the narrower rule, later steps asked for evidence
+   the harvest had been computing, and a place index was walked again.
+
+## Measured on elicit_doc (2026-11-17, release build, 134 files in the workspace, one context)
+
+| | no eviction | `CORDIAL_EVICT_LRU` |
+| --- | --- | --- |
+| Cold run, wall | 62 s, 43 s (first run after a build was slow) | 47 s, 47 s |
+| Cold run, peak resident | 2.25 GB | 1.73 to 1.79 GB |
+| Edited run (one comment), wall | 13.0 to 13.4 s | 13.2 to 13.5 s |
+| Edited run, peak resident | 1.41 GB | 1.36 to 1.41 GB |
+| Run with nothing changed | 1.4 s | 1.4 s |
+
+Eviction cost 31 s on a cold run before the one-pass work (79 s against 48 s); it costs 4 s now.
+
+Where a cold run goes (43 s, no eviction): loading the database and priming function evidence 25 s
+(inference of bodies is 37 s of the 88 s of query time, macro expansion 16 s, rust-analyzer's parse
+3 s, cordial's own extraction 2.6 s), the ordinary projection steps 2.7 s, the `+test` context 9.3 s
+(building its copy's definition maps, 8.7 s of it in the harvest), the leaf files 0.6 s, saving the
+state 3.5 s (260 MB). The projection steps, which are what the one-pass work changed, are 6% of it.
+
+Where an edited run goes (13 s): restoring the state 3.6 s (decoding 3.0 s), function evidence and the
+audit 3.1 s, the steps 0.9 s, the context 1.5 s, saving 2.2 s (the whole 260 MB is encoded again for
+one changed file), the call graph and report 1.2 s.
+
+Memory: the peak is reached in the priming of function evidence, before the ordinary projection is
+done (0.64 GB after loading, 2.26 GB after priming, with no eviction). Nothing after it raises it: the
+context and leaf passes do not move the peak on this workspace. An allocation profile of a cold run
+(20 GB allocated over 51 s, 224 threads, 2.9 GB resident at its largest) puts the allocation in the
+definition-map and inference queries (`item_key::inner_` 6.1 GB, `queries::node` 5.4 GB), saving the
+state 1.0 GB, and the copy's function lists 0.95 GB; these are allocated and freed, not held.
+
 ## What is left
 
 - The sweeps that read the tree without a query: the fallbacks that run when a query declines a file
   (`*_direct`, `error_signatures`, `error_architecture`'s direct path). They run only for a file with
   a syntax error, to say why, and are not on the way of a clean crate.
-- The leaf and context passes copy files per context and have their own sweeps.
-- Not yet measured on elicit_doc or on cordial.
+- The context pass builds each copy's definition maps on a cold run (8.7 s here, and 40 to 90 s per
+  context on cordial, which has about a dozen); a copy has its original's text but its own file ids, so
+  every context parses and resolves the workspace again. Sharing the parse, or deciding which files a
+  context can change before asking rust-analyzer, is the large piece left.
+- Not measured on cordial since the leaf filter and the saved gates.
