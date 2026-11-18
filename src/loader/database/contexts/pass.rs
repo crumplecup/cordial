@@ -165,7 +165,9 @@ impl SourceDatabase {
             ));
             let watch =
                 crate::process_memory::Watch::start(format!("cfg context {}", analysed.len() + 1));
+            let stage = std::time::Instant::now();
             let added = self.add_context_crates(&context)?;
+            let entered = stage.elapsed();
             crate::process_memory::log("cfg context entered");
             if pending.is_merged() && declares_a_name_twice(&self.db, &added.crate_set()) {
                 tracing::debug!(
@@ -187,11 +189,18 @@ impl SourceDatabase {
                 nodes,
                 context: &added,
             };
+            let stage = std::time::Instant::now();
             self.harvest(&context, index, &pairs, &files, graph)?;
+            let harvested = stage.elapsed();
             crate::process_memory::log("cfg context harvested");
+            let stage = std::time::Instant::now();
             self.evict_regenerable("cfg context");
+            let evicted = stage.elapsed();
+            let stage = std::time::Instant::now();
             #[cfg(feature = "tracing")]
             self.merge_context_observability(graph)?;
+            let merged = stage.elapsed();
+            let stage = std::time::Instant::now();
             if automatic {
                 wanted.add(asked(
                     &self.db,
@@ -202,12 +211,18 @@ impl SourceDatabase {
                     &added.originals(),
                 ));
             }
+            let planned = stage.elapsed();
             drop(watch);
-            tracing::debug!(
+            tracing::info!(
                 target: "cordial::semantic::contexts",
                 %context,
                 analysed = analysed.len(),
                 queued = wanted.queue.len(),
+                entered_ms = entered.as_millis() as u64,
+                harvested_ms = harvested.as_millis() as u64,
+                evicted_ms = evicted.as_millis() as u64,
+                observability_ms = merged.as_millis() as u64,
+                planned_ms = planned.as_millis() as u64,
                 "cfg context analysed"
             );
             crate::process_memory::log("cfg context analysed");
@@ -248,6 +263,9 @@ impl SourceDatabase {
             let mut definitions: HashMap<SemanticItemId, NodeId> = HashMap::new();
             let mut calls: Vec<(NodeId, SemanticItemId)> = Vec::new();
             let (mut saved_files, mut rust_analyzer_files) = (0usize, 0usize);
+            // The functions the context's copy has, and those of them it kept full facts for
+            // (the rest are only marked active): the share a context changes.
+            let (mut functions, mut kept, mut new_here) = (0usize, 0usize, 0usize);
             for path in files.paths {
                 // The context's copy of the file, which has the same text.
                 let original = self.file_id(path)?;
@@ -281,8 +299,10 @@ impl SourceDatabase {
                         let own = SemanticItemId::new(key.as_id().as_bits());
                         definitions.insert(canonical_id(own), node);
                         push_activity(graph, node, index)?;
+                        functions += 1;
                         let new = crate::IrView::semantic_function(graph, node)?.is_none();
                         if new {
+                            new_here += 1;
                             locator.record_trait_implementation(graph, own, node)?;
                         }
                         let relevant = new
@@ -295,6 +315,7 @@ impl SourceDatabase {
                         if !relevant {
                             continue;
                         }
+                        kept += 1;
                         let facts =
                             persisted_evidence(&self.db, key).as_ref().ok_or_else(|| {
                                 crate::CordialError::workspace_source_facts_missing(
@@ -347,8 +368,10 @@ impl SourceDatabase {
                         node,
                     );
                     push_activity(graph, node, index)?;
+                    functions += 1;
                     let new = crate::IrView::semantic_function(graph, node)?.is_none();
                     if new {
+                        new_here += 1;
                         locator.record_trait_implementation(
                             graph,
                             types::identity(&self.db, definition.into()),
@@ -358,6 +381,7 @@ impl SourceDatabase {
                     if !(new || flips.touches(range) || flips.mentions(function.syntax())) {
                         continue;
                     }
+                    kept += 1;
                     let facts = evidence_of(&self.db, definition).as_ref().ok_or_else(|| {
                         crate::CordialError::workspace_source_facts_missing(
                             "semantic function source",
@@ -382,6 +406,9 @@ impl SourceDatabase {
                 %context,
                 saved_files,
                 rust_analyzer_files,
+                functions,
+                new_here,
+                kept,
                 "the files of a context's copy: read from saved lists, and through rust-analyzer"
             );
             let mut edges: BTreeSet<(NodeId, NodeId)> = BTreeSet::new();

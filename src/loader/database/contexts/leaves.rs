@@ -91,6 +91,7 @@ impl SourceDatabase {
         let mut queue = VecDeque::from([base]);
         let mut outcome = Ok(());
         while let Some(context) = queue.pop_front() {
+            let stage = std::time::Instant::now();
             let added = match self.add_context_crates(&context) {
                 Ok(added) => added,
                 Err(error) => {
@@ -98,9 +99,18 @@ impl SourceDatabase {
                     break;
                 }
             };
+            let entered = stage.elapsed();
+            let stage = std::time::Instant::now();
             let mut found = Vec::new();
             outcome = self.read_leaves(files, &added, &mut found);
-            tracing::debug!(target: "cordial::semantic::leaves", %context, found = found.len(), "leaf context read");
+            tracing::info!(
+                target: "cordial::semantic::leaves",
+                %context,
+                found = found.len(),
+                entered_ms = entered.as_millis() as u64,
+                read_ms = stage.elapsed().as_millis() as u64,
+                "leaf context read"
+            );
             merge(leaves, found);
             if outcome.is_err() {
                 break;
