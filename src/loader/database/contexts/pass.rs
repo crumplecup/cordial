@@ -69,7 +69,10 @@ impl Wanted {
 
 /// The graph node of every function item, by file and source range.
 #[derive(Debug, Default)]
-pub(in crate::loader::database) struct FunctionNodes(HashMap<(PathBuf, TextRange), NodeId>);
+pub(in crate::loader::database) struct FunctionNodes {
+    nodes: HashMap<(PathBuf, TextRange), NodeId>,
+    by_file: HashMap<PathBuf, Vec<NodeId>>,
+}
 
 impl FunctionNodes {
     #[instrument(level = "trace", skip(self, path, range, node))]
@@ -79,12 +82,27 @@ impl FunctionNodes {
         range: TextRange,
         node: NodeId,
     ) {
-        self.0.insert((path.to_path_buf(), range), node);
+        if self
+            .nodes
+            .insert((path.to_path_buf(), range), node)
+            .is_none()
+        {
+            self.by_file
+                .entry(path.to_path_buf())
+                .or_default()
+                .push(node);
+        }
+    }
+
+    /// The nodes of the functions in the file at `path`.
+    #[instrument(level = "trace", skip(self, path))]
+    pub(in crate::loader::database) fn in_file(&self, path: &Path) -> &[NodeId] {
+        self.by_file.get(path).map_or(&[], Vec::as_slice)
     }
 
     #[instrument(level = "trace", skip(self, path, range))]
     pub(in crate::loader::database) fn get(&self, path: &Path, range: TextRange) -> Option<NodeId> {
-        self.0.get(&(path.to_path_buf(), range)).copied()
+        self.nodes.get(&(path.to_path_buf(), range)).copied()
     }
 }
 
@@ -188,21 +206,6 @@ impl SourceDatabase {
                 nodes,
                 context: &added,
             };
-            // Only a count: failing to make it must not fail the analysis it describes.
-            let reuse = self.measure_reuse(paths, &pairs).unwrap_or_else(|error| {
-                tracing::warn!(error = ?error, "could not count the files a context would copy");
-                super::reuse::Reuse::default()
-            });
-            tracing::info!(
-                target: "cordial::semantic::contexts",
-                %context,
-                files = reuse.files,
-                flipped = reuse.flipped,
-                unsure = reuse.unsure,
-                spine = reuse.spine,
-                aliased = reuse.aliased(),
-                "the files this context would copy, and the files it could take from the ordinary build"
-            );
             let stage = std::time::Instant::now();
             self.harvest(&context, index, &pairs, &files, graph)?;
             let harvested = stage.elapsed();
@@ -276,13 +279,27 @@ impl SourceDatabase {
                 |id: SemanticItemId| -> SemanticItemId { item_key::canonical_id(&self.db, id) };
             let mut definitions: HashMap<SemanticItemId, NodeId> = HashMap::new();
             let mut calls: Vec<(NodeId, SemanticItemId)> = Vec::new();
-            let (mut saved_files, mut rust_analyzer_files) = (0usize, 0usize);
+            let (mut saved_files, mut rust_analyzer_files, mut aliased_files) =
+                (0usize, 0usize, 0usize);
             // The functions the context's copy has, and those of them it kept full facts for
             // (the rest are only marked active): the share a context changes.
             let (mut functions, mut kept, mut new_here) = (0usize, 0usize, 0usize);
             for path in files.paths {
-                // The context's copy of the file, which has the same text.
                 let original = self.file_id(path)?;
+                if files.context.is_aliased(original) {
+                    // The context takes this file as it is: its functions are the ordinary
+                    // build's, active here as there, and nothing in the file is switched.
+                    aliased_files += 1;
+                    for node in files.nodes.in_file(path) {
+                        push_activity(graph, *node, index)?;
+                        functions += 1;
+                        if let Some(function) = crate::IrView::semantic_function(graph, *node)? {
+                            definitions.insert(*function.definition(), *node);
+                        }
+                    }
+                    continue;
+                }
+                // The context's copy of the file, which has the same text.
                 let Some(file) = files.context.copy_of(original) else {
                     continue;
                 };
@@ -414,6 +431,7 @@ impl SourceDatabase {
                 %context,
                 saved_files,
                 rust_analyzer_files,
+                aliased_files,
                 functions,
                 new_here,
                 kept,

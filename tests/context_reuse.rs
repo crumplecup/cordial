@@ -6,8 +6,8 @@
 //! crate with one of each, what the context would copy, so that the aliasing can be built against it.
 
 use cordial::{
-    CfgPlanning, CrateTarget, MetricsLayer, SemanticCargoOptions, SemanticContextKey,
-    SourceDatabase, StoreLayout, read_run_metrics, write_run_metrics,
+    CfgPlanning, CrateIr, CrateTarget, IrView, MetricsLayer, NodeId, SemanticCargoOptions,
+    SemanticContextKey, SourceDatabase, StoreLayout, read_run_metrics, write_run_metrics,
 };
 use miette::{IntoDiagnostic, Result};
 use tracing_subscriber::Layer;
@@ -21,7 +21,7 @@ const FILES: [(&str, &str); 7] = [
     ),
     (
         "src/gated.rs",
-        "pub fn always() {}\n#[cfg(kani)]\npub fn proof() {}\n",
+        "pub fn always() {}\n#[cfg(kani)]\npub fn proof() { crate::plain::a(); }\n",
     ),
     ("src/plain.rs", "pub fn a() {}\npub fn b() { a(); }\n"),
     ("src/plain_too.rs", "pub fn c() {}\n"),
@@ -29,12 +29,16 @@ const FILES: [(&str, &str); 7] = [
     ("src/nested/mod.rs", "mod deep;\npub fn middle() {}\n"),
     (
         "src/nested/deep.rs",
-        "#[cfg(not(kani))]\npub fn deep() {}\n",
+        "#[cfg(not(kani))]\npub fn deep() {}\n#[cfg(kani)]\npub fn deep_proof() { crate::plain_too::c(); }\n",
     ),
 ];
 
-#[test]
-fn a_context_would_copy_the_flipped_files_the_unsure_and_what_is_above_them() -> Result<()> {
+fn kani() -> SemanticContextKey {
+    SemanticContextKey::enabling(["kani"])
+}
+
+/// The crate projected with the kani context, and what the run said.
+fn project() -> Result<(CrateIr, cordial::RunMetrics)> {
     cordial::init_tracing();
     let root = tempfile::tempdir().into_diagnostic()?;
     std::fs::write(
@@ -57,14 +61,33 @@ fn a_context_would_copy_the_flipped_files_the_unsure_and_what_is_above_them() ->
         .with_cfg_contexts(vec![SemanticContextKey::enabling(["kani"])])
         .with_cfg_planning(CfgPlanning::Explicit);
     let mut session = SourceDatabase::load_saved(root.path(), &options, None).into_diagnostic()?;
-    session
+    let graph = session
         .project(&CrateTarget::new("reuse", root.path()), &sources)
         .into_diagnostic()?;
 
     let store = tempfile::tempdir().into_diagnostic()?;
     let layout = StoreLayout::from_root(store.path().to_path_buf(), "reuse".to_owned());
     write_run_metrics(&layout).into_diagnostic()?;
-    let metrics = read_run_metrics(&layout);
+    Ok((graph, read_run_metrics(&layout)))
+}
+
+fn function(graph: &CrateIr, name: &str) -> Result<NodeId> {
+    let found: Vec<NodeId> = graph
+        .nodes_matching(&cordial::BasicQuery::items())
+        .into_iter()
+        .filter(|node| node.weight().name().as_deref() == Some(name))
+        .map(|node| node.id())
+        .collect();
+    match found.as_slice() {
+        [id] => Ok(*id),
+        other => Err(miette::miette!("{name}: {other:?}")),
+    }
+}
+
+/// What the context copies, and takes as it is.
+#[test]
+fn a_context_copies_the_flipped_files_the_unsure_and_what_is_above_them() -> Result<()> {
+    let (_, metrics) = project()?;
     let value = |name: &str| {
         metrics
             .values()
@@ -95,6 +118,44 @@ fn a_context_would_copy_the_flipped_files_the_unsure_and_what_is_above_them() ->
         value("semantic.contexts.aliased"),
         Some(2),
         "plain.rs and plain_too.rs"
+    );
+    assert_eq!(
+        value("context_crates.copies"),
+        Some(5),
+        "only the files that are copied are copies: the rest are the originals themselves"
+    );
+    Ok(())
+}
+
+/// What the context finds through the files it takes as they are: its gated code, in copied files,
+/// calls functions of the files it did not copy, and those functions are active in it.
+#[test]
+fn a_context_reaches_the_files_it_takes_as_they_are() -> Result<()> {
+    let (graph, _) = project()?;
+    let (proof, deep_proof) = (function(&graph, "proof")?, function(&graph, "deep_proof")?);
+    let (a, c) = (function(&graph, "a")?, function(&graph, "c")?);
+
+    // The gated function of a copied file calls a function of a file that was not copied.
+    assert_eq!(graph.context_children(proof, &kani()), vec![a]);
+    // And so does one under a module whose file is a copy only for the module tree's sake.
+    assert_eq!(graph.context_children(deep_proof, &kani()), vec![c]);
+    assert_eq!(graph.context_parents(a, &kani()), vec![proof]);
+
+    // The functions of the files it did not copy are active in it, as they are in the ordinary build.
+    let mut contexts = vec![SemanticContextKey::ordinary(), kani()];
+    contexts.sort();
+    for function in [a, c, function(&graph, "b")?] {
+        let mut active = graph
+            .active_contexts(function)
+            .into_diagnostic()?
+            .ok_or_else(|| miette::miette!("no semantic projection"))?;
+        active.sort();
+        assert_eq!(active, contexts);
+    }
+    // And gated code is active only there.
+    assert_eq!(
+        graph.active_contexts(proof).into_diagnostic()?,
+        Some(vec![kani()])
     );
     Ok(())
 }

@@ -1,94 +1,147 @@
-//! How much of a context's copy of the workspace could be the ordinary build's own files.
+//! Which of the workspace's files a context copies, and which it takes from the ordinary build as
+//! they are.
 //!
-//! A context copies every local file under new ids, so everything rust-analyzer computes for a file
-//! is computed again for the copy, though most files have nothing a context switches. A file can
-//! be the original's (the context's source root names it, and rust-analyzer already lets one file
-//! be in several crates) when its gates are not flipped by the context and nothing in it can read
-//! the cfg in a way the gates do not say. A module is found from its parent's source root, so the
-//! files above a changed file are copies too: the *spine*.
+//! A context copies the workspace's files under new ids, so that rust-analyzer reads them in the
+//! context's crates: a file is found from its source root, and the copy's root names the context's
+//! crates. Everything rust-analyzer computes for a file (its syntax, its item tree, its macro
+//! expansions) is then computed again for each copy. Most files have nothing a context switches, and
+//! for those the context's source root can name the original file itself (rust-analyzer already lets
+//! one file be in several crates), so what is known of it is shared and nothing is parsed again.
 //!
-//! This only counts. It says, for each context, how many of the files would still be copied.
+//! A file is copied when
+//! - a gate in it is flipped by the context (the facts of its functions can differ),
+//! - it reads the cfg some way the gates do not say (`cfg!`, `cfg_attr`, `include!`, `#[path]`), so
+//!   that it cannot be taken to be unchanged,
+//! - it is the root of a crate (the context's crates are rooted at copies), or
+//! - it is above a copied file: a module is found from its parent's source root, so a copy under an
+//!   original would not be found. The files above are found from where a file is, conservatively: for
+//!   each directory above it, that directory's `mod.rs` and the file named for the directory.
 
-use std::collections::BTreeSet;
-use std::path::PathBuf;
+use std::collections::{BTreeSet, HashMap};
+use std::path::{Path, PathBuf};
 
 use ra_ap_cfg::CfgOptions;
-use ra_ap_hir::{Semantics, attach_db};
 use ra_ap_ide_db::base_db::SourceDatabase as RaSourceDatabase;
 use ra_ap_vfs::FileId;
 use tracing::instrument;
 
 use super::flips::{Flips, Reach};
-use crate::CordialResult;
 use crate::loader::database::SourceDatabase;
 
-/// The files of the workspace a context would still copy, and why.
+/// The files of the workspace a context copies, and why.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
-pub(super) struct Reuse {
-    /// The workspace's files the context copies today.
-    pub(super) files: usize,
+pub(in crate::loader::database) struct Reuse {
+    /// The workspace's files.
+    pub(in crate::loader::database) files: usize,
     /// Files with a gate the context flips.
-    pub(super) flipped: usize,
-    /// Files that read the cfg some way the gates do not say (`cfg!`, `cfg_attr`), which cannot be
-    /// taken to be unchanged.
-    pub(super) unsure: usize,
-    /// Files above a changed one, which the module tree is found through.
-    pub(super) spine: usize,
+    pub(in crate::loader::database) flipped: usize,
+    /// Files that read the cfg some way the gates do not say.
+    pub(in crate::loader::database) unsure: usize,
+    /// Crate roots, and files above a copied one, which are copied for the module tree.
+    pub(in crate::loader::database) spine: usize,
 }
 
 impl Reuse {
-    /// How many files the context would copy.
-    pub(super) fn copied(&self) -> usize {
+    /// How many files the context copies.
+    pub(in crate::loader::database) fn copied(&self) -> usize {
         self.flipped + self.unsure + self.spine
     }
 
-    /// How many could be the original's.
-    pub(super) fn aliased(&self) -> usize {
+    /// How many are the original's.
+    pub(in crate::loader::database) fn aliased(&self) -> usize {
         self.files.saturating_sub(self.copied())
     }
 }
 
-/// Whether the text of a file reads the cfg other than through a `#[cfg]` attribute.
+/// What a context copies of the workspace's files.
+#[derive(Debug, Default)]
+pub(in crate::loader::database) struct Copying {
+    /// The files to copy.
+    pub(in crate::loader::database) copy: BTreeSet<FileId>,
+    /// The counts, by why.
+    pub(in crate::loader::database) reuse: Reuse,
+}
+
+/// Whether the text of a file reads the cfg other than through a `#[cfg]` attribute, or moves where
+/// a module's file is.
 fn reads_cfg_otherwise(text: &str) -> bool {
-    text.contains("cfg!") || text.contains("cfg_attr") || text.contains("include!")
+    text.contains("cfg!")
+        || text.contains("cfg_attr")
+        || text.contains("include!")
+        || text.contains("#[path")
+}
+
+/// Whether the file is one the leaf pass reads: a test, a bench or an example, which are read
+/// through their copies.
+fn is_a_leaf_file(path: &Path) -> bool {
+    path.components().any(|part| {
+        matches!(
+            part.as_os_str().to_str(),
+            Some("tests" | "benches" | "examples")
+        )
+    })
+}
+
+/// The files that may declare a module in the file at `path`: for each directory above it, that
+/// directory's `mod.rs` and the file named for the directory.
+fn files_above(path: &Path, by_path: &HashMap<PathBuf, FileId>) -> Vec<FileId> {
+    let mut above = Vec::new();
+    let mut directory = path.parent();
+    while let Some(current) = directory {
+        for candidate in [current.join("mod.rs"), current.with_extension("rs")] {
+            if candidate != path
+                && let Some(file) = by_path.get(&candidate)
+            {
+                above.push(*file);
+            }
+        }
+        directory = current.parent();
+    }
+    above
 }
 
 impl SourceDatabase {
-    /// Count what a context would copy of the files `paths`, given its cfg `pairs`.
-    #[instrument(level = "debug", skip(self, paths, pairs), err(level = "warn"))]
+    /// Decide what a context copies of `files` (each with its real path), given the crate `roots`
+    /// and the context's cfg `pairs`.
+    #[instrument(level = "debug", skip(self, files, roots, pairs))]
     #[hotpath::measure(impl_type = "SourceDatabase")]
-    pub(super) fn measure_reuse(
+    pub(in crate::loader::database) fn files_to_copy(
         &self,
-        paths: &[PathBuf],
+        files: &[(FileId, PathBuf)],
+        roots: &BTreeSet<FileId>,
         pairs: &[(CfgOptions, CfgOptions)],
-    ) -> CordialResult<Reuse> {
-        let mut reuse = Reuse::default();
+    ) -> Copying {
+        let by_path: HashMap<PathBuf, FileId> = files
+            .iter()
+            .map(|(file, path)| (path.clone(), *file))
+            .collect();
+        let mut reuse = Reuse {
+            files: files.len(),
+            ..Reuse::default()
+        };
         let mut changed: BTreeSet<FileId> = BTreeSet::new();
-        for path in paths {
-            let original = self.file_id(path)?;
-            reuse.files += 1;
-            if Flips::of_file(&self.db, original, pairs, Reach::Written).is_flipped() {
-                reuse.flipped += 1;
-                changed.insert(original);
-            } else if reads_cfg_otherwise(self.db.file_text(original).text(&self.db)) {
+        for (file, path) in files {
+            if is_a_leaf_file(path) {
+                // Counted with the files that read the cfg otherwise: it cannot be taken as unchanged.
                 reuse.unsure += 1;
-                changed.insert(original);
+                changed.insert(*file);
+            } else if Flips::of_file(&self.db, *file, pairs, Reach::Written).is_flipped() {
+                reuse.flipped += 1;
+                changed.insert(*file);
+            } else if reads_cfg_otherwise(self.db.file_text(*file).text(&self.db)) {
+                reuse.unsure += 1;
+                changed.insert(*file);
             }
         }
-        let spine = attach_db(&self.db, || {
-            let sema = Semantics::new(&self.db);
-            let mut above: BTreeSet<FileId> = BTreeSet::new();
-            for file in &changed {
-                for module in sema.file_to_module_defs(*file) {
-                    for ancestor in module.path_to_root(&self.db) {
-                        let source = ancestor.definition_source(&self.db);
-                        above.insert(source.file_id.original_file(&self.db).file_id(&self.db));
-                    }
-                }
+        let mut spine: BTreeSet<FileId> = roots.difference(&changed).copied().collect();
+        for (file, path) in files {
+            if changed.contains(file) {
+                spine.extend(files_above(path, &by_path));
             }
-            above
-        });
+        }
         reuse.spine = spine.difference(&changed).count();
-        Ok(reuse)
+        let mut copy = changed;
+        copy.extend(spine);
+        Copying { copy, reuse }
     }
 }

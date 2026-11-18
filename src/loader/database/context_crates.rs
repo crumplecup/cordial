@@ -9,6 +9,7 @@
 //! the context's results coexist with theirs.
 
 use std::collections::{BTreeSet, HashMap};
+use std::path::PathBuf;
 use triomphe::Arc;
 
 use ra_ap_hir::{AssocItem, Crate, Function, HasSource, ModuleDef, attach_db};
@@ -73,6 +74,10 @@ pub struct ContextCrates {
     /// Each original file with its copy.
     #[getter(skip)]
     files: HashMap<FileId, FileId>,
+    /// The original files this context takes as they are: its source root names them, under the
+    /// path a copy would have had, and nothing is copied.
+    #[getter(skip)]
+    aliased: std::collections::HashSet<FileId>,
     /// Whether this came from a saved state and has not been brought up to date with the
     /// sources of this run since: its copies and crates are the ones the last run made.
     #[getter(skip)]
@@ -123,6 +128,7 @@ impl ContextCrates {
             context: saved.context,
             crates,
             files,
+            aliased: std::collections::HashSet::new(),
             kept: true,
         })
     }
@@ -142,6 +148,12 @@ impl ContextCrates {
     #[instrument(level = "trace", skip(self))]
     pub(super) fn copy_of(&self, original: FileId) -> Option<FileId> {
         self.files.get(&original).copied()
+    }
+
+    /// Whether this context takes `original` as it is, and not as a copy.
+    #[instrument(level = "trace", skip(self))]
+    pub(super) fn is_aliased(&self, original: FileId) -> bool {
+        self.aliased.contains(&original)
     }
 
     /// The original of each copy.
@@ -202,7 +214,9 @@ impl SourceDatabase {
         previous: Option<&ContextCrates>,
     ) -> CordialResult<ContextCrates> {
         let ordinary = LocalCfgs::capture_excluding(&self.db, &self.shadow_crates());
-        let files = self.copy_local_files(index, previous.map(|kept| &kept.files))?;
+        let pairs = ordinary.pairs(context);
+        let (files, aliased) =
+            self.copy_local_files(index, previous.map(|kept| &kept.files), &pairs)?;
         let mut shadows: Vec<(InputCrate, InputCrate)> = Vec::new();
         for (krate, options) in ordinary.cfgs() {
             let mut changed = options.clone();
@@ -273,6 +287,7 @@ impl SourceDatabase {
             context: context.clone(),
             crates: shadows,
             files,
+            aliased,
             kept: false,
         })
     }
@@ -289,30 +304,42 @@ impl SourceDatabase {
         set_tool_root_crates(&mut self.db, root, crates, Durability::LOW);
     }
 
-    /// Copy every file of the workspace's own source roots to virtual paths under
-    /// a source root of its own, returning each original with its copy.
-    #[instrument(level = "debug", skip(self), err(level = "warn"))]
+    /// Copy the files of the workspace's own source roots that the context can change to virtual
+    /// paths under a source root of its own, and name the others there as they are (see
+    /// [`reuse`](super::contexts)). Returns each original with its copy, and the originals taken as
+    /// they are.
+    #[instrument(level = "debug", skip(self, known, pairs), err(level = "warn"))]
     #[hotpath::measure(impl_type = "SourceDatabase")]
     fn copy_local_files(
         &mut self,
         index: usize,
         known: Option<&HashMap<FileId, FileId>>,
-    ) -> CordialResult<HashMap<FileId, FileId>> {
+        pairs: &[(ra_ap_cfg::CfgOptions, ra_ap_cfg::CfgOptions)],
+    ) -> CordialResult<(HashMap<FileId, FileId>, std::collections::HashSet<FileId>)> {
         let root_id = SourceRootId(FIRST_COPY_ROOT + u32::try_from(index).unwrap_or(u32::MAX >> 2));
-        let roots: BTreeSet<SourceRootId> = attach_db(&self.db, || {
-            Crate::all(&self.db)
-                .into_iter()
-                .filter(|krate| krate.origin(&self.db).is_local())
-                .filter(|krate| !self.shadow_crates().contains(&krate.base()))
-                .map(|krate| {
-                    self.db
-                        .file_source_root(krate.root_file(&self.db))
-                        .source_root_id(&self.db)
-                })
-                .collect()
-        });
-        let mut set = FileSet::default();
-        let mut copies: HashMap<FileId, FileId> = HashMap::new();
+        let (roots, crate_roots): (BTreeSet<SourceRootId>, BTreeSet<FileId>) =
+            attach_db(&self.db, || {
+                let locals: Vec<_> = Crate::all(&self.db)
+                    .into_iter()
+                    .filter(|krate| krate.origin(&self.db).is_local())
+                    .filter(|krate| !self.shadow_crates().contains(&krate.base()))
+                    .collect();
+                let roots = locals
+                    .iter()
+                    .map(|krate| {
+                        self.db
+                            .file_source_root(krate.root_file(&self.db))
+                            .source_root_id(&self.db)
+                    })
+                    .collect();
+                let crate_roots = locals
+                    .iter()
+                    .map(|krate| krate.root_file(&self.db))
+                    .collect();
+                (roots, crate_roots)
+            });
+        // Every file of the workspace, with where it is.
+        let mut originals: Vec<(FileId, VfsPath, PathBuf)> = Vec::new();
         for root in roots {
             let source_root = self.db.source_root(root).source_root(&self.db).clone();
             for original in source_root.iter() {
@@ -324,34 +351,61 @@ impl SourceDatabase {
                     "{COPY_PATH_PREFIX}{index}{}",
                     real.as_str()
                 ));
-                // The copy holds the allocation the original's text is in, not a copy of it.
-                let text = self.db.file_text(original).text(&self.db).clone();
-                self.vfs
-                    .set_file_contents(copy_path.clone(), Some(text.as_bytes().to_vec()));
-                let (copy, _) = self
-                    .vfs
-                    .file_id(&copy_path)
-                    .ok_or_else(|| CordialError::not_found(real.as_str().into()))?;
-                // A copy the database already holds is written only if it differs.
-                if known.and_then(|known| known.get(&original)) == Some(&copy) {
-                    if **self.db.file_text(copy).text(&self.db) != *text {
-                        self.db.set_file_text_arc(copy, text.clone());
-                    }
-                    if self.db.file_source_root(copy).source_root_id(&self.db) != root_id {
-                        self.db.set_file_source_root_with_durability(
-                            copy,
-                            root_id,
-                            Durability::LOW,
-                        );
-                    }
-                } else {
+                originals.push((original, copy_path, PathBuf::from(real.as_str())));
+            }
+        }
+        // Only Rust files are decided: the others (a manifest, a data file a macro includes) are the
+        // original's, found where the original is.
+        let located: Vec<(FileId, PathBuf)> = originals
+            .iter()
+            .filter(|(_, _, path)| path.extension().is_some_and(|extension| extension == "rs"))
+            .map(|(file, _, path)| (*file, path.clone()))
+            .collect();
+        let copying = self.files_to_copy(&located, &crate_roots, pairs);
+        tracing::info!(
+            target: "cordial::semantic::contexts",
+            context_index = index,
+            files = copying.reuse.files,
+            flipped = copying.reuse.flipped,
+            unsure = copying.reuse.unsure,
+            spine = copying.reuse.spine,
+            aliased = copying.reuse.aliased(),
+            "the files this context copies, and the files it takes from the ordinary build as they are"
+        );
+        let mut set = FileSet::default();
+        let mut copies: HashMap<FileId, FileId> = HashMap::new();
+        let mut aliased: std::collections::HashSet<FileId> = std::collections::HashSet::new();
+        for (original, copy_path, _) in originals {
+            if !copying.copy.contains(&original) {
+                // The context's root names the original itself under the path a copy would have.
+                set.insert(original, copy_path);
+                aliased.insert(original);
+                continue;
+            }
+            // The copy holds the allocation the original's text is in, not a copy of it.
+            let text = self.db.file_text(original).text(&self.db).clone();
+            self.vfs
+                .set_file_contents(copy_path.clone(), Some(text.as_bytes().to_vec()));
+            let (copy, _) = self
+                .vfs
+                .file_id(&copy_path)
+                .ok_or_else(|| CordialError::not_found(copy_path.to_string().into()))?;
+            // A copy the database already holds is written only if it differs.
+            if known.and_then(|known| known.get(&original)) == Some(&copy) {
+                if **self.db.file_text(copy).text(&self.db) != *text {
                     self.db.set_file_text_arc(copy, text.clone());
+                }
+                if self.db.file_source_root(copy).source_root_id(&self.db) != root_id {
                     self.db
                         .set_file_source_root_with_durability(copy, root_id, Durability::LOW);
                 }
-                set.insert(copy, copy_path);
-                copies.insert(original, copy);
+            } else {
+                self.db.set_file_text_arc(copy, text.clone());
+                self.db
+                    .set_file_source_root_with_durability(copy, root_id, Durability::LOW);
             }
+            set.insert(copy, copy_path);
+            copies.insert(original, copy);
         }
         let unchanged = known.is_some() && {
             let current = self.db.source_root(root_id).source_root(&self.db).clone();
@@ -379,7 +433,7 @@ impl SourceDatabase {
             text_shared = shared,
             "the files copied for a context, and how many of them hold the original's text itself"
         );
-        Ok(copies)
+        Ok((copies, aliased))
     }
 
     /// Bring every context's copy of `original` up to date with `text`.
