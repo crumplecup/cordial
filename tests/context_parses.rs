@@ -147,26 +147,17 @@ fn by_pass(found: &[(String, u64)], query: &str) -> std::collections::BTreeMap<S
     steps
 }
 
-/// The file-level query each copy of a file runs, and the query that does the parsing of a text.
+/// The file-level query each copy of a file runs.
 const FILES_PARSE: &str = "> EditionedFileId::parse_";
-const TEXT_PARSE: &str = "> parse_text";
 
-/// A context's copy of a file has the text of the original and another file id. Each copy still
-/// asks for its own parse (a memo of the file), but the parse is of the text, made once and shared:
-/// the passes make none of their own.
+/// A context's copy of a file has the text of the original and another file id, and a syntax tree
+/// of its own: rust-analyzer tells which file a node is of by the tree it is in, so a tree cannot be
+/// shared between files (two files with the same text, parsed once, would be one file to it). A run
+/// that starts from nothing parses each copy for the functions in it, once for each context; this
+/// names what is parsed so that taking the parses away shows. What the copies share is the text.
 #[test]
 fn a_cold_run_parses_each_contexts_copy_of_the_files_for_the_passes() -> Result<()> {
     let found = parses_in_contexts(false, true)?;
-    let asked: std::collections::BTreeMap<String, u64> = [
-        ("functions_in_copy < harvest".to_owned(), 2),
-        ("functions_in_copy < read_leaves".to_owned(), 4),
-    ]
-    .into();
-    assert_eq!(
-        by_pass(&found, FILES_PARSE),
-        asked,
-        "the copies the passes ask a parse of"
-    );
     let value = |name: &str| {
         found
             .iter()
@@ -182,14 +173,15 @@ fn a_cold_run_parses_each_contexts_copy_of_the_files_for_the_passes() -> Result<
         value("context_crates.copies"),
         "each copy holds the original's text itself, not a copy of it"
     );
-    assert!(
-        found.iter().any(|(key, _)| key.ends_with(TEXT_PARSE)),
-        "the text of the original is parsed somewhere, or the name above matches nothing"
-    );
+    let expected: std::collections::BTreeMap<String, u64> = [
+        ("functions_in_copy < harvest".to_owned(), 2),
+        ("functions_in_copy < read_leaves".to_owned(), 4),
+    ]
+    .into();
     assert_eq!(
-        by_pass(&found, TEXT_PARSE),
-        std::collections::BTreeMap::new(),
-        "the parses they make: none, the text was parsed for the original"
+        by_pass(&found, FILES_PARSE),
+        expected,
+        "the copies the passes parse"
     );
     Ok(())
 }
