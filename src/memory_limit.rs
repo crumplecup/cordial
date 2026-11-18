@@ -113,9 +113,79 @@ pub fn headroom_kib() -> Option<i64> {
     if limit == 0 {
         return None;
     }
-    let resident = i64::try_from(crate::process_memory::sample()?.resident_kib()).ok()?;
+    let held = i64::try_from(meter_kib()?).ok()?;
     let line = i64::try_from(limit / 1024 * BEGINS_AT[1] / 100).ok()?;
-    Some(line - resident)
+    Some(line - held)
+}
+
+/// How little a round of the ladder's costly actions (dropping values, spilling, dropping texts) may
+/// give back, in kibibytes, to count as having done nothing.
+pub const FUTILE_KIB: u64 = 8 * 1024;
+
+/// The most rounds skipped after rounds that did nothing, as a power of two (so 63 of every 64).
+const LONGEST_BACKOFF: u32 = 6;
+
+/// When to do the ladder's costly actions: not again right away after a round that gave nothing back.
+///
+/// The watchdog reads the resident memory, and an allocator may keep what the run frees, so a round
+/// can free everything it holds and the reading not fall. The actions are then repeated on every
+/// chunk to no end (a run did, one function at a time, forever). After each round that gives back
+/// less than [`FUTILE_KIB`] the next one waits twice as long, to at most 63 rounds, and a round that
+/// does give something back starts again.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct Backoff {
+    futile_in_a_row: u32,
+    skip: u32,
+}
+
+impl Backoff {
+    /// A backoff that has seen nothing.
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            futile_in_a_row: 0,
+            skip: 0,
+        }
+    }
+
+    /// Whether this round should do the costly actions: yes unless it is one to skip.
+    #[instrument(level = "trace")]
+    pub fn act_now(&mut self) -> bool {
+        if self.skip > 0 {
+            self.skip -= 1;
+            return false;
+        }
+        true
+    }
+
+    /// Say what a round that did the actions gave back.
+    #[instrument(level = "trace")]
+    pub fn gave_back(&mut self, freed_kib: u64) {
+        if freed_kib >= FUTILE_KIB {
+            *self = Self::default();
+            return;
+        }
+        self.futile_in_a_row = (self.futile_in_a_row + 1).min(LONGEST_BACKOFF);
+        self.skip = (1u32 << self.futile_in_a_row) - 1;
+    }
+}
+
+/// How many times the limit the resident memory may reach before the run is stopped whatever the
+/// program holds. The limit is on what the program holds (see [`meter_of`]); this is the backstop for
+/// the machine's memory, which an allocator that keeps what is freed can fill.
+pub const RESIDENT_BACKSTOP: u64 = 2;
+
+/// The memory the limit is judged by, in kibibytes: what the program holds, as the allocator counts
+/// it, which freeing lowers at once; the resident memory when nothing counts it.
+#[must_use]
+pub fn meter_of(resident_kib: u64) -> u64 {
+    crate::profiling::live_bytes().map_or(resident_kib, |bytes| bytes / 1024)
+}
+
+/// [`meter_of`] for the process as it is now.
+#[must_use]
+pub fn meter_kib() -> Option<u64> {
+    crate::process_memory::sample().map(|memory| meter_of(memory.resident_kib()))
 }
 
 /// The rung the watchdog last put the run on.
@@ -337,9 +407,7 @@ pub fn pressured() -> bool {
 #[instrument(level = "trace")]
 pub fn nearing_now() -> bool {
     PRESSURE_FORCED.load(Ordering::Relaxed)
-        || crate::process_memory::sample().is_some_and(|memory| {
-            nearing(memory.resident_kib(), LIMIT_BYTES.load(Ordering::Relaxed))
-        })
+        || meter_kib().is_some_and(|held| nearing(held, LIMIT_BYTES.load(Ordering::Relaxed)))
 }
 
 /// Make the run feel pressure (or stop feeling it), for the tests of what the work does under it.
@@ -403,9 +471,10 @@ fn watch(budget: &Budget) {
             // No reading on this platform: nothing to bound by.
             return;
         };
+        let held = meter_of(memory.resident_kib());
         let rung = judge_level(
             Pressure::from_bits(LEVEL.load(Ordering::Relaxed)),
-            memory.resident_kib(),
+            held,
             budget.bytes,
         );
         if rung as u8 != LEVEL.load(Ordering::Relaxed) {
@@ -413,35 +482,43 @@ fn watch(budget: &Budget) {
             tracing::info!(
                 target: "cordial::eviction",
                 rung = rung as u8,
+                held_kib = held,
                 resident_kib = memory.resident_kib(),
                 "the run's rung of the pressure ladder changed"
             );
         }
         let was = PRESSURE.load(Ordering::Relaxed);
-        let now = judge(was, memory.resident_kib(), budget.bytes);
+        let now = judge(was, held, budget.bytes);
         if now != was {
             PRESSURE.store(now, Ordering::Relaxed);
             tracing::info!(
                 target: "cordial::eviction",
                 pressured = now,
+                held_kib = held,
                 resident_kib = memory.resident_kib(),
                 "the run's memory pressure changed"
             );
         }
-        if exceeds(memory.resident_kib(), budget.bytes) {
-            stop(memory.resident_kib(), budget);
+        if exceeds(held, budget.bytes)
+            || exceeds(
+                memory.resident_kib(),
+                budget.bytes.saturating_mul(RESIDENT_BACKSTOP),
+            )
+        {
+            stop(held, memory.resident_kib(), budget);
         }
     }
 }
 
 /// Say that the run is over its limit, and where it was, and exit.
-fn stop(resident_kib: u64, budget: &Budget) -> ! {
+fn stop(held_kib: u64, resident_kib: u64, budget: &Budget) -> ! {
     let status = crate::LiveStatus::global();
     let _ = writeln!(
         crate::host::stderr(),
-        "\ncordial stopped itself: it was using {}, over its limit of {}, during \"{}\" [{}].\n\
+        "\ncordial stopped itself: it was holding {} ({} resident), over its limit of {}, during \"{}\" [{}].\n\
          Raise the limit with --memory-limit (for example 90% or 16G; 0 for none), or set \
          memory_limit in cordial.toml or CORDIAL_MEMORY_LIMIT.",
+        gibibytes(held_kib.saturating_mul(1024)),
         gibibytes(resident_kib.saturating_mul(1024)),
         budget.described,
         status.phase(),

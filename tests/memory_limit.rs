@@ -7,9 +7,9 @@ mod support {
 
 use clap::Parser;
 use cordial::{
-    Cli, DEFAULT_MEMORY_LIMIT, MEMORY_LIMIT_EXIT, MemoryLimit, Pressure, WORKER_KIB, budget_of,
-    exceeds, judge, judge_level, load_cordial_config, nearing, parse_limit, parse_meminfo,
-    parse_size, resolve_memory_limit_with, workers_within,
+    Backoff, Cli, DEFAULT_MEMORY_LIMIT, FUTILE_KIB, MEMORY_LIMIT_EXIT, MemoryLimit, Pressure,
+    WORKER_KIB, budget_of, exceeds, judge, judge_level, load_cordial_config, nearing, parse_limit,
+    parse_meminfo, parse_size, resolve_memory_limit_with, workers_within,
 };
 use miette::{IntoDiagnostic, Result};
 
@@ -174,6 +174,59 @@ fn the_workers_are_as_many_as_fit_below_the_second_rung_and_at_least_one() {
         1,
         "and one if nothing was available to count"
     );
+}
+
+#[test]
+fn the_costly_actions_wait_twice_as_long_after_each_round_that_gave_nothing_back() {
+    let mut backoff = Backoff::new();
+    assert!(backoff.act_now(), "the first round acts");
+    backoff.gave_back(0);
+    let skipped = |expected: u32, backoff: &mut Backoff| {
+        for _ in 0..expected {
+            assert!(!backoff.act_now(), "a round to skip");
+        }
+        assert!(
+            backoff.act_now(),
+            "then one that acts, after {expected} skipped"
+        );
+    };
+    skipped(1, &mut backoff);
+    backoff.gave_back(FUTILE_KIB - 1);
+    skipped(3, &mut backoff);
+    backoff.gave_back(0);
+    skipped(7, &mut backoff);
+    // However many in a row, it is not put off for longer than 63 rounds.
+    for _ in 0..20 {
+        backoff.gave_back(0);
+        while !backoff.act_now() {}
+    }
+    backoff.gave_back(0);
+    skipped(63, &mut backoff);
+}
+
+#[test]
+fn a_round_that_gives_something_back_starts_the_waiting_again() {
+    let mut backoff = Backoff::new();
+    for _ in 0..4 {
+        assert!(
+            backoff.act_now() || {
+                while !backoff.act_now() {}
+                true
+            }
+        );
+        backoff.gave_back(0);
+    }
+    assert!(
+        !backoff.act_now(),
+        "after rounds that did nothing, rounds are skipped"
+    );
+    while !backoff.act_now() {}
+    backoff.gave_back(FUTILE_KIB);
+    assert!(
+        backoff.act_now(),
+        "and what gave back enough starts again with a round that acts"
+    );
+    assert_eq!(backoff, Backoff::new());
 }
 
 #[test]

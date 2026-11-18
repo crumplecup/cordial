@@ -44,6 +44,10 @@ fn lru_cap(pressured: bool) -> usize {
     }
 }
 
+/// When the costly actions are done between the chunks of a pass (see [`crate::Backoff`]).
+static CHUNK_BACKOFF: std::sync::Mutex<crate::Backoff> =
+    std::sync::Mutex::new(crate::Backoff::new());
+
 /// Apply the cap the environment asks for, if it does.
 pub(super) fn cap_from_environment() {
     if let Some(cap) = environment_cap() {
@@ -145,6 +149,7 @@ impl SourceDatabase {
             step = after,
             micros,
             dropped_regenerable = dropped,
+            rounds = 1_u64,
             resident_before_kib = before.map_or(0, |sample| sample.resident_kib()),
             resident_after_kib = settled.map_or(0, |(resident, _)| resident),
             "dropped the values of every query that is not persisted"
@@ -171,11 +176,25 @@ impl SourceDatabase {
         if self.evicts() {
             self.evict_quietly("prime chunk");
         }
-        self.spill_under_pressure("prime chunk");
-        if crate::memory_limit::pressure() >= crate::Pressure::Hard {
-            // From the second rung, what is not persisted is dropped after each chunk, whatever it
-            // costs the next to build it again.
-            self.drop_regenerable("prime chunk");
+        if pressed
+            && CHUNK_BACKOFF
+                .lock()
+                .is_ok_and(|mut backoff| backoff.act_now())
+        {
+            // The costly actions: when a round of them gave back nothing (the allocator may keep
+            // what is freed, and the resident memory then does not fall) the next waits twice as
+            // long, so that a run is not made to compute the same values again on every chunk.
+            let before = crate::memory_limit::meter_kib().unwrap_or(0);
+            self.spill_under_pressure("prime chunk");
+            if crate::memory_limit::pressure() >= crate::Pressure::Hard {
+                // From the second rung, what is not persisted is dropped after each chunk,
+                // whatever it costs the next to build it again.
+                self.drop_regenerable("prime chunk");
+            }
+            let after = crate::memory_limit::meter_kib().unwrap_or(0);
+            if let Ok(mut backoff) = CHUNK_BACKOFF.lock() {
+                backoff.gave_back(before.saturating_sub(after));
+            }
         }
         pressed
     }

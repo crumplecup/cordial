@@ -45,8 +45,10 @@ struct Chunks {
     /// How many workers each part of the priming ran, summed, and how many parts there were.
     workers: u64,
     parts: u64,
-    /// How many values of queries that are not persisted were dropped between chunks.
+    /// How many values of queries that are not persisted were dropped between chunks, and in how
+    /// many rounds of dropping.
     dropped: u64,
+    rounds: u64,
 }
 
 fn priming_under(pressure: Pressure) -> Result<Chunks> {
@@ -101,6 +103,7 @@ fn priming_under(pressure: Pressure) -> Result<Chunks> {
         workers: sum(&|key| key == "semantic.priming.workers"),
         parts: sum(&|key| key == "prime.events"),
         dropped: sum(&|key| key == "eviction.prime_chunk.dropped_regenerable"),
+        rounds: sum(&|key| key == "eviction.prime_chunk.rounds"),
     })
 }
 
@@ -323,6 +326,12 @@ fn on_the_last_rung_the_priming_has_one_worker_and_takes_one_function_at_a_time_
     assert!(
         chunks.dropped > 0,
         "and what is not persisted was dropped between chunks"
+    );
+    assert!(
+        chunks.rounds * 2 < chunks.parts,
+        "but not on every chunk: rounds that give back little are followed by longer waits ({} rounds in {} parts)",
+        chunks.rounds,
+        chunks.parts
     );
     Ok(())
 }
