@@ -79,9 +79,6 @@ hotpath = ["hotpath/hotpath"]
 # Allocation profiling: the counting allocator below, and `functions_alloc` and
 # per-thread bytes in every profile.
 hotpath-alloc = ["hotpath", "hotpath/hotpath-alloc"]
-# The binary counts the bytes each thread has allocated and not freed, and Salsa says in its events
-# how many each query left behind. Not with `hotpath-alloc`, which has an allocator of its own.
-alloc_metrics = []
 # Private features (leading `_`): never enabled by a user, only by other
 # features. `cordial`'s feature_warnings etiquette excludes them from the
 # powerset on its own; `just check-features` lists them in its exclusions.

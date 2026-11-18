@@ -768,8 +768,9 @@ ledger write 0.76 s (an `fsync` that also waits for the state just written).
 
 ## Where the memory is, measured on elicit_doc
 
-Measured by tagging every allocation with the query executing when it was made (`alloc_metrics`
-builds; `cordial::heap` events; see `src/counting_allocator.rs` and `src/peak_heap.rs`), so what is
+Measured by tagging every allocation with the query executing when it was made (an `alloc_metrics`
+build with a counting allocator, since removed: cordial writes no unsafe code, and the measures that
+remain are tracing and `hotpath`; the results below are from those builds), so what is
 held can be read by query at any moment, and where the program held the most is kept with the
 stage it was in.
 
@@ -791,7 +792,7 @@ stage it was in.
   which is not known yet. It is not a `Semantics` cache (none is alive between steps), not a query
   value (cordial's are plain data), and not Salsa's deferred free list (the eviction clears it).
 - **Answered from the logs now** (`heap.*`, `eviction.*`, `execution.*` metrics of a run built with
-  `alloc_metrics`; `CORDIAL_EVICT_LRU` for the stage evictions):
+  the since-removed `alloc_metrics`; `CORDIAL_EVICT_LRU` for the stage evictions):
   - Every value nominated for eviction at every stage is dropped (`eviction.<stage>_<query>.dropped`
     equals `.nominated`; `.refused` and `.no_value` are 0): 3,164 file trees and 47,124 expansions at
     the priming chunks. So the memos do not hold the trees after eviction.
