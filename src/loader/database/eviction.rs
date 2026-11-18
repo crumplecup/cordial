@@ -100,6 +100,7 @@ impl SourceDatabase {
             tracing::info!(
                 target: "cordial::ledger",
                 ingredient = row.query().as_str(),
+                thread = row.thread().as_str(),
                 step = after,
                 memos = row.memos(),
                 freed_kib = row.freed_kib().max(0).unsigned_abs(),

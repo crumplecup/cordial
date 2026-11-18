@@ -28,6 +28,9 @@ pub struct LedgerRow {
     /// How long the memory took to settle, in milliseconds.
     #[getter(copy)]
     settle_ms: u64,
+    /// The thread that dropped the query's values, named for the row: what a profile that counts
+    /// the bytes each thread frees (`hotpath-alloc`) says of that thread is what the drop freed.
+    thread: String,
 }
 
 /// The whole ledger: each query's row, and what the process held before and after.
@@ -71,20 +74,55 @@ pub(crate) fn settled() -> Option<(u64, u64)> {
 /// Drop the values of each query of `db` in turn (those `only` names, or all if it is empty), and
 /// say what the process gave back for each. The queries are computed again when something reads
 /// what was dropped.
+///
+/// Each query is dropped on a thread of its own, named `lg000`, `lg001`, ... in the order of the rows.
+/// A profile that counts the bytes every thread frees (`hotpath-alloc`) then has, for each of those
+/// threads, exactly the bytes that query's values were, whatever the allocator does with them; the
+/// process's resident memory, which is also read, may not move for small objects.
 #[instrument(level = "debug", skip(db))]
 #[hotpath::measure]
 pub fn itemize(db: &mut dyn salsa::Database, only: &[&str]) -> Option<Ledger> {
     let (before, _) = settled()?;
+    let mut queries: Vec<(&'static str, u64)> = Vec::new();
+    db.values_in_memory(false, true, only, &mut |query, memos| {
+        queries.push((query, memos));
+    });
     let mut last = before;
     let mut rows = Vec::new();
-    db.values_in_memory(true, true, only, &mut |query, memos| {
+    for (index, (query, memos)) in queries.into_iter().enumerate() {
+        let thread = format!("lg{index:03}");
+        std::thread::scope(|scope| {
+            let dropper = std::thread::Builder::new()
+                .name(thread.clone())
+                .spawn_scoped(scope, || {
+                    // Counted from this thread's first allocation, which is what gives it a name in
+                    // a profile.
+                    let _registered = Box::new(0_u8);
+                    db.values_in_memory(true, true, &[query], &mut |_, _| {});
+                });
+            match dropper {
+                Ok(handle) => {
+                    // A panic in the drop is the drop's, and the ledger goes on with the next.
+                    let _ = handle.join();
+                }
+                Err(error) => {
+                    tracing::warn!(error = ?error, "could not start the thread that drops a query");
+                }
+            }
+        });
         let Some((now, waited)) = settled() else {
-            return;
+            continue;
         };
         let freed =
             i64::try_from(last).unwrap_or(i64::MAX) - i64::try_from(now).unwrap_or(i64::MAX);
-        rows.push(LedgerRow::new(query.to_owned(), memos, freed, waited));
+        rows.push(LedgerRow::new(
+            query.to_owned(),
+            memos,
+            freed,
+            waited,
+            thread,
+        ));
         last = now;
-    });
+    }
     Some(Ledger::new(rows, before, last))
 }

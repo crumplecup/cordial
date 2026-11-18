@@ -37,6 +37,27 @@ impl Database for Db {}
 
 static BIG_RUNS: AtomicUsize = AtomicUsize::new(0);
 
+/// The names of the threads that dropped a [`Tagged`].
+static DROPPED_ON: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+
+/// A value that says which thread dropped it.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, salsa::SalsaValue)]
+struct Tagged(usize);
+
+impl Drop for Tagged {
+    fn drop(&mut self) {
+        if let Ok(mut dropped) = DROPPED_ON.lock() {
+            dropped.push(std::thread::current().name().unwrap_or("").to_owned());
+        }
+    }
+}
+
+/// A query whose values say which thread dropped them.
+#[salsa::tracked(returns(ref))]
+fn tagged<'db>(db: &'db dyn Database, key: Key<'db>) -> Tagged {
+    Tagged(*key.n(db))
+}
+
 /// How big each large value is, and how many there are.
 const BIG_BYTES: usize = 8 << 20;
 const BIGS: usize = 6;
@@ -171,4 +192,45 @@ fn a_run_that_asks_for_it_says_what_each_query_held() -> Result<()> {
         "and what was left"
     );
     Ok(())
+}
+
+/// Each query is dropped on a thread of its own, named in its row: what a profile that counts the
+/// bytes each thread frees says of that thread is what that query's values were.
+#[test]
+fn each_query_is_dropped_on_the_thread_its_row_names() {
+    let mut db = Db::default();
+    Source::new(&db, 0);
+    read(&db);
+    for n in 0..5 {
+        let _ = tagged(&db, Key::new(&db, 2_000 + n));
+    }
+
+    let ledger = cordial::itemize(&mut db, &[]).unwrap_or_else(|| panic!("no memory reading"));
+    let threads: Vec<(String, String)> = ledger
+        .rows()
+        .iter()
+        .map(|row| (row.query().to_owned(), row.thread().to_owned()))
+        .collect();
+    let named: std::collections::BTreeSet<&String> =
+        threads.iter().map(|(_, thread)| thread).collect();
+    assert_eq!(
+        named.len(),
+        threads.len(),
+        "a thread for each query: {threads:?}"
+    );
+
+    let tagged_thread = threads
+        .iter()
+        .find(|(query, _)| query == "tagged")
+        .map(|(_, thread)| thread.clone())
+        .unwrap_or_else(|| panic!("no row for tagged: {threads:?}"));
+    let dropped = DROPPED_ON
+        .lock()
+        .map(|dropped| dropped.clone())
+        .unwrap_or_default();
+    assert_eq!(dropped.len(), 5, "every value was dropped");
+    assert!(
+        dropped.iter().all(|name| *name == tagged_thread),
+        "on the thread the query's row names ({tagged_thread}): {dropped:?}"
+    );
 }
