@@ -42,6 +42,23 @@ pub(super) fn collect(
             continue;
         }
         pending.extend(krate.dependencies(db).into_iter().map(|dep| dep.krate));
+        // A library crate (a dependency that is not a member of the workspace) does not change
+        // during a run, and listing the files of its modules would build its definition map and
+        // those of everything it depends on, which is the most a cold run's loading allocates. Its
+        // source root's files are a superset of them, which is as good for a digest of what an
+        // artifact is built from, and costs a directory listing.
+        if !krate.origin(db).is_local() {
+            let root = db.file_source_root(krate.root_file(db)).source_root_id(db);
+            for file in db.source_root(root).source_root(db).iter() {
+                if let Some(path) = vfs.file_path(file).as_path() {
+                    inputs.insert(
+                        AsRef::<std::path::Path>::as_ref(path).to_path_buf(),
+                        Sha256::digest(db.file_text(file).text(db).as_bytes()).into(),
+                    );
+                }
+            }
+            continue;
+        }
         // The saved lists of the crate's files, which make no definition map to answer.
         let listed = item_key::files_of(db, krate)
             .zip(item_key::included_files_of(db, krate))
