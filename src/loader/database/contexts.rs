@@ -16,6 +16,7 @@ mod leaves;
 mod merge;
 mod pass;
 mod plan;
+mod reuse;
 
 pub(super) use pass::FunctionNodes;
 

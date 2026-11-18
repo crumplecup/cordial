@@ -188,6 +188,21 @@ impl SourceDatabase {
                 nodes,
                 context: &added,
             };
+            // Only a count: failing to make it must not fail the analysis it describes.
+            let reuse = self.measure_reuse(paths, &pairs).unwrap_or_else(|error| {
+                tracing::warn!(error = ?error, "could not count the files a context would copy");
+                super::reuse::Reuse::default()
+            });
+            tracing::info!(
+                target: "cordial::semantic::contexts",
+                %context,
+                files = reuse.files,
+                flipped = reuse.flipped,
+                unsure = reuse.unsure,
+                spine = reuse.spine,
+                aliased = reuse.aliased(),
+                "the files this context would copy, and the files it could take from the ordinary build"
+            );
             let stage = std::time::Instant::now();
             self.harvest(&context, index, &pairs, &files, graph)?;
             let harvested = stage.elapsed();

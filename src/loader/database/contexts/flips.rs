@@ -76,6 +76,11 @@ impl Flips {
         flips
     }
 
+    /// Whether the context flips any gate of the file.
+    pub(super) fn is_flipped(&self) -> bool {
+        !self.hosts.is_empty()
+    }
+
     /// Whether any name is defined or used inside a flipped gate: when none is, no function
     /// mentions one.
     pub(super) fn has_names(&self) -> bool {
