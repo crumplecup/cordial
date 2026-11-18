@@ -1960,7 +1960,7 @@
      /// Last revision when this memo was verified; this begins
      /// as the current revision.
      pub(super) verified_at: AtomicRevision,
-@@ -225,10 +243,25 @@
+@@ -225,16 +243,34 @@
      }
  
      #[inline]
@@ -1987,7 +1987,18 @@
      fn can_evict_value(&self) -> bool {
          // Careful: Cannot evict memos whose values were
          // assigned as output of another query
-@@ -341,32 +374,147 @@
+         // or those with untracked inputs
+-        // as their values cannot be reconstructed.
+-        matches!(self.origin(), QueryOriginRef::Derived(_))
++        // as their values cannot be reconstructed. Nor one that is provisional, an iteration of a
++        // cycle that is still running: with no value it is read as a cycle head that panicked, and
++        // the query that reads it unwinds (an LRU that evicts often, as under memory pressure, meets
++        // this).
++        matches!(self.origin(), QueryOriginRef::Derived(_)) && !self.may_be_provisional()
+     }
+ 
+     /// True if this may be a provisional cycle-iteration result.
+@@ -341,32 +377,147 @@
                  unsafe { std::mem::transmute::<C::Output<'_>, C::Output<'static>>(value) }
              }),
              header: MemoHeader::new(revision_now, revisions),
@@ -2143,7 +2154,7 @@
      }
  
      fn remove_outputs(&self, zalsa: &Zalsa, executor: DatabaseKeyIndex) {
-@@ -404,7 +552,10 @@
+@@ -404,7 +555,10 @@
  
      /// A reference to the fields of a [`Memo`], with its [`QueryRevisions`] transformed.
      pub(crate) struct MappedMemo<'memo, C: Configuration> {
@@ -2154,7 +2165,7 @@
          pub(crate) verified_at: AtomicRevision,
          pub(crate) revisions: MappedQueryRevisions<'memo>,
      }
-@@ -414,7 +565,9 @@
+@@ -414,7 +568,9 @@
              &self,
              serialized_origin: PersistentQueryOrigin,
          ) -> MappedMemo<'_, C> {
@@ -2165,7 +2176,7 @@
              let Memo { ref header, .. } = *self;
              let MemoHeader {
                  ref verified_at,
-@@ -423,6 +576,7 @@
+@@ -423,6 +579,7 @@
  
              MappedMemo {
                  value,
@@ -2173,7 +2184,7 @@
                  verified_at: AtomicRevision::from(verified_at.load()),
                  revisions: revisions.with_origin(serialized_origin),
              }
-@@ -451,18 +605,44 @@
+@@ -451,18 +608,44 @@
                  }
              }
  
@@ -2222,7 +2233,7 @@
              s.serialize_field("verified_at", &verified_at)?;
              s.serialize_field("revisions", &revisions)?;
              s.end()
-@@ -479,36 +659,62 @@
+@@ -479,36 +662,62 @@
          {
              #[derive(Deserialize)]
              #[serde(rename = "Memo")]
@@ -2302,7 +2313,7 @@
          }
      }
  }
-@@ -635,8 +841,9 @@
+@@ -635,8 +844,9 @@
      // Memos are stored a lot, make sure their size doesn't randomly increase.
      const _: [(); std::mem::size_of::<super::MemoHeader>()] =
          [(); std::mem::size_of::<[usize; 4]>()];

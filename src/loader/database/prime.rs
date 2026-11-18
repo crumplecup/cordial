@@ -204,7 +204,26 @@ impl SourceDatabase {
                     .stack_size(WORKER_STACK_BYTES)
                     .spawn_scoped(scope, move || {
                         tracing::dispatcher::with_default(&dispatch, || {
-                            evaluate(&db, functions, next, one, may_stop);
+                            let ran =
+                                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                                    evaluate(&db, functions, next, one, may_stop);
+                                }));
+                            if let Err(payload) = ran {
+                                // A panic that carries a message says what went wrong, which the
+                                // `scoped thread panicked` that follows in the thread that waits
+                                // does not; Salsa's own unwinding (a cancellation) carries none.
+                                let message = payload
+                                    .downcast_ref::<String>()
+                                    .map(String::as_str)
+                                    .or_else(|| payload.downcast_ref::<&str>().copied());
+                                tracing::error!(
+                                    target: "cordial::prime",
+                                    worker = index,
+                                    message = message.unwrap_or("(an unwind with no message)"),
+                                    "a priming worker panicked"
+                                );
+                                std::panic::resume_unwind(payload);
+                            }
                         });
                     });
                 if let Err(error) = spawned {

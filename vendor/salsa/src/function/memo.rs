@@ -266,8 +266,11 @@ impl MemoHeader {
         // Careful: Cannot evict memos whose values were
         // assigned as output of another query
         // or those with untracked inputs
-        // as their values cannot be reconstructed.
-        matches!(self.origin(), QueryOriginRef::Derived(_))
+        // as their values cannot be reconstructed. Nor one that is provisional, an iteration of a
+        // cycle that is still running: with no value it is read as a cycle head that panicked, and
+        // the query that reads it unwinds (an LRU that evicts often, as under memory pressure, meets
+        // this).
+        matches!(self.origin(), QueryOriginRef::Derived(_)) && !self.may_be_provisional()
     }
 
     /// True if this may be a provisional cycle-iteration result.
