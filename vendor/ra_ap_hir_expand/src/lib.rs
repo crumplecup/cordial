@@ -666,6 +666,13 @@ impl MacroCallId {
             MacroDefKind::ProcMacro(..) => {
                 return self.expand_proc_macro(db).as_ref().map(|it| (Cow::Borrowed(it), None));
             }
+            MacroDefKind::Declarative(..)
+            | MacroDefKind::BuiltInDerive(..)
+            | MacroDefKind::BuiltInAttr(..) => {
+                return expand_pure_macro_of(db, self)
+                    .as_ref()
+                    .map(|(tt, matched_arm)| (Cow::Borrowed(tt), *matched_arm));
+            }
             _ => {
                 let (macro_arg, undo_info, span) =
                     self.macro_arg_considering_derives(db, &loc.kind);
@@ -781,6 +788,46 @@ fn expand_proc_macro_of(db: &dyn SourceDatabase, call: MacroCallId) -> ExpandRes
     fixup::reverse_fixups(&mut tt, undo_info);
 
     ExpandResult { value: tt, err }
+}
+
+/// What a call to a declarative macro, a built-in derive or a built-in attribute expands to, as a
+/// token tree. These are functions of the call's input and the macro's definition and nothing else,
+/// so, like a proc macro's, the expansion is saved with the database: it can be given to the cold
+/// store when memory is short, and a restored run decodes it instead of expanding again. The syntax
+/// tree built from it (`parse_macro_expansion`) is what is dropped and made again, which is cheap.
+/// The macros that read files or the environment (`include!`, `env!`) are not in it.
+#[salsa::tracked(returns(ref), persist)]
+fn expand_pure_macro_of(
+    db: &dyn SourceDatabase,
+    call: MacroCallId,
+) -> ExpandResult<(tt::TopSubtree, MatchedArmIndex)> {
+    let loc = call.loc(db);
+    let (macro_arg, undo_info, span) = call.macro_arg_considering_derives(db, &loc.kind);
+    let span = *span;
+    let arg = macro_arg;
+    let ExpandResult { value: (tt, matched_arm), err } = match loc.def.kind {
+        MacroDefKind::Declarative(id, _) => {
+            id.decl_macro_expander(db, loc.def.krate).expand(db, arg, call, span)
+        }
+        MacroDefKind::BuiltInDerive(_, it) => {
+            it.expand(db, call, arg, span).map_err(Into::into).zip_val(None)
+        }
+        MacroDefKind::BuiltInAttr(_, it) => {
+            let mut res = it.expand(db, call, arg, span);
+            fixup::reverse_fixups(&mut res.value, undo_info);
+            res.zip_val(None)
+        }
+        _ => unreachable!("only the macros `macro_expand` routes here"),
+    };
+
+    // Set a hard limit for the expanded tt, as `macro_expand` does for the rest.
+    if let Err(value) = check_tt_count(&tt) {
+        return value
+            .map(|()| tt::TopSubtree::empty(tt::DelimSpan::from_single(span)))
+            .zip_val(matched_arm);
+    }
+
+    ExpandResult { value: (tt, matched_arm), err }
 }
 
 impl MacroCallId {

@@ -34,7 +34,7 @@ Kinds: **regenerable** (computed again from something smaller: the cold tier is 
 | 2 | Saved state on restore | persistable | Keep memo values as the bytes they were saved as; save them again unchanged | Done |
 | 3 | File syntax trees (`parse`) | regenerable | LRU cap, 16 under pressure; dropped with the rest at level 2 | Cap done; drop at level 2 below |
 | 4 | Macro-expansion trees (`parse_macro_expansion`), span maps | regenerable | Same; the token tree below is what makes recomputing cheap | Cap done |
-| 5 | Macro token trees (`macro_arg`, declarative and proc-macro output) | persistable | Serialize to the cold store; rebuild the tree from them | Not started |
+| 5 | Macro token trees (declarative, built-in derive and attribute expansions; proc-macro output was already) | persistable | A saved query (`expand_pure_macro_of`): spilled to the cold store, restored as bytes; the tree is rebuilt from it. `include!` and `env!` stay out: they read files and the environment. `macro_arg` is cheap to rebuild and is left to the drop | Done |
 | 6 | `ast_id_map`, item trees, attribute flags | regenerable | LRU cap; dropped at level 2 | Cap done where RA marks it |
 | 7 | Bodies, signatures, expression scopes, inference results | regenerable | Dropped at the end of each chunk at level 2 and 3 | Stage ends done; chunk ends below |
 | 8 | Definition maps | regenerable | Same. Serializing them needs every id they hold persisted | Dropped at stage ends; serializing not planned |

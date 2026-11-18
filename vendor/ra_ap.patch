@@ -2199,7 +2199,21 @@
  pub enum MacroKind {
      /// `macro_rules!` or Macros 2.0 macro.
      Declarative,
-@@ -735,44 +736,51 @@
+@@ -665,6 +666,13 @@
+             MacroDefKind::ProcMacro(..) => {
+                 return self.expand_proc_macro(db).as_ref().map(|it| (Cow::Borrowed(it), None));
+             }
++            MacroDefKind::Declarative(..)
++            | MacroDefKind::BuiltInDerive(..)
++            | MacroDefKind::BuiltInAttr(..) => {
++                return expand_pure_macro_of(db, self)
++                    .as_ref()
++                    .map(|(tt, matched_arm)| (Cow::Borrowed(tt), *matched_arm));
++            }
+             _ => {
+                 let (macro_arg, undo_info, span) =
+                     self.macro_arg_considering_derives(db, &loc.kind);
+@@ -735,44 +743,91 @@
      /// proc macros, since they are not deterministic in general, and
      /// non-determinism breaks salsa in a very, very, very bad way.
      /// @edwin0cheng heroically debugged this once! See #4315 for details
@@ -2273,17 +2287,56 @@
 +    if let Err(value) = check_tt_count(&tt) {
 +        return value.map(|()| tt::TopSubtree::empty(tt::DelimSpan::from_single(*span)));
 +    }
- 
--        fixup::reverse_fixups(&mut tt, undo_info);
++
 +    fixup::reverse_fixups(&mut tt, undo_info);
  
--        ExpandResult { value: tt, err }
--    }
+-        fixup::reverse_fixups(&mut tt, undo_info);
 +    ExpandResult { value: tt, err }
++}
++
++/// What a call to a declarative macro, a built-in derive or a built-in attribute expands to, as a
++/// token tree. These are functions of the call's input and the macro's definition and nothing else,
++/// so, like a proc macro's, the expansion is saved with the database: it can be given to the cold
++/// store when memory is short, and a restored run decodes it instead of expanding again. The syntax
++/// tree built from it (`parse_macro_expansion`) is what is dropped and made again, which is cheap.
++/// The macros that read files or the environment (`include!`, `env!`) are not in it.
++#[salsa::tracked(returns(ref), persist)]
++fn expand_pure_macro_of(
++    db: &dyn SourceDatabase,
++    call: MacroCallId,
++) -> ExpandResult<(tt::TopSubtree, MatchedArmIndex)> {
++    let loc = call.loc(db);
++    let (macro_arg, undo_info, span) = call.macro_arg_considering_derives(db, &loc.kind);
++    let span = *span;
++    let arg = macro_arg;
++    let ExpandResult { value: (tt, matched_arm), err } = match loc.def.kind {
++        MacroDefKind::Declarative(id, _) => {
++            id.decl_macro_expander(db, loc.def.krate).expand(db, arg, call, span)
++        }
++        MacroDefKind::BuiltInDerive(_, it) => {
++            it.expand(db, call, arg, span).map_err(Into::into).zip_val(None)
++        }
++        MacroDefKind::BuiltInAttr(_, it) => {
++            let mut res = it.expand(db, call, arg, span);
++            fixup::reverse_fixups(&mut res.value, undo_info);
++            res.zip_val(None)
++        }
++        _ => unreachable!("only the macros `macro_expand` routes here"),
++    };
+ 
+-        ExpandResult { value: tt, err }
++    // Set a hard limit for the expanded tt, as `macro_expand` does for the rest.
++    if let Err(value) = check_tt_count(&tt) {
++        return value
++            .map(|()| tt::TopSubtree::empty(tt::DelimSpan::from_single(span)))
++            .zip_val(matched_arm);
+     }
++
++    ExpandResult { value: (tt, matched_arm), err }
  }
  
  impl MacroCallId {
-@@ -1497,7 +1505,7 @@
+@@ -1497,7 +1552,7 @@
  ///
  /// `ExpandTo` captures this bit of information about a particular macro call
  /// site.
@@ -2292,7 +2345,7 @@
  pub enum ExpandTo {
      Statements,
      Items,
-@@ -1551,7 +1559,7 @@
+@@ -1551,7 +1606,7 @@
  ///
  /// We encode macro definitions into ids of macro calls, this what allows us
  /// to be incremental.
@@ -2301,7 +2354,7 @@
  #[doc(alias = "MacroFileId")]
  pub struct MacroCallId {
      #[returns(ref)]
-@@ -1572,7 +1580,7 @@
+@@ -1572,7 +1627,7 @@
      }
  }
  
