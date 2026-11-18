@@ -127,19 +127,25 @@ impl SourceDatabase {
         items: &[T],
         one: &(impl Fn(&RootDatabase, &T) + Sync),
     ) {
-        let size = chunk_size(items.len());
-        let chunks = items.len().div_ceil(size);
-        for (index, part) in items.chunks(size).enumerate() {
+        let mut size = chunk_size(items.len());
+        let mut rest = items;
+        let mut index = 0;
+        while !rest.is_empty() {
+            let (part, after) = rest.split_at(size.min(rest.len()));
+            index += 1;
             tracing::debug!(
                 target: "cordial::prime",
                 label,
-                chunk = index + 1,
-                chunks,
+                chunk = index,
                 files = part.len(),
+                remaining = after.len(),
                 "priming a chunk"
             );
             self.prime_part(part, one);
-            self.evict_between_chunks();
+            if self.evict_between_chunks() {
+                size = (size / 2).max(LEAST_UNDER_PRESSURE);
+            }
+            rest = after;
         }
     }
 
@@ -185,6 +191,9 @@ impl SourceDatabase {
         });
     }
 }
+
+/// The fewest functions a chunk holds when the process is nearing its memory limit.
+const LEAST_UNDER_PRESSURE: usize = 8;
 
 /// How many functions go between two evictions: enough that the workers' start-up is nothing
 /// to it, few enough that what a chunk parses is a small part of the whole.

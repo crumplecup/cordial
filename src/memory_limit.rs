@@ -12,6 +12,7 @@
 //! programs hold, so a share of it keeps a buffer for the machine.
 
 use std::io::Write as _;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use tracing::instrument;
@@ -25,6 +26,14 @@ const FALLBACK_BYTES: u64 = 8 << 30;
 
 /// The exit status of a run that stopped itself for using too much memory.
 pub const MEMORY_LIMIT_EXIT: i32 = 75;
+
+/// The limit in force for this run, in bytes (zero: none), kept so that the work can ease off
+/// before the watchdog stops it.
+static LIMIT_BYTES: AtomicU64 = AtomicU64::new(0);
+
+/// The share of the limit, in percent, from which the work gives back what it can compute again
+/// and takes smaller steps, so the watchdog's stop is the last resort and not the usual end.
+pub const EASE_OFF_PERCENT: u64 = 60;
 
 /// How often the watchdog reads the process's memory.
 const SAMPLE_EVERY: Duration = Duration::from_millis(100);
@@ -198,10 +207,27 @@ pub fn exceeds(resident_kib: u64, limit: u64) -> bool {
     limit != 0 && resident_kib.saturating_mul(1024) > limit
 }
 
+/// Whether a process using `resident_kib` has reached [`EASE_OFF_PERCENT`] of `limit` bytes. A
+/// limit of zero is none.
+#[instrument(level = "trace")]
+pub fn nearing(resident_kib: u64, limit: u64) -> bool {
+    limit != 0
+        && resident_kib.saturating_mul(1024).saturating_mul(100)
+            >= limit.saturating_mul(EASE_OFF_PERCENT)
+}
+
+/// Whether this process, as it is now, is nearing the limit of this run.
+#[instrument(level = "trace")]
+pub fn nearing_this_runs_limit() -> bool {
+    crate::process_memory::sample()
+        .is_some_and(|memory| nearing(memory.resident_kib(), LIMIT_BYTES.load(Ordering::Relaxed)))
+}
+
 /// Start the watchdog for `budget`. It lives as long as the process.
 #[instrument(level = "debug")]
 #[hotpath::measure]
 pub fn enforce(budget: Budget) {
+    LIMIT_BYTES.store(budget.bytes, Ordering::Relaxed);
     if budget.bytes == 0 {
         return;
     }

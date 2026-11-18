@@ -49,13 +49,22 @@ impl SourceDatabase {
             || std::env::var_os(EVICT_VARIABLE).is_some()
     }
 
-    /// Evict between the chunks of a pass, if asked to: the events of every chunk add up.
+    /// Evict between the chunks of a pass if asked to, or if the process is nearing its memory
+    /// limit: the events of every chunk add up. Says whether it was the memory that made it, so
+    /// that the pass takes smaller chunks while it lasts.
     #[instrument(level = "trace", skip(self))]
-    pub(super) fn evict_between_chunks(&mut self) {
-        if !self.evicts() {
-            return;
+    pub(super) fn evict_between_chunks(&mut self) -> bool {
+        let pressed = crate::memory_limit::nearing_this_runs_limit();
+        if pressed {
+            tracing::info!(
+                target: "cordial::eviction",
+                "nearing the memory limit: evicting and taking smaller chunks"
+            );
         }
-        self.evict_quietly("prime chunk");
+        if pressed || self.evicts() {
+            self.evict_quietly("prime chunk");
+        }
+        pressed
     }
 
     fn evict_quietly(&mut self, after: &str) {

@@ -8,7 +8,8 @@ mod support {
 use clap::Parser;
 use cordial::{
     Cli, DEFAULT_MEMORY_LIMIT, MEMORY_LIMIT_EXIT, MemoryLimit, budget_of, exceeds,
-    load_cordial_config, parse_limit, parse_meminfo, parse_size, resolve_memory_limit_with,
+    load_cordial_config, nearing, parse_limit, parse_meminfo, parse_size,
+    resolve_memory_limit_with,
 };
 use miette::{IntoDiagnostic, Result};
 
@@ -68,6 +69,19 @@ fn a_process_is_over_a_limit_only_when_it_has_one() {
     assert!(!exceeds(1024 * 1024, limit), "1 GiB of 1 GiB is not over");
     assert!(exceeds(1024 * 1024 + 1, limit), "a kibibyte more is");
     assert!(!exceeds(u64::MAX, 0), "zero is no limit");
+}
+
+#[test]
+fn a_process_eases_off_at_sixty_percent_of_its_limit_before_it_is_stopped() {
+    let limit = GIB;
+    let kib_at = |percent: u64| (GIB / 1024 * percent).div_ceil(100);
+    assert!(!nearing(kib_at(59), limit), "59% is still working freely");
+    assert!(
+        nearing(kib_at(60), limit),
+        "60% gives back what can be computed again"
+    );
+    assert!(!exceeds(kib_at(60), limit), "and is not yet over the limit");
+    assert!(!nearing(u64::MAX, 0), "zero is no limit");
 }
 
 #[test]
