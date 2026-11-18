@@ -319,6 +319,27 @@ fn the_ladder_works_to_a_target_below_the_limit_and_the_run_is_stopped_at_the_li
 }
 
 #[test]
+fn the_resident_stop_is_twice_the_limit_but_within_the_memory_there_was() {
+    let limit = resolve_memory_limit_with(None, None, Some(16 * GIB));
+    assert_eq!(limit.bytes(), 12 * GIB);
+    assert_eq!(
+        limit.resident_stop_bytes(),
+        16 * GIB / 10 * 9,
+        "not past the machine"
+    );
+    let small = resolve_memory_limit_with(Some(MemoryLimit::Bytes(2 * GIB)), None, Some(16 * GIB));
+    assert_eq!(small.resident_stop_bytes(), 4 * GIB, "twice a small limit");
+    let unknown = resolve_memory_limit_with(Some(MemoryLimit::Bytes(2 * GIB)), None, None);
+    assert_eq!(
+        unknown.resident_stop_bytes(),
+        4 * GIB,
+        "twice when the memory is not known"
+    );
+    let big = resolve_memory_limit_with(Some(MemoryLimit::Bytes(20 * GIB)), None, Some(16 * GIB));
+    assert_eq!(big.resident_stop_bytes(), 20 * GIB, "never below the limit");
+}
+
+#[test]
 fn the_flag_beats_the_config_and_the_config_beats_the_default() -> Result<()> {
     assert_eq!(DEFAULT_MEMORY_LIMIT, "75%");
     let available = Some(32 * GIB);

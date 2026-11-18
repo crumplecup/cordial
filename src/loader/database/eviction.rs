@@ -44,6 +44,10 @@ fn lru_cap(pressured: bool) -> usize {
     }
 }
 
+/// Whether the memory ledger has been taken at the first moment the run was pressed hard.
+static ITEMIZED_UNDER_PRESSURE: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
 /// When the costly actions are done between the chunks of a pass (see [`crate::Backoff`]).
 static CHUNK_BACKOFF: std::sync::Mutex<crate::Backoff> =
     std::sync::Mutex::new(crate::Backoff::new());
@@ -185,6 +189,13 @@ impl SourceDatabase {
             // what is freed, and the resident memory then does not fall) the next waits twice as
             // long, so that a run is not made to compute the same values again on every chunk.
             let before = crate::memory_limit::meter_kib().unwrap_or(0);
+            if crate::memory_limit::pressure() >= crate::Pressure::Hard
+                && !ITEMIZED_UNDER_PRESSURE.swap(true, std::sync::atomic::Ordering::Relaxed)
+            {
+                // Once, at the first moment the run is pressed hard and before anything is dropped:
+                // what the memory is made of when it is most in the way.
+                self.itemize_memory("pressed");
+            }
             self.spill_under_pressure("prime chunk");
             if crate::memory_limit::pressure() >= crate::Pressure::Hard {
                 // From the second rung, what is not persisted is dropped after each chunk,

@@ -242,6 +242,8 @@ pub struct Budget {
     described: String,
     /// What the pressure ladder works to, when that is less than the limit (zero: the limit).
     target: u64,
+    /// The memory available when the run started (zero: not known).
+    available: u64,
 }
 
 impl Budget {
@@ -261,6 +263,19 @@ impl Budget {
         } else {
             self.target
         }
+    }
+
+    /// The resident memory at which the run is stopped whatever the program holds: an allocator
+    /// that keeps what is freed can fill the machine while the program holds little. Twice the
+    /// limit, but not more than nine tenths of the memory available when the run started, and not
+    /// less than the limit.
+    #[must_use]
+    pub fn resident_stop_bytes(&self) -> u64 {
+        let twice = self.bytes.saturating_mul(RESIDENT_BACKSTOP);
+        if self.available == 0 {
+            return twice;
+        }
+        twice.min(self.available / 10 * 9).max(self.bytes)
     }
 
     /// This budget with the ladder working to `target` (see [`Budget::ladder_bytes`]); a target
@@ -337,11 +352,13 @@ pub fn budget_of(limit: MemoryLimit, available: Option<u64>) -> Budget {
             bytes: 0,
             described: "no limit".to_owned(),
             target: 0,
+            available: available.unwrap_or(0),
         },
         MemoryLimit::Bytes(bytes) => Budget {
             bytes,
             described: gibibytes(bytes),
             target: 0,
+            available: available.unwrap_or(0),
         },
         MemoryLimit::Percent(percent) => match available {
             #[expect(
@@ -360,6 +377,7 @@ pub fn budget_of(limit: MemoryLimit, available: Option<u64>) -> Budget {
                         gibibytes(available)
                     ),
                     target: 0,
+                    available,
                 }
             }
             None => Budget {
@@ -369,6 +387,7 @@ pub fn budget_of(limit: MemoryLimit, available: Option<u64>) -> Budget {
                     gibibytes(FALLBACK_BYTES)
                 ),
                 target: 0,
+                available: 0,
             },
         },
     }
@@ -570,10 +589,7 @@ fn watch(budget: &Budget) {
             );
         }
         if exceeds(held, budget.bytes)
-            || exceeds(
-                memory.resident_kib(),
-                budget.bytes.saturating_mul(RESIDENT_BACKSTOP),
-            )
+            || exceeds(memory.resident_kib(), budget.resident_stop_bytes())
         {
             stop(held, memory.resident_kib(), budget);
         }
