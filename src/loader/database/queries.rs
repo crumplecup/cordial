@@ -370,8 +370,36 @@ pub(super) fn persisted_evidence<'db>(
     if let Ok(mut computed) = COMPUTED_THIS_RUN.lock() {
         computed.insert(super::item_key::key_bits(key));
     }
-    let function = super::item_key::function_of(db, key)?;
-    function_evidence(db, FunctionKey::new(db, function)).clone()
+    // A run in processes that come and go keeps what it computes in a store, by the description,
+    // and a process finds there what an earlier one computed.
+    let store = crate::result_store::current();
+    let description = store
+        .as_ref()
+        .map(|_| super::item_key::key_text(db.root_database(), key));
+    if let (Some(store), Some(description)) = (&store, &description)
+        && let Some(bytes) = store.get(crate::result_store::EVIDENCE, description)
+        && let Some(kept) = super::item_key::evidence_from_stored(db.root_database(), &bytes)
+    {
+        tracing::trace!(
+            target: "cordial::results",
+            description = %description,
+            "the evidence was found in the store"
+        );
+        return kept;
+    }
+    let evidence = super::item_key::function_of(db, key)
+        .and_then(|function| function_evidence(db, FunctionKey::new(db, function)).clone());
+    if let (Some(store), Some(description)) = (&store, &description) {
+        match super::item_key::evidence_to_stored(db.root_database(), &evidence) {
+            Some(bytes) => store.put(crate::result_store::EVIDENCE, description, &bytes),
+            None => tracing::warn!(
+                target: "cordial::results",
+                description = %description,
+                "the evidence could not be kept in the store"
+            ),
+        }
+    }
+    evidence
 }
 
 /// `facts`, the evidence of `function`, with the ranges of its calls as coordinates of its file.

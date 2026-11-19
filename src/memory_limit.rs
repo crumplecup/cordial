@@ -77,9 +77,10 @@ pub fn resume_exit() -> ! {
     let status = crate::LiveStatus::global();
     let _ = writeln!(
         crate::host::stderr(),
-        "cordial: saved its state at {} to take it up again in a new process",
+        "cordial: saved what it did, at {}, for a new process to take the run up again",
         status.phase()
     );
+    crate::flush_current();
     crate::run_metrics::write_ended("memory checkpoint", &status.phase());
     crate::profiling::finish();
     std::process::exit(MEMORY_RESUME_EXIT)

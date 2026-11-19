@@ -255,6 +255,51 @@ pub(super) fn key_for<'db>(id: SemanticItemId) -> ItemKey<'db> {
     ItemKey::from_id(salsa::Id::from_bits(id.bits()))
 }
 
+/// The evidence of a function in the form a store keeps it in, which another process can read: the
+/// evidence, and what each identity in it describes. The identities are numbers that mean something
+/// only in the process that interned them; their descriptions mean the same in every process.
+#[instrument(level = "trace", skip(db, evidence))]
+pub(super) fn evidence_to_stored(
+    db: &RootDatabase,
+    evidence: &Option<crate::SemanticFunction>,
+) -> Option<Vec<u8>> {
+    let mut described: std::collections::BTreeMap<u64, String> = std::collections::BTreeMap::new();
+    if let Some(function) = evidence {
+        let _ = function.clone().map_identities(&mut |id| {
+            described
+                .entry(id.bits())
+                .or_insert_with(|| description(db, id));
+            id
+        });
+    }
+    rmp_serde::to_vec(&(evidence, described)).ok()
+}
+
+/// The evidence a store kept, with each identity in it the number this process gives what it
+/// describes. `None` for bytes that are not evidence.
+#[instrument(level = "trace", skip(db, bytes))]
+pub(super) fn evidence_from_stored(
+    db: &RootDatabase,
+    bytes: &[u8],
+) -> Option<Option<crate::SemanticFunction>> {
+    let (evidence, described): (
+        Option<crate::SemanticFunction>,
+        std::collections::BTreeMap<u64, String>,
+    ) = rmp_serde::from_slice(bytes).ok()?;
+    let here: std::collections::BTreeMap<u64, SemanticItemId> = described
+        .into_iter()
+        .map(|(was, text)| {
+            (
+                was,
+                SemanticItemId::new(ItemKey::new(db, text).as_id().as_bits()),
+            )
+        })
+        .collect();
+    Some(evidence.map(|function| {
+        function.map_identities(&mut |id| here.get(&id.bits()).copied().unwrap_or(id))
+    }))
+}
+
 /// What `id` describes, as text.
 #[instrument(level = "trace", skip(db, id))]
 pub(super) fn description(db: &RootDatabase, id: SemanticItemId) -> String {

@@ -125,29 +125,19 @@ impl SourceDatabase {
         let name = target.crate_name().to_owned();
         #[cfg(any(feature = "antipatterns", feature = "cli_layout"))]
         let crate_name = target.crate_name().to_owned();
-        self.run_in_chunks("file scans", &visits, move |db, (file, path, visit)| {
-            // The compiler does not see that a build with none of the features reads nothing here.
-            let _ = (&root, db, file, path, visit);
-            if visit.scanned {
-                scan_queries::prime_extraction(db, *file, path, &root);
-                #[cfg(feature = "internal_error_chain")]
-                scan_queries::prime_compliance(db, *file, path, &root, &name, proc_macro);
-            }
-            #[cfg(feature = "panics")]
-            if let Some(tree) = &visit.panics {
-                let key = super::crate_files::FileKey::new(
-                    db,
-                    *file,
-                    path.clone(),
-                    tree.clone(),
-                    root.clone(),
-                );
-                let _ = super::panic_queries::panic_proofs_file(db, key);
-                let _ = super::panic_queries::panic_candidates_file(db, key);
-            }
-            #[cfg(feature = "antipatterns")]
-            {
-                if let Some(tree) = &visit.antipatterns {
+        self.run_in_chunks_with(
+            "file scans",
+            &visits,
+            move |db, (file, path, visit)| {
+                // The compiler does not see that a build with none of the features reads nothing here.
+                let _ = (&root, db, file, path, visit);
+                if visit.scanned {
+                    scan_queries::prime_extraction(db, *file, path, &root);
+                    #[cfg(feature = "internal_error_chain")]
+                    scan_queries::prime_compliance(db, *file, path, &root, &name, proc_macro);
+                }
+                #[cfg(feature = "panics")]
+                if let Some(tree) = &visit.panics {
                     let key = super::crate_files::FileKey::new(
                         db,
                         *file,
@@ -155,58 +145,77 @@ impl SourceDatabase {
                         tree.clone(),
                         root.clone(),
                     );
-                    let _ = super::antipattern_queries::antipattern_facts_file(db, key);
-                    let _ = super::antipattern_queries::antipattern_pending_file(db, key);
+                    let _ = super::panic_queries::panic_proofs_file(db, key);
+                    let _ = super::panic_queries::panic_candidates_file(db, key);
                 }
-                if let Some(tree) = &visit.contracts {
+                #[cfg(feature = "antipatterns")]
+                {
+                    if let Some(tree) = &visit.antipatterns {
+                        let key = super::crate_files::FileKey::new(
+                            db,
+                            *file,
+                            path.clone(),
+                            tree.clone(),
+                            root.clone(),
+                        );
+                        let _ = super::antipattern_queries::antipattern_facts_file(db, key);
+                        let _ = super::antipattern_queries::antipattern_pending_file(db, key);
+                    }
+                    if let Some(tree) = &visit.contracts {
+                        let key = super::crate_files::FileKey::new(
+                            db,
+                            *file,
+                            path.clone(),
+                            tree.clone(),
+                            root.clone(),
+                        );
+                        let _ = super::antipattern_queries::antipattern_contracts_file(
+                            db,
+                            super::antipattern_queries::ContractKey::new(
+                                db,
+                                key,
+                                crate_name.clone(),
+                            ),
+                        );
+                    }
+                }
+                #[cfg(feature = "cli_layout")]
+                if visit.layout {
                     let key = super::crate_files::FileKey::new(
-                        db,
-                        *file,
-                        path.clone(),
-                        tree.clone(),
-                        root.clone(),
-                    );
-                    let _ = super::antipattern_queries::antipattern_contracts_file(
-                        db,
-                        super::antipattern_queries::ContractKey::new(db, key, crate_name.clone()),
-                    );
-                }
-            }
-            #[cfg(feature = "cli_layout")]
-            if visit.layout {
-                let key = super::crate_files::FileKey::new(
-                    db,
-                    *file,
-                    path.clone(),
-                    root.join("src"),
-                    root.clone(),
-                );
-                let _ = super::layout_queries::cli_layout_file(
-                    db,
-                    super::layout_queries::LayoutKey::new(db, key, crate_name.clone()),
-                );
-            }
-            #[cfg(feature = "internal_error_chain")]
-            {
-                let key = || {
-                    super::crate_files::FileKey::new(
                         db,
                         *file,
                         path.clone(),
                         root.join("src"),
                         root.clone(),
-                    )
-                };
-                if visit.architecture {
-                    let _ = super::architecture_queries::architecture_file(db, key());
-                    // Where the crate's `mod` declarations lead, read once with the rest.
-                    let _ = super::module_queries::module_declarations_file(db, key());
+                    );
+                    let _ = super::layout_queries::cli_layout_file(
+                        db,
+                        super::layout_queries::LayoutKey::new(db, key, crate_name.clone()),
+                    );
                 }
-                if visit.signatures {
-                    let _ = super::signature_queries::signature_file(db, key());
+                #[cfg(feature = "internal_error_chain")]
+                {
+                    let key = || {
+                        super::crate_files::FileKey::new(
+                            db,
+                            *file,
+                            path.clone(),
+                            root.join("src"),
+                            root.clone(),
+                        )
+                    };
+                    if visit.architecture {
+                        let _ = super::architecture_queries::architecture_file(db, key());
+                        // Where the crate's `mod` declarations lead, read once with the rest.
+                        let _ = super::module_queries::module_declarations_file(db, key());
+                    }
+                    if visit.signatures {
+                        let _ = super::signature_queries::signature_file(db, key());
+                    }
                 }
-            }
-        });
+            },
+            false,
+        );
         Ok(())
     }
 }

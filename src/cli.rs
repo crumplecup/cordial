@@ -95,19 +95,27 @@ impl Cli {
     #[instrument(level = "debug", skip(self), err(level = "warn"))]
     #[hotpath::measure]
     pub fn act(self) -> CordialResult<()> {
-        if self.memory_isolation && !crate::memory_limit::resumable() {
-            // The run is a child of this process, and this one ends with what the last ended with.
-            let program = std::env::current_exe()?;
-            let arguments: Vec<std::ffi::OsString> = std::env::args_os().skip(1).collect();
-            let code = crate::drive_resumable(&program, &arguments)?;
-            std::process::exit(code);
-        }
         let project_root = match &self.project {
             Some(path) => path.clone(),
             None => std::env::current_dir()?,
         };
         let slug = project_slug_from_path(&project_root);
         let store_home = self.store_home.clone().unwrap_or_else(default_store_home);
+        if self.memory_isolation && !crate::memory_limit::resumable() {
+            // The run is a child of this process, and this one ends with what the last ended with.
+            // What the children hand on goes in a file in the run cache, which is on the disk.
+            let program = std::env::current_exe()?;
+            let arguments: Vec<std::ffi::OsString> = std::env::args_os().skip(1).collect();
+            let results = store_home
+                .join(&slug)
+                .join("run-results")
+                .join(format!("{}.redb", std::process::id()));
+            let code = crate::drive_resumable(&program, &arguments, &results)?;
+            std::process::exit(code);
+        }
+        // A process of a run that keeps its results in a store has the store the driver named.
+        crate::result_store::install_from_environment()?;
+        let _results = crate::result_store::FlushOnDrop;
         let configured = crate::load_cordial_config(&project_root, &store_home);
         let limit =
             crate::resolve_memory_limit(self.memory_limit, configured.memory_limit().as_deref());

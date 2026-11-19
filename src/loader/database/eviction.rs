@@ -188,7 +188,7 @@ impl SourceDatabase {
     /// limit: the events of every chunk add up. Says whether it was the memory that made it, so
     /// that the pass takes smaller chunks while it lasts.
     #[instrument(level = "trace", skip(self))]
-    pub(super) fn evict_between_chunks(&mut self) -> bool {
+    pub(super) fn evict_between_chunks(&mut self, stores_results: bool) -> bool {
         let pressed = crate::memory_limit::pressured();
         if self.evicts() {
             self.evict_quietly("prime chunk");
@@ -218,7 +218,7 @@ impl SourceDatabase {
                 backoff.gave_back(before.saturating_sub(after));
             }
         }
-        if self.checkpoint_wanted() {
+        if self.checkpoint_wanted(stores_results) {
             self.checkpoint();
         }
         pressed
@@ -227,8 +227,13 @@ impl SourceDatabase {
     /// Whether the run should save and exit now: the watchdog saw the resident memory reach the
     /// checkpoint line, or (for a test) enough chunks that computed something have run. Only a run
     /// that a driver takes up again, and that has somewhere to save to.
-    fn checkpoint_wanted(&self) -> bool {
+    fn checkpoint_wanted(&self, stores_results: bool) -> bool {
         if !crate::memory_limit::resumable() || self.saved.is_none() {
+            return false;
+        }
+        // A run that hands its results on in a store loses what a pass computes that the store does
+        // not keep: another process would do it again, and be ended again.
+        if crate::result_store::active() && !stores_results {
             return false;
         }
         let executed = salsa::persisted_executions();
@@ -263,6 +268,20 @@ impl SourceDatabase {
     /// has been computed since the state this run started from: a new process would start where
     /// this one is, and not get further.
     fn checkpoint(&mut self) {
+        if let Some(store) = crate::result_store::current() {
+            // The results are in the store, as each was computed: what the next process needs is
+            // there, and the database, with the numbers that only this process knows, is not
+            // handed on. Nothing to save, and so nothing to ask of the memory that is short.
+            store.flush();
+            crate::report_progress(crate::Progress::Results(store.count()));
+            tracing::info!(
+                target: "cordial::eviction",
+                results = store.count(),
+                resident_kib = crate::memory_sample().map_or(0, |memory| memory.resident_kib()),
+                "the results are in the store and this process exits, to be followed by another"
+            );
+            crate::memory_limit::resume_exit();
+        }
         if self.restored && salsa::persisted_executions() == self.persisted_at_load {
             return;
         }
@@ -272,7 +291,7 @@ impl SourceDatabase {
         self.saved_once = false;
         self.save_state();
         if let Some(saved) = &self.saved {
-            crate::report_progress(saved.bytes_on_disk());
+            crate::report_progress(crate::Progress::StateBytes(saved.bytes_on_disk()));
         }
         tracing::info!(
             target: "cordial::eviction",

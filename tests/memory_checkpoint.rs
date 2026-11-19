@@ -3,7 +3,7 @@
 
 use cordial::{
     CHECKPOINT_AFTER_CHUNKS_VARIABLE, MEMORY_LIMIT_EXIT, MEMORY_RESUME_EXIT, MEMORY_STUCK_EXIT,
-    MOST_RESUMES, Next, RESUMABLE_VARIABLE, RESUMES_VARIABLE, next_after, stalled,
+    MOST_RESUMES, Next, RESUMABLE_VARIABLE, RESUMES_VARIABLE, next_after, stalled, stalled_results,
 };
 use miette::{IntoDiagnostic, Result};
 use std::path::Path;
@@ -130,6 +130,7 @@ fn the_driver_runs_the_children_and_ends_with_what_one_run_gives() -> Result<()>
         .arg("--memory-isolation")
         .arg("open")
         .env("CORDIAL_NO_PROGRESS", "1")
+        .env("RUST_LOG", "warn,cordial::results=info")
         .env(CHECKPOINT_AFTER_CHUNKS_VARIABLE, "1")
         .output()
         .into_diagnostic()?;
@@ -142,6 +143,61 @@ fn the_driver_runs_the_children_and_ends_with_what_one_run_gives() -> Result<()>
         "the driver started a new process several times: {restarts}\n{said}"
     );
     assert_eq!(printed, whole, "and the result is the one run's");
+
+    // Each process found more of the work done than the one before it, and left less to do: what
+    // they handed on was the results, in the store, and not a database.
+    // The log colours its fields, as it does for a person's terminal: the colours are not the numbers.
+    let plain = |line: &str| -> String {
+        let mut kept = String::new();
+        let mut characters = line.chars();
+        while let Some(character) = characters.next() {
+            if character == '\u{1b}' {
+                for skipped in characters.by_ref() {
+                    if skipped == 'm' {
+                        break;
+                    }
+                }
+            } else {
+                kept.push(character);
+            }
+        }
+        kept
+    };
+    let field = |line: &str, name: &str| -> Option<usize> {
+        let line = plain(line);
+        let after = line.split(&format!("{name}=")).nth(1)?;
+        after.split_whitespace().next()?.parse().ok()
+    };
+    let rounds: Vec<(usize, usize)> = said
+        .lines()
+        .filter(|line| line.contains("whose evidence is in the store"))
+        .filter_map(|line| Some((field(line, "done")?, field(line, "pending")?)))
+        .collect();
+    assert!(
+        rounds.len() >= 3,
+        "a process said what was left for each: {rounds:?}\n{said}"
+    );
+    assert_eq!(rounds[0].0, 0, "the first found nothing done: {rounds:?}");
+    assert!(
+        rounds
+            .windows(2)
+            .all(|pair| pair[1].0 > pair[0].0 && pair[1].1 < pair[0].1),
+        "and each after it found more done and less to do: {rounds:?}"
+    );
+    assert_eq!(
+        rounds[rounds.len() - 1].1,
+        0,
+        "until nothing was left: {rounds:?}"
+    );
+    let left_behind = std::fs::read_dir(
+        scratch
+            .path()
+            .join("driven")
+            .join("ckpt")
+            .join("run-results"),
+    )
+    .map_or(0, |entries| entries.flatten().count());
+    assert_eq!(left_behind, 0, "and the store went with the run");
     Ok(())
 }
 
@@ -205,4 +261,27 @@ fn a_process_to_take_a_run_up_that_has_no_state_to_use_stops_and_says_so() -> Re
         "and says why: {said}"
     );
     Ok(())
+}
+
+#[test]
+fn a_run_that_keeps_results_is_stuck_when_the_count_stops_growing() {
+    assert!(!stalled_results(&[]));
+    assert!(!stalled_results(&[64]));
+    assert!(
+        !stalled_results(&[64, 64]),
+        "one that added nothing is not yet"
+    );
+    assert!(stalled_results(&[64, 64, 64]), "two in a row is");
+    assert!(
+        !stalled_results(&[64, 128, 192]),
+        "each one more or many more is getting further"
+    );
+    assert!(
+        !stalled_results(&[64, 65, 66]),
+        "a single result each time is still more"
+    );
+    assert!(
+        !stalled_results(&[64, 64, 100]),
+        "and growth ends the run of stalls"
+    );
 }

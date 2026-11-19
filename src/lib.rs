@@ -48,6 +48,7 @@ mod progress;
 #[cfg(any(feature = "impl_coverage", feature = "amenable_std"))]
 mod proof_harness;
 mod reporter;
+mod result_store;
 mod run_cache;
 mod run_metrics;
 /// Rustdoc JSON inventory helpers used by coverage etiquettes.
@@ -401,8 +402,9 @@ pub use ir::{
     build_wrapper_coverage_from_hub_ir, collect_trenchcoat_pairs_from_ir, wrapper_maps_equivalent,
 };
 pub use isolation::{
-    MEMORY_STUCK_EXIT, MOST_RESUMES, Next, PROGRESS_VARIABLE, RESUMES_VARIABLE, STALLS_ALLOWED,
-    drive as drive_resumable, next_after, report_progress, stalled, taken_up_again,
+    MEMORY_STUCK_EXIT, MOST_RESUMES, Next, PROGRESS_VARIABLE, Progress, RESUMES_VARIABLE,
+    STALLS_ALLOWED, drive as drive_resumable, next_after, report_progress, stalled,
+    stalled_results, taken_up_again,
 };
 #[cfg(any(feature = "_quality_support", feature = "verus_ir"))]
 pub use loader::path_has_fixtures;
@@ -437,6 +439,9 @@ pub use reporter::{
     QualityAreaSummary, QualityChecklist, QualityReport, QualityReportReporter,
     build_quality_report, render_quality_report_markdown,
     render_quality_workspace_summary_markdown,
+};
+pub use result_store::{
+    EVIDENCE, RESULT_STORE_VARIABLE, ResultStore, flush_current, install as install_result_store,
 };
 pub use session::{
     RunAll, RunFilter, RunOutcome, RuntimeSession, STAGES, Session, SessionBuilder, SessionView,

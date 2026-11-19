@@ -58,13 +58,45 @@ impl SourceDatabase {
                 functions = described.len(),
                 "priming from the saved descriptions of the workspace's functions"
             );
-            self.prime_in_chunks("workspace", &described, |db, text| {
+            // What an earlier process of this run did is in the store, and is not done again.
+            let done = crate::result_store::current()
+                .map(|store| store.names(crate::result_store::EVIDENCE))
+                .unwrap_or_default();
+            let pending: Vec<String> = described
+                .into_iter()
+                .filter(|text| !done.contains(text))
+                .collect();
+            tracing::info!(
+                target: "cordial::results",
+                done = done.len(),
+                pending = pending.len(),
+                "functions of the workspace whose evidence is in the store, and whose is not"
+            );
+            self.prime_in_chunks("workspace", &pending, |db, text| {
                 let _ = queries::persisted_evidence(db, ItemKey::new(db, text.clone()));
             });
             return;
         }
         let excluded = self.shadow_crates();
-        let functions = attach_db(&self.db, || local_functions(&self.db, &excluded));
+        let mut functions = attach_db(&self.db, || local_functions(&self.db, &excluded));
+        if let Some(store) = crate::result_store::current() {
+            // What an earlier process of this run did is in the store, and is not done again.
+            let done = store.names(crate::result_store::EVIDENCE);
+            let before = functions.len();
+            attach_db(&self.db, || {
+                functions.retain(|function| {
+                    let key = item_key::key_of(&self.db, ra_ap_hir::ModuleDef::Function(*function));
+                    !done.contains(&item_key::key_text(&self.db, key))
+                });
+            });
+            tracing::info!(
+                target: "cordial::results",
+                done = done.len(),
+                pending = functions.len(),
+                enumerated = before,
+                "functions of the workspace whose evidence is in the store, and whose is not"
+            );
+        }
         self.prime_in_chunks("workspace", &functions, |db, function| {
             let _ = queries::evidence_of(db, *function);
         });
@@ -114,16 +146,20 @@ impl SourceDatabase {
         one: impl Fn(&RootDatabase, &T) + Send + Sync + 'static,
     ) {
         let before = queries::evidence_executed();
-        self.run_in_chunks(label, functions, one);
+        // The evidence is what a run in processes keeps in its store: here a process may end.
+        self.run_in_chunks_with(label, functions, one, true);
         self.say_primed(label, before, functions.len());
     }
 
     /// Run `one` over `items` on worker threads in chunks, evicting between the chunks if asked to.
-    pub(in crate::loader::database) fn run_in_chunks<T: Clone + Send + Sync + 'static>(
+    /// `stores_results` says whether what `one` computes is kept in the store of a run in processes:
+    /// only then may the process end between the chunks, since what it did is not lost.
+    pub(in crate::loader::database) fn run_in_chunks_with<T: Clone + Send + Sync + 'static>(
         &mut self,
         label: &str,
         items: &[T],
         one: impl Fn(&RootDatabase, &T) + Send + Sync + 'static,
+        stores_results: bool,
     ) {
         let items: Arc<[T]> = items.to_vec().into();
         let one: Work<T> = Arc::new(one);
@@ -165,7 +201,7 @@ impl SourceDatabase {
                 "priming a chunk"
             );
             at += done;
-            size = if self.evict_between_chunks() {
+            size = if self.evict_between_chunks(stores_results) {
                 (size / 2).max(least_at(crate::memory_limit::pressure()))
             } else {
                 // Relieved: back to the usual step, doubling so that one calm sample does not.

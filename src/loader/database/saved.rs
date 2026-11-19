@@ -311,6 +311,12 @@ impl super::SourceDatabase {
         let Some(saved) = self.saved.clone() else {
             return;
         };
+        if crate::result_store::active() {
+            // What a store gave this run has no record of what it was computed from, so a state
+            // saved from it would be taken for good by a run after, whatever had changed.
+            crate::host::event("analysis state: not saved by a run in processes".to_owned());
+            return;
+        }
         if std::mem::replace(&mut self.saved_once, true) {
             return;
         }

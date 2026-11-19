@@ -97,10 +97,15 @@ impl SourceDatabase {
                     .map(|file| (file, path.to_path_buf()))
             })
             .collect();
-        self.run_in_chunks("tracing inventories", &files, move |db, (file, path)| {
-            let key = queries::FileKey::new(db, *file, path.clone());
-            let _ = tracing_queries::tracing_inventory_file(db, key);
-        });
+        self.run_in_chunks_with(
+            "tracing inventories",
+            &files,
+            move |db, (file, path)| {
+                let key = queries::FileKey::new(db, *file, path.clone());
+                let _ = tracing_queries::tracing_inventory_file(db, key);
+            },
+            false,
+        );
     }
 
     #[cfg(feature = "tracing")]
