@@ -137,6 +137,17 @@ pub(crate) fn macro_at(
             kind = PathKind::Abs;
         }
     }
+    // Where the path is resolved from: the module `Semantics` finds for the file, which is the first
+    // of the crates that hold it when there are several (a cfg context's copies of a crate name
+    // the files they do not change as the original's).
+    if let Some(around) = sema.scope(scope) {
+        tracing::debug!(
+            target: "cordial::semantic::identity",
+            written = %path.syntax().text(),
+            scope_crate = ?around.module().krate(sema.db).base(),
+            "resolving a macro path from a module"
+        );
+    }
     let definition = sema
         .resolve_mod_path(scope, &ModPath::from_segments(kind, segments))?
         .find_map(|item| match item {

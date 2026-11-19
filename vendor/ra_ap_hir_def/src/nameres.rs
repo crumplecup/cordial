@@ -277,9 +277,17 @@ impl std::ops::Index<ModuleIdLt<'_>> for DefMap {
     type Output = ModuleData;
 
     fn index(&self, id: ModuleIdLt<'_>) -> &ModuleData {
-        self.modules
-            .get(&unsafe { id.to_static() })
-            .unwrap_or_else(|| panic!("ModuleId not found in ModulesMap {:#?}: {id:#?}", self.root))
+        self.modules.get(&unsafe { id.to_static() }).unwrap_or_else(|| {
+            // Said as an event first, so that the log has the steps that were running, which the
+            // panic's message does not.
+            tracing::error!(
+                target: "cordial::nameres",
+                def_map_root = ?self.root,
+                module = ?id,
+                "a module is not in the def map it was looked up in"
+            );
+            panic!("ModuleId not found in ModulesMap {:#?}: {id:#?}", self.root)
+        })
     }
 }
 
@@ -436,6 +444,12 @@ pub fn block_def_map<'db>(db: &'db dyn SourceDatabase, block_id: BlockIdLt<'db>)
         ModuleData::new(ModuleOrigin::BlockExpr { block: ast_id, id: block_id }, visibility, None);
 
     let krate = module.krate(db);
+    tracing::debug!(
+        target: "cordial::nameres",
+        parent_crate = ?krate,
+        parent_module = ?module,
+        "computing the def map of a block"
+    );
     let local_def_map = crate_local_def_map(db, krate);
     let def_map = DefMap::empty(
         db,

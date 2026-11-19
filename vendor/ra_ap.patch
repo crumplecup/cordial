@@ -1499,7 +1499,28 @@
  struct BlockInfo {
      /// The `BlockId` this `DefMap` was created from.
      block: BlockId,
-@@ -288,7 +289,7 @@
+@@ -276,9 +277,17 @@
+     type Output = ModuleData;
+ 
+     fn index(&self, id: ModuleIdLt<'_>) -> &ModuleData {
+-        self.modules
+-            .get(&unsafe { id.to_static() })
+-            .unwrap_or_else(|| panic!("ModuleId not found in ModulesMap {:#?}: {id:#?}", self.root))
++        self.modules.get(&unsafe { id.to_static() }).unwrap_or_else(|| {
++            // Said as an event first, so that the log has the steps that were running, which the
++            // panic's message does not.
++            tracing::error!(
++                target: "cordial::nameres",
++                def_map_root = ?self.root,
++                module = ?id,
++                "a module is not in the def map it was looked up in"
++            );
++            panic!("ModuleId not found in ModulesMap {:#?}: {id:#?}", self.root)
++        })
+     }
+ }
+ 
+@@ -288,7 +297,7 @@
      }
  }
  
@@ -1508,7 +1529,7 @@
  pub enum ModuleOrigin {
      CrateRoot {
          definition: EditionedFileId,
-@@ -362,7 +363,7 @@
+@@ -362,7 +371,7 @@
      }
  }
  
@@ -1517,7 +1538,7 @@
  pub struct ModuleData {
      /// Where does this module come from?
      pub origin: ModuleOrigin,
-@@ -381,7 +382,7 @@
+@@ -381,7 +390,7 @@
      crate_local_def_map(db, crate_id).def_map(db)
  }
  
@@ -1526,7 +1547,7 @@
  pub(crate) struct DefMapPair<'db> {
      #[tracked]
      #[returns(ref)]
-@@ -390,7 +391,7 @@
+@@ -390,7 +399,7 @@
      pub(crate) local: LocalDefMap,
  }
  
@@ -1535,7 +1556,7 @@
  pub(crate) fn crate_local_def_map(db: &dyn SourceDatabase, crate_id: Crate) -> DefMapPair<'_> {
      let krate = crate_id.data(db);
      let _p = tracing::info_span!(
-@@ -424,7 +425,7 @@
+@@ -424,7 +433,7 @@
      DefMapPair::new(db, def_map, local_def_map)
  }
  
@@ -1544,7 +1565,20 @@
  pub fn block_def_map<'db>(db: &'db dyn SourceDatabase, block_id: BlockIdLt<'db>) -> DefMap {
      let block_id = unsafe { block_id.to_static() };
      let ast_id = block_id.ast_id(db);
-@@ -885,7 +886,7 @@
+@@ -435,6 +444,12 @@
+         ModuleData::new(ModuleOrigin::BlockExpr { block: ast_id, id: block_id }, visibility, None);
+ 
+     let krate = module.krate(db);
++    tracing::debug!(
++        target: "cordial::nameres",
++        parent_crate = ?krate,
++        parent_module = ?module,
++        "computing the def map of a block"
++    );
+     let local_def_map = crate_local_def_map(db, krate);
+     let def_map = DefMap::empty(
+         db,
+@@ -885,7 +900,7 @@
  }
  
  /// A newtype wrapper around `FxHashMap<ModuleId, ModuleData>` that implements `IndexMut`.
