@@ -573,6 +573,8 @@ fn watch(budget: &Budget) {
                 rung = rung as u8,
                 held_kib = held,
                 resident_kib = memory.resident_kib(),
+                phase = %crate::LiveStatus::global().phase(),
+                status = %crate::LiveStatus::global().line(),
                 "the run's rung of the pressure ladder changed"
             );
         }
