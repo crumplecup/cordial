@@ -14,6 +14,7 @@
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::{Path, PathBuf};
 
+use super::edition::crate_name;
 use ra_ap_ide_db::RootDatabase;
 use ra_ap_ide_db::base_db::SourceDatabase as RaSourceDatabase;
 use ra_ap_vfs::{Vfs, VfsPath};
@@ -379,6 +380,8 @@ impl super::SourceDatabase {
                 target: "cordial::tables",
                 table = "crate",
                 key = krate.as_id().as_bits(),
+                hex = format_args!("{:#x}", krate.as_id().as_bits()),
+                name = %crate_name(&self.db, *krate),
                 root = %self.vfs.file_path(krate.data(&self.db).root_file_id),
                 context_copy = shadows.contains(krate),
                 "an input"

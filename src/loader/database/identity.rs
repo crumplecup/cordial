@@ -144,7 +144,7 @@ pub(crate) fn macro_at(
         tracing::debug!(
             target: "cordial::semantic::identity",
             written = %path.syntax().text(),
-            scope_crate = ?around.module().krate(sema.db).base(),
+            scope_crate = %super::edition::crate_label(sema.db, around.module().krate(sema.db).base()),
             "resolving a macro path from a module"
         );
     }

@@ -1499,7 +1499,27 @@
  struct BlockInfo {
      /// The `BlockId` this `DefMap` was created from.
      block: BlockId,
-@@ -276,9 +277,17 @@
+@@ -272,13 +273,41 @@
+     parent: ModuleId,
+ }
+ 
++/// A crate said by its name and its number in both bases, so that a line of the log names it: a
++/// bare `Crate(Id(3c1f))` is a number to look up elsewhere, in a base the tables do not print.
++fn crate_label(krate: Crate) -> String {
++    salsa::with_attached_database(|db| {
++        use salsa::plumbing::AsId;
++        let bits = krate.as_id().as_bits();
++        let name = krate
++            .extra_data(db)
++            .display_name
++            .as_ref()
++            .map_or_else(|| "(unnamed)".to_owned(), ToString::to_string);
++        format!("{name} (crate {bits} = {bits:#x})")
++    })
++    .unwrap_or_else(|| "(no database attached)".to_owned())
++}
++
+ impl std::ops::Index<ModuleIdLt<'_>> for DefMap {
      type Output = ModuleData;
  
      fn index(&self, id: ModuleIdLt<'_>) -> &ModuleData {
@@ -1509,8 +1529,12 @@
 +        self.modules.get(&unsafe { id.to_static() }).unwrap_or_else(|| {
 +            // Said as an event first, so that the log has the steps that were running, which the
 +            // panic's message does not.
++            let module_crate = salsa::with_attached_database(|db| id.krate(db))
++                .map_or_else(|| "(no database attached)".to_owned(), crate_label);
 +            tracing::error!(
 +                target: "cordial::nameres",
++                def_map_crate = %crate_label(self.krate()),
++                module_crate = %module_crate,
 +                def_map_root = ?self.root,
 +                module = ?id,
 +                "a module is not in the def map it was looked up in"
@@ -1520,7 +1544,7 @@
      }
  }
  
-@@ -288,7 +297,7 @@
+@@ -288,7 +317,7 @@
      }
  }
  
@@ -1529,7 +1553,7 @@
  pub enum ModuleOrigin {
      CrateRoot {
          definition: EditionedFileId,
-@@ -362,7 +371,7 @@
+@@ -362,7 +391,7 @@
      }
  }
  
@@ -1538,7 +1562,7 @@
  pub struct ModuleData {
      /// Where does this module come from?
      pub origin: ModuleOrigin,
-@@ -381,7 +390,7 @@
+@@ -381,7 +410,7 @@
      crate_local_def_map(db, crate_id).def_map(db)
  }
  
@@ -1547,7 +1571,7 @@
  pub(crate) struct DefMapPair<'db> {
      #[tracked]
      #[returns(ref)]
-@@ -390,7 +399,7 @@
+@@ -390,7 +419,7 @@
      pub(crate) local: LocalDefMap,
  }
  
@@ -1556,7 +1580,7 @@
  pub(crate) fn crate_local_def_map(db: &dyn SourceDatabase, crate_id: Crate) -> DefMapPair<'_> {
      let krate = crate_id.data(db);
      let _p = tracing::info_span!(
-@@ -424,7 +433,7 @@
+@@ -424,7 +453,7 @@
      DefMapPair::new(db, def_map, local_def_map)
  }
  
@@ -1565,11 +1589,11 @@
  pub fn block_def_map<'db>(db: &'db dyn SourceDatabase, block_id: BlockIdLt<'db>) -> DefMap {
      let block_id = unsafe { block_id.to_static() };
      let ast_id = block_id.ast_id(db);
-@@ -435,6 +444,12 @@
+@@ -435,6 +464,12 @@
          ModuleData::new(ModuleOrigin::BlockExpr { block: ast_id, id: block_id }, visibility, None);
  
      let krate = module.krate(db);
-+    tracing::debug!(
++    tracing::trace!(
 +        target: "cordial::nameres",
 +        parent_crate = ?krate,
 +        parent_module = ?module,
@@ -1578,7 +1602,7 @@
      let local_def_map = crate_local_def_map(db, krate);
      let def_map = DefMap::empty(
          db,
-@@ -885,7 +900,7 @@
+@@ -885,7 +920,7 @@
  }
  
  /// A newtype wrapper around `FxHashMap<ModuleId, ModuleData>` that implements `IndexMut`.

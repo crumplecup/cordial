@@ -266,6 +266,9 @@ impl SourceDatabase {
         if self.restored && salsa::persisted_executions() == self.persisted_at_load {
             return;
         }
+        // The numbers of the crates as they are at this save: a process that takes the run up reads
+        // them back, and the log of its own table says whether they are the same.
+        self.log_tables();
         self.saved_once = false;
         self.save_state();
         if let Some(saved) = &self.saved {

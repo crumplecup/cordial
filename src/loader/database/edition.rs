@@ -11,6 +11,23 @@ use ra_ap_ide_db::base_db::relevant_crates;
 use ra_ap_vfs::FileId;
 use tracing::instrument;
 
+/// A crate by its name and its number in both bases, for the events that mention one: a bare number
+/// is something to look up elsewhere.
+pub(super) fn crate_label(db: &RootDatabase, krate: ra_ap_ide_db::base_db::Crate) -> String {
+    use salsa::plumbing::AsId;
+    let bits = krate.as_id().as_bits();
+    format!("{} (crate {bits} = {bits:#x})", crate_name(db, krate))
+}
+
+/// A crate's name, or what stands for it when it has none.
+pub(super) fn crate_name(db: &RootDatabase, krate: ra_ap_ide_db::base_db::Crate) -> String {
+    krate
+        .extra_data(db)
+        .display_name
+        .as_ref()
+        .map_or_else(|| "(unnamed)".to_owned(), ToString::to_string)
+}
+
 /// `file` with the edition of the first crate that has it, or the current edition for a file no
 /// crate has.
 #[instrument(level = "trace", skip(db))]
@@ -24,7 +41,7 @@ pub(super) fn edition_of(db: &RootDatabase, file: FileId) -> EditionedFileId {
             target: "cordial::semantic::crates",
             file = file.index(),
             crates = crates.len(),
-            first = ?crates.first(),
+            first = %crates.first().map_or_else(String::new, |krate| crate_label(db, *krate)),
             "a file is in several crates: the first gives its edition"
         );
     }

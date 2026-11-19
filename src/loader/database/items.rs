@@ -357,7 +357,10 @@ fn module_path_of(
             target: "cordial::semantic::crates",
             file = file.index(),
             modules = modules.len(),
-            crates = ?modules.iter().map(|module| module.krate(db).base()).collect::<Vec<_>>(),
+            crates = ?modules
+                .iter()
+                .map(|module| super::edition::crate_label(db, module.krate(db).base()))
+                .collect::<Vec<_>>(),
             "a file has a module in several crates: the first gives its path"
         );
     }

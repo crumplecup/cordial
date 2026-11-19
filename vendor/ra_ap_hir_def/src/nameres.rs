@@ -273,6 +273,22 @@ struct BlockInfo {
     parent: ModuleId,
 }
 
+/// A crate said by its name and its number in both bases, so that a line of the log names it: a
+/// bare `Crate(Id(3c1f))` is a number to look up elsewhere, in a base the tables do not print.
+fn crate_label(krate: Crate) -> String {
+    salsa::with_attached_database(|db| {
+        use salsa::plumbing::AsId;
+        let bits = krate.as_id().as_bits();
+        let name = krate
+            .extra_data(db)
+            .display_name
+            .as_ref()
+            .map_or_else(|| "(unnamed)".to_owned(), ToString::to_string);
+        format!("{name} (crate {bits} = {bits:#x})")
+    })
+    .unwrap_or_else(|| "(no database attached)".to_owned())
+}
+
 impl std::ops::Index<ModuleIdLt<'_>> for DefMap {
     type Output = ModuleData;
 
@@ -280,8 +296,12 @@ impl std::ops::Index<ModuleIdLt<'_>> for DefMap {
         self.modules.get(&unsafe { id.to_static() }).unwrap_or_else(|| {
             // Said as an event first, so that the log has the steps that were running, which the
             // panic's message does not.
+            let module_crate = salsa::with_attached_database(|db| id.krate(db))
+                .map_or_else(|| "(no database attached)".to_owned(), crate_label);
             tracing::error!(
                 target: "cordial::nameres",
+                def_map_crate = %crate_label(self.krate()),
+                module_crate = %module_crate,
                 def_map_root = ?self.root,
                 module = ?id,
                 "a module is not in the def map it was looked up in"
@@ -444,7 +464,7 @@ pub fn block_def_map<'db>(db: &'db dyn SourceDatabase, block_id: BlockIdLt<'db>)
         ModuleData::new(ModuleOrigin::BlockExpr { block: ast_id, id: block_id }, visibility, None);
 
     let krate = module.krate(db);
-    tracing::debug!(
+    tracing::trace!(
         target: "cordial::nameres",
         parent_crate = ?krate,
         parent_module = ?module,
