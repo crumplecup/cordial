@@ -16,7 +16,19 @@ use tracing::instrument;
 #[instrument(level = "trace", skip(db))]
 #[hotpath::measure]
 pub(super) fn edition_of(db: &RootDatabase, file: FileId) -> EditionedFileId {
-    match relevant_crates(db, file).first() {
+    let crates = relevant_crates(db, file);
+    if crates.len() > 1 {
+        // A file of several crates (a cfg context names the files it does not change as the
+        // original's): which crate is first decides the edition, so which it is is said.
+        tracing::debug!(
+            target: "cordial::semantic::crates",
+            file = file.index(),
+            crates = crates.len(),
+            first = ?crates.first(),
+            "a file is in several crates: the first gives its edition"
+        );
+    }
+    match crates.first() {
         Some(krate) => EditionedFileId::new(db, file, krate.data(db).edition),
         None => EditionedFileId::current_edition(db, file),
     }

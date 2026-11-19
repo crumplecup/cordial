@@ -349,7 +349,20 @@ fn module_path_of(
     path: &Path,
     src: &Path,
 ) -> String {
-    sema.file_to_module_defs(file)
+    let modules: Vec<_> = sema.file_to_module_defs(file).collect();
+    if modules.len() > 1 {
+        // The module tree of each crate that holds the file has a module for it: the first is the
+        // one whose path this is, and which crate that is is said.
+        tracing::debug!(
+            target: "cordial::semantic::crates",
+            file = file.index(),
+            modules = modules.len(),
+            crates = ?modules.iter().map(|module| module.krate(db).base()).collect::<Vec<_>>(),
+            "a file has a module in several crates: the first gives its path"
+        );
+    }
+    modules
+        .into_iter()
         .next()
         .map(|module| {
             module

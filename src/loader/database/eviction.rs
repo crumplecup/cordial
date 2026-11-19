@@ -242,7 +242,21 @@ impl SourceDatabase {
             .ok()
             .and_then(|value| value.parse().ok())
             .unwrap_or(0);
-        crate::checkpoint_requested() || (after > 0 && computed >= after)
+        let by_memory = crate::checkpoint_requested();
+        let by_count = after > 0 && computed >= after;
+        if by_memory || by_count {
+            tracing::info!(
+                target: "cordial::eviction",
+                by_memory,
+                by_count,
+                computing_chunks = computed,
+                persisted_executions = executed,
+                resident_kib = crate::memory_sample().map_or(0, |memory| memory.resident_kib()),
+                held_kib = crate::memory_limit::meter_kib().unwrap_or(0),
+                "a checkpoint is wanted at this chunk boundary"
+            );
+        }
+        by_memory || by_count
     }
 
     /// Save the state and exit with the status that says it is to be taken up again, unless nothing
