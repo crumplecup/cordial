@@ -69,6 +69,9 @@ impl SourceDatabase {
         if !self.evicts() {
             return;
         }
+        if crate::memory_limit::pressure() >= crate::Pressure::Hard {
+            self.itemize_memory(after);
+        }
         self.evict_quietly(after);
         self.spill_under_pressure(after);
         self.drop_regenerable_if_still_pressed(after);
@@ -84,7 +87,12 @@ impl SourceDatabase {
             .as_ref()
             .is_some_and(|options| *options.memory_ledger())
             || std::env::var_os(LEDGER_VARIABLE).is_some();
-        if !asked || ITEMIZED.swap(true, std::sync::atomic::Ordering::Relaxed) {
+        // `CORDIAL_MEMORY_LEDGER=pressed` waits for the first moment the run is pressed hard.
+        let waits_for_pressure = std::env::var(LEDGER_VARIABLE)
+            .is_ok_and(|value| value == "pressed")
+            && crate::memory_limit::pressure() < crate::Pressure::Hard;
+        if !asked || waits_for_pressure || ITEMIZED.swap(true, std::sync::atomic::Ordering::Relaxed)
+        {
             return;
         }
         let texts: (usize, usize) = self
