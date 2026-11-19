@@ -28,6 +28,9 @@ const CRATES: &str = "crates";
 const PATHS: &str = "paths";
 const CONTEXTS: &str = "contexts";
 
+/// How much of the encoded state is held before it is written to the file.
+const WRITE_BUFFER_BYTES: usize = 1 << 20;
+
 /// What a saved state restores to: the database, and the paths of the VFS it was saved with,
 /// in id order. Salsa's inputs are keyed by file id, so the next load must hand out the same
 /// ids to the same paths: it seeds its VFS with these.
@@ -96,8 +99,19 @@ impl SavedState {
         let database: &mut dyn salsa::Database = database;
         crate::host::event("analysis state: encoding the memos".to_owned());
         let encoding = std::time::Instant::now();
-        let salsa =
-            rmp_serde::to_vec(&database.as_serialize()).map_err(|error| self.encoding(&error))?;
+        // Straight to the file: the encoded state held in memory first, and grown as it is written,
+        // is a copy or two of the state on top of what the run holds, at the moment a run that is
+        // saving because its memory is near the budget can least afford it.
+        let mut out = std::io::BufWriter::with_capacity(
+            WRITE_BUFFER_BYTES,
+            std::fs::File::create(writing.join(SALSA))?,
+        );
+        rmp_serde::encode::write(&mut out, &database.as_serialize())
+            .map_err(|error| self.encoding(&error))?;
+        std::io::Write::flush(&mut out)?;
+        drop(out);
+        let salsa_len =
+            usize::try_from(std::fs::metadata(writing.join(SALSA))?.len()).unwrap_or(usize::MAX);
         if std::env::var_os(crate::STATE_SIZES_VARIABLE).is_some() {
             // Where the size is, by ingredient: the whole database is encoded once more.
             for (ingredient, bytes) in database.ingredient_sizes(&|part| {
@@ -114,16 +128,15 @@ impl SavedState {
         tracing::debug!(
             target: "cordial::cache",
             step = "encoded",
-            bytes = salsa.len(),
+            bytes = salsa_len,
             micros = u64::try_from(encoding.elapsed().as_micros()).unwrap_or(u64::MAX),
             "the memos encoded"
         );
         crate::host::event(format!(
             "analysis state: memos encoded, {} bytes in {:?}",
-            salsa.len(),
+            salsa_len,
             encoding.elapsed()
         ));
-        std::fs::write(writing.join(SALSA), &salsa)?;
         std::fs::write(writing.join(FILES), &files)?;
         std::fs::write(writing.join(CRATES), &crates)?;
         std::fs::write(writing.join(PATHS), &paths)?;
@@ -137,7 +150,7 @@ impl SavedState {
             _ => {}
         }
         std::fs::rename(&writing, &self.dir)?;
-        Ok(salsa.len() + files.len() + crates.len() + paths.len() + contexts.len())
+        Ok(salsa_len + files.len() + crates.len() + paths.len() + contexts.len())
     }
 
     /// The saved database, or why there is none to use.
