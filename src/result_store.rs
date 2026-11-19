@@ -50,20 +50,35 @@ pub fn active() -> bool {
     current().is_some()
 }
 
-/// Open the store the driver of this run named, and make it this process's. Says why when it cannot:
-/// a process that cannot keep its results cannot be one of a run that hands them on.
-///
-/// # Errors
-///
-/// When the driver named a file and it cannot be opened.
-#[cfg(feature = "cli")]
-#[instrument(level = "debug", err(level = "warn"))]
-pub fn install_from_environment() -> std::io::Result<()> {
-    let Some(path) = std::env::var_os(RESULT_STORE_VARIABLE) else {
-        return Ok(());
+/// The directory the driver of this run named for the stores of its results, if it named one. The
+/// file in it that a process keeps its results in is named for the inputs of the run (see the
+/// projection), so that a run with the same inputs finds them.
+#[must_use]
+pub fn directory_from_environment() -> Option<PathBuf> {
+    std::env::var_os(RESULT_STORE_VARIABLE).map(PathBuf::from)
+}
+
+/// Remove the stores in `directory` but the `keep` most recently used: each is of the inputs of a
+/// run, and the ones that are not those of the next run are only the disk's. Says nothing of what it
+/// cannot remove.
+pub fn sweep_stores(directory: &Path, keep: usize) {
+    let Ok(entries) = std::fs::read_dir(directory) else {
+        return;
     };
-    install(Some(Arc::new(ResultStore::open(Path::new(&path))?)));
-    Ok(())
+    let mut stores: Vec<(std::time::SystemTime, PathBuf)> = entries
+        .flatten()
+        .filter(|entry| {
+            entry
+                .path()
+                .extension()
+                .is_some_and(|extension| extension == "redb")
+        })
+        .filter_map(|entry| Some((entry.metadata().ok()?.modified().ok()?, entry.path())))
+        .collect();
+    stores.sort_by_key(|(modified, _)| std::cmp::Reverse(*modified));
+    for (_, path) in stores.into_iter().skip(keep) {
+        let _ = std::fs::remove_file(path);
+    }
 }
 
 /// Write what the installed store has gathered. A process that ends without returning does it first.

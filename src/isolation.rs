@@ -35,6 +35,19 @@ pub const MEMORY_STUCK_EXIT: i32 = 77;
 /// results the run has to, so that the driver can tell whether the run is getting further.
 pub const PROGRESS_VARIABLE: &str = "CORDIAL_RESUME_PROGRESS";
 
+/// Set by the driver to what it holds itself, in bytes: the budget is the whole run's, and the driver
+/// is part of the run, so what a process may spend is the budget less this.
+pub const RESERVED_VARIABLE: &str = "CORDIAL_RESERVED_BYTES";
+
+/// What the driver holds, in bytes, for the processes to leave out of what they spend.
+#[must_use]
+pub fn reserved_by_driver() -> u64 {
+    std::env::var(RESERVED_VARIABLE)
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .unwrap_or(0)
+}
+
 /// How many processes in a row may end with no more results kept than before the run is stopped.
 pub const STALLS_ALLOWED: usize = 2;
 
@@ -43,19 +56,39 @@ pub const STALLS_ALLOWED: usize = 2;
 pub enum Progress {
     /// How many results the run has kept: each is one more, and counted exactly.
     Results(u64),
+    /// A process was stopped by the memory budget, at this much resident and held memory.
+    Stopped {
+        /// What the machine saw of the process, in kibibytes.
+        resident_kib: u64,
+        /// What the process held, in kibibytes.
+        held_kib: u64,
+    },
 }
 
 impl Progress {
     fn text(self) -> String {
         match self {
             Self::Results(count) => format!("results {count}"),
+            Self::Stopped {
+                resident_kib,
+                held_kib,
+            } => format!("stopped {resident_kib} {held_kib}"),
         }
     }
 
     fn parse(text: &str) -> Option<Self> {
-        let (kind, number) = text.trim().split_once(' ')?;
-        let number = number.parse().ok()?;
-        (kind == "results").then_some(Self::Results(number))
+        let (kind, rest) = text.trim().split_once(' ')?;
+        match kind {
+            "results" => Some(Self::Results(rest.parse().ok()?)),
+            "stopped" => {
+                let (resident, held) = rest.split_once(' ')?;
+                Some(Self::Stopped {
+                    resident_kib: resident.parse().ok()?,
+                    held_kib: held.parse().ok()?,
+                })
+            }
+            _ => None,
+        }
     }
 }
 
@@ -84,12 +117,17 @@ pub fn stalled_results(history: &[u64]) -> bool {
 fn stuck(history: &[Progress]) -> bool {
     let results: Vec<u64> = history
         .iter()
-        .map(|progress| match progress {
-            Progress::Results(count) => *count,
+        .filter_map(|progress| match progress {
+            Progress::Results(count) => Some(*count),
+            Progress::Stopped { .. } => None,
         })
         .collect();
     stalled_results(&results)
 }
+
+/// How many stores of results (each of the inputs of a run) are kept beside the run cache: the last
+/// run's, and the one before it.
+pub const STORES_KEPT: usize = 2;
 
 /// The most times a run is taken up again: a run that has still not finished after this many is
 /// not one that more processes will finish.
@@ -129,6 +167,7 @@ pub fn drive(
     arguments: &[OsString],
     results: &std::path::Path,
 ) -> std::io::Result<i32> {
+    std::fs::create_dir_all(results)?;
     let Some(runtime) = crate::worker_pool::runtime() else {
         return Err(std::io::Error::other("no runtime to drive the run on"));
     };
@@ -169,6 +208,34 @@ pub fn drive(
                     );
                 }
                 Next::End(code) => {
+                    if code == crate::MEMORY_LIMIT_EXIT
+                        && let Some(Progress::Stopped {
+                            resident_kib,
+                            held_kib,
+                        }) = std::fs::read_to_string(&progress)
+                            .ok()
+                            .and_then(|text| Progress::parse(&text))
+                    {
+                        // Nothing a process could do within the budget: the least it needed, at the
+                        // point it was stopped, is what the budget has to be above.
+                        let kept = history
+                            .iter()
+                            .map(|progress| match progress {
+                                Progress::Results(count) => *count,
+                                Progress::Stopped { .. } => 0,
+                            })
+                            .max()
+                            .unwrap_or(0);
+                        let _ = std::io::Write::write_all(
+                            &mut crate::host::stderr(),
+                            format!(
+                                "cordial: the memory budget is too small for this workspace: a process was stopped holding {} MB ({} MB resident) with {kept} results kept before it, and no process can hold less than the workspace takes to load. Raise --memory-limit (or --memory-target) above that.\n",
+                                held_kib / 1024,
+                                resident_kib / 1024
+                            )
+                            .as_bytes(),
+                        );
+                    }
                     if code == 1 && resumes >= MOST_RESUMES {
                         let _ = std::io::Write::write_all(
                             &mut crate::host::stderr(),
@@ -181,8 +248,9 @@ pub fn drive(
         }
     });
     let _ = std::fs::remove_file(&progress);
-    // What the processes handed on is of this run, and means nothing to another.
-    let _ = std::fs::remove_file(results);
+    // What the processes handed on is kept, under the name of the inputs it is of, for a run with
+    // the same inputs; the stores of the runs before are only the disk's.
+    crate::result_store::sweep_stores(results, STORES_KEPT);
     outcome
 }
 
@@ -199,6 +267,12 @@ async fn child(
         .env(RESUMABLE_VARIABLE, "1")
         .env(RESUMES_VARIABLE, resumes.to_string())
         .env(PROGRESS_VARIABLE, progress)
+        .env(
+            RESERVED_VARIABLE,
+            crate::memory_sample()
+                .map_or(0, |memory| memory.resident_kib().saturating_mul(1024))
+                .to_string(),
+        )
         .env(crate::RESULT_STORE_VARIABLE, results)
         .kill_on_drop(true)
         .spawn()?

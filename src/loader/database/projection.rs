@@ -78,6 +78,20 @@ impl SourceDatabase {
         selection::validate_target(target, &context)?;
         super::queries::forget_computed();
         self.declare_cutoffs();
+        // A run that keeps its results in a store opens the one of its inputs, which has what a run
+        // before it with the same inputs did.
+        self.open_results_store()?;
+        if self.unit_is_done("complete") {
+            // The whole projection was done by a run with these inputs: its graph is what this run
+            // is after.
+            if let Some((graph, _)) = self.take_up_stage()? {
+                tracing::info!(
+                    target: "cordial::results",
+                    "the projection of a run with these inputs is in the store: nothing is analysed again"
+                );
+                return Ok(graph);
+            }
+        }
         if self.restored {
             self.warm_persisted_dependencies(paths);
             self.warm_fingerprint();
@@ -162,6 +176,8 @@ impl SourceDatabase {
         // A run that fails in the contexts still leaves what it computed.
         self.save_state();
         rest?;
+        // The whole projection is done: a run with the same inputs has the graph from the store.
+        self.stage_complete(&graph);
         // What the database now holds, for a profile; it needs the database
         // exclusively, which it has here.
         #[cfg(feature = "hotpath")]

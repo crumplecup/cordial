@@ -18,6 +18,126 @@ const CONTEXTS: &str = "contexts";
 const IDS: &str = "ids";
 
 impl SourceDatabase {
+    /// Open the store of this run's inputs, if the run keeps its results in one: the file is named
+    /// for what the results depend on, so that a run whose inputs are the same finds them (and a
+    /// process of a run that was ended finds what the earlier ones did), and one whose inputs are
+    /// not starts with none.
+    #[instrument(level = "debug", skip(self), err(level = "warn"))]
+    pub(in crate::loader::database) fn open_results_store(&self) -> CordialResult<()> {
+        let Some(directory) = crate::result_store::directory_from_environment() else {
+            return Ok(());
+        };
+        let digest = self.results_digest()?;
+        let path = directory.join(format!("{digest}.redb"));
+        let store = crate::ResultStore::open(&path)?;
+        tracing::info!(
+            target: "cordial::results",
+            digest = %digest,
+            path = %path.display(),
+            results = store.count(),
+            "the results of this run are kept in the store of its inputs"
+        );
+        crate::install_result_store(Some(std::sync::Arc::new(store)));
+        Ok(())
+    }
+
+    /// What the results of a run depend on, as a hash: the build of cordial, the Cargo context of the
+    /// workspace, how this run was asked to analyse it, and what is in every source file of the
+    /// workspace. A result kept under another hash is of other inputs and is not used.
+    #[instrument(level = "debug", skip(self), err(level = "warn"))]
+    fn results_digest(&self) -> CordialResult<String> {
+        use sha2::{Digest, Sha256};
+        let hex = |bytes: &[u8]| {
+            bytes
+                .iter()
+                .fold(String::new(), |hex, byte| format!("{hex}{byte:02x}"))
+        };
+        let context = self.projection_context()?;
+        let executable = Sha256::digest(crate::run_cache::executable_fingerprint().as_bytes());
+        // Not the context's own identity, which is a hash of the whole environment of the process,
+        // and so of the variables the driver of a run in processes sets for each of them: what is
+        // hashed is what the analysis depends on, and of the environment what Cargo and the compiler
+        // read.
+        let environment: std::collections::BTreeMap<String, String> = std::env::vars()
+            .filter(|(key, _)| key.starts_with("CARGO") || key.starts_with("RUST"))
+            .collect();
+        let identity = Sha256::digest(serde_json::to_vec(&(
+            context.root(),
+            context.features(),
+            context.target(),
+            context.all_targets(),
+            context.test_cfg(),
+            context.toolchain(),
+            context.sysroot(),
+            context.configuration_inputs(),
+            context.compiled_inputs(),
+            environment,
+        ))?);
+        let options = Sha256::digest(format!("{:?}", self.cargo_options).as_bytes());
+        // Every Rust source file under the workspace's packages, the tests and examples and build
+        // scripts with the rest: a package's own list of its entries is of its targets' roots, and an
+        // edit to a file that is not one would not change what the results are of.
+        let mut sources: Vec<std::path::PathBuf> = Vec::new();
+        for package in context.packages() {
+            let walk = walkdir::WalkDir::new(package.root())
+                .into_iter()
+                .filter_entry(|entry| {
+                    entry.depth() == 0
+                        || !(entry.file_name() == "target"
+                            || entry.file_name().to_string_lossy().starts_with('.'))
+                });
+            sources.extend(
+                walk.flatten()
+                    .filter(|entry| {
+                        entry.file_type().is_file()
+                            && entry
+                                .path()
+                                .extension()
+                                .is_some_and(|extension| extension == "rs")
+                    })
+                    .map(walkdir::DirEntry::into_path),
+            );
+        }
+        sources.sort();
+        sources.dedup();
+        let mut texts = Sha256::new();
+        for path in &sources {
+            texts.update(path.to_string_lossy().as_bytes());
+            texts.update([0]);
+            // What is on the disk, which is what the analysis was loaded from.
+            if let Ok(bytes) = std::fs::read(path) {
+                texts.update(&bytes);
+            }
+            texts.update([0]);
+        }
+        let texts = texts.finalize();
+        let mut whole = Sha256::new();
+        for part in [&executable[..], &identity[..], &options[..], &texts[..]] {
+            whole.update(part);
+        }
+        let digest = hex(&whole.finalize());
+        // Said part by part: a digest that is not the same from one process of a run to the next is
+        // one of these that is not, and which it is shows here.
+        tracing::debug!(
+            target: "cordial::results",
+            digest = %digest,
+            executable = %hex(&executable[..6]),
+            identity = %hex(&identity[..6]),
+            options = %hex(&options[..6]),
+            sources = sources.len(),
+            texts = %hex(&texts[..6]),
+            "what the results of this run depend on"
+        );
+        Ok(digest)
+    }
+
+    /// The whole of the projection is done: keep the graph, so that a run with the same inputs
+    /// has it without doing any of it again. The process does not end here.
+    #[instrument(level = "debug", skip(self, graph))]
+    pub(in crate::loader::database) fn stage_complete(&self, graph: &CrateIr) {
+        self.stage_kept(graph, None, "complete", false);
+    }
+
     /// Keep the outline, which the passes after the ordinary one read and do not change.
     #[instrument(level = "debug", skip_all)]
     pub(in crate::loader::database) fn store_outline(&self, outline: &Outline) {
@@ -42,6 +162,17 @@ impl SourceDatabase {
         graph: &CrateIr,
         contexts: Option<&ContextsState>,
         unit: &str,
+    ) {
+        self.stage_kept(graph, contexts, unit, true);
+    }
+
+    /// [`Self::stage_done`], saying whether the process ends at the boundary it may be.
+    fn stage_kept(
+        &self,
+        graph: &CrateIr,
+        contexts: Option<&ContextsState>,
+        unit: &str,
+        boundary: bool,
     ) {
         let Some(store) = crate::result_store::current() else {
             return;
@@ -86,7 +217,9 @@ impl SourceDatabase {
                 return;
             }
         }
-        self.stage_boundary();
+        if boundary {
+            self.stage_boundary();
+        }
     }
 
     /// The graph and outline an earlier process of this run left, if it left them, and where its

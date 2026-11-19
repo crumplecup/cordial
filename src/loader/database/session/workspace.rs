@@ -260,7 +260,9 @@ fn load_database(
             );
             // A run that hands its results on in a store hands no database on: a process that loads
             // cold is what it is meant to do.
-            if crate::taken_up_again() && !crate::result_store::active() {
+            if crate::taken_up_again()
+                && crate::result_store::directory_from_environment().is_none()
+            {
                 // Starting over would do what the process before did, and be taken up again: a
                 // cycle. Said, and stopped.
                 let _ = std::io::Write::write_all(

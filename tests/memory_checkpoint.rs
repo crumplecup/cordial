@@ -167,7 +167,9 @@ fn the_driver_runs_the_children_and_ends_with_what_one_run_gives() -> Result<()>
         0,
         "until nothing was left: {rounds:?}"
     );
-    let left_behind = std::fs::read_dir(
+    // What the processes handed on stays, under the name of the inputs it is of, for a run with the
+    // same inputs.
+    let kept = std::fs::read_dir(
         scratch
             .path()
             .join("driven")
@@ -175,7 +177,7 @@ fn the_driver_runs_the_children_and_ends_with_what_one_run_gives() -> Result<()>
             .join("run-results"),
     )
     .map_or(0, |entries| entries.flatten().count());
-    assert_eq!(left_behind, 0, "and the store went with the run");
+    assert_eq!(kept, 1, "the store of the inputs of this run is kept");
     Ok(())
 }
 
@@ -323,6 +325,151 @@ fn a_run_whose_processes_end_after_every_stage_gives_what_one_run_gives() -> Res
         said.iter()
             .any(|line| line.contains("the cfg contexts are taken up from an earlier process")),
         "a process went on with the contexts an earlier one analysed: {said:#?}"
+    );
+    Ok(())
+}
+
+/// Remove everything the run cache of `store` holds for the project but the stores of results: what
+/// is left is what a run in processes keeps for a run with the same inputs, and the worklist, which
+/// `open` would take for the answer, is not.
+fn forget_all_but_results(store: &Path) -> Result<()> {
+    let project = store.join("ckpt");
+    for entry in std::fs::read_dir(&project).into_diagnostic()?.flatten() {
+        if entry.file_name() != "run-results" {
+            let path = entry.path();
+            if path.is_dir() {
+                std::fs::remove_dir_all(&path).into_diagnostic()?;
+            } else {
+                std::fs::remove_file(&path).into_diagnostic()?;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// One run of the driver on `project`, with `store` as its store home: its exit code, what it
+/// printed and what it said (without the terminal's colours).
+fn driven(
+    project: &Path,
+    store: &Path,
+    stages: Option<&str>,
+) -> Result<(Option<i32>, String, Vec<String>)> {
+    let mut command = std::process::Command::new(env!("CARGO_BIN_EXE_cordial"));
+    command
+        .arg("--project")
+        .arg(project)
+        .arg("--store-home")
+        .arg(store)
+        .arg("--memory-isolation")
+        .arg("open")
+        .env("CORDIAL_NO_PROGRESS", "1")
+        .env("RUST_LOG", "warn,cordial::results=info");
+    if let Some(stages) = stages {
+        command.env(CHECKPOINT_AFTER_STAGES_VARIABLE, stages);
+    }
+    let output = command.output().into_diagnostic()?;
+    Ok((
+        output.status.code(),
+        String::from_utf8_lossy(&output.stdout).into_owned(),
+        plain_lines(&String::from_utf8_lossy(&output.stderr)),
+    ))
+}
+
+#[test]
+fn a_run_with_the_same_inputs_finds_the_results_of_the_one_before_and_one_with_others_does_not()
+-> Result<()> {
+    let scratch = tempfile::tempdir().into_diagnostic()?;
+    let project = scratch.path().join("ckpt");
+    write_crate(&project)?;
+    let store = scratch.path().join("store");
+
+    // The worklist says first, when it is made, that it is being made: that is of the list and not of
+    // the analysis, so what is compared starts at the first item.
+    let from_the_list = |text: &str| -> String {
+        text.lines()
+            .skip_while(|line| !line.starts_with("Item "))
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    let (code, first, said) = driven(&project, &store, Some("1"))?;
+    assert_eq!(code, Some(0), "the first run finishes: {said:#?}");
+
+    // The same inputs: nothing is analysed again.
+    forget_all_but_results(&store)?;
+    let (code, second, said) = driven(&project, &store, None)?;
+    assert_eq!(code, Some(0), "the second run finishes: {said:#?}");
+    assert_eq!(
+        from_the_list(&second),
+        from_the_list(&first),
+        "and gives the first's result"
+    );
+    assert!(
+        said.iter()
+            .any(|line| line.contains("the projection of a run with these inputs is in the store")),
+        "it found the projection in the store: {said:#?}"
+    );
+    assert!(
+        !said
+            .iter()
+            .any(|line| line.contains("whose evidence is in the store")),
+        "and did not prime the evidence again: {said:#?}"
+    );
+
+    // Other inputs: a source file changed, so none of it is used.
+    let library = std::fs::read_to_string(project.join("src/lib.rs")).into_diagnostic()?;
+    std::fs::write(
+        project.join("src/lib.rs"),
+        format!("{library}pub fn added(x: Option<usize>) -> usize {{ x.unwrap() }}\n"),
+    )
+    .into_diagnostic()?;
+    forget_all_but_results(&store)?;
+    let (code, third, said) = driven(&project, &store, None)?;
+    assert_eq!(code, Some(0), "the third run finishes: {said:#?}");
+    assert!(
+        said.iter()
+            .any(|line| line.contains("whose evidence is in the store") && line.contains("done=0")),
+        "it found none of the evidence of the inputs before: {said:#?}"
+    );
+    let (code, whole) = open(&project, &scratch.path().join("whole"), None)?;
+    assert_eq!(code, Some(0));
+    assert_eq!(
+        third, whole,
+        "and gives what one run on the new inputs gives"
+    );
+    Ok(())
+}
+
+#[test]
+fn a_budget_too_small_for_any_process_is_said_so_with_what_it_was_too_small_for() -> Result<()> {
+    let scratch = tempfile::tempdir().into_diagnostic()?;
+    let project = scratch.path().join("ckpt");
+    write_crate(&project)?;
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_cordial"))
+        .arg("--project")
+        .arg(&project)
+        .arg("--store-home")
+        .arg(scratch.path().join("store"))
+        .arg("--memory-isolation")
+        // Loading a workspace takes far more than this.
+        .arg("--memory-limit")
+        .arg("16M")
+        .arg("open")
+        .env("CORDIAL_NO_PROGRESS", "1")
+        .output()
+        .into_diagnostic()?;
+    let said = String::from_utf8_lossy(&output.stderr).into_owned();
+    assert_eq!(
+        output.status.code(),
+        Some(cordial::MEMORY_LIMIT_EXIT),
+        "it ends as a run over its limit does: {said}"
+    );
+    assert!(
+        said.contains("the memory budget is too small for this workspace"),
+        "and says what happened: {said}"
+    );
+    assert!(
+        said.contains("MB resident"),
+        "with what the process held: {said}"
     );
     Ok(())
 }

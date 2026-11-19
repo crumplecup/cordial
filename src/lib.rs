@@ -290,10 +290,11 @@ pub use etiquettes::{AMENABLE_EXT_JIFF_ETIQUETTE, ExtReporter};
 pub use live_status::{LiveLayer, LiveStatus, live_filter};
 pub use memory_limit::{
     Backoff, Budget, CHECKPOINT_AFTER_CHUNKS_VARIABLE, CHECKPOINT_AFTER_STAGES_VARIABLE,
-    CHECKPOINT_PERCENT, DEFAULT_MEMORY_LIMIT, FIRST_GROWTH_KIB, FUTILE_KIB, MEMORY_LIMIT_EXIT,
-    MEMORY_RESUME_EXIT, MemoryLimit, Pressure, RESUMABLE_VARIABLE, WORKER_KIB, available_memory,
-    budget_of, checkpoint_due, checkpoint_requested, enforce, exceeds, feel_pressure,
-    feel_pressure_at, functions_within, judge, judge_level, nearing, over_budget, parse_limit,
+    CHECKPOINT_PERCENT, DEFAULT_MEMORY_LIMIT, FIRST_GROWTH_KIB, FUTILE_KIB, Footprint,
+    FootprintOnDrop, MEMORY_LIMIT_EXIT, MEMORY_RESUME_EXIT, MemoryLimit, Pressure,
+    RESUMABLE_VARIABLE, WORKER_KIB, available_memory, budget_of, checkpoint_due,
+    checkpoint_requested, enforce, exceeds, feel_pressure, feel_pressure_at, footprint_of,
+    functions_within, judge, judge_level, log_footprint, nearing, over_budget, parse_limit,
     parse_meminfo, parse_size, pressure, pressured, relieved, resolve as resolve_memory_limit,
     resolve_target as resolve_memory_target, resolve_with as resolve_memory_limit_with, workers_at,
     workers_within,
@@ -403,9 +404,9 @@ pub use ir::{
     build_wrapper_coverage_from_hub_ir, collect_trenchcoat_pairs_from_ir, wrapper_maps_equivalent,
 };
 pub use isolation::{
-    MEMORY_STUCK_EXIT, MOST_RESUMES, Next, PROGRESS_VARIABLE, Progress, RESUMES_VARIABLE,
-    STALLS_ALLOWED, drive as drive_resumable, next_after, report_progress, stalled_results,
-    taken_up_again,
+    MEMORY_STUCK_EXIT, MOST_RESUMES, Next, PROGRESS_VARIABLE, Progress, RESERVED_VARIABLE,
+    RESUMES_VARIABLE, STALLS_ALLOWED, drive as drive_resumable, next_after, report_progress,
+    reserved_by_driver, stalled_results, taken_up_again,
 };
 #[cfg(any(feature = "_quality_support", feature = "verus_ir"))]
 pub use loader::path_has_fixtures;

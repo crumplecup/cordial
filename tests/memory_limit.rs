@@ -8,8 +8,8 @@ mod support {
 use clap::Parser;
 use cordial::{
     Backoff, Cli, DEFAULT_MEMORY_LIMIT, FIRST_GROWTH_KIB, FUTILE_KIB, MEMORY_LIMIT_EXIT,
-    MemoryLimit, Pressure, WORKER_KIB, budget_of, exceeds, functions_within, judge, judge_level,
-    load_cordial_config, nearing, over_budget, parse_limit, parse_meminfo, parse_size,
+    MemoryLimit, Pressure, WORKER_KIB, budget_of, exceeds, footprint_of, functions_within, judge,
+    judge_level, load_cordial_config, nearing, over_budget, parse_limit, parse_meminfo, parse_size,
     resolve_memory_limit_with, resolve_memory_target, workers_at, workers_within,
 };
 use miette::{IntoDiagnostic, Result};
@@ -344,6 +344,51 @@ fn the_rungs_allow_all_the_workers_then_a_quarter_then_one() {
     assert_eq!(workers_at(16, cordial::Pressure::Hard), 4);
     assert_eq!(workers_at(16, cordial::Pressure::Severe), 1);
     assert_eq!(workers_at(2, cordial::Pressure::Hard), 1, "never none");
+}
+
+#[test]
+fn a_footprint_says_how_much_of_what_the_machine_saw_the_process_held() {
+    // Held 400 MB at most, and when the machine saw 1.2 GB of it, 300 MB of that was held.
+    let footprint = footprint_of(400 * 1024, 1200 * 1024, 300 * 1024);
+    assert_eq!(footprint.peak_held_kib, 400 * 1024);
+    assert_eq!(footprint.peak_resident_kib, 1200 * 1024);
+    assert_eq!(
+        footprint.kept_by_allocator_kib,
+        900 * 1024,
+        "what the machine saw that was not held"
+    );
+    assert_eq!(
+        footprint.held_percent, 25,
+        "a quarter of what was seen was held"
+    );
+    let nothing = footprint_of(0, 0, 0);
+    assert_eq!(
+        (nothing.kept_by_allocator_kib, nothing.held_percent),
+        (0, 0)
+    );
+    let more_held = footprint_of(10, 5, 9);
+    assert_eq!(more_held.kept_by_allocator_kib, 0, "never less than none");
+}
+
+#[test]
+fn a_process_of_a_run_in_processes_spends_the_budget_less_what_the_driver_holds() {
+    let limit = resolve_memory_limit_with(Some(MemoryLimit::Bytes(2 * GIB)), None, None);
+    let budget = resolve_memory_target(limit, Some(MemoryLimit::Bytes(GIB)), None, None);
+    let spent = budget.clone().reserving(16 << 20);
+    assert_eq!(
+        spent.bytes(),
+        2 * GIB - (16 << 20),
+        "the limit, less the driver's share"
+    );
+    assert_eq!(spent.ladder_bytes(), GIB - (16 << 20), "and the target");
+    let tiny = budget.reserving(10 * GIB);
+    assert_eq!(
+        tiny.bytes(),
+        1 << 20,
+        "a driver that holds more than the budget leaves a mebibyte"
+    );
+    let none = resolve_memory_limit_with(Some(MemoryLimit::Bytes(0)), None, None).reserving(GIB);
+    assert_eq!(none.bytes(), 0, "no limit stays none");
 }
 
 #[test]

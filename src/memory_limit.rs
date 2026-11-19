@@ -85,9 +85,80 @@ pub fn resume_exit() -> ! {
         status.phase()
     );
     crate::flush_current();
+    log_footprint("ended to be followed by another process");
     crate::run_metrics::write_ended("memory checkpoint", &status.phase());
     crate::profiling::finish();
     std::process::exit(MEMORY_RESUME_EXIT)
+}
+
+/// The most the run held, the most the machine saw of it, and what it held when the machine saw the
+/// most: the watchdog's samples, kept to say at the end where the memory was.
+static PEAK_HELD_KIB: AtomicU64 = AtomicU64::new(0);
+static PEAK_RESIDENT_KIB: AtomicU64 = AtomicU64::new(0);
+static HELD_AT_PEAK_RESIDENT_KIB: AtomicU64 = AtomicU64::new(0);
+
+/// What a process's memory was, from its peaks: how much of what the machine saw of it was held,
+/// and how much was not (what an allocator kept after the program freed it, and its own overhead).
+/// The held bytes are the program's to lower; the rest is not.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Footprint {
+    /// The most the process held, in kibibytes.
+    pub peak_held_kib: u64,
+    /// The most the machine saw of it, in kibibytes.
+    pub peak_resident_kib: u64,
+    /// What the machine saw at its most that the process did not hold, in kibibytes.
+    pub kept_by_allocator_kib: u64,
+    /// The share, in hundredths, of what the machine saw at its most that the process held.
+    pub held_percent: u64,
+}
+
+/// The footprint of a process whose most resident memory was `peak_resident_kib`, of which it held
+/// `held_at_peak_kib`, and whose most held was `peak_held_kib`.
+#[must_use]
+pub fn footprint_of(
+    peak_held_kib: u64,
+    peak_resident_kib: u64,
+    held_at_peak_kib: u64,
+) -> Footprint {
+    let kept = peak_resident_kib.saturating_sub(held_at_peak_kib);
+    let share = held_at_peak_kib
+        .saturating_mul(100)
+        .checked_div(peak_resident_kib)
+        .unwrap_or(0);
+    Footprint {
+        peak_held_kib,
+        peak_resident_kib,
+        kept_by_allocator_kib: kept,
+        held_percent: share,
+    }
+}
+
+/// Say, as an event, what this process's memory was at its most.
+pub fn log_footprint(why: &str) {
+    let footprint = footprint_of(
+        PEAK_HELD_KIB.load(Ordering::Relaxed),
+        PEAK_RESIDENT_KIB.load(Ordering::Relaxed),
+        HELD_AT_PEAK_RESIDENT_KIB.load(Ordering::Relaxed),
+    );
+    tracing::info!(
+        target: "cordial::footprint",
+        why,
+        peak_held_kib = footprint.peak_held_kib,
+        peak_resident_kib = footprint.peak_resident_kib,
+        kept_by_allocator_kib = footprint.kept_by_allocator_kib,
+        held_percent = footprint.held_percent,
+        "what this process's memory was at its most"
+    );
+}
+
+/// Says what the process's memory was at its most when it goes, whichever way it ends.
+#[derive(Debug)]
+pub struct FootprintOnDrop;
+
+impl Drop for FootprintOnDrop {
+    fn drop(&mut self) {
+        log_footprint("ended");
+    }
 }
 
 /// The limit in force for this run, in bytes (zero: none), kept so that the work can ease off
@@ -339,6 +410,21 @@ impl Budget {
         } else {
             self.target
         }
+    }
+
+    /// This budget less `bytes` that something else of the run holds: the driver of a run in
+    /// processes is part of the run, and what it holds is not the child's to spend. Never less than
+    /// a mebibyte, so that a driver that holds more than the budget does not make it none.
+    #[must_use]
+    pub fn reserving(mut self, bytes: u64) -> Self {
+        const LEAST: u64 = 1 << 20;
+        if self.bytes != 0 {
+            self.bytes = self.bytes.saturating_sub(bytes).max(LEAST);
+        }
+        if self.target != 0 {
+            self.target = self.target.saturating_sub(bytes).max(LEAST);
+        }
+        self
     }
 
     /// This budget with the ladder working to `target` (see [`Budget::ladder_bytes`]); a target
@@ -620,6 +706,12 @@ fn watch(budget: &Budget) {
             return;
         };
         let held = meter_of(memory.resident_kib());
+        PEAK_HELD_KIB.fetch_max(held, Ordering::Relaxed);
+        if memory.resident_kib()
+            > PEAK_RESIDENT_KIB.fetch_max(memory.resident_kib(), Ordering::Relaxed)
+        {
+            HELD_AT_PEAK_RESIDENT_KIB.store(held, Ordering::Relaxed);
+        }
         let rung = judge_level(
             Pressure::from_bits(LEVEL.load(Ordering::Relaxed)),
             held,
@@ -676,6 +768,13 @@ fn stop(held_kib: u64, resident_kib: u64, budget: &Budget) -> ! {
         status.line()
     );
     crate::run_metrics::write_ended("memory limit", &status.phase());
+    log_footprint("stopped by the limit");
+    // The driver of a run in processes is told where this one was stopped, so that it can say what
+    // the budget was too small for.
+    crate::report_progress(crate::Progress::Stopped {
+        resident_kib,
+        held_kib,
+    });
     // The profile of the run that was stopped is the one that says where its memory went.
     crate::profiling::finish();
     std::process::exit(MEMORY_LIMIT_EXIT)
