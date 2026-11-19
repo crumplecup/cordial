@@ -402,12 +402,13 @@ impl SourceDatabase {
     /// built to compute what is kept (item trees, definition maps, evidence) and are not read again
     /// until something asks for that file or call, when they are made again. Under pressure they are
     /// a large share of what is held (about two thirds of a process that has just loaded a workspace),
-    /// so under pressure they go; with memory to spare they stay, as a second parse is time that
+    /// so under pressure, or once the process holds a share of its budget it should not hold more of,
+    /// they go; with memory to spare they stay, as a second parse is time that
     /// memory would not have cost. Returns how many values were dropped.
     #[instrument(level = "debug", skip(self))]
     #[hotpath::measure(impl_type = "SourceDatabase")]
     pub(super) fn jettison_scaffolding(&mut self, after: &str) -> u64 {
-        if !crate::memory_limit::pressured() {
+        if !crate::memory_limit::scaffolding_to_go() {
             return 0;
         }
         let held_before = crate::memory_limit::meter_kib().unwrap_or(0);

@@ -74,6 +74,7 @@ impl SourceDatabase {
         paths: &[PathBuf],
         policy_paths: &[PathBuf],
     ) -> CordialResult<CrateIr> {
+        crate::process_memory::log("projection begun");
         let context = self.projection_context()?;
         selection::validate_target(target, &context)?;
         super::queries::forget_computed();
@@ -81,6 +82,7 @@ impl SourceDatabase {
         // A run that keeps its results in a store opens the one of its inputs, which has what a run
         // before it with the same inputs did.
         self.open_results_store()?;
+        crate::process_memory::log("results store opened");
         if self.unit_is_done("complete") {
             // The whole projection was done by a run with these inputs: its graph is what this run
             // is after.
@@ -114,6 +116,7 @@ impl SourceDatabase {
                 })?;
                 inventory
             };
+            crate::process_memory::log("declarations collected");
             // A process that did the work of the evidence may end once it is in the store.
             if self.prime_function_evidence() {
                 self.evidence_done();

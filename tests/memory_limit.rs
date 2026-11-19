@@ -570,3 +570,68 @@ fn the_limit_in_cordial_toml_stops_a_run_too() -> Result<()> {
     assert!(text.contains("cordial stopped itself"), "{text}");
     Ok(())
 }
+
+/// The scaffolding is let go of once a process holds its share of the budget, with no pressure to
+/// say so: pressure begins at sixty per cent, and what is built in one step passes it before it is
+/// felt. With no budget or no share, or room to spare, it stays.
+#[test]
+fn the_scaffolding_goes_once_a_process_holds_its_share_of_the_budget() {
+    let budget = 1000 * 1024 * 1024;
+    assert!(
+        !cordial::scaffolding_due(299 * 1024, budget, 30),
+        "below the line it stays"
+    );
+    assert!(
+        cordial::scaffolding_due(300 * 1024, budget, 30),
+        "at the line it goes"
+    );
+    assert!(
+        cordial::scaffolding_due(900 * 1024, budget, 30),
+        "and above it"
+    );
+    assert!(
+        cordial::scaffolding_due(150 * 1024, budget, 15),
+        "a lean run has an earlier line"
+    );
+    assert!(
+        !cordial::scaffolding_due(150 * 1024, budget, 50),
+        "a roomy run a later one"
+    );
+    assert!(
+        !cordial::scaffolding_due(900 * 1024, 0, 30),
+        "no budget is no line"
+    );
+    assert!(
+        !cordial::scaffolding_due(900 * 1024, budget, 0),
+        "no share is no line"
+    );
+    assert!(
+        !cordial::scaffolding_due(900 * 1024, 100 * 1024 * 1024 * 1024, 30),
+        "with memory to spare it stays"
+    );
+}
+
+/// Parsimony is a name or a share, the flag beats `cordial.toml`, a setting that is not understood
+/// says so and the default stands, and the default is the middle one.
+#[test]
+fn parsimony_is_a_name_or_a_share_with_a_default_in_the_middle() {
+    assert_eq!(cordial::parse_parsimony("lean"), Ok(15));
+    assert_eq!(cordial::parse_parsimony("Balanced"), Ok(30));
+    assert_eq!(cordial::parse_parsimony("roomy"), Ok(50));
+    assert_eq!(cordial::parse_parsimony("off"), Ok(0));
+    assert_eq!(cordial::parse_parsimony("40%"), Ok(40));
+    assert_eq!(cordial::parse_parsimony("40"), Ok(40));
+    assert!(cordial::parse_parsimony("101").is_err());
+    assert!(cordial::parse_parsimony("frugal").is_err());
+    assert_eq!(
+        cordial::resolve_parsimony(None, None),
+        cordial::DEFAULT_PARSIMONY_PERCENT
+    );
+    assert_eq!(cordial::resolve_parsimony(None, Some("lean")), 15);
+    assert_eq!(cordial::resolve_parsimony(Some(50), Some("lean")), 50);
+    assert_eq!(
+        cordial::resolve_parsimony(None, Some("sloppy")),
+        cordial::DEFAULT_PARSIMONY_PERCENT,
+        "a setting that is not understood leaves the default"
+    );
+}

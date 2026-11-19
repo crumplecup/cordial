@@ -79,6 +79,18 @@ pub struct Cli {
     )]
     pub memory_target: Option<crate::MemoryLimit>,
 
+    /// How early the run lets go of the scaffolding it builds (trees, expansions, span maps), as
+    /// the share of the budget a process may hold before it does: lean (15%), balanced (30%),
+    /// roomy (50%), off (only under pressure), or 0 to 100 (default: balanced, or
+    /// `memory_parsimony` in `cordial.toml`).
+    #[arg(
+        long,
+        env = "CORDIAL_MEMORY_PARSIMONY",
+        global = true,
+        value_parser = crate::parse_parsimony
+    )]
+    pub memory_parsimony: Option<u64>,
+
     /// Run in processes that are taken up again: the run saves its state and exits when its
     /// resident memory nears the budget, and a new process restores it and goes on, so that the
     /// memory an allocator kept goes back to the machine (default: off).
@@ -127,6 +139,10 @@ impl Cli {
             )
             .reserving(crate::reserved_by_driver()),
         );
+        crate::be_parsimonious_at(crate::resolve_parsimony(
+            self.memory_parsimony,
+            configured.memory_parsimony().as_deref(),
+        ));
         let _footprint = crate::FootprintOnDrop;
         let store_root = store_home.join(&slug);
         let store = StoreLayout::from_root(store_root.clone(), slug);

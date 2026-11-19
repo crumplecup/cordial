@@ -12,6 +12,10 @@ impl SourceDatabase {
     #[tracing::instrument(level = "debug", skip(self, target), err(level = "warn"))]
     #[hotpath::measure]
     pub fn project_target(&mut self, target: &CrateTarget) -> CordialResult<CrateIr> {
+        // Listing a package's modules asks for the definition maps of its crates, and of all they
+        // depend on, in one step nothing can interrupt: they are built a crate at a time first,
+        // with the scaffolding let go of between them as the run's parsimony asks.
+        self.build_definition_maps();
         let root = target.crate_root();
         let context = self.projection_context()?;
         let root = root.canonicalize()?;

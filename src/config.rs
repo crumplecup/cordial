@@ -69,6 +69,14 @@ pub struct CordialConfig {
     /// `CORDIAL_MEMORY_TARGET` take precedence; the default is the limit.
     #[serde(default)]
     memory_target: Option<String>,
+    /// How early a run lets go of the scaffolding it builds (syntax trees, macro expansions, span
+    /// maps), which it makes again if it is wanted again: the share of the memory budget a process
+    /// may hold before it does, as `lean` (15%), `balanced` (30%, the default), `roomy` (50%), `off`
+    /// (only under pressure) or a number from 0 to 100. Lean suits a machine with little to spare,
+    /// and parses again what is wanted again; roomy suits one with memory to spare. The
+    /// `--memory-parsimony` flag and `CORDIAL_MEMORY_PARSIMONY` take precedence.
+    #[serde(default)]
+    memory_parsimony: Option<String>,
     /// Save what is computed for a function as depending on a fingerprint of its crate's
     /// definition map, so that an edit to a function's body makes the next run compute the
     /// functions of that file and not of the whole crate. A run that computed anything then

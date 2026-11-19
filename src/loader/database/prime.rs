@@ -22,6 +22,7 @@ impl SourceDatabase {
     #[instrument(level = "debug", skip(self))]
     #[hotpath::measure(impl_type = "SourceDatabase")]
     pub(super) fn prime_function_evidence(&mut self) -> bool {
+        self.build_definition_maps();
         // The functions of each ordinary crate, by description, as the last run saved them. A crate
         // all of whose functions a description finds again is primed from them without asking
         // rust-analyzer which functions it has; any other is enumerated.
@@ -49,6 +50,18 @@ impl SourceDatabase {
                     return false;
                 }
                 described.extend(index.found.iter().cloned());
+                // What the process held, and what the machine saw of it, once this crate's functions
+                // were found: finding them asks the crate for its files, which builds its definition
+                // map and those of what it depends on, and the growth from one crate to the next says
+                // where the syntax trees and expansions come from.
+                tracing::info!(
+                    target: "cordial::enumeration",
+                    krate = %item_key::key_text(&self.db, scope),
+                    functions = index.found.len(),
+                    held_kib = crate::memory_limit::meter_kib().unwrap_or(0),
+                    resident_kib = crate::memory_sample().map_or(0, |memory| memory.resident_kib()),
+                    "a crate's functions were found"
+                );
             }
             true
         });
@@ -353,6 +366,69 @@ fn chunk_size(functions: usize) -> usize {
     functions.div_ceil(CHUNKS).max(LEAST)
 }
 
+impl SourceDatabase {
+    /// Build the definition map of every crate the ordinary crates need, dependencies first, one
+    /// crate at a time, and under pressure let go of the scaffolding (trees, expansions, span maps)
+    /// that building them left whenever enough of it has built up.
+    ///
+    /// Asking for a crate's definition map builds those of everything it depends on, inside one query
+    /// that nothing can interrupt, and what each needs is parsed and expanded on the way: for a
+    /// workspace of modest size that is two thirds of what a process holds once it has loaded. Built
+    /// in dependency order, each crate finds what it needs already built, builds only its own, and
+    /// the scaffolding of those before it is let go of between them. The maps are the same ones the
+    /// first ask would have built, and are all needed, so no work is added.
+    #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure(impl_type = "SourceDatabase")]
+    pub(super) fn build_definition_maps(&mut self) {
+        let needed: std::collections::BTreeSet<ra_ap_ide_db::base_db::Crate> =
+            attach_db(&self.db, || {
+                self.ordinary_crates()
+                    .into_iter()
+                    .flat_map(|krate| {
+                        let mut with = krate.transitive_deps(&self.db);
+                        with.push(krate);
+                        with
+                    })
+                    .collect()
+            });
+        crate::process_memory::log("definition maps: crates chosen");
+        let order: Vec<Crate> = attach_db(&self.db, || {
+            Crate::all(&self.db)
+                .into_iter()
+                .filter(|krate| needed.contains(&krate.base()))
+                .collect()
+        });
+        let mut released_at = crate::memory_limit::meter_kib().unwrap_or(0);
+        for krate in order {
+            let name = attach_db(&self.db, || {
+                let _ = ra_ap_hir_def::nameres::crate_def_map(&self.db, krate.base());
+                krate
+                    .display_name(&self.db)
+                    .map_or_else(String::new, |name| name.to_string())
+            });
+            let held = crate::memory_limit::meter_kib().unwrap_or(0);
+            tracing::debug!(
+                target: "cordial::enumeration",
+                krate = %name,
+                held_kib = held,
+                "a crate's definition map was built"
+            );
+            if crate::memory_limit::scaffolding_to_go()
+                && held.saturating_sub(released_at) >= crate::memory_limit::scaffolding_step_kib()
+            {
+                let dropped = self.jettison_scaffolding("definition maps");
+                tracing::debug!(
+                    target: "cordial::enumeration",
+                    krate = %name,
+                    released = dropped,
+                    "the scaffolding built so far was let go of between definition maps"
+                );
+                released_at = crate::memory_limit::meter_kib().unwrap_or(0);
+            }
+        }
+    }
+}
+
 /// The functions declared in the workspace's own crates: free functions, trait
 /// methods with their default bodies, and the methods of every impl.
 #[instrument(level = "debug", skip(db))]
@@ -366,7 +442,19 @@ fn local_functions(
         if !krate.origin(db).is_local() || excluded.contains(&krate.base()) {
             continue;
         }
+        let before = functions.len();
         functions.extend(functions_in(db, krate));
+        // What the process held and what the machine saw of it once this crate's functions were
+        // listed: listing them builds the crate's definition map and those of what it needs, and the
+        // growth from one crate to the next says where the syntax trees and expansions come from.
+        tracing::info!(
+            target: "cordial::enumeration",
+            krate = %krate.display_name(db).map_or_else(String::new, |name| name.to_string()),
+            functions = functions.len() - before,
+            held_kib = crate::memory_limit::meter_kib().unwrap_or(0),
+            resident_kib = crate::memory_sample().map_or(0, |memory| memory.resident_kib()),
+            "a crate's functions were listed"
+        );
     }
     functions
 }

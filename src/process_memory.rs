@@ -45,6 +45,7 @@ pub(crate) fn log(phase: &str) {
             phase,
             resident_kib = memory.resident_kib(),
             peak_kib = memory.peak_kib(),
+            held_kib = crate::memory_limit::meter_kib().unwrap_or(0),
             "memory"
         );
     }

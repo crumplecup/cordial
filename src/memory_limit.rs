@@ -62,6 +62,91 @@ pub fn checkpoint_due(resident_kib: u64, ladder_bytes: u64) -> bool {
         && resident_kib.saturating_mul(1024) >= ladder_bytes / 100 * CHECKPOINT_PERCENT
 }
 
+/// How parsimonious a run is: the share of its budget a process may hold, with no pressure, before
+/// the scaffolding the analysis builds (trees, expansions, span maps) is let go of. Pressure begins
+/// at sixty per cent of the budget, which is too late for what is built in one step, so a run that
+/// is parsimonious lets go earlier. Below the line memory is abundant for the work, and a second
+/// parse is time that memory would not have cost. `0` is none: only pressure lets go of it.
+pub const DEFAULT_PARSIMONY_PERCENT: u64 = 30;
+
+/// The names of the settings of parsimony, and the share of the budget each is: from the least
+/// room kept for scaffolding (`lean`, which suits a machine with little to spare, at the cost of
+/// parsing again what is wanted again) to the most (`roomy`); `off` leaves it to pressure.
+pub const PARSIMONY_NAMES: [(&str, u64); 4] = [
+    ("lean", 15),
+    ("balanced", DEFAULT_PARSIMONY_PERCENT),
+    ("roomy", 50),
+    ("off", 0),
+];
+
+static PARSIMONY_PERCENT: AtomicU64 = AtomicU64::new(DEFAULT_PARSIMONY_PERCENT);
+
+/// Read a setting of parsimony: a name from [`PARSIMONY_NAMES`], or a share of the budget from 1 to
+/// 100 (with or without a `%`), or `0` for none.
+///
+/// # Errors
+///
+/// Says what was wrong with `text` and what is accepted.
+pub fn parse_parsimony(text: &str) -> Result<u64, String> {
+    let wanted = text.trim().to_ascii_lowercase();
+    if let Some((_, percent)) = PARSIMONY_NAMES.iter().find(|(name, _)| *name == wanted) {
+        return Ok(*percent);
+    }
+    match wanted.trim_end_matches('%').parse::<u64>() {
+        Ok(percent) if percent <= 100 => Ok(percent),
+        _ => Err(format!(
+            "`{text}` is not a setting of parsimony: use lean, balanced, roomy, off, or a share of the budget from 0 to 100"
+        )),
+    }
+}
+
+/// The setting of parsimony: the flag, else `cordial.toml`, else the default.
+#[must_use]
+pub fn resolve_parsimony(flag: Option<u64>, configured: Option<&str>) -> u64 {
+    flag.or_else(|| {
+        configured.and_then(|text| match parse_parsimony(text) {
+            Ok(percent) => Some(percent),
+            Err(reason) => {
+                let _ = writeln!(
+                    crate::host::stderr(),
+                    "cordial.toml: memory_parsimony: {reason}; using the default"
+                );
+                None
+            }
+        })
+    })
+    .unwrap_or(DEFAULT_PARSIMONY_PERCENT)
+}
+
+/// Set how parsimonious the run is, as a share of the budget (see [`DEFAULT_PARSIMONY_PERCENT`]).
+pub fn be_parsimonious_at(percent: u64) {
+    PARSIMONY_PERCENT.store(percent, Ordering::Relaxed);
+}
+
+/// Whether a process holding `held_kib` of a budget of `ladder_bytes` holds enough that, at
+/// `percent` of it, the scaffolding should be let go of. No budget and no share are no line, and
+/// nothing is let go of.
+#[must_use]
+pub fn scaffolding_due(held_kib: u64, ladder_bytes: u64, percent: u64) -> bool {
+    ladder_bytes != 0
+        && percent != 0
+        && held_kib.saturating_mul(1024) >= ladder_bytes / 100 * percent
+}
+
+/// Whether the scaffolding should be let go of now: the run feels pressure, or holds a share of its
+/// budget that it should not hold more of.
+#[must_use]
+pub fn scaffolding_to_go() -> bool {
+    pressured()
+        || meter_kib().is_some_and(|held| {
+            scaffolding_due(
+                held,
+                ladder_bytes(),
+                PARSIMONY_PERCENT.load(Ordering::Relaxed),
+            )
+        })
+}
+
 /// How much more than a process holds the machine sees of it once the allocator has kept what the
 /// program freed, as a share of what is held: what a process needs to be given besides what it holds.
 /// Measured at 18 to 50 per cent on the elicit_doc runs; this is near the low end, since a process
@@ -724,6 +809,23 @@ pub fn nearing_now() -> bool {
 pub fn feel_pressure(on: bool) {
     PRESSURE_FORCED.store(on, Ordering::Relaxed);
     LEVEL_FORCED.store(u8::from(on), Ordering::Relaxed);
+}
+
+/// How much more than at the last release a process holds before it lets go of the scaffolding
+/// again while it builds the definition maps (in kibibytes): a release walks every memo, so it is
+/// made when enough has built up to be worth it.
+static SCAFFOLDING_STEP_KIB: AtomicU64 = AtomicU64::new(96 * 1024);
+
+/// Change how much is built up between releases of scaffolding: what a test of the release asks
+/// for, since a workspace small enough to test does not build up the default.
+pub fn release_scaffolding_every_kib(step: u64) {
+    SCAFFOLDING_STEP_KIB.store(step, Ordering::Relaxed);
+}
+
+/// How much is built up between releases of scaffolding.
+#[must_use]
+pub fn scaffolding_step_kib() -> u64 {
+    SCAFFOLDING_STEP_KIB.load(Ordering::Relaxed)
 }
 
 /// Make the run feel the pressure of `level`, for the tests of what the work does on each rung.

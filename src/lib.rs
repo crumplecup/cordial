@@ -290,15 +290,17 @@ pub use etiquettes::{AMENABLE_EXT_JIFF_ETIQUETTE, ExtReporter};
 pub use live_status::{LiveLayer, LiveStatus, live_filter};
 pub use memory_limit::{
     ALLOCATOR_OVERHEAD_PERCENT, Backoff, Budget, CHECKPOINT_AFTER_CHUNKS_VARIABLE,
-    CHECKPOINT_AFTER_STAGES_VARIABLE, CHECKPOINT_PERCENT, DEFAULT_MEMORY_LIMIT, FIRST_GROWTH_KIB,
-    FUTILE_KIB, Footprint, FootprintOnDrop, MEMORY_LIMIT_EXIT, MEMORY_RESUME_EXIT, MemoryLimit,
-    Pressure, RESUMABLE_VARIABLE, ROOM_LEAST_BYTES, ROOM_PERCENT, WORKER_KIB, available_memory,
-    budget_of, budget_with_room, checkpoint_due, checkpoint_line_bytes, checkpoint_requested,
-    enforce, exceeds, feel_pressure, feel_pressure_at, footprint_of, functions_within, judge,
-    judge_level, log_footprint, nearing, no_room, no_room_exit, over_budget, parse_limit,
-    parse_meminfo, parse_size, pressure, pressured, relieved, resolve as resolve_memory_limit,
-    resolve_target as resolve_memory_target, resolve_with as resolve_memory_limit_with, workers_at,
-    workers_within,
+    CHECKPOINT_AFTER_STAGES_VARIABLE, CHECKPOINT_PERCENT, DEFAULT_MEMORY_LIMIT,
+    DEFAULT_PARSIMONY_PERCENT, FIRST_GROWTH_KIB, FUTILE_KIB, Footprint, FootprintOnDrop,
+    MEMORY_LIMIT_EXIT, MEMORY_RESUME_EXIT, MemoryLimit, Pressure, RESUMABLE_VARIABLE,
+    ROOM_LEAST_BYTES, ROOM_PERCENT, WORKER_KIB, available_memory, be_parsimonious_at, budget_of,
+    budget_with_room, checkpoint_due, checkpoint_line_bytes, checkpoint_requested, enforce,
+    exceeds, feel_pressure, feel_pressure_at, footprint_of, functions_within, judge, judge_level,
+    log_footprint, nearing, no_room, no_room_exit, over_budget, parse_limit, parse_meminfo,
+    parse_parsimony, parse_size, pressure, pressured, release_scaffolding_every_kib, relieved,
+    resolve as resolve_memory_limit, resolve_parsimony, resolve_target as resolve_memory_target,
+    resolve_with as resolve_memory_limit_with, scaffolding_due, scaffolding_step_kib,
+    scaffolding_to_go, workers_at, workers_within,
 };
 #[cfg(all(feature = "rustdoc", feature = "impl_coverage"))]
 pub use plugin::classify_elicit_complete_gap;
