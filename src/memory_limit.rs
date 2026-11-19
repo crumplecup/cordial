@@ -27,6 +27,64 @@ const FALLBACK_BYTES: u64 = 8 << 30;
 /// The exit status of a run that stopped itself for using too much memory.
 pub const MEMORY_LIMIT_EXIT: i32 = 75;
 
+/// The exit status of a run that saved its state to be taken up again, because its resident memory
+/// neared the budget: the driver that started it starts the next.
+pub const MEMORY_RESUME_EXIT: i32 = 76;
+
+/// Set (to anything) by the driver that restarts a run that exits with [`MEMORY_RESUME_EXIT`]. A
+/// run without it never exits to be taken up again: nothing would take it up.
+pub const RESUMABLE_VARIABLE: &str = "CORDIAL_RESUMABLE";
+
+/// For a test: the run saves and exits, to be taken up again, after this many chunks that computed
+/// something, whatever its memory.
+pub const CHECKPOINT_AFTER_CHUNKS_VARIABLE: &str = "CORDIAL_CHECKPOINT_AFTER_CHUNKS";
+
+/// The share of the budget, in hundredths, that the resident memory reaches before a run that can be
+/// taken up again saves its state and exits, so that the next process starts with nothing the
+/// allocator kept.
+pub const CHECKPOINT_PERCENT: u64 = 85;
+
+/// Whether this run is started by a driver that takes it up again.
+#[must_use]
+pub fn resumable() -> bool {
+    std::env::var_os(RESUMABLE_VARIABLE).is_some()
+}
+
+/// Whether a process using `resident_kib` has reached [`CHECKPOINT_PERCENT`] of `ladder_bytes`.
+/// A budget of zero is none.
+#[must_use]
+pub fn checkpoint_due(resident_kib: u64, ladder_bytes: u64) -> bool {
+    ladder_bytes != 0
+        && resident_kib.saturating_mul(1024) >= ladder_bytes / 100 * CHECKPOINT_PERCENT
+}
+
+/// Whether the watchdog saw the resident memory reach the checkpoint line.
+static CHECKPOINT: AtomicBool = AtomicBool::new(false);
+
+/// Whether the run should save its state and exit at its next safe point.
+#[must_use]
+pub fn checkpoint_requested() -> bool {
+    CHECKPOINT.load(Ordering::Relaxed)
+}
+
+/// Ask for a checkpoint at the next safe point (for a test; the watchdog does it by the memory).
+pub fn request_checkpoint() {
+    CHECKPOINT.store(true, Ordering::Relaxed);
+}
+
+/// Say that the run saved its state to be taken up again, and exit.
+pub fn resume_exit() -> ! {
+    let status = crate::LiveStatus::global();
+    let _ = writeln!(
+        crate::host::stderr(),
+        "cordial: saved its state at {} to take it up again in a new process",
+        status.phase()
+    );
+    crate::run_metrics::write_ended("memory checkpoint", &status.phase());
+    crate::profiling::finish();
+    std::process::exit(MEMORY_RESUME_EXIT)
+}
+
 /// The limit in force for this run, in bytes (zero: none), kept so that the work can ease off
 /// before the watchdog stops it.
 static LIMIT_BYTES: AtomicU64 = AtomicU64::new(0);
@@ -588,6 +646,9 @@ fn watch(budget: &Budget) {
                 resident_kib = memory.resident_kib(),
                 "the run's memory pressure changed"
             );
+        }
+        if resumable() && checkpoint_due(memory.resident_kib(), budget.ladder_bytes()) {
+            request_checkpoint();
         }
         if over_budget(held, memory.resident_kib(), budget.bytes) {
             stop(held, memory.resident_kib(), budget);

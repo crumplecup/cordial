@@ -44,6 +44,11 @@ fn lru_cap(pressured: bool) -> usize {
     }
 }
 
+/// How many persisted queries had executed at the last chunk boundary, and how many chunks have
+/// computed something.
+static LAST_EXECUTIONS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+static COMPUTING_CHUNKS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
 /// Whether the memory ledger has been taken. Once a run: the profile follows a thread of its own
 /// for each query dropped and has room for 256 of them, so a second pass would find none.
 static ITEMIZED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
@@ -213,7 +218,48 @@ impl SourceDatabase {
                 backoff.gave_back(before.saturating_sub(after));
             }
         }
+        if self.checkpoint_wanted() {
+            self.checkpoint();
+        }
         pressed
+    }
+
+    /// Whether the run should save and exit now: the watchdog saw the resident memory reach the
+    /// checkpoint line, or (for a test) enough chunks that computed something have run. Only a run
+    /// that a driver takes up again, and that has somewhere to save to.
+    fn checkpoint_wanted(&self) -> bool {
+        if !crate::memory_limit::resumable() || self.saved.is_none() {
+            return false;
+        }
+        let executed = salsa::persisted_executions();
+        let before = LAST_EXECUTIONS.swap(executed, std::sync::atomic::Ordering::Relaxed);
+        let computed = if executed > before {
+            COMPUTING_CHUNKS.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1
+        } else {
+            COMPUTING_CHUNKS.load(std::sync::atomic::Ordering::Relaxed)
+        };
+        let after: u64 = std::env::var(crate::CHECKPOINT_AFTER_CHUNKS_VARIABLE)
+            .ok()
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(0);
+        crate::checkpoint_requested() || (after > 0 && computed >= after)
+    }
+
+    /// Save the state and exit with the status that says it is to be taken up again, unless nothing
+    /// has been computed since the state this run started from: a new process would start where
+    /// this one is, and not get further.
+    fn checkpoint(&mut self) {
+        if self.restored && salsa::persisted_executions() == self.persisted_at_load {
+            return;
+        }
+        self.saved_once = false;
+        self.save_state();
+        tracing::info!(
+            target: "cordial::eviction",
+            resident_kib = crate::memory_sample().map_or(0, |memory| memory.resident_kib()),
+            "the state is saved and this process exits, to be taken up again"
+        );
+        crate::memory_limit::resume_exit();
     }
 
     /// If the run is under memory pressure, give the values of persisted memos to the spill file,
