@@ -44,9 +44,9 @@ fn lru_cap(pressured: bool) -> usize {
     }
 }
 
-/// Whether the memory ledger has been taken at the first moment the run was pressed hard.
-static ITEMIZED_UNDER_PRESSURE: std::sync::atomic::AtomicBool =
-    std::sync::atomic::AtomicBool::new(false);
+/// Whether the memory ledger has been taken. Once a run: the profile follows a thread of its own
+/// for each query dropped and has room for 256 of them, so a second pass would find none.
+static ITEMIZED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 /// When the costly actions are done between the chunks of a pass (see [`crate::Backoff`]).
 static CHUNK_BACKOFF: std::sync::Mutex<crate::Backoff> =
@@ -84,7 +84,7 @@ impl SourceDatabase {
             .as_ref()
             .is_some_and(|options| *options.memory_ledger())
             || std::env::var_os(LEDGER_VARIABLE).is_some();
-        if !asked {
+        if !asked || ITEMIZED.swap(true, std::sync::atomic::Ordering::Relaxed) {
             return;
         }
         let texts: (usize, usize) = self
@@ -189,9 +189,7 @@ impl SourceDatabase {
             // what is freed, and the resident memory then does not fall) the next waits twice as
             // long, so that a run is not made to compute the same values again on every chunk.
             let before = crate::memory_limit::meter_kib().unwrap_or(0);
-            if crate::memory_limit::pressure() >= crate::Pressure::Hard
-                && !ITEMIZED_UNDER_PRESSURE.swap(true, std::sync::atomic::Ordering::Relaxed)
-            {
+            if crate::memory_limit::pressure() >= crate::Pressure::Hard {
                 // Once, at the first moment the run is pressed hard and before anything is dropped:
                 // what the memory is made of when it is most in the way.
                 self.itemize_memory("pressed");
