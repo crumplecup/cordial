@@ -62,6 +62,12 @@ pub fn checkpoint_due(resident_kib: u64, ladder_bytes: u64) -> bool {
         && resident_kib.saturating_mul(1024) >= ladder_bytes / 100 * CHECKPOINT_PERCENT
 }
 
+/// How much more than a process holds the machine sees of it once the allocator has kept what the
+/// program freed, as a share of what is held: what a process needs to be given besides what it holds.
+/// Measured at 18 to 50 per cent on the elicit_doc runs; this is near the low end, since a process
+/// that lets go of what it does not need and allocates again reuses much of what was kept.
+pub const ALLOCATOR_OVERHEAD_PERCENT: u64 = 25;
+
 /// The room a process has left before it ends, as a share of the line, below which it is taken to
 /// have none: one that has loaded the workspace and has less than this to work in does a chunk of
 /// work and ends again, and so does every process after it.

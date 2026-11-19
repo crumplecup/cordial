@@ -49,6 +49,9 @@ struct Chunks {
     /// many rounds of dropping.
     dropped: u64,
     rounds: u64,
+    /// How many values of the scaffolding (trees, expansions, span maps, id maps) were let go of
+    /// between chunks.
+    scaffolding: u64,
 }
 
 fn priming_under(pressure: Pressure) -> Result<Chunks> {
@@ -104,6 +107,7 @@ fn priming_under(pressure: Pressure) -> Result<Chunks> {
         parts: sum(&|key| key == "prime.events"),
         dropped: sum(&|key| key == "eviction.prime_chunk.dropped_regenerable"),
         rounds: sum(&|key| key == "eviction.prime_chunk.rounds"),
+        scaffolding: sum(&|key| key == "eviction.dropped_scaffolding"),
     })
 }
 
@@ -114,6 +118,10 @@ fn without_pressure_the_functions_are_primed_in_one_chunk() -> Result<()> {
     let chunks = priming_under(Pressure::Absent)?;
     assert_eq!(chunks.waited, 0, "no function waited for a later chunk");
     assert_eq!(chunks.evictions, 0, "nothing was evicted between chunks");
+    assert_eq!(
+        chunks.scaffolding, 0,
+        "with memory to spare the scaffolding stays: a second parse is time memory would not have cost"
+    );
     Ok(())
 }
 
@@ -128,6 +136,10 @@ fn under_pressure_the_priming_takes_smaller_chunks_and_evicts_between_them() -> 
         chunks.taken
     );
     assert!(chunks.evictions > 0, "the run evicted between chunks");
+    assert!(
+        chunks.scaffolding > 0,
+        "and let go of the scaffolding (trees, expansions, span maps, id maps) it had built"
+    );
     // Each eviction kept no more than the pressure's cap of the trees and expansions, and not what
     // rust-analyzer marks them for.
     assert!(chunks.eviction_events > 0);

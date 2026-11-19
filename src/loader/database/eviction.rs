@@ -44,6 +44,15 @@ fn lru_cap(pressured: bool) -> usize {
     }
 }
 
+/// The queries whose values are scaffolding: built to compute what is kept, and made again when read.
+const SCAFFOLDING: [&str; 5] = [
+    "EditionedFileId::parse_",
+    "MacroCallId::parse_macro_expansion_",
+    "HirFileId::ast_id_map_",
+    "MacroCallId::macro_arg_",
+    "real_span_map",
+];
+
 /// How many persisted queries had executed at the last chunk boundary, and how many chunks have
 /// computed something.
 static LAST_EXECUTIONS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
@@ -80,6 +89,7 @@ impl SourceDatabase {
         if crate::memory_limit::pressure() >= crate::Pressure::Hard {
             self.itemize_memory(after);
         }
+        self.jettison_scaffolding(after);
         self.evict_quietly(after);
         self.spill_under_pressure(after);
         self.drop_regenerable_if_still_pressed(after);
@@ -117,9 +127,11 @@ impl SourceDatabase {
                     .and_then(|rest| rest.trim().parse::<u64>().ok())
             })
             .unwrap_or(0);
+        let held_before = crate::memory_limit::meter_kib().unwrap_or(0);
         let Some(ledger) = crate::itemize(&mut self.db, &[]) else {
             return;
         };
+        let held_after = crate::memory_limit::meter_kib().unwrap_or(0);
         for row in ledger.rows() {
             tracing::info!(
                 target: "cordial::ledger",
@@ -137,6 +149,8 @@ impl SourceDatabase {
             step = after,
             before_kib = ledger.before_kib(),
             floor_kib = ledger.floor_kib(),
+            held_before_kib = held_before,
+            held_after_kib = held_after,
             file_texts = texts.0 as u64,
             file_text_kib = (texts.1 / 1024) as u64,
             threads,
@@ -193,6 +207,7 @@ impl SourceDatabase {
     #[instrument(level = "trace", skip(self))]
     pub(super) fn evict_between_chunks(&mut self, stores_results: bool) -> bool {
         let pressed = crate::memory_limit::pressured();
+        self.jettison_scaffolding("prime chunk");
         if self.evicts() {
             self.evict_quietly("prime chunk");
         }
@@ -380,6 +395,43 @@ impl SourceDatabase {
             resident_after_kib = resident(crate::process_memory::sample()),
             "spilled the values of persisted memos"
         );
+    }
+
+    /// Let go of the scaffolding the analysis builds and does not keep: the syntax trees, the results
+    /// of macro expansions with their span maps, the maps of syntax ids, and macro arguments. They are
+    /// built to compute what is kept (item trees, definition maps, evidence) and are not read again
+    /// until something asks for that file or call, when they are made again. Under pressure they are
+    /// a large share of what is held (about two thirds of a process that has just loaded a workspace),
+    /// so under pressure they go; with memory to spare they stay, as a second parse is time that
+    /// memory would not have cost. Returns how many values were dropped.
+    #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure(impl_type = "SourceDatabase")]
+    pub(super) fn jettison_scaffolding(&mut self, after: &str) -> u64 {
+        if !crate::memory_limit::pressured() {
+            return 0;
+        }
+        let held_before = crate::memory_limit::meter_kib().unwrap_or(0);
+        let started = std::time::Instant::now();
+        let mut dropped = 0_u64;
+        salsa::Database::values_in_memory(
+            &mut self.db,
+            true,
+            false,
+            &SCAFFOLDING,
+            &mut |_, held| {
+                dropped += held;
+            },
+        );
+        tracing::info!(
+            target: "cordial::eviction",
+            after,
+            micros = u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX),
+            dropped_scaffolding = dropped,
+            held_before_kib = held_before,
+            held_after_kib = crate::memory_limit::meter_kib().unwrap_or(0),
+            "let go of the scaffolding: trees, expansions, span maps and id maps"
+        );
+        dropped
     }
 
     fn evict_quietly(&mut self, after: &str) {

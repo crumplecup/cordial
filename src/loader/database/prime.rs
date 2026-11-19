@@ -130,14 +130,25 @@ impl SourceDatabase {
     /// floor. If that leaves no room to work in before the process would end, no process of the run
     /// can do more than load, and the run is not one that processes finish within this budget: it
     /// says so now, and ends, and not after as many processes as it takes to find that out.
-    fn check_room(&self) {
+    fn check_room(&mut self) {
         if !crate::memory_limit::resumable() || !crate::result_store::active() {
             return;
         }
+        // What the memory is made of at the floor, if the run asks (see the memory ledger): the
+        // values every query holds, dropped one by one, and what is held before and after.
+        self.itemize_memory("floor");
+        // The scaffolding that loading and listing built is let go first, if the run is pressed: what
+        // a process has to hold to work is what is left.
+        self.jettison_scaffolding("floor");
         let Some(memory) = crate::memory_sample() else {
             return;
         };
-        let floor = memory.resident_kib();
+        // What the machine sees of the process does not fall when the program frees (the allocator
+        // keeps it, and gives it back to what the program allocates next), so the floor is what the
+        // program holds, and the allowance the allocator needs on top of it.
+        let floor = crate::memory_limit::meter_kib().map_or(memory.resident_kib(), |held| {
+            held.saturating_mul(100 + crate::memory_limit::ALLOCATOR_OVERHEAD_PERCENT) / 100
+        });
         crate::memory_limit::note_floor(floor);
         if crate::no_room(floor, crate::memory_limit::ladder_bytes()) {
             tracing::info!(
