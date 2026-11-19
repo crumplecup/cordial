@@ -315,10 +315,15 @@ impl SourceDatabase {
             return;
         };
         store.flush();
-        crate::report_progress(crate::Progress::Results(store.count()));
+        crate::report_progress(crate::Progress::Working {
+            results: store.count(),
+            remaining: crate::memory_limit::remaining(),
+            floor_kib: crate::memory_limit::floor_kib(),
+        });
         tracing::info!(
             target: "cordial::eviction",
             results = store.count(),
+            remaining = ?crate::memory_limit::remaining(),
             resident_kib = crate::memory_sample().map_or(0, |memory| memory.resident_kib()),
             "the results are in the store and this process exits, to be followed by another"
         );

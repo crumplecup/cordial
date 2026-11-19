@@ -473,3 +473,49 @@ fn a_budget_too_small_for_any_process_is_said_so_with_what_it_was_too_small_for(
     );
     Ok(())
 }
+
+#[test]
+fn a_budget_with_no_room_above_the_floor_is_said_so_at_once_and_not_after_many_processes()
+-> Result<()> {
+    let scratch = tempfile::tempdir().into_diagnostic()?;
+    let project = scratch.path().join("ckpt");
+    write_crate(&project)?;
+    let started = std::time::Instant::now();
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_cordial"))
+        .arg("--project")
+        .arg(&project)
+        .arg("--store-home")
+        .arg(scratch.path().join("store"))
+        .arg("--memory-isolation")
+        // Less than a process holds once the workspace is loaded: its checkpoint line is below that.
+        .arg("--memory-target")
+        .arg("64M")
+        .arg("open")
+        .env("CORDIAL_NO_PROGRESS", "1")
+        .output()
+        .into_diagnostic()?;
+    let said = String::from_utf8_lossy(&output.stderr).into_owned();
+    assert_eq!(
+        output.status.code(),
+        Some(cordial::MEMORY_STUCK_EXIT),
+        "it stops: {said}"
+    );
+    assert!(
+        said.contains("the memory budget is too small to analyse this workspace in processes"),
+        "and says why: {said}"
+    );
+    assert!(
+        said.contains("Raise --memory-target to at least"),
+        "and what would do: {said}"
+    );
+    assert!(
+        !said.contains("taking the run up again"),
+        "without a single process being followed by another: {said}"
+    );
+    assert!(
+        started.elapsed().as_secs() < 60,
+        "and soon: {:?}",
+        started.elapsed()
+    );
+    Ok(())
+}

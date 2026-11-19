@@ -8,9 +8,10 @@ mod support {
 use clap::Parser;
 use cordial::{
     Backoff, Cli, DEFAULT_MEMORY_LIMIT, FIRST_GROWTH_KIB, FUTILE_KIB, MEMORY_LIMIT_EXIT,
-    MemoryLimit, Pressure, WORKER_KIB, budget_of, exceeds, footprint_of, functions_within, judge,
-    judge_level, load_cordial_config, nearing, over_budget, parse_limit, parse_meminfo, parse_size,
-    resolve_memory_limit_with, resolve_memory_target, workers_at, workers_within,
+    MemoryLimit, Pressure, WORKER_KIB, budget_of, budget_with_room, exceeds, footprint_of,
+    functions_within, judge, judge_level, load_cordial_config, nearing, no_room, over_budget,
+    parse_limit, parse_meminfo, parse_size, resolve_memory_limit_with, resolve_memory_target,
+    workers_at, workers_within,
 };
 use miette::{IntoDiagnostic, Result};
 
@@ -389,6 +390,67 @@ fn a_process_of_a_run_in_processes_spends_the_budget_less_what_the_driver_holds(
     );
     let none = resolve_memory_limit_with(Some(MemoryLimit::Bytes(0)), None, None).reserving(GIB);
     assert_eq!(none.bytes(), 0, "no limit stays none");
+}
+
+#[test]
+fn a_process_with_no_room_below_the_checkpoint_line_is_seen_to_have_none() {
+    let target = 1536 * 1024 * 1024_u64;
+    // The line is 85% of the target: about 1.28 GB.
+    assert!(
+        no_room(1300 * 1024, target),
+        "1.3 GB resident is past the line"
+    );
+    assert!(
+        no_room(1250 * 1024, target),
+        "and 1.25 GB is within 10% of it"
+    );
+    assert!(
+        !no_room(800 * 1024, target),
+        "800 MB leaves room to work in"
+    );
+    assert!(!no_room(1_000_000, 0), "no budget is none, and has room");
+    // A budget that would have room for a floor of 1.3 GB is more than the 1.5 GB that did not.
+    let needed = budget_with_room(1300 * 1024);
+    assert!(needed > target, "{needed} against {target}");
+    assert!(!no_room(1300 * 1024, needed), "and with it there is room");
+}
+
+#[test]
+fn the_driver_projects_how_many_more_processes_a_run_needs_from_the_rate_they_go_at() {
+    use cordial::{Progress, projected_processes};
+    let working = |results: u64, remaining: u64| Progress::Working {
+        results,
+        remaining: Some(remaining),
+        floor_kib: 1_300_000,
+    };
+    assert_eq!(projected_processes(&[]), None, "nothing yet");
+    assert_eq!(
+        projected_processes(&[working(64, 2000), working(128, 1936)]),
+        None,
+        "two are not enough to tell a rate from"
+    );
+    // 64 more each time, and 1,872 left: about thirty more processes.
+    assert_eq!(
+        projected_processes(&[working(64, 2000), working(128, 1936), working(192, 1872)]),
+        Some(30)
+    );
+    // Faster, and what is left small: a few.
+    assert_eq!(
+        projected_processes(&[working(500, 1600), working(1000, 1100), working(1500, 600)]),
+        Some(2)
+    );
+    // They got through nothing: not for this (the run is stuck, which is another check).
+    assert_eq!(
+        projected_processes(&[working(64, 100), working(64, 100), working(64, 100)]),
+        None
+    );
+    // What is left is not known: no projection.
+    let unknown = Progress::Working {
+        results: 1,
+        remaining: None,
+        floor_kib: 0,
+    };
+    assert_eq!(projected_processes(&[unknown, unknown, unknown]), None);
 }
 
 #[test]

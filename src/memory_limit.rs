@@ -62,6 +62,103 @@ pub fn checkpoint_due(resident_kib: u64, ladder_bytes: u64) -> bool {
         && resident_kib.saturating_mul(1024) >= ladder_bytes / 100 * CHECKPOINT_PERCENT
 }
 
+/// The room a process has left before it ends, as a share of the line, below which it is taken to
+/// have none: one that has loaded the workspace and has less than this to work in does a chunk of
+/// work and ends again, and so does every process after it.
+pub const ROOM_PERCENT: u64 = 10;
+
+/// The least room, in bytes, a process is taken to have: a process with less does too little between
+/// the load that comes first and the end that comes after.
+pub const ROOM_LEAST_BYTES: u64 = 64 << 20;
+
+/// The memory, in bytes, at which a process of a run with `ladder_bytes` ends: the checkpoint line.
+#[must_use]
+pub fn checkpoint_line_bytes(ladder_bytes: u64) -> u64 {
+    ladder_bytes / 100 * CHECKPOINT_PERCENT
+}
+
+/// Whether a process that holds `floor_kib` once the workspace is loaded has no room to work in
+/// before the checkpoint line of a run with `ladder_bytes`: no process of the run can do anything
+/// but the load, and the run is not one that processes can finish within its budget. A budget of
+/// zero is none, and has room.
+#[must_use]
+pub fn no_room(floor_kib: u64, ladder_bytes: u64) -> bool {
+    if ladder_bytes == 0 {
+        return false;
+    }
+    let line = checkpoint_line_bytes(ladder_bytes);
+    let least = (line / 100 * ROOM_PERCENT).max(ROOM_LEAST_BYTES);
+    line.saturating_sub(floor_kib.saturating_mul(1024)) < least
+}
+
+/// The budget, in bytes, that a process with `floor_kib` needs to have room: its checkpoint line (a
+/// share of the budget) has to be the floor and the room it is taken to need, which is the larger of
+/// [`ROOM_PERCENT`] of the line and [`ROOM_LEAST_BYTES`]. Rounded up to a mebibyte, and a mebibyte
+/// more, for the whole numbers the line is made of.
+#[must_use]
+pub fn budget_with_room(floor_kib: u64) -> u64 {
+    let floor = floor_kib.saturating_mul(1024);
+    // The line that leaves ROOM_PERCENT of it, and the line that leaves the least room.
+    let by_share = floor.saturating_mul(100) / (100 - ROOM_PERCENT);
+    let by_least = floor.saturating_add(ROOM_LEAST_BYTES);
+    let line = by_share.max(by_least);
+    let budget = line.saturating_mul(100).div_ceil(CHECKPOINT_PERCENT.max(1));
+    (budget.div_ceil(1 << 20) + 1) << 20
+}
+
+/// How much work of the pass that keeps its results in the store is left, as the last chunk left it
+/// (`u64::MAX` when no such pass has run): what a process that ends says of the run, so that the
+/// driver can tell how many more processes it needs at the rate they go at.
+static REMAINING: AtomicU64 = AtomicU64::new(u64::MAX);
+
+/// What a process held once it had loaded the workspace and listed its functions, in kibibytes.
+static FLOOR_KIB: AtomicU64 = AtomicU64::new(0);
+
+/// Say how much of the pass that keeps its results in the store is left.
+pub fn note_remaining(items: u64) {
+    REMAINING.store(items, Ordering::Relaxed);
+}
+
+/// How much of the pass that keeps its results in the store is left, if it has begun.
+#[must_use]
+pub fn remaining() -> Option<u64> {
+    let items = REMAINING.load(Ordering::Relaxed);
+    (items != u64::MAX).then_some(items)
+}
+
+/// Say what this process held once it had loaded the workspace and listed its functions.
+pub fn note_floor(floor_kib: u64) {
+    FLOOR_KIB.store(floor_kib, Ordering::Relaxed);
+}
+
+/// What this process held once it had loaded the workspace and listed its functions, in kibibytes.
+#[must_use]
+pub fn floor_kib() -> u64 {
+    FLOOR_KIB.load(Ordering::Relaxed)
+}
+
+/// The memory, in bytes, the run's processes work to: the target if there is one, else the limit.
+#[must_use]
+pub fn ladder_bytes() -> u64 {
+    LIMIT_BYTES.load(Ordering::Relaxed)
+}
+
+/// Say that no process of the run has room to work in, and exit: the driver says what the budget
+/// would have to be.
+pub fn no_room_exit(floor_kib: u64) -> ! {
+    let status = crate::LiveStatus::global();
+    let line_kib = checkpoint_line_bytes(LIMIT_BYTES.load(Ordering::Relaxed)) / 1024;
+    crate::report_progress(crate::Progress::NoRoom {
+        floor_kib,
+        line_kib,
+    });
+    crate::flush_current();
+    log_footprint("no room to work in");
+    crate::run_metrics::write_ended("memory no room", &status.phase());
+    crate::profiling::finish();
+    std::process::exit(crate::MEMORY_STUCK_EXIT)
+}
+
 /// Whether the watchdog saw the resident memory reach the checkpoint line.
 static CHECKPOINT: AtomicBool = AtomicBool::new(false);
 

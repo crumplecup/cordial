@@ -73,6 +73,9 @@ impl SourceDatabase {
                 "functions of the workspace whose evidence is in the store, and whose is not"
             );
             let had_work = !pending.is_empty();
+            if had_work {
+                self.check_room();
+            }
             self.prime_in_chunks("workspace", &pending, |db, text| {
                 let _ = queries::persisted_evidence(db, ItemKey::new(db, text.clone()));
             });
@@ -99,6 +102,9 @@ impl SourceDatabase {
             );
         }
         let had_work = !functions.is_empty();
+        if had_work {
+            self.check_room();
+        }
         self.prime_in_chunks("workspace", &functions, |db, function| {
             let _ = queries::evidence_of(db, *function);
         });
@@ -118,6 +124,30 @@ impl SourceDatabase {
         self.prime(label, functions, |db, function| {
             let _ = queries::evidence_of(db, *function);
         });
+    }
+
+    /// What this process holds now that the workspace is loaded and its functions are listed is its
+    /// floor. If that leaves no room to work in before the process would end, no process of the run
+    /// can do more than load, and the run is not one that processes finish within this budget: it
+    /// says so now, and ends, and not after as many processes as it takes to find that out.
+    fn check_room(&self) {
+        if !crate::memory_limit::resumable() || !crate::result_store::active() {
+            return;
+        }
+        let Some(memory) = crate::memory_sample() else {
+            return;
+        };
+        let floor = memory.resident_kib();
+        crate::memory_limit::note_floor(floor);
+        if crate::no_room(floor, crate::memory_limit::ladder_bytes()) {
+            tracing::info!(
+                target: "cordial::eviction",
+                floor_kib = floor,
+                line_kib = crate::checkpoint_line_bytes(crate::memory_limit::ladder_bytes()) / 1024,
+                "a process has no room to work in once the workspace is loaded"
+            );
+            crate::memory_limit::no_room_exit(floor);
+        }
     }
 
     /// Run `one` over `items` on worker threads, each item once.
@@ -204,6 +234,9 @@ impl SourceDatabase {
                 "priming a chunk"
             );
             at += done;
+            if stores_results {
+                crate::memory_limit::note_remaining(u64::try_from(items.len() - at).unwrap_or(0));
+            }
             size = if self.evict_between_chunks(stores_results) {
                 (size / 2).max(least_at(crate::memory_limit::pressure()))
             } else {

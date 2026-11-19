@@ -56,6 +56,25 @@ pub const STALLS_ALLOWED: usize = 2;
 pub enum Progress {
     /// How many results the run has kept: each is one more, and counted exactly.
     Results(u64),
+    /// A process ended to be followed by another: how many results the run has, how many items of
+    /// the pass that keeps them are left (if it has begun), and what a process holds once it has
+    /// loaded the workspace.
+    Working {
+        /// How many results the run has kept.
+        results: u64,
+        /// How many items of the pass are left, if it has begun.
+        remaining: Option<u64>,
+        /// What a process holds once it has loaded the workspace, in kibibytes.
+        floor_kib: u64,
+    },
+    /// A process loaded the workspace and had no room to work in before the point at which it would
+    /// end: no process of the run could do more than load.
+    NoRoom {
+        /// What the machine saw of the process once the workspace was loaded, in kibibytes.
+        floor_kib: u64,
+        /// The memory at which a process ends, in kibibytes.
+        line_kib: u64,
+    },
     /// A process was stopped by the memory budget, at this much resident and held memory.
     Stopped {
         /// What the machine saw of the process, in kibibytes.
@@ -73,6 +92,18 @@ impl Progress {
                 resident_kib,
                 held_kib,
             } => format!("stopped {resident_kib} {held_kib}"),
+            Self::NoRoom {
+                floor_kib,
+                line_kib,
+            } => format!("noroom {floor_kib} {line_kib}"),
+            Self::Working {
+                results,
+                remaining,
+                floor_kib,
+            } => format!(
+                "working {results} {} {floor_kib}",
+                remaining.map_or_else(|| "-".to_owned(), |items| items.to_string())
+            ),
         }
     }
 
@@ -80,6 +111,24 @@ impl Progress {
         let (kind, rest) = text.trim().split_once(' ')?;
         match kind {
             "results" => Some(Self::Results(rest.parse().ok()?)),
+            "working" => {
+                let mut parts = rest.split(' ');
+                let results = parts.next()?.parse().ok()?;
+                let remaining = parts.next()?;
+                let floor_kib = parts.next()?.parse().ok()?;
+                Some(Self::Working {
+                    results,
+                    remaining: remaining.parse().ok(),
+                    floor_kib,
+                })
+            }
+            "noroom" => {
+                let (floor, line) = rest.split_once(' ')?;
+                Some(Self::NoRoom {
+                    floor_kib: floor.parse().ok()?,
+                    line_kib: line.parse().ok()?,
+                })
+            }
             "stopped" => {
                 let (resident, held) = rest.split_once(' ')?;
                 Some(Self::Stopped {
@@ -113,13 +162,44 @@ pub fn stalled_results(history: &[u64]) -> bool {
     stalls >= STALLS_ALLOWED
 }
 
+/// The most processes that a run may be projected to still need before it is stopped for going too
+/// slowly: each loads the workspace, so a run that would take more is not one that this budget lets
+/// finish in a time anyone would wait for.
+pub const MOST_PROJECTED_PROCESSES: u64 = 10;
+
+/// How many more processes the run needs at the rate the last ones went at, from what the processes
+/// that ended reported: the items left of the pass, over what each process got through. `None` when
+/// there are not three yet to tell the rate from, when what is left is not known, or when they got
+/// through nothing (which [`stalled_results`] is for).
+#[must_use]
+pub fn projected_processes(history: &[Progress]) -> Option<u64> {
+    let working: Vec<(u64, u64)> = history
+        .iter()
+        .filter_map(|progress| match progress {
+            Progress::Working {
+                results,
+                remaining: Some(remaining),
+                ..
+            } => Some((*results, *remaining)),
+            _ => None,
+        })
+        .collect();
+    if working.len() < 3 {
+        return None;
+    }
+    let (first, last) = (working[0], working[working.len() - 1]);
+    let steps = u64::try_from(working.len() - 1).ok()?;
+    let rate = last.0.saturating_sub(first.0) / steps;
+    (rate > 0).then(|| last.1.div_ceil(rate))
+}
+
 /// Whether the run is stuck, by what each process reported.
 fn stuck(history: &[Progress]) -> bool {
     let results: Vec<u64> = history
         .iter()
         .filter_map(|progress| match progress {
-            Progress::Results(count) => Some(*count),
-            Progress::Stopped { .. } => None,
+            Progress::Results(count) | Progress::Working { results: count, .. } => Some(*count),
+            Progress::Stopped { .. } | Progress::NoRoom { .. } => None,
         })
         .collect();
     stalled_results(&results)
@@ -200,6 +280,29 @@ pub fn drive(
                         );
                         return Ok(MEMORY_STUCK_EXIT);
                     }
+                    if let Some(more) = projected_processes(&history)
+                        && more > MOST_PROJECTED_PROCESSES
+                    {
+                        let floor_kib = history
+                            .iter()
+                            .rev()
+                            .find_map(|progress| match progress {
+                                Progress::Working { floor_kib, .. } => Some(*floor_kib),
+                                _ => None,
+                            })
+                            .unwrap_or(0);
+                        let needed = crate::budget_with_room(floor_kib) >> 20;
+                        let _ = std::io::Write::write_all(
+                            &mut crate::host::stderr(),
+                            format!(
+                                "cordial: stopped: at the rate the last processes went at, the run needs about {more} more processes, each loading the workspace again ({} so far). The memory budget leaves too little room to work in: a process holds {} MB once the workspace is loaded. Raise --memory-target to at least {needed} MB, or run without --memory-isolation.\n",
+                                resumes + 1,
+                                floor_kib / 1024
+                            )
+                            .as_bytes(),
+                        );
+                        return Ok(MEMORY_STUCK_EXIT);
+                    }
                     resumes += 1;
                     let _ = std::io::Write::write_all(
                         &mut crate::host::stderr(),
@@ -208,6 +311,25 @@ pub fn drive(
                     );
                 }
                 Next::End(code) => {
+                    if code == MEMORY_STUCK_EXIT
+                        && let Some(Progress::NoRoom {
+                            floor_kib,
+                            line_kib,
+                        }) = std::fs::read_to_string(&progress)
+                            .ok()
+                            .and_then(|text| Progress::parse(&text))
+                    {
+                        let needed = crate::budget_with_room(floor_kib) >> 20;
+                        let _ = std::io::Write::write_all(
+                            &mut crate::host::stderr(),
+                            format!(
+                                "cordial: the memory budget is too small to analyse this workspace in processes: a process holds {} MB once the workspace is loaded, and ends at {} MB, so it would have almost no room to work in, and every process after it would end after a small piece of the work and load the workspace again. Raise --memory-target to at least {needed} MB (the processes then have room), or run without --memory-isolation.\n",
+                                floor_kib / 1024,
+                                line_kib / 1024
+                            )
+                            .as_bytes(),
+                        );
+                    }
                     if code == crate::MEMORY_LIMIT_EXIT
                         && let Some(Progress::Stopped {
                             resident_kib,
@@ -221,8 +343,9 @@ pub fn drive(
                         let kept = history
                             .iter()
                             .map(|progress| match progress {
-                                Progress::Results(count) => *count,
-                                Progress::Stopped { .. } => 0,
+                                Progress::Results(count)
+                                | Progress::Working { results: count, .. } => *count,
+                                Progress::Stopped { .. } | Progress::NoRoom { .. } => 0,
                             })
                             .max()
                             .unwrap_or(0);
