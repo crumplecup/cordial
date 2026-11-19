@@ -9,8 +9,8 @@ use clap::Parser;
 use cordial::{
     Backoff, Cli, DEFAULT_MEMORY_LIMIT, FIRST_GROWTH_KIB, FUTILE_KIB, MEMORY_LIMIT_EXIT,
     MemoryLimit, Pressure, WORKER_KIB, budget_of, exceeds, functions_within, judge, judge_level,
-    load_cordial_config, nearing, parse_limit, parse_meminfo, parse_size,
-    resolve_memory_limit_with, resolve_memory_target, workers_within,
+    load_cordial_config, nearing, over_budget, parse_limit, parse_meminfo, parse_size,
+    resolve_memory_limit_with, resolve_memory_target, workers_at, workers_within,
 };
 use miette::{IntoDiagnostic, Result};
 
@@ -319,24 +319,31 @@ fn the_ladder_works_to_a_target_below_the_limit_and_the_run_is_stopped_at_the_li
 }
 
 #[test]
-fn the_resident_stop_is_twice_the_limit_but_within_the_memory_there_was() {
-    let limit = resolve_memory_limit_with(None, None, Some(16 * GIB));
-    assert_eq!(limit.bytes(), 12 * GIB);
-    assert_eq!(
-        limit.resident_stop_bytes(),
-        16 * GIB / 10 * 9,
-        "not past the machine"
+fn a_run_is_over_its_budget_when_what_it_holds_or_what_the_machine_sees_of_it_is() {
+    let limit = 2 * GIB;
+    let kib = |bytes: u64| bytes / 1024;
+    assert!(!over_budget(kib(GIB), kib(GIB), limit), "under both");
+    assert!(
+        over_budget(kib(3 * GIB), kib(GIB), limit),
+        "holding too much"
     );
-    let small = resolve_memory_limit_with(Some(MemoryLimit::Bytes(2 * GIB)), None, Some(16 * GIB));
-    assert_eq!(small.resident_stop_bytes(), 4 * GIB, "twice a small limit");
-    let unknown = resolve_memory_limit_with(Some(MemoryLimit::Bytes(2 * GIB)), None, None);
-    assert_eq!(
-        unknown.resident_stop_bytes(),
-        4 * GIB,
-        "twice when the memory is not known"
+    assert!(
+        over_budget(kib(GIB / 4), kib(3 * GIB), limit),
+        "holding little, but the allocator keeps what the machine sees: over"
     );
-    let big = resolve_memory_limit_with(Some(MemoryLimit::Bytes(20 * GIB)), None, Some(16 * GIB));
-    assert_eq!(big.resident_stop_bytes(), 20 * GIB, "never below the limit");
+    assert!(
+        !over_budget(kib(100 * GIB), kib(100 * GIB), 0),
+        "no limit is none"
+    );
+}
+
+#[test]
+fn the_rungs_allow_all_the_workers_then_a_quarter_then_one() {
+    assert_eq!(workers_at(16, cordial::Pressure::None), 16);
+    assert_eq!(workers_at(16, cordial::Pressure::Soft), 16);
+    assert_eq!(workers_at(16, cordial::Pressure::Hard), 4);
+    assert_eq!(workers_at(16, cordial::Pressure::Severe), 1);
+    assert_eq!(workers_at(2, cordial::Pressure::Hard), 1, "never none");
 }
 
 #[test]

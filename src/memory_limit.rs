@@ -170,10 +170,14 @@ impl Backoff {
     }
 }
 
-/// How many times the limit the resident memory may reach before the run is stopped whatever the
-/// program holds. The limit is on what the program holds (see [`meter_of`]); this is the backstop for
-/// the machine's memory, which an allocator that keeps what is freed can fill.
-pub const RESIDENT_BACKSTOP: u64 = 2;
+/// Whether the run is over its budget: what it holds is over the limit, or what the machine sees
+/// of it is. The resident memory is the one a person's machine runs out of, and an allocator that
+/// keeps what is freed can fill it while the program holds little, so it is the budget too: a run is
+/// not let to take more of the machine than it was given, whatever it holds. A limit of zero is none.
+#[must_use]
+pub fn over_budget(held_kib: u64, resident_kib: u64, limit_bytes: u64) -> bool {
+    exceeds(held_kib, limit_bytes) || exceeds(resident_kib, limit_bytes)
+}
 
 /// The memory the limit is judged by, in kibibytes: what the program holds, as the allocator counts
 /// it, which freeing lowers at once; the resident memory when nothing counts it.
@@ -186,6 +190,17 @@ pub fn meter_of(resident_kib: u64) -> u64 {
 #[must_use]
 pub fn meter_kib() -> Option<u64> {
     crate::process_memory::sample().map(|memory| meter_of(memory.resident_kib()))
+}
+
+/// How many workers run on the rung the run is on: all of them, then a quarter, then one. Every
+/// worker holds a tree, expansions and an inference at once, so fewer is less held at the peak.
+#[must_use]
+pub fn workers_at(available: usize, level: Pressure) -> usize {
+    match level {
+        Pressure::None | Pressure::Soft => available,
+        Pressure::Hard => (available / 4).max(1),
+        Pressure::Severe => 1,
+    }
 }
 
 /// What a function of the priming is taken to retain, in kibibytes, before anything of the run is
@@ -242,8 +257,6 @@ pub struct Budget {
     described: String,
     /// What the pressure ladder works to, when that is less than the limit (zero: the limit).
     target: u64,
-    /// The memory available when the run started (zero: not known).
-    available: u64,
 }
 
 impl Budget {
@@ -263,19 +276,6 @@ impl Budget {
         } else {
             self.target
         }
-    }
-
-    /// The resident memory at which the run is stopped whatever the program holds: an allocator
-    /// that keeps what is freed can fill the machine while the program holds little. Twice the
-    /// limit, but not more than nine tenths of the memory available when the run started, and not
-    /// less than the limit.
-    #[must_use]
-    pub fn resident_stop_bytes(&self) -> u64 {
-        let twice = self.bytes.saturating_mul(RESIDENT_BACKSTOP);
-        if self.available == 0 {
-            return twice;
-        }
-        twice.min(self.available / 10 * 9).max(self.bytes)
     }
 
     /// This budget with the ladder working to `target` (see [`Budget::ladder_bytes`]); a target
@@ -352,13 +352,11 @@ pub fn budget_of(limit: MemoryLimit, available: Option<u64>) -> Budget {
             bytes: 0,
             described: "no limit".to_owned(),
             target: 0,
-            available: available.unwrap_or(0),
         },
         MemoryLimit::Bytes(bytes) => Budget {
             bytes,
             described: gibibytes(bytes),
             target: 0,
-            available: available.unwrap_or(0),
         },
         MemoryLimit::Percent(percent) => match available {
             #[expect(
@@ -377,7 +375,6 @@ pub fn budget_of(limit: MemoryLimit, available: Option<u64>) -> Budget {
                         gibibytes(available)
                     ),
                     target: 0,
-                    available,
                 }
             }
             None => Budget {
@@ -387,7 +384,6 @@ pub fn budget_of(limit: MemoryLimit, available: Option<u64>) -> Budget {
                     gibibytes(FALLBACK_BYTES)
                 ),
                 target: 0,
-                available: 0,
             },
         },
     }
@@ -568,6 +564,9 @@ fn watch(budget: &Budget) {
         );
         if rung as u8 != LEVEL.load(Ordering::Relaxed) {
             LEVEL.store(rung as u8, Ordering::Relaxed);
+            // The workers of a round that is running are narrowed (or widened) now, at the next item
+            // each starts, and not when the next round begins.
+            crate::allow_workers(workers_at(crate::pool_size(), rung));
             tracing::info!(
                 target: "cordial::eviction",
                 rung = rung as u8,
@@ -590,9 +589,7 @@ fn watch(budget: &Budget) {
                 "the run's memory pressure changed"
             );
         }
-        if exceeds(held, budget.bytes)
-            || exceeds(memory.resident_kib(), budget.resident_stop_bytes())
-        {
+        if over_budget(held, memory.resident_kib(), budget.bytes) {
             stop(held, memory.resident_kib(), budget);
         }
     }
