@@ -222,6 +222,12 @@ fn load_database(
     };
     let (mut db, mut vfs, restored) = match saved.map(SavedState::restore) {
         Some(Ok(restored)) => {
+            tracing::info!(
+                target: "cordial::cache",
+                paths = restored.paths.len(),
+                contexts = restored.contexts.len(),
+                "the saved analysis state was restored"
+            );
             crate::host::event(
                 "analysis state: restored from the last run; the workspace is loaded onto it"
                     .to_owned(),
@@ -246,6 +252,24 @@ fn load_database(
             (database, vfs, Some(restored.contexts))
         }
         Some(Err(reason)) => {
+            tracing::warn!(
+                target: "cordial::cache",
+                reason = %reason,
+                "the saved analysis state was not used: the workspace is loaded cold"
+            );
+            if crate::taken_up_again() {
+                // Starting over would do what the process before did, and be taken up again: a
+                // cycle. Said, and stopped.
+                let _ = std::io::Write::write_all(
+                    &mut crate::host::stderr(),
+                    format!(
+                        "cordial: stopped: this process was to take a run up again and could not \
+                         use the state saved for it ({reason}).\n"
+                    )
+                    .as_bytes(),
+                );
+                std::process::exit(crate::MEMORY_STUCK_EXIT);
+            }
             crate::host::event(format!("analysis state: not used ({reason}); loading cold"));
             (RootDatabase::new(None), ra_ap_vfs::Vfs::default(), None)
         }

@@ -268,6 +268,9 @@ impl SourceDatabase {
         }
         self.saved_once = false;
         self.save_state();
+        if let Some(saved) = &self.saved {
+            crate::report_progress(saved.bytes_on_disk());
+        }
         tracing::info!(
             target: "cordial::eviction",
             resident_kib = crate::memory_sample().map_or(0, |memory| memory.resident_kib()),

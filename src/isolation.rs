@@ -27,6 +27,47 @@ pub fn taken_up_again() -> bool {
         .is_some_and(|resumes| resumes > 0)
 }
 
+/// The exit status of a run that stopped because taking it up again was getting it nowhere: the
+/// states the processes saved did not grow, or a process could not restore the state it was to take
+/// up. Another process would do the same.
+pub const MEMORY_STUCK_EXIT: i32 = 77;
+
+/// Set by the driver to a file that a process which saves its state to be taken up again writes the
+/// size of the state to, so that the driver can tell whether the run is getting further.
+pub const PROGRESS_VARIABLE: &str = "CORDIAL_RESUME_PROGRESS";
+
+/// How many processes in a row may save a state that has not grown before the run is stopped.
+pub const STALLS_ALLOWED: usize = 2;
+
+/// How much a state has to grow over the one before to be progress: one part in twenty thousand, and
+/// at least a kibibyte. The state is dominated by what every run has (the standard library's
+/// analysis is most of a small workspace's), so what a process adds is a small share of it; a
+/// process that did the same work again adds nothing.
+fn progress_over(before: u64) -> u64 {
+    (before / 20_000).max(1024)
+}
+
+/// Whether the run is stuck: the last [`STALLS_ALLOWED`] states grew by less than [`progress_over`]
+/// the one before. `history` has the size of the state each process saved, in order.
+/// A process that restores what the last saved and does the same work again saves the same state, so
+/// a run that takes up again and again without getting further is seen after a few of them.
+#[must_use]
+pub fn stalled(history: &[u64]) -> bool {
+    let stalls = history
+        .windows(2)
+        .rev()
+        .take_while(|pair| pair[1] <= pair[0].saturating_add(progress_over(pair[0])))
+        .count();
+    stalls >= STALLS_ALLOWED
+}
+
+/// Say, to the driver that will take the run up again, how big the state just saved is.
+pub fn report_progress(state_bytes: u64) {
+    if let Some(path) = std::env::var_os(PROGRESS_VARIABLE) {
+        let _ = std::fs::write(path, state_bytes.to_string());
+    }
+}
+
 /// The most times a run is taken up again: a run that has still not finished after this many is
 /// not one that more processes will finish.
 pub const MOST_RESUMES: usize = 500;
@@ -64,12 +105,35 @@ pub fn drive(program: &std::path::Path, arguments: &[OsString]) -> std::io::Resu
     let Some(runtime) = crate::worker_pool::runtime() else {
         return Err(std::io::Error::other("no runtime to drive the run on"));
     };
-    runtime.block_on(async {
+    let progress = std::env::temp_dir().join(format!("cordial-resume-{}", std::process::id()));
+    let outcome = runtime.block_on(async {
         let mut resumes = 0;
+        let mut history: Vec<u64> = Vec::new();
         loop {
-            let status = child(program, arguments, resumes).await?;
+            let status = child(program, arguments, resumes, &progress).await?;
             match next_after(status.code(), resumes) {
                 Next::Resume => {
+                    if let Some(bytes) = std::fs::read_to_string(&progress)
+                        .ok()
+                        .and_then(|text| text.trim().parse().ok())
+                    {
+                        history.push(bytes);
+                    }
+                    if stalled(&history) {
+                        let _ = std::io::Write::write_all(
+                            &mut crate::host::stderr(),
+                            format!(
+                                "cordial: stopped: {} processes in a row saved a state that had not \
+                                 grown (sizes in bytes, latest last: {:?}). The memory budget leaves \
+                                 too little room to get further on this workspace: raise \
+                                 --memory-target or --memory-limit.\n",
+                                STALLS_ALLOWED + 1,
+                                history.iter().rev().take(STALLS_ALLOWED + 1).rev().collect::<Vec<_>>()
+                            )
+                            .as_bytes(),
+                        );
+                        return Ok(MEMORY_STUCK_EXIT);
+                    }
                     resumes += 1;
                     let _ = std::io::Write::write_all(
                         &mut crate::host::stderr(),
@@ -77,10 +141,20 @@ pub fn drive(program: &std::path::Path, arguments: &[OsString]) -> std::io::Resu
                             .as_bytes(),
                     );
                 }
-                Next::End(code) => return Ok(code),
+                Next::End(code) => {
+                    if code == 1 && resumes >= MOST_RESUMES {
+                        let _ = std::io::Write::write_all(
+                            &mut crate::host::stderr(),
+                            format!("cordial: stopped: the run was taken up again {resumes} times and has still not finished.\n").as_bytes(),
+                        );
+                    }
+                    return Ok(code);
+                }
             }
         }
-    })
+    });
+    let _ = std::fs::remove_file(&progress);
+    outcome
 }
 
 /// One child, awaited.
@@ -88,11 +162,13 @@ async fn child(
     program: &std::path::Path,
     arguments: &[OsString],
     resumes: usize,
+    progress: &std::path::Path,
 ) -> std::io::Result<ExitStatus> {
     tokio::process::Command::new(program)
         .args(arguments)
         .env(RESUMABLE_VARIABLE, "1")
         .env(RESUMES_VARIABLE, resumes.to_string())
+        .env(PROGRESS_VARIABLE, progress)
         .kill_on_drop(true)
         .spawn()?
         .wait()

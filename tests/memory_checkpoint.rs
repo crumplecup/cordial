@@ -2,8 +2,8 @@
 //! a status that says so, and the runs that take it up give what one run would have.
 
 use cordial::{
-    CHECKPOINT_AFTER_CHUNKS_VARIABLE, MEMORY_LIMIT_EXIT, MEMORY_RESUME_EXIT, MOST_RESUMES, Next,
-    RESUMABLE_VARIABLE, next_after,
+    CHECKPOINT_AFTER_CHUNKS_VARIABLE, MEMORY_LIMIT_EXIT, MEMORY_RESUME_EXIT, MEMORY_STUCK_EXIT,
+    MOST_RESUMES, Next, RESUMABLE_VARIABLE, RESUMES_VARIABLE, next_after, stalled,
 };
 use miette::{IntoDiagnostic, Result};
 use std::path::Path;
@@ -142,5 +142,67 @@ fn the_driver_runs_the_children_and_ends_with_what_one_run_gives() -> Result<()>
         "the driver started a new process several times: {restarts}\n{said}"
     );
     assert_eq!(printed, whole, "and the result is the one run's");
+    Ok(())
+}
+
+#[test]
+fn a_run_taken_up_again_without_getting_further_is_seen_to_be_stuck() {
+    const BASE: u64 = 100_000_000;
+    assert!(!stalled(&[]), "nothing yet");
+    assert!(!stalled(&[BASE]), "one state is no cycle");
+    assert!(!stalled(&[BASE, BASE]), "one that did not grow is not yet");
+    assert!(
+        stalled(&[BASE, BASE, BASE]),
+        "two in a row that did not grow is"
+    );
+    assert!(
+        stalled(&[BASE, BASE + 300, BASE + 100]),
+        "a few hundred bytes of noise is not growth"
+    );
+    // What a run that is getting further added, in a state that is mostly what every run has.
+    assert!(
+        !stalled(&[102_000_303, 102_017_623, 102_048_630]),
+        "tens of kilobytes on a hundred megabytes is progress"
+    );
+    assert!(
+        !stalled(&[BASE, 2 * BASE, 4 * BASE]),
+        "growing is getting further"
+    );
+    assert!(
+        !stalled(&[BASE, BASE, BASE + 50_000]),
+        "and growth ends the run of stalls"
+    );
+    assert!(
+        stalled(&[BASE, BASE + 50_000, BASE + 50_000, BASE + 50_100]),
+        "stalls after growth count from where they began"
+    );
+}
+
+#[test]
+fn a_process_to_take_a_run_up_that_has_no_state_to_use_stops_and_says_so() -> Result<()> {
+    let scratch = tempfile::tempdir().into_diagnostic()?;
+    let project = scratch.path().join("ckpt");
+    write_crate(&project)?;
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_cordial"))
+        .arg("--project")
+        .arg(&project)
+        .arg("--store-home")
+        .arg(scratch.path().join("empty"))
+        .arg("open")
+        .env("CORDIAL_NO_PROGRESS", "1")
+        .env(RESUMABLE_VARIABLE, "1")
+        .env(RESUMES_VARIABLE, "1")
+        .output()
+        .into_diagnostic()?;
+    let said = String::from_utf8_lossy(&output.stderr).into_owned();
+    assert_eq!(
+        output.status.code(),
+        Some(MEMORY_STUCK_EXIT),
+        "it stops: {said}"
+    );
+    assert!(
+        said.contains("could not use the state saved for it"),
+        "and says why: {said}"
+    );
     Ok(())
 }
