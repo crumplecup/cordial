@@ -333,5 +333,18 @@ fn on_the_last_rung_the_priming_has_one_worker_and_takes_one_function_at_a_time_
         chunks.rounds,
         chunks.parts
     );
+    // The chunks ran on the pool's threads, which are still there and not more than the pool has:
+    // a thread for every chunk would have left none, or as many as there were chunks.
+    let pool_threads = std::fs::read_dir("/proc/self/task")
+        .into_diagnostic()?
+        .filter_map(|task| std::fs::read_to_string(task.ok()?.path().join("comm")).ok())
+        .filter(|name| name.trim() == "cordial-prime")
+        .count();
+    assert!(
+        pool_threads >= 1 && pool_threads <= cordial::pool_size() + 1,
+        "{} chunks ran on {pool_threads} threads of the pool, which has {}",
+        chunks.parts,
+        cordial::pool_size()
+    );
     Ok(())
 }

@@ -13,12 +13,8 @@ use super::queries::SemanticDatabase;
 use super::{SourceDatabase, queries};
 use ra_ap_hir::{AssocItem, Crate, Function, ModuleDef, attach_db};
 use ra_ap_ide_db::RootDatabase;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 use tracing::instrument;
-
-/// Stack for a worker: inferring a body recurses deeply, and a spawned thread's
-/// default stack is far smaller than the main thread's.
-const WORKER_STACK_BYTES: usize = 64 * 1024 * 1024;
 
 impl SourceDatabase {
     /// Evaluate the evidence of every function in the workspace's own crates,
@@ -93,14 +89,16 @@ impl SourceDatabase {
     #[cfg(feature = "tracing")]
     #[instrument(level = "debug", skip(self, functions, one))]
     #[hotpath::measure(impl_type = "SourceDatabase")]
-    pub(in crate::loader::database) fn prime<T: Sync>(
+    pub(in crate::loader::database) fn prime<T: Clone + Send + Sync + 'static>(
         &self,
         label: &str,
         functions: &[T],
-        one: impl Fn(&RootDatabase, &T) + Sync,
+        one: impl Fn(&RootDatabase, &T) + Send + Sync + 'static,
     ) {
         let before = queries::evidence_executed();
-        self.prime_part(functions, &one, false);
+        let items: Arc<[T]> = functions.to_vec().into();
+        let one: Work<T> = Arc::new(one);
+        self.prime_round(&items, 0..items.len(), &one, false);
         self.say_primed(label, before, functions.len());
     }
 
@@ -109,43 +107,45 @@ impl SourceDatabase {
     /// so a pass that never stops keeps every syntax tree it makes until it is over.
     #[instrument(level = "debug", skip(self, functions, one))]
     #[hotpath::measure(impl_type = "SourceDatabase")]
-    pub(in crate::loader::database) fn prime_in_chunks<T: Sync>(
+    pub(in crate::loader::database) fn prime_in_chunks<T: Clone + Send + Sync + 'static>(
         &mut self,
         label: &str,
         functions: &[T],
-        one: impl Fn(&RootDatabase, &T) + Sync,
+        one: impl Fn(&RootDatabase, &T) + Send + Sync + 'static,
     ) {
         let before = queries::evidence_executed();
-        self.run_in_chunks(label, functions, &one);
+        self.run_in_chunks(label, functions, one);
         self.say_primed(label, before, functions.len());
     }
 
     /// Run `one` over `items` on worker threads in chunks, evicting between the chunks if asked to.
-    pub(in crate::loader::database) fn run_in_chunks<T: Sync>(
+    pub(in crate::loader::database) fn run_in_chunks<T: Clone + Send + Sync + 'static>(
         &mut self,
         label: &str,
         items: &[T],
-        one: &(impl Fn(&RootDatabase, &T) + Sync),
+        one: impl Fn(&RootDatabase, &T) + Send + Sync + 'static,
     ) {
+        let items: Arc<[T]> = items.to_vec().into();
+        let one: Work<T> = Arc::new(one);
         let usual = chunk_size(items.len());
         let mut size = usual;
-        let mut rest = items;
+        let mut at = 0;
         let mut index = 0;
         // What a function of this pass has retained, as the last chunk showed.
         let mut growth = crate::FIRST_GROWTH_KIB;
-        while !rest.is_empty() {
-            // The ladder acts between chunks, so a chunk is as long as what the headroom allows at the
-            // growth seen: a chunk that grows past it cannot be stopped.
+        while at < items.len() {
+            // The ladder acts between chunks, so a chunk is as long as what the headroom allows at
+            // the growth seen: a chunk that grows past it cannot be stopped.
             let taken = crate::memory_limit::headroom_kib().map_or(size, |headroom| {
                 size.min(crate::functions_within(headroom, growth, size))
             });
-            let (part, _) = rest.split_at(taken.min(rest.len()));
+            let end = (at + taken).min(items.len());
             index += 1;
             let held_before = crate::memory_limit::meter_kib();
             // Under pressure the workers stop early and the rest of the chunk waits for the next.
-            let done = match self.prime_part(part, one, true) {
+            let done = match self.prime_round(&items, at..end, &one, true) {
                 // No worker started: the projection evaluates what was not, as it says it will.
-                0 => part.len(),
+                0 => end - at,
                 done => done,
             };
             if let (Some(before), Some(after)) = (held_before, crate::memory_limit::meter_kib()) {
@@ -159,12 +159,12 @@ impl SourceDatabase {
                 target: "cordial::prime",
                 label,
                 chunk = index,
-                files = part.len(),
+                files = end - at,
                 done,
-                remaining = rest.len() - done,
+                remaining = items.len() - at - done,
                 "priming a chunk"
             );
-            rest = &rest[done..];
+            at += done;
             size = if self.evict_between_chunks() {
                 (size / 2).max(least_at(crate::memory_limit::pressure()))
             } else {
@@ -181,76 +181,60 @@ impl SourceDatabase {
         ));
     }
 
-    /// Run `one` over `functions` on worker threads, each once, and wait for them. Returns how
-    /// many it ran. All of them, unless `may_stop` and the run is under memory pressure, when the
-    /// workers take no new function once [`LEAST_UNDER_PRESSURE`] are taken, so that the caller can
-    /// evict before the rest.
-    fn prime_part<T: Sync>(
+    /// Run `one` over `items[range]` on the pool, each once, and wait for it. Returns how many it
+    /// ran. All of them, unless `may_stop` and the run is under memory pressure, when the workers
+    /// take no new function once [`LEAST_UNDER_PRESSURE`] are taken, so that the caller can evict
+    /// before the rest.
+    ///
+    /// How many workers take part is what fits below the second rung, decided before the round
+    /// starts: reacting when the rungs are crossed is too late, with every worker already in the
+    /// middle of a function. Each carries its own handle onto the database and drops it when the
+    /// round is over, so that the caller can take the database exclusively between rounds.
+    fn prime_round<T: Send + Sync + 'static>(
         &self,
-        functions: &[T],
-        one: &(impl Fn(&RootDatabase, &T) + Sync),
+        items: &Arc<[T]>,
+        range: std::ops::Range<usize>,
+        one: &Work<T>,
         may_stop: bool,
     ) -> usize {
-        let available = std::thread::available_parallelism().map_or(1, usize::from);
-        // The pool is sized before the chunk starts, by what fits below the second rung: reacting
-        // when the rungs are crossed is too late, with every worker already in the middle of a
-        // function.
+        let available = crate::pool_size();
         let fitting = crate::memory_limit::headroom_kib().map_or(available, |headroom| {
             crate::workers_within(headroom, available)
         });
-        let workers = workers_at(available, crate::memory_limit::pressure())
+        let length = range.len();
+        let workers = crate::workers_at(available, crate::memory_limit::pressure())
             .min(fitting)
-            .min(functions.len().max(1));
+            .min(length.max(1));
         tracing::debug!(
             target: "cordial::semantic::priming",
-            functions = functions.len(),
+            functions = length,
             workers,
             "priming function evidence"
         );
-        let next = AtomicUsize::new(0);
-        // A subscriber set for this thread would not see the workers' events.
-        let dispatch = tracing::dispatcher::get_default(Clone::clone);
-        std::thread::scope(|scope| {
-            for index in 0..workers {
-                let db = self.db.clone();
-                let (functions, next, dispatch) = (functions, &next, dispatch.clone());
-                let spawned = std::thread::Builder::new()
-                    .name(format!("cordial-prime-{index}"))
-                    .stack_size(WORKER_STACK_BYTES)
-                    .spawn_scoped(scope, move || {
-                        tracing::dispatcher::with_default(&dispatch, || {
-                            let ran =
-                                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                                    evaluate(&db, functions, next, one, may_stop);
-                                }));
-                            if let Err(payload) = ran {
-                                // A panic that carries a message says what went wrong, which the
-                                // `scoped thread panicked` that follows in the thread that waits
-                                // does not; Salsa's own unwinding (a cancellation) carries none.
-                                let message = payload
-                                    .downcast_ref::<String>()
-                                    .map(String::as_str)
-                                    .or_else(|| payload.downcast_ref::<&str>().copied());
-                                tracing::error!(
-                                    target: "cordial::prime",
-                                    worker = index,
-                                    message = message.unwrap_or("(an unwind with no message)"),
-                                    "a priming worker panicked"
-                                );
-                                std::panic::resume_unwind(payload);
-                            }
-                        });
-                    });
-                if let Err(error) = spawned {
-                    // The functions this worker would have taken are evaluated
-                    // by the projection instead.
-                    tracing::warn!(error = ?error, "could not start a priming worker");
-                }
-            }
-        });
-        next.load(Ordering::Relaxed).min(functions.len())
+        // The gate says how many items run at once: what fits now, and the ladder narrows or widens
+        // it while the round runs. Every item that runs is lent a handle onto the database, which
+        // is dropped with the round, so that the caller can take the database exclusively after.
+        crate::allow_workers(workers);
+        let handles: Vec<RootDatabase> = (0..available.min(length.max(1)))
+            .map(|_| self.db.clone())
+            .collect();
+        let one = Arc::clone(one);
+        crate::run_items(
+            items,
+            range,
+            handles,
+            move |db, item| prime_item(db, item, &*one),
+            move |taken| {
+                may_stop
+                    && taken >= least_at(crate::memory_limit::pressure())
+                    && crate::memory_limit::pressured()
+            },
+        )
     }
 }
+
+/// What a worker runs for each item.
+type Work<T> = Arc<dyn Fn(&RootDatabase, &T) + Send + Sync>;
 
 /// The fewest functions a chunk holds when the process is nearing its memory limit.
 const LEAST_UNDER_PRESSURE: usize = 8;
@@ -267,14 +251,12 @@ fn least_at(level: crate::Pressure) -> usize {
     }
 }
 
-/// How many workers run on the rung the run is on: all of them, then a quarter, then one. Every
-/// worker holds a tree, expansions and an inference at once, so fewer is less held at the peak.
-fn workers_at(available: usize, level: crate::Pressure) -> usize {
-    match level {
-        crate::Pressure::None | crate::Pressure::Soft => available,
-        crate::Pressure::Hard => (available / 4).max(1),
-        crate::Pressure::Severe => 1,
-    }
+/// Run `one` on an item with the database attached. A span of its own, named `evaluate` as the
+/// workers' loop was, so that the queries it executes are told apart from those of the steps that
+/// ask for the priming.
+#[instrument(level = "debug", name = "evaluate", skip_all)]
+fn prime_item<T>(db: &RootDatabase, item: &T, one: &(dyn Fn(&RootDatabase, &T) + Send + Sync)) {
+    attach_db(db, || one(db, item));
 }
 
 /// How many functions go between two evictions: enough that the workers' start-up is nothing
@@ -283,33 +265,6 @@ fn chunk_size(functions: usize) -> usize {
     const CHUNKS: usize = 16;
     const LEAST: usize = 64;
     functions.div_ceil(CHUNKS).max(LEAST)
-}
-
-/// Take functions from the shared counter until none are left, or, if `may_stop`, until the run
-/// is under memory pressure and [`LEAST_UNDER_PRESSURE`] have been taken.
-#[instrument(level = "debug", skip(db, functions, next, one))]
-#[hotpath::measure]
-fn evaluate<T>(
-    db: &RootDatabase,
-    functions: &[T],
-    next: &AtomicUsize,
-    one: &impl Fn(&RootDatabase, &T),
-    may_stop: bool,
-) {
-    attach_db(db, || {
-        loop {
-            if may_stop
-                && next.load(Ordering::Relaxed) >= least_at(crate::memory_limit::pressure())
-                && crate::memory_limit::pressured()
-            {
-                break;
-            }
-            let Some(function) = functions.get(next.fetch_add(1, Ordering::Relaxed)) else {
-                break;
-            };
-            one(db, function);
-        }
-    });
 }
 
 /// The functions declared in the workspace's own crates: free functions, trait

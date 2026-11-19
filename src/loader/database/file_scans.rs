@@ -23,7 +23,7 @@ use crate::CordialResult;
 
 /// What is asked of one file: each field is whether a collector reads it, and where it needs the
 /// scan tree the file was found under.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 struct Visit {
     /// The collectors that share the extraction, and the compliance collector.
     scanned: bool,
@@ -125,7 +125,7 @@ impl SourceDatabase {
         let name = target.crate_name().to_owned();
         #[cfg(any(feature = "antipatterns", feature = "cli_layout"))]
         let crate_name = target.crate_name().to_owned();
-        self.run_in_chunks("file scans", &visits, &|db, (file, path, visit)| {
+        self.run_in_chunks("file scans", &visits, move |db, (file, path, visit)| {
             // The compiler does not see that a build with none of the features reads nothing here.
             let _ = (&root, db, file, path, visit);
             if visit.scanned {
