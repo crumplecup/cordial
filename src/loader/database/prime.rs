@@ -143,12 +143,15 @@ impl SourceDatabase {
         let Some(memory) = crate::memory_sample() else {
             return;
         };
-        // What the machine sees of the process does not fall when the program frees (the allocator
-        // keeps it, and gives it back to what the program allocates next), so the floor is what the
-        // program holds, and the allowance the allocator needs on top of it.
-        let floor = crate::memory_limit::meter_kib().map_or(memory.resident_kib(), |held| {
+        // What the machine sees of the process does not fall when the program frees: the allocator
+        // keeps it, and does not give it back to what the program allocates next as well as the
+        // program would hope. The line a process ends at is judged by what the machine sees, so the
+        // floor is no less than that, and no less than what the program holds with the allowance the
+        // allocator needs on top of it.
+        let held_with_allowance = crate::memory_limit::meter_kib().map_or(0, |held| {
             held.saturating_mul(100 + crate::memory_limit::ALLOCATOR_OVERHEAD_PERCENT) / 100
         });
+        let floor = memory.resident_kib().max(held_with_allowance);
         crate::memory_limit::note_floor(floor);
         if crate::no_room(floor, crate::memory_limit::ladder_bytes()) {
             tracing::info!(
