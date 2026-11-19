@@ -79,6 +79,12 @@ pub struct Cli {
     )]
     pub memory_target: Option<crate::MemoryLimit>,
 
+    /// Run in processes that are taken up again: the run saves its state and exits when its
+    /// resident memory nears the budget, and a new process restores it and goes on, so that the
+    /// memory an allocator kept goes back to the machine (default: off).
+    #[arg(long, env = "CORDIAL_MEMORY_ISOLATION", global = true)]
+    pub memory_isolation: bool,
+
     /// Nested clap subcommand.
     #[command(subcommand)]
     pub command: Commands,
@@ -89,6 +95,13 @@ impl Cli {
     #[instrument(level = "debug", skip(self), err(level = "warn"))]
     #[hotpath::measure]
     pub fn act(self) -> CordialResult<()> {
+        if self.memory_isolation && !crate::memory_limit::resumable() {
+            // The run is a child of this process, and this one ends with what the last ended with.
+            let program = std::env::current_exe()?;
+            let arguments: Vec<std::ffi::OsString> = std::env::args_os().skip(1).collect();
+            let code = crate::drive_resumable(&program, &arguments)?;
+            std::process::exit(code);
+        }
         let project_root = match &self.project {
             Some(path) => path.clone(),
             None => std::env::current_dir()?,

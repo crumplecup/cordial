@@ -47,10 +47,11 @@ pub fn pool_size() -> usize {
 
 static RUNTIME: OnceLock<Option<Runtime>> = OnceLock::new();
 
-fn runtime() -> Option<&'static Runtime> {
+pub(crate) fn runtime() -> Option<&'static Runtime> {
     RUNTIME
         .get_or_init(|| {
             let built = Builder::new_multi_thread()
+                .enable_io()
                 .worker_threads(1)
                 .max_blocking_threads(pool_size())
                 .thread_name("cordial-prime")

@@ -33,6 +33,7 @@ mod framework_std;
 mod hooks;
 pub mod host;
 mod ir;
+mod isolation;
 mod live_status;
 mod loader;
 mod memory_ledger;
@@ -398,6 +399,9 @@ pub use ir::{
 #[cfg(feature = "impl_coverage")]
 pub use ir::{
     build_wrapper_coverage_from_hub_ir, collect_trenchcoat_pairs_from_ir, wrapper_maps_equivalent,
+};
+pub use isolation::{
+    MOST_RESUMES, Next, RESUMES_VARIABLE, drive as drive_resumable, next_after, taken_up_again,
 };
 #[cfg(any(feature = "_quality_support", feature = "verus_ir"))]
 pub use loader::path_has_fixtures;

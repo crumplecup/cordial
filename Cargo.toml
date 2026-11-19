@@ -73,7 +73,7 @@ salsa = { version = "0.28.5", default-features = false, features = ["macros", "i
 anyhow = "1"
 redb = "4.6.0"
 cap = "0.1.2"
-tokio = { version = "1.54.1", default-features = false, features = ["rt-multi-thread", "sync"] }
+tokio = { version = "1.54.1", default-features = false, features = ["process", "rt-multi-thread", "sync"] }
 
 [features]
 default = ["full", "quick"]

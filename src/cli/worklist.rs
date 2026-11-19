@@ -132,7 +132,8 @@ pub(super) fn execute_open(ctx: &ActCtx, json: bool) -> CordialResult<()> {
         .map(|list| list.validity(&config))
         .transpose()?;
     if validity != Some(Validity::Current) {
-        if !json {
+        // A process that takes a run up again does not say again what the first said.
+        if !json && !crate::taken_up_again() {
             match (&existing, validity) {
                 (None, _) => writeln!(crate::host::stdout(), "No list yet. Building one now.")?,
                 (Some(list), Some(reason)) => {
