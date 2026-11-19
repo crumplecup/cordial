@@ -2,8 +2,9 @@
 //! a status that says so, and the runs that take it up give what one run would have.
 
 use cordial::{
-    CHECKPOINT_AFTER_CHUNKS_VARIABLE, MEMORY_LIMIT_EXIT, MEMORY_RESUME_EXIT, MEMORY_STUCK_EXIT,
-    MOST_RESUMES, Next, RESUMABLE_VARIABLE, RESUMES_VARIABLE, next_after, stalled, stalled_results,
+    CHECKPOINT_AFTER_CHUNKS_VARIABLE, CHECKPOINT_AFTER_STAGES_VARIABLE, MEMORY_LIMIT_EXIT,
+    MEMORY_RESUME_EXIT, MEMORY_STUCK_EXIT, MOST_RESUMES, Next, RESUMABLE_VARIABLE,
+    RESUMES_VARIABLE, next_after, stalled_results,
 };
 use miette::{IntoDiagnostic, Result};
 use std::path::Path;
@@ -15,7 +16,7 @@ fn write_crate(root: &Path) -> Result<()> {
     std::fs::create_dir_all(root.join("src")).into_diagnostic()?;
     std::fs::write(
         root.join("Cargo.toml"),
-        "[package]\nname='ckpt'\nversion='0.1.0'\nedition='2024'\n[workspace]\n",
+        "[package]\nname='ckpt'\nversion='0.1.0'\nedition='2024'\n[features]\nextra=[]\nmore=[]\n[workspace]\n",
     )
     .into_diagnostic()?;
     let library: String = (0..FUNCTIONS)
@@ -23,7 +24,20 @@ fn write_crate(root: &Path) -> Result<()> {
             format!("pub fn f{index}(x: Option<usize>) -> usize {{ x.unwrap() + {index} }}\n")
         })
         .collect();
-    std::fs::write(root.join("src/lib.rs"), library).into_diagnostic()
+    // What makes the run analyse more than the ordinary build: code that only exists under a
+    // feature or under test, so that there are cfg contexts to analyse.
+    let gated = "\n#[cfg(feature = \"extra\")]\npub fn extra_only(x: Option<usize>) -> usize { x.unwrap() }\n\
+                 #[cfg(feature = \"more\")]\npub fn more_only(x: Option<usize>) -> usize { x.unwrap() + 1 }\n\
+                 #[cfg(test)]\nmod tests {\n    #[test]\n    fn first() { assert_eq!(super::f0(Some(1)), 1); }\n}\n";
+    std::fs::write(root.join("src/lib.rs"), format!("{library}{gated}")).into_diagnostic()?;
+    // A file of integration tests, which the leaf passes read under the contexts their gates ask for.
+    std::fs::create_dir_all(root.join("tests")).into_diagnostic()?;
+    std::fs::write(
+        root.join("tests/integration.rs"),
+        "#[test]\nfn calls() { let _ = ckpt::f0(Some(1)); }\n\
+         #[cfg(feature = \"extra\")]\n#[test]\nfn gated() { let _ = ckpt::f1(Some(1)); }\n",
+    )
+    .into_diagnostic()
 }
 
 /// One process of `cordial open`: its exit code and what it printed.
@@ -46,42 +60,6 @@ fn open(project: &Path, store: &Path, resumable: Option<&str>) -> Result<(Option
         output.status.code(),
         String::from_utf8_lossy(&output.stdout).into_owned(),
     ))
-}
-
-#[test]
-fn a_run_that_is_taken_up_again_saves_and_exits_and_the_runs_that_follow_give_the_same_result()
--> Result<()> {
-    let scratch = tempfile::tempdir().into_diagnostic()?;
-    let project = scratch.path().join("ckpt");
-    write_crate(&project)?;
-
-    // What one run gives, with nothing to take up.
-    let (code, whole) = open(&project, &scratch.path().join("whole"), None)?;
-    assert_eq!(code, Some(0), "an ordinary run finishes: {whole}");
-
-    // The same project, a process that saves and exits after every chunk that computed anything,
-    // taken up again until one finishes.
-    let store = scratch.path().join("resumed");
-    let mut processes = 0;
-    let finished = loop {
-        processes += 1;
-        assert!(processes <= 40, "it does not get further");
-        let (code, printed) = open(&project, &store, Some("1"))?;
-        match code {
-            Some(MEMORY_RESUME_EXIT) => {}
-            Some(0) => break printed,
-            other => panic!("a process ended with {other:?}: {printed}"),
-        }
-    };
-    assert!(
-        processes >= 3,
-        "it took up the run again several times, not once: {processes} processes"
-    );
-    assert_eq!(
-        finished, whole,
-        "and gave what the run that was not interrupted gave"
-    );
-    Ok(())
 }
 
 #[test]
@@ -202,39 +180,6 @@ fn the_driver_runs_the_children_and_ends_with_what_one_run_gives() -> Result<()>
 }
 
 #[test]
-fn a_run_taken_up_again_without_getting_further_is_seen_to_be_stuck() {
-    const BASE: u64 = 100_000_000;
-    assert!(!stalled(&[]), "nothing yet");
-    assert!(!stalled(&[BASE]), "one state is no cycle");
-    assert!(!stalled(&[BASE, BASE]), "one that did not grow is not yet");
-    assert!(
-        stalled(&[BASE, BASE, BASE]),
-        "two in a row that did not grow is"
-    );
-    assert!(
-        stalled(&[BASE, BASE + 300, BASE + 100]),
-        "a few hundred bytes of noise is not growth"
-    );
-    // What a run that is getting further added, in a state that is mostly what every run has.
-    assert!(
-        !stalled(&[102_000_303, 102_017_623, 102_048_630]),
-        "tens of kilobytes on a hundred megabytes is progress"
-    );
-    assert!(
-        !stalled(&[BASE, 2 * BASE, 4 * BASE]),
-        "growing is getting further"
-    );
-    assert!(
-        !stalled(&[BASE, BASE, BASE + 50_000]),
-        "and growth ends the run of stalls"
-    );
-    assert!(
-        stalled(&[BASE, BASE + 50_000, BASE + 50_000, BASE + 50_100]),
-        "stalls after growth count from where they began"
-    );
-}
-
-#[test]
 fn a_process_to_take_a_run_up_that_has_no_state_to_use_stops_and_says_so() -> Result<()> {
     let scratch = tempfile::tempdir().into_diagnostic()?;
     let project = scratch.path().join("ckpt");
@@ -284,4 +229,100 @@ fn a_run_that_keeps_results_is_stuck_when_the_count_stops_growing() {
         !stalled_results(&[64, 64, 100]),
         "and growth ends the run of stalls"
     );
+}
+
+/// Every line of `text` with the terminal's colours taken out.
+fn plain_lines(text: &str) -> Vec<String> {
+    text.lines()
+        .map(|line| {
+            let mut kept = String::new();
+            let mut characters = line.chars();
+            while let Some(character) = characters.next() {
+                if character == '\u{1b}' {
+                    for skipped in characters.by_ref() {
+                        if skipped == 'm' {
+                            break;
+                        }
+                    }
+                } else {
+                    kept.push(character);
+                }
+            }
+            kept
+        })
+        .collect()
+}
+
+#[test]
+fn a_run_whose_processes_end_after_every_stage_gives_what_one_run_gives() -> Result<()> {
+    let scratch = tempfile::tempdir().into_diagnostic()?;
+    let project = scratch.path().join("ckpt");
+    write_crate(&project)?;
+    let (code, whole) = open(&project, &scratch.path().join("whole"), None)?;
+    assert_eq!(code, Some(0), "an ordinary run finishes: {whole}");
+
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_cordial"))
+        .arg("--project")
+        .arg(&project)
+        .arg("--store-home")
+        .arg(scratch.path().join("driven"))
+        .arg("--memory-isolation")
+        .arg("open")
+        .env("CORDIAL_NO_PROGRESS", "1")
+        .env(
+            "RUST_LOG",
+            "warn,cordial::results=info,cordial::semantic::contexts=info,cordial::semantic::leaves=info",
+        )
+        .env(CHECKPOINT_AFTER_STAGES_VARIABLE, "1")
+        .output()
+        .into_diagnostic()?;
+    let printed = String::from_utf8_lossy(&output.stdout).into_owned();
+    let said = plain_lines(&String::from_utf8_lossy(&output.stderr));
+    assert_eq!(output.status.code(), Some(0), "the run finishes: {said:#?}");
+    assert_eq!(printed, whole, "and gives the result one run gives");
+
+    let kept: Vec<&String> = said
+        .iter()
+        .filter(|line| line.contains("a stage is done and kept in the store"))
+        .collect();
+    assert!(
+        kept.iter().any(|line| line.contains("unit=\"ordinary\"")),
+        "the ordinary part was kept: {kept:#?}"
+    );
+    assert!(
+        kept.iter().any(|line| line.contains("unit=\"context-")),
+        "and at least one cfg context: {kept:#?}"
+    );
+    for unit in ["contexts", "tracing-inventories", "leaves"] {
+        assert!(
+            kept.iter()
+                .any(|line| line.contains(&format!("unit=\"{unit}\""))),
+            "{unit} was kept: {kept:#?}"
+        );
+    }
+    assert!(
+        said.iter()
+            .any(|line| line.contains("progress is kept in the store")
+                && line.contains("unit=\"leaf-context-")),
+        "and at least one leaf context: {said:#?}"
+    );
+    assert!(
+        said.iter()
+            .any(|line| line.contains("the leaf contexts are taken up from an earlier process")),
+        "a process went on with the leaf contexts an earlier one read: {said:#?}"
+    );
+    let taken_up: Vec<&String> = said
+        .iter()
+        .filter(|line| line.contains("taken up from an earlier process"))
+        .collect();
+    assert!(
+        taken_up.len() >= 2,
+        "later processes took the stages up, and the contexts: {taken_up:#?}"
+    );
+    assert!(
+        said.iter()
+            .any(|line| line.contains("the cfg contexts are taken up from an earlier process")),
+        "a process went on with the contexts an earlier one analysed: {said:#?}"
+    );
+    Ok(())
 }

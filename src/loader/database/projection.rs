@@ -5,6 +5,7 @@ mod antipatterns;
 #[cfg(feature = "cli_layout")]
 mod cli_layout;
 mod declarations;
+mod stages;
 #[cfg(any(
     feature = "allows",
     feature = "cfg_hygiene",
@@ -81,64 +82,80 @@ impl SourceDatabase {
             self.warm_persisted_dependencies(paths);
             self.warm_fingerprint();
         }
-        #[cfg(feature = "cfg_hygiene")]
-        let declarations = {
-            let workspace_root = self
-                .workspace_root
-                .clone()
-                .unwrap_or_else(|| target.crate_root().clone());
-            let mut inventory = crate::ir::SourcePolicyInventory::default();
-            inventory.collect_declarations(target.crate_root(), &workspace_root, |path| {
-                self.input_text(path)
+        // A process that takes up a run an earlier one began finds, in the run's store, the graph and
+        // the outline the ordinary part made, and goes on from there.
+        let taken_up = self.take_up_stage()?;
+        let (mut graph, outline) = if let Some(stages) = taken_up {
+            stages
+        } else {
+            #[cfg(feature = "cfg_hygiene")]
+            let declarations = {
+                let workspace_root = self
+                    .workspace_root
+                    .clone()
+                    .unwrap_or_else(|| target.crate_root().clone());
+                let mut inventory = crate::ir::SourcePolicyInventory::default();
+                inventory.collect_declarations(target.crate_root(), &workspace_root, |path| {
+                    self.input_text(path)
+                })?;
+                inventory
+            };
+            // A process that did the work of the evidence may end once it is in the store.
+            if self.prime_function_evidence() {
+                self.evidence_done();
+            }
+            self.audit_reused_evidence();
+            self.itemize_memory("evidence");
+            self.evict_regenerable("evidence");
+            #[cfg(any(
+                feature = "error_sites",
+                feature = "error_chain",
+                feature = "internal_error_chain",
+                feature = "tracing",
+                feature = "verus_ir",
+                feature = "visibility",
+                feature = "allows",
+                feature = "cfg_hygiene",
+                feature = "cfg_scatter",
+                feature = "glob_imports",
+                feature = "inline_tests",
+                feature = "modularity",
+                feature = "pageantry",
+                feature = "derives",
+                feature = "cli_layout"
+            ))]
+            self.prime_file_scans(target)?;
+            let ordinary_watch =
+                crate::process_memory::Watch::start("ordinary projection".to_owned());
+            let (mut graph, outline) = attach_db(&self.db, || {
+                self.project_attached(
+                    target,
+                    paths,
+                    policy_paths,
+                    #[cfg(feature = "cfg_hygiene")]
+                    declarations,
+                )
             })?;
-            inventory
+            drop(ordinary_watch);
+            crate::process_memory::log("ordinary projection done");
+            self.evict_regenerable("ordinary projection");
+            if crate::memory_limit::pressured() {
+                // What the steps read of the graph's bulk attributes goes back to bytes.
+                let dropped = graph.drop_decoded_attrs();
+                tracing::info!(
+                    target: "cordial::eviction",
+                    step = "ordinary projection",
+                    dropped_decoded = dropped,
+                    "the graph's bulk attributes that were read are bytes again"
+                );
+            }
+            self.log_tables();
+            // What the next process of a run in processes needs from the ordinary part is kept, and the
+            // process ends here if it is the kind that does.
+            self.store_outline(&outline);
+            self.stage_done(&graph, None, "ordinary");
+            (graph, outline)
         };
-        self.prime_function_evidence();
-        self.audit_reused_evidence();
-        self.itemize_memory("evidence");
-        self.evict_regenerable("evidence");
-        #[cfg(any(
-            feature = "error_sites",
-            feature = "error_chain",
-            feature = "internal_error_chain",
-            feature = "tracing",
-            feature = "verus_ir",
-            feature = "visibility",
-            feature = "allows",
-            feature = "cfg_hygiene",
-            feature = "cfg_scatter",
-            feature = "glob_imports",
-            feature = "inline_tests",
-            feature = "modularity",
-            feature = "pageantry",
-            feature = "derives",
-            feature = "cli_layout"
-        ))]
-        self.prime_file_scans(target)?;
-        let ordinary_watch = crate::process_memory::Watch::start("ordinary projection".to_owned());
-        let (mut graph, outline) = attach_db(&self.db, || {
-            self.project_attached(
-                target,
-                paths,
-                policy_paths,
-                #[cfg(feature = "cfg_hygiene")]
-                declarations,
-            )
-        })?;
-        drop(ordinary_watch);
-        crate::process_memory::log("ordinary projection done");
-        self.evict_regenerable("ordinary projection");
-        if crate::memory_limit::pressured() {
-            // What the steps read of the graph's bulk attributes goes back to bytes.
-            let dropped = graph.drop_decoded_attrs();
-            tracing::info!(
-                target: "cordial::eviction",
-                step = "ordinary projection",
-                dropped_decoded = dropped,
-                "the graph's bulk attributes that were read are bytes again"
-            );
-        }
-        self.log_tables();
         // Gated code is analysed by changing the database's cfg input, which
         // needs the exclusive borrow the ordinary pass does not have.
         let rest = self.project_after_ordinary(paths, &outline, &mut graph);
@@ -164,12 +181,22 @@ impl SourceDatabase {
     ) -> CordialResult<()> {
         // Gated code is analysed by changing the database's cfg input, which
         // needs the exclusive borrow the ordinary pass does not have.
-        self.project_contexts(paths, outline.functions(), graph)?;
+        // A process that takes up a run an earlier one began skips what that one finished.
+        if !self.unit_is_done("contexts") {
+            self.project_contexts(paths, outline.functions(), graph)?;
+            self.stage_done(graph, None, "contexts");
+        }
         #[cfg(feature = "tracing")]
         {
-            self.prime_tracing_inventories(outline);
-            self.project_tracing_inventories(outline, graph)?;
-            self.project_leaves(graph)?;
+            if !self.unit_is_done("tracing-inventories") {
+                self.prime_tracing_inventories(outline);
+                self.project_tracing_inventories(outline, graph)?;
+                self.stage_done(graph, None, "tracing-inventories");
+            }
+            if !self.unit_is_done("leaves") {
+                self.project_leaves(graph)?;
+                self.stage_done(graph, None, "leaves");
+            }
             self.project_observability_calls(outline, graph)?;
         }
         Ok(())

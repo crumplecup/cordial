@@ -49,6 +49,9 @@ fn lru_cap(pressured: bool) -> usize {
 static LAST_EXECUTIONS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 static COMPUTING_CHUNKS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
+/// How many stages this process has finished.
+static STAGES_THIS_PROCESS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
 /// Whether the memory ledger has been taken. Once a run: the profile follows a thread of its own
 /// for each query dropped and has room for 256 of them, so a second pass would find none.
 static ITEMIZED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
@@ -228,12 +231,14 @@ impl SourceDatabase {
     /// checkpoint line, or (for a test) enough chunks that computed something have run. Only a run
     /// that a driver takes up again, and that has somewhere to save to.
     fn checkpoint_wanted(&self, stores_results: bool) -> bool {
-        if !crate::memory_limit::resumable() || self.saved.is_none() {
+        // Only a run that hands its results on in a store ends its processes between chunks: what a
+        // process did is in the store, and not in a database that cannot be handed on.
+        if !crate::memory_limit::resumable() || !crate::result_store::active() {
             return false;
         }
-        // A run that hands its results on in a store loses what a pass computes that the store does
-        // not keep: another process would do it again, and be ended again.
-        if crate::result_store::active() && !stores_results {
+        // And only where what a pass computes is kept in the store: another process would do the rest
+        // again, and be ended again.
+        if !stores_results {
             return false;
         }
         let executed = salsa::persisted_executions();
@@ -264,39 +269,58 @@ impl SourceDatabase {
         by_memory || by_count
     }
 
+    /// A place between stages where a process of a run in processes may end: what the next needs is in
+    /// the store already. It ends if the resident memory has reached the line, or (for a test) if it
+    /// has done as many stages as the environment says.
+    #[instrument(level = "debug", skip(self))]
+    pub(super) fn stage_boundary(&self) {
+        if !crate::result_store::active() || !crate::memory_limit::resumable() {
+            return;
+        }
+        let done = STAGES_THIS_PROCESS.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
+        let after: u64 = std::env::var(crate::CHECKPOINT_AFTER_STAGES_VARIABLE)
+            .ok()
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(0);
+        let by_memory = crate::checkpoint_requested();
+        let by_count = after > 0 && done >= after;
+        if !(by_memory || by_count) {
+            return;
+        }
+        let Some(store) = crate::result_store::current() else {
+            return;
+        };
+        store.flush();
+        crate::report_progress(crate::Progress::Results(store.count()));
+        tracing::info!(
+            target: "cordial::eviction",
+            by_memory,
+            by_count,
+            stages_done = done,
+            results = store.count(),
+            resident_kib = crate::memory_sample().map_or(0, |memory| memory.resident_kib()),
+            "a stage is done and this process exits, to be followed by another"
+        );
+        crate::memory_limit::resume_exit();
+    }
+
     /// Save the state and exit with the status that says it is to be taken up again, unless nothing
     /// has been computed since the state this run started from: a new process would start where
     /// this one is, and not get further.
     fn checkpoint(&mut self) {
-        if let Some(store) = crate::result_store::current() {
-            // The results are in the store, as each was computed: what the next process needs is
-            // there, and the database, with the numbers that only this process knows, is not
-            // handed on. Nothing to save, and so nothing to ask of the memory that is short.
-            store.flush();
-            crate::report_progress(crate::Progress::Results(store.count()));
-            tracing::info!(
-                target: "cordial::eviction",
-                results = store.count(),
-                resident_kib = crate::memory_sample().map_or(0, |memory| memory.resident_kib()),
-                "the results are in the store and this process exits, to be followed by another"
-            );
-            crate::memory_limit::resume_exit();
-        }
-        if self.restored && salsa::persisted_executions() == self.persisted_at_load {
+        // The results are in the store, as each was computed: what the next process needs is there,
+        // and the database, with the numbers that only this process knows, is not handed on. Nothing
+        // to save, and so nothing to ask of the memory that is short.
+        let Some(store) = crate::result_store::current() else {
             return;
-        }
-        // The numbers of the crates as they are at this save: a process that takes the run up reads
-        // them back, and the log of its own table says whether they are the same.
-        self.log_tables();
-        self.saved_once = false;
-        self.save_state();
-        if let Some(saved) = &self.saved {
-            crate::report_progress(crate::Progress::StateBytes(saved.bytes_on_disk()));
-        }
+        };
+        store.flush();
+        crate::report_progress(crate::Progress::Results(store.count()));
         tracing::info!(
             target: "cordial::eviction",
+            results = store.count(),
             resident_kib = crate::memory_sample().map_or(0, |memory| memory.resident_kib()),
-            "the state is saved and this process exits, to be taken up again"
+            "the results are in the store and this process exits, to be followed by another"
         );
         crate::memory_limit::resume_exit();
     }

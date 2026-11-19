@@ -289,13 +289,14 @@ pub use etiquettes::quality_etiquettes;
 pub use etiquettes::{AMENABLE_EXT_JIFF_ETIQUETTE, ExtReporter};
 pub use live_status::{LiveLayer, LiveStatus, live_filter};
 pub use memory_limit::{
-    Backoff, Budget, CHECKPOINT_AFTER_CHUNKS_VARIABLE, CHECKPOINT_PERCENT, DEFAULT_MEMORY_LIMIT,
-    FIRST_GROWTH_KIB, FUTILE_KIB, MEMORY_LIMIT_EXIT, MEMORY_RESUME_EXIT, MemoryLimit, Pressure,
-    RESUMABLE_VARIABLE, WORKER_KIB, available_memory, budget_of, checkpoint_due,
-    checkpoint_requested, enforce, exceeds, feel_pressure, feel_pressure_at, functions_within,
-    judge, judge_level, nearing, over_budget, parse_limit, parse_meminfo, parse_size, pressure,
-    pressured, relieved, resolve as resolve_memory_limit, resolve_target as resolve_memory_target,
-    resolve_with as resolve_memory_limit_with, workers_at, workers_within,
+    Backoff, Budget, CHECKPOINT_AFTER_CHUNKS_VARIABLE, CHECKPOINT_AFTER_STAGES_VARIABLE,
+    CHECKPOINT_PERCENT, DEFAULT_MEMORY_LIMIT, FIRST_GROWTH_KIB, FUTILE_KIB, MEMORY_LIMIT_EXIT,
+    MEMORY_RESUME_EXIT, MemoryLimit, Pressure, RESUMABLE_VARIABLE, WORKER_KIB, available_memory,
+    budget_of, checkpoint_due, checkpoint_requested, enforce, exceeds, feel_pressure,
+    feel_pressure_at, functions_within, judge, judge_level, nearing, over_budget, parse_limit,
+    parse_meminfo, parse_size, pressure, pressured, relieved, resolve as resolve_memory_limit,
+    resolve_target as resolve_memory_target, resolve_with as resolve_memory_limit_with, workers_at,
+    workers_within,
 };
 #[cfg(all(feature = "rustdoc", feature = "impl_coverage"))]
 pub use plugin::classify_elicit_complete_gap;
@@ -403,8 +404,8 @@ pub use ir::{
 };
 pub use isolation::{
     MEMORY_STUCK_EXIT, MOST_RESUMES, Next, PROGRESS_VARIABLE, Progress, RESUMES_VARIABLE,
-    STALLS_ALLOWED, drive as drive_resumable, next_after, report_progress, stalled,
-    stalled_results, taken_up_again,
+    STALLS_ALLOWED, drive as drive_resumable, next_after, report_progress, stalled_results,
+    taken_up_again,
 };
 #[cfg(any(feature = "_quality_support", feature = "verus_ir"))]
 pub use loader::path_has_fixtures;

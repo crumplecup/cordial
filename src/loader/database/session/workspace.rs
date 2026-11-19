@@ -99,6 +99,7 @@ impl SourceDatabase {
             cargo_options: Some(options.clone()),
             proc_macro_server: server,
             restored: kept.is_some(),
+            resume_contexts: None,
             context_crates: kept.unwrap_or_default(),
             reporter: reporter.clone(),
             saved,

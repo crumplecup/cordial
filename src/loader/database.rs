@@ -150,6 +150,9 @@ pub struct SourceDatabase {
     spill: Option<spill::Spilling>,
     // Whether the database was restored from a saved state.
     restored: bool,
+    // Where the pass over the cfg contexts is taken up from, when an earlier process of this run
+    // did some of it.
+    resume_contexts: Option<contexts::ContextsState>,
     #[cfg(feature = "cfg_hygiene")]
     workspace_root: Option<std::path::PathBuf>,
 }

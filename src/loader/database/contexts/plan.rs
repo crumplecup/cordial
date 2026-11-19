@@ -71,6 +71,35 @@ impl Clause {
 #[derive(Debug, Default)]
 pub(in crate::loader::database) struct Covered(BTreeSet<(FileId, Clause)>);
 
+impl Covered {
+    /// What is covered, by the path of each file instead of the database's number for it: the
+    /// number means something only in the process that handed it out.
+    #[instrument(level = "trace", skip(self, path_of))]
+    pub(super) fn by_path(
+        &self,
+        path_of: &dyn Fn(FileId) -> Option<String>,
+    ) -> Vec<(String, Clause)> {
+        self.0
+            .iter()
+            .filter_map(|(file, clause)| Some((path_of(*file)?, clause.clone())))
+            .collect()
+    }
+
+    /// What was covered, with each path's file as this process numbers it.
+    #[instrument(level = "trace", skip(entries, file_of))]
+    pub(super) fn from_paths(
+        entries: Vec<(String, Clause)>,
+        file_of: &dyn Fn(&str) -> Option<FileId>,
+    ) -> Self {
+        Self(
+            entries
+                .into_iter()
+                .filter_map(|(path, clause)| Some((file_of(&path)?, clause)))
+                .collect(),
+        )
+    }
+}
+
 /// `expr` (or its negation) as a disjunction of clauses.
 #[instrument(level = "trace", skip(expr))]
 pub(super) fn clauses(expr: &CfgExpr, negated: bool) -> Vec<Clause> {

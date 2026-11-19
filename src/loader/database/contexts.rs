@@ -18,7 +18,7 @@ mod pass;
 mod plan;
 mod reuse;
 
-pub(super) use pass::FunctionNodes;
+pub(super) use pass::{ContextsState, FunctionNodes, FunctionNodesState};
 
 use crate::SemanticContextKey;
 use ra_ap_cfg::{CfgAtom, CfgDiff, CfgOptions};

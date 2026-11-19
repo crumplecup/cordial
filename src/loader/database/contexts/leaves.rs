@@ -37,6 +37,15 @@ struct Flipped<'a> {
     known: &'a BTreeSet<FunctionLocation>,
 }
 
+/// Where the loop over the leaf files' contexts has got to, as another process can take it up from.
+#[derive(serde::Serialize, serde::Deserialize)]
+struct LeavesState {
+    leaves: Vec<LeafFunction>,
+    seen: Vec<SemanticContextKey>,
+    queue: Vec<SemanticContextKey>,
+    covered: Vec<(String, super::plan::Clause)>,
+}
+
 impl SourceDatabase {
     /// Read the crate's observability inventory again in the cfg context the
     /// database is in and add it to the one the ordinary build produced, so a
@@ -107,6 +116,24 @@ impl SourceDatabase {
         let mut covered = Covered::default();
         let mut seen = vec![base.clone()];
         let mut queue = VecDeque::from([base.clone()]);
+        // A process that takes up a run goes on from the leaf contexts an earlier one read.
+        if let Some(state) = self
+            .leaves_progress()
+            .and_then(|bytes| serde_json::from_slice::<LeavesState>(&bytes).ok())
+        {
+            tracing::info!(
+                target: "cordial::semantic::leaves",
+                read = state.seen.len() - state.queue.len(),
+                queued = state.queue.len(),
+                "the leaf contexts are taken up from an earlier process"
+            );
+            *leaves = state.leaves;
+            seen = state.seen;
+            queue = state.queue.into_iter().collect();
+            covered = Covered::from_paths(state.covered, &|path| {
+                self.file_id(std::path::Path::new(path)).ok()
+            });
+        }
         let mut outcome = Ok(());
         while let Some(context) = queue.pop_front() {
             let stage = std::time::Instant::now();
@@ -156,6 +183,21 @@ impl SourceDatabase {
                     seen.push(next.clone());
                     queue.push_back(next);
                 }
+            }
+            // What a process that takes up the run needs to go on from here is kept, and the
+            // process ends here if it is the kind that does.
+            let state = LeavesState {
+                leaves: leaves.clone(),
+                seen: seen.clone(),
+                queue: queue.iter().cloned().collect(),
+                covered: covered.by_path(&|file| Some(self.vfs.file_path(file).to_string())),
+            };
+            if let Ok(bytes) = serde_json::to_vec(&state) {
+                self.keep_progress(
+                    "leaves",
+                    &bytes,
+                    &format!("leaf-context-{}", seen.len() - queue.len()),
+                );
             }
         }
         outcome

@@ -265,6 +265,17 @@ impl NodeWeight {
         self.attrs.push((key.to_string(), attr));
     }
 
+    /// Put `value` where the latest attribute under `key` is, so that the attribute is as it would
+    /// have been had it been set so (and not followed by a second one, which a graph that is made
+    /// over for another process would carry for the rest of its life). Appends it if there is none.
+    #[instrument(level = "trace", skip(self, value))]
+    pub fn replace_attr(&mut self, key: &str, value: serde_json::Value) {
+        match self.attrs.iter().rposition(|(k, _)| k == key) {
+            Some(index) => self.attrs[index].1 = Attr::of(key, value),
+            None => self.set_attr(key, value),
+        }
+    }
+
     /// Latest attribute value stored under `key`.
     #[instrument(level = "trace", skip(self))]
     pub fn attr(&self, key: &str) -> Option<&serde_json::Value> {

@@ -28,44 +28,19 @@ pub fn taken_up_again() -> bool {
 }
 
 /// The exit status of a run that stopped because taking it up again was getting it nowhere: the
-/// states the processes saved did not grow, or a process could not restore the state it was to take
-/// up. Another process would do the same.
+/// results the processes kept did not grow. Another process would do the same.
 pub const MEMORY_STUCK_EXIT: i32 = 77;
 
-/// Set by the driver to a file that a process which saves its state to be taken up again writes the
-/// size of the state to, so that the driver can tell whether the run is getting further.
+/// Set by the driver to a file that a process which ends to be followed by another writes how many
+/// results the run has to, so that the driver can tell whether the run is getting further.
 pub const PROGRESS_VARIABLE: &str = "CORDIAL_RESUME_PROGRESS";
 
-/// How many processes in a row may save a state that has not grown before the run is stopped.
+/// How many processes in a row may end with no more results kept than before the run is stopped.
 pub const STALLS_ALLOWED: usize = 2;
-
-/// How much a state has to grow over the one before to be progress: one part in twenty thousand, and
-/// at least a kibibyte. The state is dominated by what every run has (the standard library's
-/// analysis is most of a small workspace's), so what a process adds is a small share of it; a
-/// process that did the same work again adds nothing.
-fn progress_over(before: u64) -> u64 {
-    (before / 20_000).max(1024)
-}
-
-/// Whether the run is stuck: the last [`STALLS_ALLOWED`] states grew by less than [`progress_over`]
-/// the one before. `history` has the size of the state each process saved, in order.
-/// A process that restores what the last saved and does the same work again saves the same state, so
-/// a run that takes up again and again without getting further is seen after a few of them.
-#[must_use]
-pub fn stalled(history: &[u64]) -> bool {
-    let stalls = history
-        .windows(2)
-        .rev()
-        .take_while(|pair| pair[1] <= pair[0].saturating_add(progress_over(pair[0])))
-        .count();
-    stalls >= STALLS_ALLOWED
-}
 
 /// How a process that ends to be followed by another says how far the run has got.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Progress {
-    /// The size of the state it saved, in bytes: a state that did the same work again is the same size.
-    StateBytes(u64),
     /// How many results the run has kept: each is one more, and counted exactly.
     Results(u64),
 }
@@ -73,7 +48,6 @@ pub enum Progress {
 impl Progress {
     fn text(self) -> String {
         match self {
-            Self::StateBytes(bytes) => format!("bytes {bytes}"),
             Self::Results(count) => format!("results {count}"),
         }
     }
@@ -81,11 +55,7 @@ impl Progress {
     fn parse(text: &str) -> Option<Self> {
         let (kind, number) = text.trim().split_once(' ')?;
         let number = number.parse().ok()?;
-        match kind {
-            "bytes" => Some(Self::StateBytes(number)),
-            "results" => Some(Self::Results(number)),
-            _ => None,
-        }
+        (kind == "results").then_some(Self::Results(number))
     }
 }
 
@@ -96,8 +66,10 @@ pub fn report_progress(progress: Progress) {
     }
 }
 
-/// Whether the run is stuck, as [`stalled`] says of states, but by how many results the run has: the
-/// last [`STALLS_ALLOWED`] processes each left no more than the one before.
+/// Whether the run is stuck: the last [`STALLS_ALLOWED`] processes each left no more results than
+/// the one before. `history` has how many results the run had when each process ended, in order. A
+/// process that did the same work again adds none, so a run that takes up again and again without
+/// getting further is seen after a few of them.
 #[must_use]
 pub fn stalled_results(history: &[u64]) -> bool {
     let stalls = history
@@ -108,23 +80,15 @@ pub fn stalled_results(history: &[u64]) -> bool {
     stalls >= STALLS_ALLOWED
 }
 
-/// Whether the run is stuck, by whichever of the two the processes say how far they got in.
+/// Whether the run is stuck, by what each process reported.
 fn stuck(history: &[Progress]) -> bool {
-    let bytes: Vec<u64> = history
-        .iter()
-        .filter_map(|progress| match progress {
-            Progress::StateBytes(bytes) => Some(*bytes),
-            Progress::Results(_) => None,
-        })
-        .collect();
     let results: Vec<u64> = history
         .iter()
-        .filter_map(|progress| match progress {
-            Progress::Results(count) => Some(*count),
-            Progress::StateBytes(_) => None,
+        .map(|progress| match progress {
+            Progress::Results(count) => *count,
         })
         .collect();
-    stalled(&bytes) || stalled_results(&results)
+    stalled_results(&results)
 }
 
 /// The most times a run is taken up again: a run that has still not finished after this many is

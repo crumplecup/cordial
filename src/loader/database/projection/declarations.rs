@@ -23,6 +23,48 @@ pub(in crate::loader::database) struct Outline {
     modules: Vec<(PathBuf, crate::NodeId)>,
 }
 
+/// An [`Outline`] in a form another process can read.
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+pub(in crate::loader::database) struct OutlineState {
+    functions: crate::loader::database::contexts::FunctionNodesState,
+    #[cfg(feature = "tracing")]
+    observed: Vec<(crate::NodeId, crate::loader::database::items::ObservedCalls)>,
+    #[cfg(feature = "tracing")]
+    modules: Vec<(PathBuf, crate::NodeId)>,
+}
+
+impl Outline {
+    /// This, in the form a store keeps it in.
+    #[tracing::instrument(level = "trace", skip(self))]
+    pub(in crate::loader::database) fn to_state(&self) -> OutlineState {
+        OutlineState {
+            functions: self.functions.to_state(),
+            #[cfg(feature = "tracing")]
+            observed: self
+                .observed
+                .iter()
+                .map(|(node, calls)| (*node, calls.clone()))
+                .collect(),
+            #[cfg(feature = "tracing")]
+            modules: self.modules.clone(),
+        }
+    }
+
+    /// What a store kept, as it was.
+    #[tracing::instrument(level = "trace", skip(state))]
+    pub(in crate::loader::database) fn from_state(state: OutlineState) -> Self {
+        Self {
+            functions: crate::loader::database::contexts::FunctionNodes::from_state(
+                state.functions,
+            ),
+            #[cfg(feature = "tracing")]
+            observed: state.observed.into_iter().collect(),
+            #[cfg(feature = "tracing")]
+            modules: state.modules,
+        }
+    }
+}
+
 impl SourceDatabase {
     /// The database-issued carrier for `path`, refusing a file that did not parse.
     #[tracing::instrument(level = "debug", skip(self, sema, path), err(level = "warn"))]

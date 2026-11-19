@@ -31,6 +31,25 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 use std::path::{Path, PathBuf};
 use tracing::instrument;
 
+/// Where the pass over the cfg contexts has got to, in a form another process can take it up from:
+/// what is analysed, what is queued, what is requested and what the planning has covered (by file
+/// path, since a file's number is its process's own).
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub(in crate::loader::database) struct ContextsState {
+    analysed: Vec<SemanticContextKey>,
+    seen: Vec<SemanticContextKey>,
+    queue: Vec<(SemanticContextKey, Vec<SemanticContextKey>)>,
+    covered: Vec<(String, super::plan::Clause)>,
+}
+
+impl ContextsState {
+    /// How many contexts are analysed.
+    #[must_use]
+    pub(in crate::loader::database) fn analysed(&self) -> usize {
+        self.analysed.len()
+    }
+}
+
 /// Contexts still to analyse, and every request ever made.
 #[derive(Debug, Default)]
 struct Wanted {
@@ -74,7 +93,53 @@ pub(in crate::loader::database) struct FunctionNodes {
     by_file: HashMap<PathBuf, Vec<NodeId>>,
 }
 
+/// What a [`FunctionNodes`] is made of, in a form another process can read: ranges as their two ends.
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+pub(in crate::loader::database) struct FunctionNodesState {
+    nodes: Vec<(PathBuf, u32, u32, NodeId)>,
+    by_file: Vec<(PathBuf, Vec<NodeId>)>,
+}
+
 impl FunctionNodes {
+    /// This, in the form a store keeps it in.
+    #[instrument(level = "trace", skip(self))]
+    pub(in crate::loader::database) fn to_state(&self) -> FunctionNodesState {
+        FunctionNodesState {
+            nodes: self
+                .nodes
+                .iter()
+                .map(|((path, range), node)| {
+                    (
+                        path.clone(),
+                        u32::from(range.start()),
+                        u32::from(range.end()),
+                        *node,
+                    )
+                })
+                .collect(),
+            by_file: self
+                .by_file
+                .iter()
+                .map(|(path, nodes)| (path.clone(), nodes.clone()))
+                .collect(),
+        }
+    }
+
+    /// What a store kept, as it was.
+    #[instrument(level = "trace", skip(state))]
+    pub(in crate::loader::database) fn from_state(state: FunctionNodesState) -> Self {
+        Self {
+            nodes: state
+                .nodes
+                .into_iter()
+                .map(|(path, start, end, node)| {
+                    ((path, TextRange::new(start.into(), end.into())), node)
+                })
+                .collect(),
+            by_file: state.by_file.into_iter().collect(),
+        }
+    }
+
     #[instrument(level = "trace", skip(self, path, range, node))]
     pub(in crate::loader::database) fn insert(
         &mut self,
@@ -119,7 +184,9 @@ impl SourceDatabase {
     ) -> CordialResult<()> {
         let cfgs = LocalCfgs::capture_excluding(&self.db, &self.shadow_crates());
         let mut analysed = Vec::new();
-        let outcome = self.analyse_contexts(&cfgs, paths, nodes, graph, &mut analysed);
+        // A process that takes up a run an earlier one began goes on from the contexts it analysed.
+        let resume = self.resume_contexts.take();
+        let outcome = self.analyse_contexts(&cfgs, paths, nodes, graph, &mut analysed, resume);
         // Gated code is extra evidence: failing to analyse it must not fail a run
         // that asked for nothing else. The plan says it is incomplete, and the log
         // carries the whole error chain.
@@ -153,15 +220,36 @@ impl SourceDatabase {
         nodes: &FunctionNodes,
         graph: &mut CrateIr,
         analysed: &mut Vec<SemanticContextKey>,
+        resume: Option<ContextsState>,
     ) -> CordialResult<bool> {
         let options = self.cargo_options.clone().unwrap_or_default();
         let automatic = *options.cfg_planning() == CfgPlanning::Automatic;
         let ordinary = SemanticContextKey::ordinary();
-        self.reporter.say("Planning cfg contexts");
         let mut covered = Covered::default();
         let mut wanted = Wanted::default();
-        wanted.add_exact(options.cfg_contexts().clone());
-        if automatic {
+        if let Some(state) = resume {
+            // The planning was done by the process that began this: what it asked for and had
+            // covered is what this one goes on from.
+            tracing::info!(
+                target: "cordial::semantic::contexts",
+                analysed = state.analysed.len(),
+                queued = state.queue.len(),
+                "the cfg contexts are taken up from an earlier process"
+            );
+            analysed.extend(state.analysed);
+            wanted.seen = state.seen;
+            wanted.queue = state
+                .queue
+                .into_iter()
+                .map(|(key, members)| Pending::restored(key, members))
+                .collect();
+            covered =
+                Covered::from_paths(state.covered, &|path| self.file_id(Path::new(path)).ok());
+        } else {
+            self.reporter.say("Planning cfg contexts");
+            wanted.add_exact(options.cfg_contexts().clone());
+        }
+        if automatic && !self.has_resumed_contexts(analysed, &wanted) {
             let _watch = crate::process_memory::Watch::start("planning scan".to_owned());
             wanted.add(asked(
                 &self.db,
@@ -233,6 +321,10 @@ impl SourceDatabase {
             }
             let planned = stage.elapsed();
             drop(watch);
+            // What a process that takes up the run needs to go on from here is kept, and the process
+            // ends here if it is the kind that does.
+            let state = self.contexts_state(analysed, &wanted, &covered);
+            self.stage_done(graph, Some(&state), &format!("context-{}", analysed.len()));
             tracing::info!(
                 target: "cordial::semantic::contexts",
                 %context,
@@ -248,6 +340,31 @@ impl SourceDatabase {
             crate::process_memory::log("cfg context analysed");
         }
         Ok(wanted.queue.is_empty())
+    }
+
+    /// Whether the planning scan was done already, by a process this one takes the run up from.
+    fn has_resumed_contexts(&self, analysed: &[SemanticContextKey], wanted: &Wanted) -> bool {
+        !analysed.is_empty() || !wanted.queue.is_empty() || !wanted.seen.is_empty()
+    }
+
+    /// Where the pass has got to, as another process can take it up from.
+    #[instrument(level = "trace", skip_all)]
+    fn contexts_state(
+        &self,
+        analysed: &[SemanticContextKey],
+        wanted: &Wanted,
+        covered: &Covered,
+    ) -> ContextsState {
+        ContextsState {
+            analysed: analysed.to_vec(),
+            seen: wanted.seen.clone(),
+            queue: wanted
+                .queue
+                .iter()
+                .map(|pending| (pending.key().clone(), pending.members().clone()))
+                .collect(),
+            covered: covered.by_path(&|file| Some(self.vfs.file_path(file).to_string())),
+        }
     }
 
     /// Copy the active context's facts into `graph`.

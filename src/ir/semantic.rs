@@ -29,7 +29,19 @@ pub const ATTR_SEMANTIC_FUNCTION: &str = "semantic_function";
 
 /// An interned definition identity, meaningful only inside its analysis session.
 /// Labels and printed type paths are never used to decide identity.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, derive_new::new)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    Serialize,
+    Deserialize,
+    derive_new::new,
+)]
 #[new(visibility = "pub(crate)")]
 pub struct SemanticItemId(u64);
 

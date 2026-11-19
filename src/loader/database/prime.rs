@@ -21,7 +21,7 @@ impl SourceDatabase {
     /// spread over the available cores.
     #[instrument(level = "debug", skip(self))]
     #[hotpath::measure(impl_type = "SourceDatabase")]
-    pub(super) fn prime_function_evidence(&mut self) {
+    pub(super) fn prime_function_evidence(&mut self) -> bool {
         // The functions of each ordinary crate, by description, as the last run saved them. A crate
         // all of whose functions a description finds again is primed from them without asking
         // rust-analyzer which functions it has; any other is enumerated.
@@ -72,10 +72,11 @@ impl SourceDatabase {
                 pending = pending.len(),
                 "functions of the workspace whose evidence is in the store, and whose is not"
             );
+            let had_work = !pending.is_empty();
             self.prime_in_chunks("workspace", &pending, |db, text| {
                 let _ = queries::persisted_evidence(db, ItemKey::new(db, text.clone()));
             });
-            return;
+            return had_work;
         }
         let excluded = self.shadow_crates();
         let mut functions = attach_db(&self.db, || local_functions(&self.db, &excluded));
@@ -97,9 +98,11 @@ impl SourceDatabase {
                 "functions of the workspace whose evidence is in the store, and whose is not"
             );
         }
+        let had_work = !functions.is_empty();
         self.prime_in_chunks("workspace", &functions, |db, function| {
             let _ = queries::evidence_of(db, *function);
         });
+        had_work
     }
 
     #[cfg(feature = "tracing")]

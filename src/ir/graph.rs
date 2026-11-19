@@ -152,6 +152,72 @@ impl CrateIr {
         Ok(())
     }
 
+    /// Every identity in the facts the graph holds (a function's and its contexts'), replaced by
+    /// `map`'s answer: the numbers of a graph made in one process, made the numbers of another.
+    ///
+    /// # Errors
+    ///
+    /// When a fact is not what it should be.
+    #[instrument(level = "debug", skip(self, map), err(level = "warn"))]
+    #[hotpath::measure(impl_type = "CrateIr")]
+    pub(crate) fn map_semantic_identities(
+        &mut self,
+        map: &mut impl FnMut(crate::SemanticItemId) -> crate::SemanticItemId,
+    ) -> CordialResult<()> {
+        for weight in self.graph.node_weights_mut() {
+            if let Some(value) = weight.attr(crate::ATTR_SEMANTIC_FUNCTION).cloned() {
+                let function: crate::SemanticFunction = serde_json::from_value(value)?;
+                weight.replace_attr(
+                    crate::ATTR_SEMANTIC_FUNCTION,
+                    serde_json::to_value(function.map_identities(map))?,
+                );
+            }
+            if let Some(value) = weight.attr(crate::ATTR_SEMANTIC_CONTEXT_FUNCTIONS).cloned() {
+                let functions: Vec<crate::SemanticContextFunction> = serde_json::from_value(value)?;
+                let mapped: Vec<crate::SemanticContextFunction> = functions
+                    .into_iter()
+                    .map(|function| function.map_identities(map))
+                    .collect();
+                weight.replace_attr(
+                    crate::ATTR_SEMANTIC_CONTEXT_FUNCTIONS,
+                    serde_json::to_value(mapped)?,
+                );
+            }
+        }
+        Ok(())
+    }
+
+    /// Every identity in the facts the graph holds, once each.
+    ///
+    /// # Errors
+    ///
+    /// When a fact is not what it should be.
+    #[instrument(level = "debug", skip(self), err(level = "warn"))]
+    #[hotpath::measure(impl_type = "CrateIr")]
+    pub(crate) fn semantic_identities(
+        &self,
+    ) -> CordialResult<std::collections::BTreeSet<crate::SemanticItemId>> {
+        let mut found = std::collections::BTreeSet::new();
+        let mut note = |id: crate::SemanticItemId| {
+            found.insert(id);
+            id
+        };
+        for weight in self.graph.node_weights() {
+            if let Some(value) = weight.attr(crate::ATTR_SEMANTIC_FUNCTION) {
+                let function: crate::SemanticFunction = serde_json::from_value(value.clone())?;
+                let _ = function.map_identities(&mut note);
+            }
+            if let Some(value) = weight.attr(crate::ATTR_SEMANTIC_CONTEXT_FUNCTIONS) {
+                let functions: Vec<crate::SemanticContextFunction> =
+                    serde_json::from_value(value.clone())?;
+                for function in functions {
+                    let _ = function.map_identities(&mut note);
+                }
+            }
+        }
+        Ok(found)
+    }
+
     /// Put the bulk attributes of every node that were read back to the bytes they are held as (see
     /// [`NodeWeight::drop_decoded`]). Returns how many.
     #[instrument(level = "debug", skip(self))]
@@ -237,6 +303,38 @@ impl CrateIr {
                 .collect::<CordialResult<_>>()?,
             indexes: self.indexes.clone(),
         })
+    }
+
+    /// The graph as compressed bytes a run in processes keeps in its store: the same snapshot the
+    /// cache writes, but to memory, a compressed chunk at a time.
+    ///
+    /// # Errors
+    ///
+    /// When the graph cannot be snapshotted or encoded.
+    #[instrument(level = "debug", skip(self), err(level = "warn"))]
+    #[hotpath::measure(impl_type = "CrateIr")]
+    pub fn to_stage_bytes(&self) -> CordialResult<Vec<u8>> {
+        let encoder = zstd::stream::write::Encoder::new(Vec::new(), ZSTD_LEVEL)?;
+        let mut out = std::io::BufWriter::with_capacity(IO_BUFFER_BYTES, encoder);
+        serde_json::to_writer(&mut out, &self.snapshot()?)?;
+        Ok(out
+            .into_inner()
+            .map_err(std::io::IntoInnerError::into_error)?
+            .finish()?)
+    }
+
+    /// A graph kept by [`Self::to_stage_bytes`], with the node numbers it had.
+    ///
+    /// # Errors
+    ///
+    /// When the bytes are not a graph.
+    #[instrument(level = "debug", skip(bytes), err(level = "warn"))]
+    #[hotpath::measure(impl_type = "CrateIr")]
+    pub fn from_stage_bytes(bytes: &[u8]) -> CordialResult<Self> {
+        let decoder = zstd::stream::read::Decoder::new(bytes)?;
+        let snapshot: CrateIrSnapshot =
+            serde_json::from_reader(std::io::BufReader::with_capacity(IO_BUFFER_BYTES, decoder))?;
+        Self::from_snapshot(snapshot)
     }
 
     /// Rebuild from a serialized snapshot.

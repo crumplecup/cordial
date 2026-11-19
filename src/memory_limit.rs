@@ -39,6 +39,10 @@ pub const RESUMABLE_VARIABLE: &str = "CORDIAL_RESUMABLE";
 /// something, whatever its memory.
 pub const CHECKPOINT_AFTER_CHUNKS_VARIABLE: &str = "CORDIAL_CHECKPOINT_AFTER_CHUNKS";
 
+/// For a test: a process of a run in processes ends after this many stages (the ordinary projection,
+/// each cfg context), whatever its memory.
+pub const CHECKPOINT_AFTER_STAGES_VARIABLE: &str = "CORDIAL_CHECKPOINT_AFTER_STAGES";
+
 /// The share of the budget, in hundredths, that the resident memory reaches before a run that can be
 /// taken up again saves its state and exits, so that the next process starts with nothing the
 /// allocator kept.

@@ -34,6 +34,12 @@ impl Pending {
         }
     }
 
+    /// A request as a store kept it: the context, and the requests it stands for.
+    #[instrument(level = "trace", skip(key, members))]
+    pub(super) fn restored(key: SemanticContextKey, members: Vec<SemanticContextKey>) -> Self {
+        Self { key, members }
+    }
+
     /// Whether this combines more than one request.
     #[instrument(level = "trace", skip(self))]
     pub(super) fn is_merged(&self) -> bool {

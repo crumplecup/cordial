@@ -114,6 +114,18 @@ pub struct SemanticContextFunction {
     function: super::SemanticFunction,
 }
 
+impl SemanticContextFunction {
+    /// These facts with every identity in them replaced by `map`'s answer.
+    #[tracing::instrument(level = "trace", skip(self, map))]
+    pub(crate) fn map_identities(
+        mut self,
+        map: &mut impl FnMut(super::SemanticItemId) -> super::SemanticItemId,
+    ) -> Self {
+        self.function = self.function.map_identities(map);
+        self
+    }
+}
+
 /// Node attribute listing the contexts in which a function is active, as
 /// indexes into [`SemanticContextPlan::contexts`]. Cheap enough to record for
 /// every function, unlike the facts themselves.

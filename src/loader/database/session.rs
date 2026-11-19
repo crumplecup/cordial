@@ -42,6 +42,7 @@ impl SourceDatabase {
             persisted_at_load: salsa::persisted_executions(),
             spill: None,
             restored: false,
+            resume_contexts: None,
             #[cfg(feature = "cfg_hygiene")]
             workspace_root: None,
         }

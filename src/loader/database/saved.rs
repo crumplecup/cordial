@@ -55,17 +55,6 @@ impl SavedState {
         Self { dir: dir.into() }
     }
 
-    /// How many bytes the saved state takes on the disk.
-    pub(super) fn bytes_on_disk(&self) -> u64 {
-        std::fs::read_dir(&self.dir).map_or(0, |entries| {
-            entries
-                .flatten()
-                .filter_map(|entry| entry.metadata().ok())
-                .map(|metadata| metadata.len())
-                .sum()
-        })
-    }
-
     /// Where this run's spilled values go: a file named for the process, in a directory beside the
     /// state (in the run cache, which is on the disk, and not in `/tmp`, which may be memory).
     pub(super) fn spill_path(&self) -> PathBuf {
