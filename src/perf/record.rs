@@ -198,6 +198,10 @@ pub struct RunRecord {
     #[builder(default)]
     #[serde(default)]
     values: BTreeMap<String, u64>,
+    /// Exact allocation data per producer, including unavailable/incomplete captures.
+    #[builder(default)]
+    #[serde(default)]
+    memory: Vec<super::MemoryCapture>,
     /// What the program said that cannot be added up: which kinds of query reached the most, why a
     /// fingerprint was volatile. The last of each.
     #[builder(default)]
@@ -234,5 +238,13 @@ impl RunRecord {
             slug(&self.subject.to_string()),
             state
         )
+    }
+}
+
+impl RunRecord {
+    /// Attach the shared memory import without merging process/thread/phase identities.
+    pub fn with_memory(mut self, memory: Vec<super::MemoryCapture>) -> Self {
+        self.memory = memory;
+        self
     }
 }

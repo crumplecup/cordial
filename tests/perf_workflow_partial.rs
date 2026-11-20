@@ -32,8 +32,17 @@ fn the_states_that_finished_are_kept_when_a_later_one_fails() {
         measure_workflow_partial(project.path(), &scratch.path().join("work"), &request);
     assert_eq!(
         records.len(),
-        1,
-        "the cold state finished before the warm one failed"
+        2,
+        "the cold sample and failed warm capture are both retained"
+    );
+    assert!(!records[0].stages().is_empty());
+    assert!(records[1].stages().is_empty());
+    assert!(records.iter().all(|record| record.memory().len() == 1));
+    assert!(
+        records
+            .iter()
+            .flat_map(|record| record.memory())
+            .all(|item| item.status == cordial::perf::MemoryStatus::Missing)
     );
     assert!(failure.is_some(), "and the failure is still reported");
 }

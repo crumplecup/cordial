@@ -17,6 +17,12 @@ inventory it consumes, and to [performance metrics](performance-metrics.md),
 whose profiles it makes complete. The etiquette is static and checks coverage;
 `cordial perf` is dynamic and reads the numbers. They stay separate.
 
+The implemented allocation contract is now defined by
+[memory measurement](memory-measurement.md) and
+[memory profiling](../memory-profiling.md). Static instrumentation cannot by
+itself prove runtime attribution. The old scan-only coverage test has been
+replaced by a shared-loader IR fixture; the future etiquette remains unbuilt.
+
 ## Problem
 
 Instrumentation drifts. On cordial, a profile answered only the question that
@@ -42,7 +48,7 @@ all, and an apply can fix the common one.
 | Area | Required in the codebase | Where hotpath reads it |
 | --- | --- | --- |
 | Timing and call counts | `#[hotpath::measure]` on every operation (a function instrumented at `debug` or `info`) | `functions_timing` |
-| Heap allocation | One `#[global_allocator]` of `hotpath::CountingAllocator`, under a feature | `functions_alloc`, per-thread bytes |
+| Heap allocation | One always-on `hotpath::CountingAllocator`; detailed recording remains optional | Exact `allocation` schema, function/thread traffic, retained origins and live/peak heap |
 | Threads | Every spawned thread is a named `thread::Builder` | `threads` |
 | Locks | `Mutex` and `RwLock` come from one module that re-exports hotpath's | `mutexes`, `rw_locks` |
 | Channels | `mpsc` comes from the same module | `channels` |

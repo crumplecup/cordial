@@ -4,7 +4,9 @@
 mod compare;
 mod environment;
 mod identity;
+mod memory;
 mod nextest;
+pub use memory::{MemoryCapture, MemoryStatus, read_memory, render_memory};
 mod profile;
 mod record;
 mod report;
@@ -23,7 +25,7 @@ pub use identity::{PerfIdentity, PerfIdentityBuilder};
 pub use nextest::{NextestRequest, TestRun, build_targets, parse_events};
 pub use profile::{
     TestExpectations, TestProfile, aggregate, attach, fixed_ns, parse_duration, parse_report,
-    profiled, read_captures, read_profiles,
+    profiled, profiled_from, read_captures, read_profiles,
 };
 pub use record::{
     FunctionTiming, PerfState, PerfSubject, RECORD_SCHEMA, RunRecord, RunRecordBuilder,

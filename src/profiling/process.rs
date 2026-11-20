@@ -123,7 +123,10 @@ pub(crate) fn expect_child_for(
             });
             capture
                 .expect_child(restart, identity)
-                .map(|ticket| ChildProfile { ticket })
+                .map(|ticket| ChildProfile {
+                    ticket,
+                    standalone: None,
+                })
         })
         .transpose()
 }
@@ -131,9 +134,17 @@ pub(crate) fn expect_child_for(
 /// Updates only the parent's manifest. The child owns its report and manifest.
 pub(crate) struct ChildProfile {
     ticket: Ticket,
+    standalone: Option<std::path::PathBuf>,
 }
 
 impl ChildProfile {
+    pub(crate) fn id(&self) -> &str {
+        &self.ticket.id
+    }
+    pub(crate) fn root(&self) -> &Path {
+        &self.ticket.root
+    }
+
     pub(crate) fn environment(&self) -> io::Result<(&'static str, String)> {
         Ok((TICKET_VARIABLE, serde_json::to_string(&self.ticket)?))
     }
@@ -144,6 +155,21 @@ impl ChildProfile {
         exit: Option<Option<i32>>,
         error: Option<String>,
     ) -> io::Result<()> {
+        if let Some(path) = &self.standalone {
+            let mut child: super::capture::Child =
+                serde_json::from_reader(std::fs::File::open(path)?)?;
+            if let Some(pid) = pid {
+                child.pid = Some(pid);
+            }
+            if let Some(exit) = exit {
+                child.exited = true;
+                child.exit_code = exit;
+            }
+            if error.is_some() {
+                child.error = error;
+            }
+            return super::capture::write_json(path, &child);
+        }
         let mut held = HELD
             .lock()
             .map_err(|_| io::Error::other("profile owner poisoned"))?;
@@ -159,4 +185,36 @@ pub fn test_run_directory(root: &Path) -> io::Result<std::path::PathBuf> {
     let path = root.join(unique_id());
     std::fs::create_dir_all(&path)?;
     Ok(path)
+}
+
+/// Register a workflow child even when a library caller has no process owner.
+pub(crate) fn workflow_child(root: &Path, identity: Identity) -> io::Result<ChildProfile> {
+    if let Some(profile) = expect_child_for(0, Some(identity.clone()))? {
+        return Ok(profile);
+    }
+    let id = unique_id();
+    let root = root.join(&id);
+    let path = root.join(format!("{id}.child.json"));
+    let child = super::capture::Child {
+        id: id.clone(),
+        restart: 0,
+        identity: identity.clone(),
+        pid: None,
+        exit_code: None,
+        exited: false,
+        error: None,
+    };
+    super::capture::write_json(&path, &child)?;
+    let ticket = Ticket {
+        root,
+        run_id: id.clone(),
+        id,
+        parent: "unprofiled_workflow_driver".to_owned(),
+        restart: 0,
+        identity,
+    };
+    Ok(ChildProfile {
+        ticket,
+        standalone: Some(path),
+    })
 }

@@ -82,6 +82,8 @@ pub struct ChannelUsage {
 /// Everything in one profile, or the sum of several, besides function timing.
 #[derive(Debug, Clone, Default, PartialEq, Eq, derive_getters::Getters)]
 pub struct ProfileUsage {
+    /// Exact Hotpath data retained separately; heap snapshots/peaks are never summed.
+    exact: Vec<hotpath::json::AllocationReport>,
     allocations: Vec<FunctionAllocation>,
     threads: Vec<ThreadUsage>,
     locks: Vec<LockUsage>,
@@ -134,7 +136,7 @@ impl ProfileUsage {
     #[instrument(level = "debug", skip(report))]
     #[hotpath::measure]
     pub fn from_report(report: &serde_json::Value) -> Self {
-        let allocations = rows(report, "functions_alloc", "data")
+        let mut allocations = rows(report, "functions_alloc", "data")
             .iter()
             .filter_map(|row| {
                 Some(FunctionAllocation::new(
@@ -144,7 +146,7 @@ impl ProfileUsage {
                 ))
             })
             .collect();
-        let threads = rows(report, "threads", "data")
+        let mut threads = rows(report, "threads", "data")
             .iter()
             .filter_map(|row| {
                 Some(ThreadUsage::new(
@@ -201,7 +203,47 @@ impl ProfileUsage {
                 Some((row["expression"].as_str()?.to_owned(), value.round() as u64))
             })
             .collect();
+        let exact: Vec<hotpath::json::AllocationReport> = report
+            .get("allocation")
+            .cloned()
+            .and_then(|value| serde_json::from_value(value).ok())
+            .into_iter()
+            .collect();
+        // The presence of an exact section forbids silently falling back to rounded strings,
+        // including a malformed, disabled or unsupported exact producer.
+        if report.get("allocation").is_some() {
+            allocations = exact
+                .iter()
+                .filter(|data| data.schema_version == 1)
+                .flat_map(|data| data.functions.iter().flatten())
+                .filter_map(|row| {
+                    Some(FunctionAllocation::new(
+                        row.name.clone(),
+                        row.calls,
+                        row.bytes?,
+                    ))
+                })
+                .collect();
+            threads = exact
+                .iter()
+                .filter(|data| data.schema_version == 1)
+                .flat_map(|data| data.threads.iter().flatten())
+                .map(|row| {
+                    ThreadUsage::new(
+                        row.name
+                            .clone()
+                            .unwrap_or_else(|| format!("tid={}", row.tid)),
+                        0,
+                        row.allocated_bytes,
+                        row.freed_bytes,
+                    )
+                })
+                .collect();
+        } else if report["functions_alloc"]["profiling_mode"].as_str() != Some("alloc-bytes") {
+            allocations = Vec::new();
+        }
         Self {
+            exact,
             allocations,
             threads,
             locks,
@@ -216,12 +258,14 @@ impl ProfileUsage {
     #[instrument(level = "debug", skip(profiles))]
     #[hotpath::measure]
     pub fn merge<'a>(profiles: impl IntoIterator<Item = &'a Self>) -> Self {
+        let mut exact = Vec::new();
         let mut allocations: BTreeMap<&str, (u64, u64)> = BTreeMap::new();
         let mut threads: BTreeMap<&str, (u64, u64, u64)> = BTreeMap::new();
         let mut locks: BTreeMap<&str, (u64, u64, u64)> = BTreeMap::new();
         let mut channels: BTreeMap<&str, (u64, u64, u64)> = BTreeMap::new();
         let mut values: BTreeMap<String, u64> = BTreeMap::new();
         for profile in profiles {
+            exact.extend(profile.exact.iter().cloned());
             for item in &profile.allocations {
                 let entry = allocations.entry(item.name()).or_default();
                 entry.0 += item.calls();
@@ -255,8 +299,15 @@ impl ProfileUsage {
             .into_iter()
             .map(|(name, (calls, bytes))| FunctionAllocation::new(name.to_owned(), calls, bytes))
             .collect();
+        // Exact data stays per producer in RunRecord::memory. Repeats, accounting
+        // modes and local thread identities cannot be merged by display name.
+        if !exact.is_empty() {
+            allocations.clear();
+            threads.clear();
+        }
         allocations.sort_by_key(|item| std::cmp::Reverse(item.total_bytes()));
         Self {
+            exact,
             allocations,
             threads: threads
                 .into_iter()

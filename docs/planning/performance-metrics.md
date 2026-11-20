@@ -188,16 +188,18 @@ here should replace the ad hoc numbers used there.
   database; that is a separate piece of work. Files, functions and cargo
   invocations are likewise not yet counted.
 - [x] **P5. Per-test profile.** `cordial perf tests profile <set>` runs the set
-  with `--features full,hotpath` and `CORDIAL_PERF_PROFILE_DIR` set. Each test
-  process starts a `hotpath` guard from `init_tracing` (no per-test edits) on a
-  helper thread, so the report is written before the process ends; the report is
-  named from `NEXTEST_BINARY_ID` and `NEXTEST_TEST_NAME`. The profiles are joined
-  to the timings: per-test slowest functions, **fixed cost** (the totals of
-  `load_reporting` and `project_target`: loading the workspace and projecting it
-  into the IR), the run's functions by total time, and the fixed share. The
-  record's subject is `<set>+profile`, since profiling slows what it measures.
-  `hotpath` timing reports carry totals and p95 but no self time, so a
-  function's self time is not recorded.
+  with `CORDIAL_PERF_PROFILE_DIR` set. `profile_test()` starts ownership before
+  fixtures; the compatibility `init_tracing` owner records its late boundary.
+  One shared Hotpath capture path writes unique raw reports and producer
+  manifests. Nextest's existing events preserve expected tests without reports.
+  `profiled_from` joins timing and exact allocation data through the shared
+  perf reader. Original binary/test names and repeats remain metadata, not
+  filename-derived identities. Timing summaries retain slowest functions and
+  setup share. Exact process/thread/origin quantities remain separate, with
+  availability, accounting mode and coverage limits. See
+  [memory profiling](../memory-profiling.md) for the implemented contract.
+  Full-program measurement remains deferred by the
+  [memory measurement plan](memory-measurement.md).
 - [x] **P6. Compare.** `cordial perf compare [first] [second]` and `cordial perf
   baseline <id>`. A timing counts as moved only beyond both the tolerance
   (`--tolerance`, default 10% of the earlier median) and the larger spread.

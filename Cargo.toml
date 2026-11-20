@@ -50,7 +50,7 @@ quote = { version = "1", optional = true }
 clap = { version = "4", features = ["derive", "env"], optional = true }
 miette = { version = "7", features = ["fancy"], optional = true }
 indicatif = { version = "0.18", optional = true }
-hotpath = { version = "0.31", features = ["hotpath-live"] }
+hotpath = { version = "0.31", features = ["hotpath-live", "json"] }
 derive-new = "0.7.0"
 derive-getters = "0.5.0"
 derive_builder = "0.20"

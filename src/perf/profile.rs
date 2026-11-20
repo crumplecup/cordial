@@ -309,12 +309,34 @@ pub fn read_captures(root: &Path) -> CordialResult<Vec<crate::profiling::RunRepo
             records.insert(record.process_id.clone(), record);
         }
         for entry in std::fs::read_dir(&directory)? {
-            let path = entry?.path();
-            if path.is_dir() {
+            let entry = entry?;
+            let path = entry.path();
+            if entry.file_type()?.is_dir() {
                 pending.push(path);
             } else if path.to_string_lossy().ends_with(".expected.json") {
-                let identities: Vec<Identity> =
-                    serde_json::from_reader(std::io::BufReader::new(std::fs::File::open(&path)?))?;
+                let identities: Vec<Identity> = match serde_json::from_reader(
+                    std::io::BufReader::new(std::fs::File::open(&path)?),
+                ) {
+                    Ok(identities) => identities,
+                    Err(error) => {
+                        let id = path.display().to_string();
+                        records.insert(
+                            id.clone(),
+                            RunReport {
+                                process_id: id,
+                                expected: None,
+                                manifest: None,
+                                observation: None,
+                                status: if error.is_eof() {
+                                    ReportStatus::Truncated
+                                } else {
+                                    ReportStatus::Malformed
+                                },
+                            },
+                        );
+                        continue;
+                    }
+                };
                 expected.extend(
                     identities
                         .into_iter()
@@ -339,10 +361,17 @@ pub fn read_captures(root: &Path) -> CordialResult<Vec<crate::profiling::RunRepo
                     process_id: id,
                     expected: Some(identity),
                     manifest: None,
+                    observation: None,
                     status: ReportStatus::Missing,
                 },
             );
         }
     }
     Ok(records.into_values().collect())
+}
+
+/// Attach timing summaries and the complete process inventory from the same capture directory.
+pub fn profiled_from(record: &RunRecord, set: &str, directory: &Path) -> CordialResult<RunRecord> {
+    Ok(profiled(record, set, &read_profiles(directory)?)?
+        .with_memory(super::read_memory(directory)?))
 }

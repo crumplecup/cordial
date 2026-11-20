@@ -1,10 +1,12 @@
 # Memory measurement through Hotpath allocation profiling
 
-Status: **Active implementation, 2026-11-20.** Phases 1–3 are implemented and
-gated. Phase 4 operation coverage is next.
+Status: **Infrastructure complete for maintainer review, 2026-11-20.**
+Phases 1–5 are implemented and gated. Phase 5 unifies import, storage,
+rendering and comparison through the existing perf path.
 Hotpath supplies the always-on live/peak meter, retained allocation origins,
 exact JSON and explicit coverage counters; `cap` and the parallel diagnostics
-are removed. Operation coverage and ingestion remain phases 4–5. No full-program measurement has been authorized or performed.
+are removed. No full-program measurement has been authorized or performed.
+The remaining full-program boundaries are explicit in every report.
 
 ## Objective and decisions
 
@@ -115,9 +117,10 @@ counters. Cordial's budget reads Hotpath directly; `cap` has been removed. The
 origin identity, bounds, metadata overhead, failure and concurrency behavior.
 
 The dependency can now identify outstanding requested heap by allocation origin.
-Process lifetime and operation coverage still need phases 3–4, and ingestion
-needs phase 5 before a complete memory explanation is available. Do not relabel
-thread allocation-minus-free as retained ownership.
+Phases 3–5 now own process lifetimes, expose operation coverage and import the
+exact data through the existing perf path. Full-program coverage remains
+unverified and visible in every capture. Do not relabel thread
+allocation-minus-free as retained ownership.
 
 ## Coverage inventory
 
@@ -505,3 +508,59 @@ Controlled allocation, linked allocator, shared IR coverage, lifecycle, worker
 origin and existing worker-pool behavior fixtures passed. A 4,097-byte allocation
 on each of three workers survives as exactly 12,291 bytes under the named worker
 operation. No Cordial invocation or full-program benchmark was used.
+
+### Phase 5 common ingestion, storage and presentation
+
+`MemoryCapture` embeds Hotpath's exact allocation DTO rather than recreating
+accounting. The shared lifecycle reader imports workflow and test producers,
+including library workflows without a driver owner. `profiled_from` joins timing
+and memory from the same inventory. `ProfileUsage` prefers exact integers and
+rejects count-mode formatted strings as byte data. Exact producers are not
+merged by display name; `RunRecord::memory` retains process/thread/origin ids,
+features, modes, raw paths, time boundaries and completion reasons. Existing
+records remain readable with an explicitly unavailable capture inventory.
+
+Standalone workflow tickets use the existing child schema and capture path.
+Their metadata directory always differs from the disposable project slug,
+including a project named `perf`. Failed attempts retain memory evidence even
+without timing samples. Resume graph import follows both manifest parent links
+and durable child expectations, preserving missing descendants with no manifest.
+Parent-observed pid, exit and spawn/wait errors survive import. Malformed and
+truncated manifests/inventories remain visible rather than aborting all import.
+
+Available zero, disabled, unsupported, missing, malformed, truncated and
+incomplete are distinct. Exact schema/mode validation forbids rounded fallback.
+Overflow, missing data, late setup, incomplete teardown, unavailable baselines,
+display overrides and all ten coverage regions remain visible. Reports separate
+requested heap, allocation traffic, retained origins, lifetime peaks and the
+unsupported OS envelope. Comparison preserves repeat/state/restart boundaries,
+requires compatible producers and accounting, and withholds incompatible or
+lossy traffic deltas. Its memory-completeness result is separate from the timing
+verdict. No process/origin peaks or ending live values are added together.
+
+The implementation guide is [memory profiling](../memory-profiling.md).
+Controlled fixtures prove a retained 12,345-byte allocation through capture,
+import, record storage and display, preserve integers above 2^53, retain equal
+thread names with different ids, and exercise zero/disabled/count/invalid/lossy
+reports and incompatible comparisons. Workflow fixtures launch only shell
+stand-ins or the unit-test executable, including expected missing resumes.
+
+Phase 5 validation:
+
+- All-features focused suite: 47 tests passed across `hotpath_lifecycle`,
+  `perf_compare`, `perf_memory`, `perf_profile`, `perf_record`, `perf_usage`,
+  `perf_workflow` and `perf_workflow_partial`.
+- After the final missing-resume and workflow-directory regression fixes,
+  `perf_memory` and `perf_workflow_partial` passed all nine tests again.
+- Timing-only (`--no-default-features --features hotpath`): all thirteen
+  `hotpath_lifecycle` and `perf_memory` tests passed.
+- Recording disabled (`--no-default-features`): all thirteen lifecycle/import
+  tests passed, including explicit disabled capture behavior.
+- `cargo clippy --all-features --all-targets -- -D warnings` passed after the
+  final code changes. Formatting and whitespace checks passed.
+
+Phase checkpoints: phase 3 commits `ac9946fa` and `4b7cd789`; phase 4 commit
+`f88cf4b4`; phase 5 is recorded by the commit containing this evidence.
+No Cordial command or full-program benchmark was executed. Full-program
+measurement remains deferred for maintainer review and a separate discussion
+of `elicit_doc`.

@@ -8,8 +8,8 @@ use tracing::instrument;
 use crate::CordialResult;
 use crate::perf::{
     DEFAULT_TOLERANCE, NextestRequest, PerfStore, RunRecord, TimingRequest, Verdict,
-    WorkflowRequestBuilder, compare, measure, measure_from, measure_workflow_partial, profiled,
-    read_profiles, render_comparison, render_profile, render_stages, render_timing,
+    WorkflowRequestBuilder, compare, measure, measure_from, measure_workflow_partial,
+    profiled_from, render_comparison, render_profile, render_stages, render_timing,
 };
 use crate::{CordialError, load_cordial_config};
 
@@ -375,7 +375,7 @@ fn profile(ctx: &ActCtx, name: &str, options: TimingOptions) -> CordialResult<()
         1,
     );
     let timed = measure(ctx.project_root(), &request, &store.raw_dir())?;
-    let record = profiled(&timed, name, &read_profiles(&directory)?)?;
+    let record = profiled_from(&timed, name, &directory)?;
     let path = store.save(&record)?;
     let mut output = crate::host::stdout();
     write!(output, "{}", render_profile(&record, options.top))?;

@@ -114,6 +114,7 @@ pub fn render_stages(record: &RunRecord, top: usize) -> String {
     for (name, value) in record.counters() {
         let _ = writeln!(out, "  {value:>9}  {name}");
     }
+    out.push_str(&super::render_memory(record.memory(), top));
     out
 }
 
@@ -174,7 +175,7 @@ pub fn render_profile(record: &RunRecord, top: usize) -> String {
 #[instrument(level = "debug", skip(record))]
 #[hotpath::measure]
 pub fn render_usage(record: &RunRecord, top: usize) -> String {
-    let mut out = String::new();
+    let mut out = super::render_memory(record.memory(), top);
     if !record.allocations().is_empty() {
         let _ = writeln!(out, "\nFunctions by bytes allocated:");
         for item in record.allocations().iter().take(top) {

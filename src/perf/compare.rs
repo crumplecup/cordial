@@ -96,9 +96,14 @@ pub struct Comparison {
     stages: Vec<Delta>,
     functions: Vec<Delta>,
     tests: Vec<Delta>,
-    /// Bytes allocated per function. They trend: hotpath prints them to one
-    /// decimal of their unit, so a small move is not a finding.
+    /// Per-operation traffic in compatible process/repeat/mode boundaries.
+    /// Legacy records retain approximate formatted-byte trends.
     allocations: Vec<Delta>,
+    /// Why allocation comparisons are partial, unavailable, or incompatible.
+    memory_issues: Vec<String>,
+    /// Complete attribution requires every process and boundary to be verified.
+    #[getter(copy)]
+    memory_complete: bool,
     /// Stored and held sizes in bytes (the store's entries, a context's copy, the
     /// database's memos). They trend; the counts beside them (files, crates,
     /// memos) are exact and gate through the counters.
@@ -223,7 +228,16 @@ pub fn compare(before: &RunRecord, after: &RunRecord, tolerance: f64) -> Compari
     let stages = pair(stages_of(before), &stages_of(after), tolerance);
     let functions = pair(functions_of(before), &functions_of(after), tolerance);
     let tests = pair(tests_of(before), &tests_of(after), tolerance);
-    let allocations = pair(allocations_of(before), &allocations_of(after), tolerance);
+    let (earlier_memory, later_memory, memory_issues) = memory_traffic(before, after);
+    let allocations = pair(earlier_memory, &later_memory, tolerance);
+    let memory_complete = !before.memory().is_empty()
+        && !after.memory().is_empty()
+        && memory_issues.is_empty()
+        && before
+            .memory()
+            .iter()
+            .chain(after.memory())
+            .all(super::MemoryCapture::attribution_complete);
     let storage = pair(storage_of(before), &storage_of(after), tolerance);
     let grew = counters
         .iter()
@@ -254,6 +268,8 @@ pub fn compare(before: &RunRecord, after: &RunRecord, tolerance: f64) -> Compari
         functions,
         tests,
         allocations,
+        memory_issues,
+        memory_complete,
         storage,
         changed_inputs: after.environment().changes_from(before.environment()),
         fixed_share: share_of(before).zip(share_of(after)),
@@ -275,6 +291,18 @@ pub fn render_comparison(comparison: &Comparison, top: usize) -> String {
         comparison.before_id(),
         comparison.after_id()
     );
+    let _ = writeln!(
+        out,
+        "  Memory attribution comparison: {} (timing verdict above is separate).",
+        if comparison.memory_complete() {
+            "complete"
+        } else {
+            "incomplete"
+        }
+    );
+    for issue in comparison.memory_issues() {
+        let _ = writeln!(out, "    gap: {issue}");
+    }
     if comparison.machine_changed() {
         let _ = writeln!(
             out,
@@ -306,7 +334,7 @@ pub fn render_comparison(comparison: &Comparison, top: usize) -> String {
         ),
         ("Functions", comparison.functions(), format_nanos),
         ("Tests", comparison.tests(), format_nanos),
-        ("Bytes allocated", comparison.allocations(), format_bytes),
+        ("Bytes allocated", comparison.allocations(), exact_bytes),
         ("Stored bytes", comparison.storage(), format_bytes),
     ] {
         let moved: Vec<&Delta> = deltas
@@ -359,4 +387,97 @@ pub fn render_comparison(comparison: &Comparison, top: usize) -> String {
         }
     }
     out
+}
+
+fn exact_bytes(value: u64) -> String {
+    format!("{value} B")
+}
+
+type Traffic = BTreeMap<String, Spread>;
+
+/// Compare operation traffic only inside matching producer/state/repeat/mode boundaries.
+/// No heap or origin peak is a sum or a cross-process comparison.
+fn memory_traffic(before: &RunRecord, after: &RunRecord) -> (Traffic, Traffic, Vec<String>) {
+    if before.memory().is_empty() && after.memory().is_empty() {
+        return (allocations_of(before), allocations_of(after), vec!["no process inventory; legacy allocation values are approximate and coverage is unknown".into()]);
+    }
+    let mut issues = Vec::new();
+    let earlier = memory_index(before);
+    let later = memory_index(after);
+    if earlier.len() != before.memory().len() || later.len() != after.memory().len() {
+        issues.push("ambiguous duplicate workload keys; allocation comparison withheld".into());
+    }
+    if earlier.is_empty() || earlier.keys().ne(later.keys()) {
+        issues
+            .push("process/state/repeat inventories differ; allocation comparison withheld".into());
+    }
+    if !issues.is_empty() {
+        return (Traffic::new(), Traffic::new(), issues);
+    }
+    let mut left = Traffic::new();
+    let mut right = Traffic::new();
+    for (key, a) in earlier {
+        let b = &later[&key];
+        if !a.attribution_complete() || !b.attribution_complete() {
+            issues.push(format!("{key}: attribution incomplete; unverified boundaries and collection losses remain in each record"));
+        }
+        if a.status != super::MemoryStatus::Available
+            || b.status != super::MemoryStatus::Available
+            || !a.issues.is_empty()
+            || !b.issues.is_empty()
+        {
+            issues.push(format!(
+                "{key}: unavailable or lossy allocation evidence; traffic comparison withheld"
+            ));
+            continue;
+        }
+        let (Some(am), Some(bm)) = (&a.capture.manifest, &b.capture.manifest) else {
+            continue;
+        };
+        if am.hotpath_version != bm.hotpath_version
+            || am.features != bm.features
+            || am.accounting != bm.accounting
+            || am.traffic_metric != bm.traffic_metric
+            || am.identity.boundary != bm.identity.boundary
+            || am.completion != bm.completion
+            || am.boundaries != bm.boundaries
+            || am.traffic_metric != "bytes"
+        {
+            issues.push(format!("{key}: incompatible producer, accounting, metric or interval boundary; traffic comparison withheld"));
+            continue;
+        }
+        let rows = |item: &super::MemoryCapture| -> Option<Traffic> {
+            let rows = item.allocation.as_ref()?.functions.as_ref()?;
+            let values: Traffic = rows
+                .iter()
+                .filter_map(|row| {
+                    Some((format!("{key}::{}", row.name), Spread::single(row.bytes?)))
+                })
+                .collect();
+            (values.len() == rows.len()).then_some(values)
+        };
+        let (Some(a), Some(b)) = (rows(a), rows(b)) else {
+            issues.push(format!(
+                "{key}: duplicate operation names or unavailable byte rows; comparison withheld"
+            ));
+            continue;
+        };
+        if a.keys().ne(b.keys()) {
+            issues.push(format!(
+                "{key}: operation inventories differ; comparison withheld"
+            ));
+            continue;
+        }
+        left.extend(a);
+        right.extend(b);
+    }
+    (left, right, issues)
+}
+
+fn memory_index(record: &RunRecord) -> BTreeMap<String, &super::MemoryCapture> {
+    record
+        .memory()
+        .iter()
+        .map(|item| (item.key(), item))
+        .collect()
 }

@@ -132,9 +132,14 @@ impl Step {
     }
 }
 
-/// Run `step` once against `root` with `work_home` as the store home, and read
-/// the ledger it wrote.
-#[instrument(level = "debug", skip(request), err(level = "warn"))]
+/// Memory evidence collected independently of disposable workflow state.
+struct WorkflowCapture {
+    root: PathBuf,
+    memory: Vec<super::MemoryCapture>,
+}
+
+/// Run one attempt and import its capture even when spawn or execution fails.
+#[instrument(level = "debug", skip(request, captures), err(level = "warn"))]
 #[hotpath::measure]
 fn run_once(
     request: &WorkflowRequest,
@@ -143,21 +148,22 @@ fn run_once(
     step: Step,
     state: &str,
     repeat: u32,
+    captures: &mut WorkflowCapture,
 ) -> CordialResult<StageSample> {
     let ledger_path = work_home
         .join(project_slug_from_path(root))
         .join("ledger.json");
     let before = std::fs::read(&ledger_path).ok();
     let started = Instant::now();
-    let profile = crate::profiling::expect_child_for(
-        0,
-        Some(crate::profiling::Identity {
+    let profile = crate::profiling::workflow_child(
+        &captures.root,
+        crate::profiling::Identity {
             role: "workflow_child".to_owned(),
             boundary: "process_entry".to_owned(),
             state: Some(state.to_owned()),
             repeat: Some(u64::from(repeat)),
             ..crate::profiling::Identity::default()
-        }),
+        },
     )?;
     let mut command = Command::new(request.program());
     command
@@ -169,27 +175,28 @@ fn run_once(
         .env("CORDIAL_NO_PROGRESS", "1")
         .stdin(Stdio::null())
         .stdout(Stdio::null());
-    if let Some(profile) = &profile {
-        let (name, value) = profile.environment()?;
-        command.env(name, value);
-    }
-    let spawned = command.spawn();
-    if let (Some(profile), Err(error)) = (&profile, &spawned) {
-        profile.observe(None, None, Some(error.to_string()))?;
-    }
-    let mut child = spawned?;
-    if let Some(profile) = &profile {
+    let (name, value) = profile.environment()?;
+    command.env(name, value);
+    let observed = (|| -> CordialResult<std::process::ExitStatus> {
+        let spawned = command.spawn();
+        if let Err(error) = &spawned {
+            profile.observe(None, None, Some(error.to_string()))?;
+        }
+        let mut child = spawned?;
         profile.observe(Some(child.id()), None, None)?;
-    }
-    let waited = child.wait();
-    if let Some(profile) = &profile {
+        let waited = child.wait();
         profile.observe(
             None,
             waited.as_ref().ok().map(|status| status.code()),
             waited.as_ref().err().map(ToString::to_string),
         )?;
-    }
-    let status = waited?;
+        Ok(waited?)
+    })();
+    captures.memory.extend(super::memory::read_child_memory(
+        profile.root(),
+        profile.id(),
+    )?);
+    let status = observed?;
     let process = u64::try_from(started.elapsed().as_nanos()).unwrap_or(u64::MAX);
     if !status.success() {
         return Err(CordialError::perf(
@@ -215,7 +222,7 @@ fn run_once(
 }
 
 /// Edit `file`, run `submit`, and put the file back whatever happened.
-#[instrument(level = "debug", skip(request), err(level = "warn"))]
+#[instrument(level = "debug", skip(request, captures), err(level = "warn"))]
 #[hotpath::measure]
 fn edited_run(
     request: &WorkflowRequest,
@@ -223,10 +230,19 @@ fn edited_run(
     work_home: &Path,
     file: &Path,
     round: u32,
+    captures: &mut WorkflowCapture,
 ) -> CordialResult<StageSample> {
     let path = root.join(file);
     let original = edit_file(&path, round)?;
-    let sample = run_once(request, root, work_home, Step::Submit, "incremental", round);
+    let sample = run_once(
+        request,
+        root,
+        work_home,
+        Step::Submit,
+        "incremental",
+        round,
+        captures,
+    );
     std::fs::write(&path, original)?;
     sample
 }
@@ -265,8 +281,8 @@ pub fn measure_workflow_partial(
     work_home: &Path,
     request: &WorkflowRequest,
 ) -> (Vec<RunRecord>, Option<CordialError>) {
-    let (cold, warm, incremental, failure) = run_states(root, work_home, request);
-    match records_of(root, request, cold, warm, incremental) {
+    let (cold, warm, incremental, memory, failure) = run_states(root, work_home, request);
+    match records_of(root, request, cold, warm, incremental, memory) {
         Ok(records) => (records, failure),
         Err(error) => (Vec::new(), failure.or(Some(error))),
     }
@@ -278,6 +294,7 @@ type States = (
     Vec<StageSample>,
     Vec<StageSample>,
     Vec<StageSample>,
+    Vec<super::MemoryCapture>,
     Option<CordialError>,
 );
 
@@ -286,6 +303,12 @@ type States = (
 #[hotpath::measure]
 fn run_states(root: &Path, work_home: &Path, request: &WorkflowRequest) -> States {
     let (mut cold, mut warm, mut incremental) = (Vec::new(), Vec::new(), Vec::new());
+    let mut captures = WorkflowCapture {
+        // The derived name always differs from the disposable project slug,
+        // including projects named "perf" or "profiles".
+        root: work_home.join(format!(".{}-profiles", project_slug_from_path(root))),
+        memory: Vec::new(),
+    };
     let mut run = || -> CordialResult<()> {
         let slug_dir = work_home.join(project_slug_from_path(root));
         for round in 1..=request.repeat().max(1) {
@@ -299,6 +322,7 @@ fn run_states(root: &Path, work_home: &Path, request: &WorkflowRequest) -> State
                 Step::Open,
                 "cold",
                 round,
+                &mut captures,
             )?);
             warm.push(run_once(
                 request,
@@ -307,15 +331,23 @@ fn run_states(root: &Path, work_home: &Path, request: &WorkflowRequest) -> State
                 Step::Submit,
                 "warm",
                 round,
+                &mut captures,
             )?);
             if let Some(file) = request.edit() {
-                incremental.push(edited_run(request, root, work_home, file, round)?);
+                incremental.push(edited_run(
+                    request,
+                    root,
+                    work_home,
+                    file,
+                    round,
+                    &mut captures,
+                )?);
             }
         }
         Ok(())
     };
     let failure = run().err();
-    (cold, warm, incremental, failure)
+    (cold, warm, incremental, captures.memory, failure)
 }
 
 /// One record for each state that has samples.
@@ -327,6 +359,7 @@ fn records_of(
     cold: Vec<StageSample>,
     warm: Vec<StageSample>,
     incremental: Vec<StageSample>,
+    mut memory: Vec<super::MemoryCapture>,
 ) -> CordialResult<Vec<RunRecord>> {
     let identity = PerfIdentity::capture(root)?;
     let environment = PerfEnvironment::capture(root);
@@ -337,7 +370,16 @@ fn records_of(
         (PerfState::Warm, warm),
         (PerfState::Incremental, incremental),
     ] {
-        if samples.is_empty() {
+        let state_name = state.to_string();
+        let (state_memory, remaining): (Vec<_>, Vec<_>) = memory.into_iter().partition(|item| {
+            item.capture
+                .expected
+                .as_ref()
+                .and_then(|identity| identity.state.as_deref())
+                == Some(state_name.as_str())
+        });
+        memory = remaining;
+        if samples.is_empty() && state_memory.is_empty() {
             continue;
         }
         let (stages, counters, metrics) = fold(&samples);
@@ -348,6 +390,7 @@ fn records_of(
                 .subject(PerfSubject::workflow(name.clone()))
                 .state(Some(state))
                 .stages(stages)
+                .memory(state_memory)
                 .counters(counters)
                 .values(metrics.values().clone())
                 .notes(metrics.notes().clone())

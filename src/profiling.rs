@@ -3,8 +3,8 @@
 //!
 //! Timing needs only `#[hotpath::measure]` on the functions. Allocation needs one
 //! counting allocator for the whole program, declared here, so a binary does not
-//! declare its own (a second would not link). The guard that writes a profile
-//! belongs here too once there is one place that builds it.
+//! declare its own (a second would not link). CLI, child and test owners all
+//! build the report guard here and publish through the same capture lifecycle.
 
 /// The program's one allocator. Hotpath's always-on live meter supplies the
 /// budget reading in every build, including recorder allocations and work
@@ -55,8 +55,10 @@ pub use coverage::{Boundary, boundaries};
 #[cfg(feature = "tracing")]
 pub use coverage::{OperationCoverage, operation_coverage};
 
-pub use capture::{Capture, FinishReason, Identity, Manifest, ReportStatus, RunReport, read_run};
+pub use capture::{
+    Capture, Child, FinishReason, Identity, Manifest, ReportStatus, RunReport, read_run,
+};
 #[cfg(feature = "cli")]
 pub(crate) use process::configure;
 pub use process::{ProcessProfile, test_run_directory};
-pub(crate) use process::{expect_child, expect_child_for, finish};
+pub(crate) use process::{expect_child, finish, workflow_child};

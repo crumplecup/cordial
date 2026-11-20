@@ -36,8 +36,10 @@ pub enum ReportStatus {
     Disabled,
     /// An expected process/report never appeared.
     Missing,
-    /// The report exists but is truncated or invalid.
+    /// The report exists but is invalid.
     Malformed,
+    /// The JSON document ended before completion.
+    Truncated,
     /// Publishing the report failed.
     WriteFailed,
 }
@@ -60,7 +62,7 @@ pub struct Identity {
 }
 
 /// An expected child, registered durably before spawn. Children write separate manifests.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Child {
     /// Unique process identity, including before an OS pid exists.
     pub id: String,
@@ -80,7 +82,7 @@ pub struct Child {
 }
 
 /// One process's durable portion of a run manifest. Each process has one writer.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Manifest {
     /// Lifecycle schema, independent of Hotpath's report schema.
     pub schema: u32,
@@ -137,7 +139,7 @@ pub struct Manifest {
 }
 
 /// Transferable child registration; contains no profiler state.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct Ticket {
     pub root: PathBuf,
     pub run_id: String,
@@ -464,13 +466,14 @@ fn report_status(path: &Path) -> ReportStatus {
                 let _ = envelope.functions_timing;
                 ReportStatus::Complete
             }
+            Err(error) if error.is_eof() => ReportStatus::Truncated,
             _ => ReportStatus::Malformed,
         },
     }
 }
 
 /// A collected process, including an expected child with no manifest.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RunReport {
     /// Expected process identity.
     pub process_id: String,
@@ -478,6 +481,9 @@ pub struct RunReport {
     pub expected: Option<Identity>,
     /// Durable producer record, absent when capture never started.
     pub manifest: Option<Manifest>,
+    /// Parent observation, including pid and spawn/exit errors when capture never began.
+    #[serde(default)]
+    pub observation: Option<Child>,
     /// Verified current raw report status. Running is always incomplete.
     pub status: ReportStatus,
 }
@@ -485,12 +491,68 @@ pub struct RunReport {
 /// Collect the durable run manifest pieces without hiding missing or truncated children.
 pub fn read_run(root: &Path) -> io::Result<Vec<RunReport>> {
     let mut records = std::collections::BTreeMap::new();
+    let mut standalone = Vec::new();
     for entry in std::fs::read_dir(root)? {
         let path = entry?.path();
+        if path.to_string_lossy().ends_with(".child.json") {
+            match serde_json::from_reader::<_, Child>(io::BufReader::new(std::fs::File::open(
+                &path,
+            )?)) {
+                Ok(child) => standalone.push(child),
+                Err(error) => {
+                    let id = path
+                        .file_name()
+                        .and_then(|name| name.to_str())
+                        .unwrap_or_default()
+                        .trim_end_matches(".child.json")
+                        .to_owned();
+                    records.insert(
+                        id.clone(),
+                        RunReport {
+                            process_id: id,
+                            expected: None,
+                            manifest: None,
+                            observation: None,
+                            status: if error.is_eof() {
+                                ReportStatus::Truncated
+                            } else {
+                                ReportStatus::Malformed
+                            },
+                        },
+                    );
+                }
+            }
+            continue;
+        }
         if !path.to_string_lossy().ends_with(".manifest.json") {
             continue;
         }
-        let manifest: Manifest = serde_json::from_slice(&std::fs::read(path)?)?;
+        let manifest: Manifest = match serde_json::from_slice(&std::fs::read(&path)?) {
+            Ok(manifest) => manifest,
+            Err(error) => {
+                let id = path
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .unwrap_or_default()
+                    .trim_end_matches(".manifest.json")
+                    .to_owned();
+                records.insert(
+                    id.clone(),
+                    RunReport {
+                        process_id: id,
+                        expected: None,
+                        manifest: None,
+                        observation: None,
+                        status: if error.is_eof() {
+                            ReportStatus::Truncated
+                        } else {
+                            ReportStatus::Malformed
+                        },
+                    },
+                );
+                continue;
+            }
+        };
         let status = if manifest.report_status == ReportStatus::Complete {
             report_status(&manifest.report)
         } else {
@@ -502,6 +564,7 @@ pub fn read_run(root: &Path) -> io::Result<Vec<RunReport>> {
                 process_id: manifest.process_id.clone(),
                 expected: Some(manifest.identity.clone()),
                 manifest: Some(manifest),
+                observation: None,
                 status,
             },
         );
@@ -511,16 +574,21 @@ pub fn read_run(root: &Path) -> io::Result<Vec<RunReport>> {
         .filter_map(|record| record.manifest.as_ref())
         .flat_map(|manifest| manifest.children.iter().cloned())
         .collect();
-    for child in children {
+    for child in children.into_iter().chain(standalone) {
         let record = records.entry(child.id.clone()).or_insert(RunReport {
-            process_id: child.id,
-            expected: Some(child.identity),
+            process_id: child.id.clone(),
+            expected: Some(child.identity.clone()),
             manifest: None,
+            observation: None,
             status: ReportStatus::Missing,
         });
+        if record.expected.is_none() {
+            record.expected = Some(child.identity.clone());
+        }
         if record.status == ReportStatus::Running && child.exited {
             record.status = ReportStatus::Incomplete;
         }
+        record.observation = Some(child);
     }
     Ok(records.into_values().collect())
 }
