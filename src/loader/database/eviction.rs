@@ -6,7 +6,6 @@
 //! asked to, and a run is one revision: without asking, every tree it ever parsed stays in
 //! memory.
 
-use ra_ap_ide_db::base_db::SourceDatabase as RaSourceDatabase;
 use tracing::instrument;
 
 use super::SourceDatabase;
@@ -14,9 +13,6 @@ use super::SourceDatabase;
 /// The environment variable that caps how many values each query keeps of those that keep the
 /// most recently used (rust-analyzer marks them for an editor: 128 files, 512 expansions).
 pub const LRU_CAP_VARIABLE: &str = "CORDIAL_LRU_CAP";
-
-/// The environment variable that asks a run for a ledger of what each query holds.
-pub const LEDGER_VARIABLE: &str = "CORDIAL_MEMORY_LEDGER";
 
 /// The environment variable that asks a run to evict between its phases.
 pub const EVICT_VARIABLE: &str = "CORDIAL_EVICT_LRU";
@@ -61,10 +57,6 @@ static COMPUTING_CHUNKS: std::sync::atomic::AtomicU64 = std::sync::atomic::Atomi
 /// How many stages this process has finished.
 static STAGES_THIS_PROCESS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
-/// Whether the memory ledger has been taken. Once a run: the profile follows a thread of its own
-/// for each query dropped and has room for 256 of them, so a second pass would find none.
-static ITEMIZED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-
 /// When the costly actions are done between the chunks of a pass (see [`crate::Backoff`]).
 static CHUNK_BACKOFF: std::sync::Mutex<crate::Backoff> =
     std::sync::Mutex::new(crate::Backoff::new());
@@ -86,76 +78,10 @@ impl SourceDatabase {
         if !self.evicts() {
             return;
         }
-        if crate::memory_limit::pressure() >= crate::Pressure::Hard {
-            self.itemize_memory(after);
-        }
         self.jettison_scaffolding(after);
         self.evict_quietly(after);
         self.spill_under_pressure(after);
         self.drop_regenerable_if_still_pressed(after);
-    }
-
-    /// If the run asks for it, drop the values of each query in turn and say what the process gave
-    /// back for each, with what else the process holds that no query's value is.
-    #[instrument(level = "debug", skip(self))]
-    #[hotpath::measure(impl_type = "SourceDatabase")]
-    pub(super) fn itemize_memory(&mut self, after: &str) {
-        let asked = self
-            .cargo_options
-            .as_ref()
-            .is_some_and(|options| *options.memory_ledger())
-            || std::env::var_os(LEDGER_VARIABLE).is_some();
-        // `CORDIAL_MEMORY_LEDGER=pressed` waits for the first moment the run is pressed hard.
-        let waits_for_pressure = std::env::var(LEDGER_VARIABLE)
-            .is_ok_and(|value| value == "pressed")
-            && crate::memory_limit::pressure() < crate::Pressure::Hard;
-        if !asked || waits_for_pressure || ITEMIZED.swap(true, std::sync::atomic::Ordering::Relaxed)
-        {
-            return;
-        }
-        let texts: (usize, usize) = self
-            .vfs
-            .iter()
-            .map(|(file, _)| self.db.file_text(file).text(&self.db).len())
-            .fold((0, 0), |(files, bytes), len| (files + 1, bytes + len));
-        let threads = std::fs::read_to_string("/proc/self/status")
-            .ok()
-            .and_then(|status| {
-                status
-                    .lines()
-                    .find_map(|line| line.strip_prefix("Threads:"))
-                    .and_then(|rest| rest.trim().parse::<u64>().ok())
-            })
-            .unwrap_or(0);
-        let held_before = crate::memory_limit::meter_kib().unwrap_or(0);
-        let Some(ledger) = crate::itemize(&mut self.db, &[]) else {
-            return;
-        };
-        let held_after = crate::memory_limit::meter_kib().unwrap_or(0);
-        for row in ledger.rows() {
-            tracing::info!(
-                target: "cordial::ledger",
-                ingredient = row.query().as_str(),
-                thread = row.thread().as_str(),
-                step = after,
-                memos = row.memos(),
-                freed_kib = row.freed_kib().max(0).unsigned_abs(),
-                settle_ms = row.settle_ms(),
-                "what dropping a query's values gave back"
-            );
-        }
-        tracing::info!(
-            target: "cordial::ledger",
-            step = after,
-            before_kib = ledger.before_kib(),
-            floor_kib = ledger.floor_kib(),
-            held_before_kib = held_before,
-            held_after_kib = held_after,
-            file_texts = texts.0 as u64,
-            file_text_kib = (texts.1 / 1024) as u64,
-            threads,
-            "what a run held before and after every query's values were dropped"
-        );
     }
 
     /// If the run is still nearing its memory limit after the eviction and the spill, drop the
@@ -176,7 +102,7 @@ impl SourceDatabase {
         let before = crate::process_memory::sample();
         let started = std::time::Instant::now();
         let dropped = salsa::Database::drop_regenerable_values(&mut self.db);
-        let settled = crate::memory_ledger::settled();
+        let after_sample = crate::process_memory::sample();
         let micros = u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX);
         tracing::info!(
             target: "cordial::eviction",
@@ -185,7 +111,7 @@ impl SourceDatabase {
             dropped_regenerable = dropped,
             rounds = 1_u64,
             resident_before_kib = before.map_or(0, |sample| sample.resident_kib()),
-            resident_after_kib = settled.map_or(0, |(resident, _)| resident),
+            resident_after_kib = after_sample.map_or(0, |sample| sample.resident_kib()),
             "dropped the values of every query that is not persisted"
         );
     }
@@ -220,11 +146,6 @@ impl SourceDatabase {
             // what is freed, and the resident memory then does not fall) the next waits twice as
             // long, so that a run is not made to compute the same values again on every chunk.
             let before = crate::memory_limit::meter_kib().unwrap_or(0);
-            if crate::memory_limit::pressure() >= crate::Pressure::Hard {
-                // Once, at the first moment the run is pressed hard and before anything is dropped:
-                // what the memory is made of when it is most in the way.
-                self.itemize_memory("pressed");
-            }
             self.spill_under_pressure("prime chunk");
             if crate::memory_limit::pressure() >= crate::Pressure::Hard {
                 // From the second rung, what is not persisted is dropped after each chunk,

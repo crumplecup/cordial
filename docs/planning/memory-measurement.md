@@ -1,0 +1,278 @@
+# Memory measurement through Hotpath allocation profiling
+
+Status: **Active implementation, 2026-11-19.** Phase 1 removes the duplicate
+diagnostics. Subsequent phases establish Hotpath capabilities and coverage;
+their completion requires the evidence described below.
+
+## Objective and decisions
+
+Use `hotpath-alloc` as the allocation measurement path throughout Cordial.
+Remove the parallel memory ledger and tracing-span memory profiler. Make a
+profile explain allocation activity throughout a run, identify which allocation
+origins still account for live heap, and expose every coverage limitation.
+
+Motivation and constraint: Cordial currently consumes too much RAM to run `open`
+or `submit` on its own repository. The requested work is to establish complete
+memory measurement through Hotpath and remove the parallel homebrewed efforts.
+
+Validation for this effort is through unit tests with small, controlled fixtures.
+Do not benchmark Cordial or profile full programs during this phase. Put the
+infrastructure in place and demonstrate it through those tests for maintainer
+review first. After that, discuss using `elicit_doc` as a real-program target;
+that measurement is deferred and is not authorized by this plan.
+
+This is the implementation plan for memory measurement. It complements
+[performance metrics](performance-metrics.md) and narrows the allocation claims
+in the [Hotpath etiquette plan](hotpath-etiquette.md). Building the general
+etiquette is not a prerequisite for measuring this program.
+
+Decisions:
+
+- Hotpath owns allocation counting and attribution. Cordial owns lifecycle,
+  operation labels, report storage, ingestion, and presentation.
+- A missing Hotpath capability is addressed through Hotpath, with a tested
+  dependency change if necessary. Do not introduce another allocator profiler,
+  tracing layer, pointer registry, or before/after attribution system in Cordial.
+- Remove the custom diagnostic systems first. Preserve eviction, persistence,
+  pressure control, worker reuse, and resumable execution unless a particular
+  piece exists solely to support those diagnostics.
+- Keep operating-system memory readings as the process envelope and budget
+  backstop. Label their relationship to heap data explicitly; they cannot
+  attribute heap allocations to functions.
+- Preserve budget enforcement in builds without detailed profiling. Consolidate
+  its live-byte source too; do not silently require a full profile to enforce a
+  memory limit.
+
+## What the current tree actually does
+
+Assessment baseline: `3709e09b`, with existing uncommitted changes to
+`src/memory_ledger.rs` and `src/loader/database/eviction.rs`, and untracked
+`src/span_memory.rs`. Preserve that distinction when reviewing the removal.
+
+| Path | Current behavior | Planned disposition |
+| --- | --- | --- |
+| `src/profiling.rs` | One global allocator: `cap::Cap` wraps Hotpath's allocator with `hotpath-alloc`, otherwise `System`. `cap` supplies `live_bytes()`. One guard builder enables unlimited report rows. | Keep the central integration point; make Hotpath the counter authority after the capability work below. |
+| `src/memory_ledger.rs` | Drops each query's values, waits for process memory to settle, and assigns the difference to that query. Creates one `lgNNN` thread per query so Hotpath can also report frees on those threads. | Remove the module, public types/function, settling loop, and artificial threads. |
+| `src/loader/database/eviction.rs` and callers | `CORDIAL_MEMORY_LEDGER`, occurrence selectors, option checks, and ledger logging at eviction/stage boundaries. The diagnostic also reads file texts to count their lengths. | Remove diagnostic hooks and selectors. Keep actual cache management. Replace any operational dependency on `settled()` with the appropriate direct metric, without keeping its attribution algorithm. |
+| `src/span_memory.rs` | Unwired tracing subscriber that subtracts process-wide live bytes at span boundaries, including a child-subtraction calculation. | Remove; do not wire it into the subscriber. Parallel activity prevents that subtraction from proving span ownership. |
+| `src/process_memory.rs`, `src/memory_limit.rs` | OS memory sampling, footprint logging, budget/pressure decisions, and use of `live_bytes()`. | Retain operational behavior; review diagnostic growth claims and route allocation data through Hotpath. |
+| `src/perf/usage.rs` and profile reader | Import function allocation totals and thread allocation/free totals. Missing/unparseable fields can become zero or disappear; reports merge by name. | Extend the existing reader and run record, preserving identity and completeness. |
+| `src/perf/workflow.rs` | Reads child gate ledgers and run metrics, but does not import child Hotpath reports. | Connect it to the same profile reader used for test profiles. |
+
+The ledger's current eviction log also mixes a resident-memory reading before
+the operation with the newly changed live-heap reading after it. Removing the
+ledger must remove that unit/source mismatch, rather than reproduce it.
+
+The historical `alloc_metrics` experiment described in `ra-persistence.md` is
+already removed. Keep its history; do not revive it as the replacement.
+
+## Measurement contract
+
+These quantities answer different questions and must remain distinct:
+
+| Quantity | Meaning and required treatment |
+| --- | --- |
+| Allocation bytes/count | Traffic produced by an operation, including temporary objects that have already been freed. |
+| Free bytes/count | Traffic on the freeing thread; a free may happen on a different thread and long after allocation. |
+| Live heap at a point | Successful allocation sizes still outstanding, with a defined baseline and complete allocation/free tracking. |
+| Peak live heap | Maximum simultaneous live heap over a stated interval. Summing per-operation or per-process peaks does not give a run peak. |
+| Live heap by allocation origin | Outstanding allocations associated with where they were allocated, even after the allocating scope or thread exits. This does not prove which current object semantically owns a shared allocation. |
+| Resident/process memory | OS view including effects outside Rust's global allocator. It is not interchangeable with requested heap sizes. |
+
+Function totals need an explicit exclusive/inclusive mode. Use exclusive bytes
+for accounting and inclusive views for navigation; do not add inclusive rows
+together. A worker's allocations belong to its measured worker operation, not
+automatically to the parent function that scheduled it.
+
+### Capability boundary in the locked dependency
+
+Inspection of the installed `hotpath` **0.31.2** source establishes:
+
+- Function allocation frames track allocated bytes and count. Deallocation
+  updates thread totals, not the function that originally allocated the block.
+- Function attribution is exclusive by default; `HOTPATH_ALLOC_CUMULATIVE`
+  propagates child allocations to parents.
+- Thread allocation tracking begins when initialized. The registry has 256
+  lifetime slots, preserves exited threads, and counts overflow traffic in
+  aggregate totals. Per-thread attribution is lost for overflow threads.
+- Hotpath suspends counting for recorder work and can hide its internal threads.
+- Function allocation nesting has a build-time depth limit. Async measurement
+  has a separate mechanism; a synchronous guard must not span a migrating future.
+- The inspected interface does not provide retained bytes by allocation origin
+  or a live/peak API that can replace Cordial's `cap` meter. Human-formatted report
+  byte strings also lose precision in the current reader.
+
+Therefore the current report can locate allocation churn, but cannot yet answer
+all of “what holds RAM now.” Recheck the exact dependency API before choosing an
+extension. Do not relabel thread allocation-minus-free as retained ownership:
+cross-thread frees alone invalidate that interpretation.
+
+## Coverage inventory
+
+Every row needs a measured path, a deliberate boundary, and a verification case.
+“No blind spots” means gaps are detected and exposed, then closed where possible;
+an empty report is never accepted as evidence of zero memory use.
+
+| Region | Coverage work |
+| --- | --- |
+| Entry and setup | Start profiling before tracing, CLI parsing, configuration, workspace loading, and runtime construction. Establish what predates Rust entry and how the baseline is represented. |
+| Pipeline | Cover load, semantic initialization/definition maps, priming, shared IR collection/enrichment, evidence, cfg contexts, projection, assessors, reporting, apply, and output serialization. Include both cache hits and recomputation. |
+| Dependency work | Allocations through the process allocator are counted, but opaque dependency work may be charged to a Cordial boundary. Add targeted Hotpath scopes at important vendored RA/Salsa query/build boundaries when that attribution is too coarse. |
+| Concurrent work | Cover Tokio runtime and blocking pool, Rayon/RA workers, Salsa work, syntax background drops, watchdog, and helper threads. Include short-lived and exited threads. Verify the actual thread inventory; names alone do not prove coverage. |
+| Async work | Use Hotpath's supported poll-aware instrumentation for async bodies. Check yielding, migration, cancellation, and allocations in blocking jobs. |
+| Eviction and shutdown | Include normal eviction, spill/restore, result-store flush, database destruction, delayed background frees, error unwinding, and normal teardown before finishing the report. Do not measure TLS destructors with unsafe guard lifetimes. |
+| Isolation | Profile the driver and every resumed child. Currently the driver calls `process::exit` before the guard is created. Record parent/child role and restart sequence. |
+| Other subprocesses | Inventory Cargo/rustc/proc-macro and other helpers. Distinguish Cordial children that can emit Hotpath reports from external programs whose heap is outside this allocator. Include their OS envelope where the run includes them. |
+| Test processes | Start the per-test profile before measured fixtures/setup. Record tests that never initialize profiling and missing or failed reports. Keep test/process identity before aggregation. |
+| Recorder and native memory | Expose excluded recorder work and the residual OS envelope: native allocations bypassing Rust's allocator, mmap, stacks, shared/file-backed pages, and allocator retention/overhead. Do not manufacture an exact partition by subtracting live heap from RSS. |
+
+## Ordered implementation slices
+
+### 1. Remove the parallel diagnostics
+
+- Delete `span_memory.rs` and `memory_ledger.rs`; remove ledger exports, options,
+  environment handling, stage hooks, and diagnostic-only tests and metrics.
+- Review `tests/memory_ledger.rs`, `tests/salsa_eviction.rs`, and vendored Salsa
+  additions by caller. Keep the primitives used for real cache eviction and
+  tests of that behavior; remove facilities used only for diagnostic itemization.
+  Keep `vendor/salsa.patch` consistent with retained vendor changes.
+- Review `process_memory::Watch` and phase memory events. Keep only OS-envelope
+  sampling and operational diagnostics that are still needed, and carry that
+  context into the same profile/run record. Remove duplicate allocation reports
+  and diagnostic-only watcher threads where Hotpath already supplies the data.
+- Keep before/after operational telemetry honest about its metric and source.
+  No artificial query-drop threads or “settled delta means owner” replacement.
+- Search the working tree for remaining live references and update active docs.
+
+Exit evidence: the custom attribution paths are gone; pressure/eviction behavior
+still has its required APIs and focused behavioral checks.
+
+### 2. Establish the Hotpath capability contract
+
+- Build small controlled fixtures using the locked dependency to establish
+  exclusive/inclusive accounting, cross-thread frees, realloc behavior, thread
+  overflow, recorder exclusions, depth limits, and async behavior.
+- Determine the supported Hotpath path for exact machine-readable counters,
+  process live/peak bytes, and outstanding bytes by allocation origin. Where the
+  locked dependency lacks them, specify and test a Hotpath change rather than
+  implementing a Cordial-owned profiler.
+- Require allocation-origin tracking to survive scope/thread exit, cross-thread
+  frees, and reallocations. Define allocation failure handling and overhead.
+- Provide a cheap live-byte mode suitable for normal budget enforcement without
+  detailed profile collection. Migrate `live_bytes()` callers and remove `cap`
+  only once this preserves behavior with and without detailed profiling.
+
+Exit evidence: a documented supported API and fixtures prove each claimed
+quantity. If retained-origin measurement is unavailable, mark that requirement
+blocked on Hotpath; available allocation-traffic work can continue with that
+limitation visible. Do not declare RAM attribution complete.
+
+### 3. Cover each process lifetime and collect its report
+
+- Retain one guard construction point, with an explicit owner for each process.
+  Begin early; stop after the workload and its normal teardown have completed.
+  Resolve store configuration without delaying initial capture.
+- Write unique raw reports under the configured store, with a run manifest
+  linking process identity, role, parent, restart, state/repeat/test, enabled
+  features, Hotpath version, accounting mode, and report completion status.
+  An explicitly configured output path must not be overwritten by sibling runs.
+- Use the existing watchdog finish path consistently. Controlled exits must
+  finish once; uncatchable termination must leave a visibly incomplete run.
+  Check whether checkpointed Hotpath reports can preserve useful partial data.
+- Verify features in every executable being measured. A timing-only build must
+  report allocation profiling as disabled, rather than produce zero allocations.
+
+Exit evidence: unit tests cover ordinary, error, watchdog, and resumed-process
+lifecycle cases and report linkage; missing/partial children are visible in the
+run record using controlled report fixtures.
+
+### 4. Close operation and concurrency gaps
+
+- Work through the coverage inventory using existing `#[hotpath::measure]` and
+  supported block/future scopes. Measure dependency boundaries narrowly where
+  needed to distinguish meaningful allocation origins.
+- Use Hotpath context propagation if supported when relating worker tasks to a
+  stage. Preserve thread and operation views even without parent linkage.
+- Make registry overflow, unscoped activity, excluded work, and instrumentation
+  limits visible. Zero overflow is required for a claim of full thread attribution.
+- Strengthen coverage checks beyond the existing scan of functions that already
+  have debug/info tracing. It misses uninstrumented entry points and closures;
+  the allocator scan also assumes an older feature-gated declaration shape.
+  Static policy work must use the shared loader/IR, per repository rules.
+
+Exit evidence: each inventory row has unit-test evidence or an explicitly
+documented unverified boundary, and each remaining boundary appears in the
+report. Full-program coverage remains unverified until the later target review.
+
+### 5. Read everything through the existing perf path
+
+- Extend `ProfileUsage`, `RunRecord`, rendering, and comparison; use that reader
+  for both workflow children and test profiles. Keep the raw Hotpath report as
+  the source of truth. Do not add another collection subsystem.
+- Distinguish zero, disabled, unsupported, missing, malformed, truncated, and
+  incomplete data. Validate profiling mode so allocation-count reports are not
+  silently parsed as byte reports. Preserve exact numeric fields when available.
+- Preserve process/thread identity and time/phase provenance before producing
+  summaries. Separate repeats and cold/warm/incremental states. Sum traffic only
+  over disjoint records; derive simultaneous peaks from compatible time data,
+  never by summing individual peaks or ending live-byte values.
+- Present allocation traffic, current retained origins, peak, OS envelope, and
+  coverage status with their definitions. Keep unsupported quantities visible.
+
+Exit evidence: fixtures with known allocations survive capture, import, storage,
+and display; missing child reports and overflow cannot yield a complete result.
+
+## Validation and completion
+
+Unit tests during implementation should cover controlled nested allocations,
+objects retained past scope exit, cross-thread frees, grow/shrink/failing realloc,
+short-lived threads and registry overflow, async migration/cancellation, normal
+and error teardown, watchdog termination, and parent/child report import. Use
+meaningful controlled fixtures, rather than assertions about source spelling.
+Keep the test cases small and independent of Cordial's own analysis workload or
+any other full program. Follow the repository's `tests/` placement convention.
+
+Reconcile controlled allocations with imported Hotpath totals using matching
+intervals and accounting modes. Test that unscoped activity, overflow, exclusions,
+missing reports, and unsupported quantities remain visible. Use numeric fixtures
+to verify precision and aggregation instead of obtaining benchmark measurements.
+
+Infrastructure completion requires all of the following:
+
+- No active custom span-delta or destructive ledger attribution remains.
+- Hotpath is the allocation counter authority, including the live-byte source
+  used by budget control; detailed profiling remains optional.
+- Every owned process and inventory region is measured or has an explicit,
+  evidenced boundary. Allocation-origin retention is proven before claiming to
+  explain held RAM; allocation traffic alone does not meet that claim.
+- The existing perf workflow retains the data and refuses to call incomplete
+  coverage complete. Unit tests demonstrate capture, ingestion, storage, and
+  presentation with known allocations and report fixtures.
+
+Present the infrastructure and unit-test evidence for maintainer review before
+starting full-program measurement. `elicit_doc` is the proposed later target,
+subject to discussion of how to use it. Neither a Cordial benchmark nor a
+real-program run is an acceptance requirement for this infrastructure phase.
+
+The maintainer directs us to **not run Cordial**, to validate with controlled
+unit tests, and to commit at completed phase points using
+`cargo clippy --all-features --all-targets -- -D warnings` as the gate.
+Do not run the usual Cordial pre-commit gate during this effort.
+
+## Implementation evidence
+
+### Phase 1
+
+Removed the destructive ledger module, artificial query-drop threads, settling
+loop, stage/environment/option hooks, public exports, and diagnostic-only tests.
+Removed the unwired, untracked span profiler. Kept Salsa's query-value APIs because
+both pressure eviction and scaffolding eviction use them operationally; their
+controlled behavior tests now live in `tests/salsa_eviction.rs`. No vendor API
+or patch changes were needed. OS sampling remains envelope telemetry and no
+longer emits a duplicate live-heap figure in its phase event. Eviction takes
+direct RSS samples before and after without claiming allocation ownership.
+
+Validation: `cargo test --all-features --test salsa_eviction -- --test-threads=1`
+passes all four controlled cache tests.
+`cargo clippy --all-features --all-targets -- -D warnings` passes. No Cordial
+command or full-program measurement was run.

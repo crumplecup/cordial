@@ -6,8 +6,8 @@ cannot, and the run slows down but keeps going. This is a resiliency strategy, n
 worst case is evict and recompute, and the smallest RAM shadow is what remains when everything that
 can be cold or recomputed is.
 
-Measurements (`cordial::itemize`, `CORDIAL_MEMORY_LEDGER`, a `hotpath-alloc` profile) are a soft
-priority signal only: they order the work, they do not decide whether a cache gets a strategy. Every
+Measurements through `hotpath-alloc` are a soft priority signal only (see
+[memory measurement](memory-measurement.md) for their limits): they order the work, they do not decide whether a cache gets a strategy. Every
 type below needs one.
 
 ## The ladder

@@ -147,9 +147,6 @@ impl SourceDatabase {
         if !crate::memory_limit::resumable() || !crate::result_store::active() {
             return;
         }
-        // What the memory is made of at the floor, if the run asks (see the memory ledger): the
-        // values every query holds, dropped one by one, and what is held before and after.
-        self.itemize_memory("floor");
         // The scaffolding that loading and listing built is let go first, if the run is pressed: what
         // a process has to hold to work is what is left.
         self.jettison_scaffolding("floor");

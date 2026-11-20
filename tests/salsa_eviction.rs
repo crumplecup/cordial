@@ -1,7 +1,5 @@
-//! What a database holds in memory can be counted by query, and dropped one query at a time: the
-//! ledger of what each kind of cache is made of is measured by dropping a query's values and seeing
-//! what the process gives back. A memo whose value is dropped is computed again when something reads
-//! it; one that was restored from a saved state decodes its bytes again and computes nothing.
+//! Query-value eviction preserves other caches and persisted state. These small Salsa
+//! fixtures check cache behavior; memo counts are not measurements of heap ownership.
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -90,7 +88,7 @@ fn count(found: &[(&str, u64)], query: &str) -> u64 {
         .map_or(0, |(_, count)| *count)
 }
 
-/// Each query's memos are counted, and counting drops nothing.
+/// Inspecting cache contents drops nothing.
 #[test]
 fn what_is_held_is_counted_by_query() {
     let mut db = Db::default();

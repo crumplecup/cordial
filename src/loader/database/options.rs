@@ -43,7 +43,7 @@ pub struct SemanticCargoOptions {
     reuse_across_edits: bool,
     /// Ask Salsa to drop what is over the capacity of the queries that keep the most recently used
     /// (the syntax trees of files and of macro expansions among them), between the chunks of the
-    /// priming and at the end of each stage, and wait for the memory to be given back. Off: a run
+    /// priming and at the end of each stage. Off: a run
     /// is one revision, and Salsa drops those values only when asked or at a revision, so every
     /// tree it makes is kept until it ends.
     evicts_between_chunks: bool,
@@ -51,12 +51,6 @@ pub struct SemanticCargoOptions {
     /// steps that merge them: each step then asks for it, file by file, and the first to ask
     /// computes it. For the tests of what the pass does.
     skip_file_scan_priming: bool,
-    /// At the end of the evidence stage, where memory is highest, drop the values of each query in
-    /// turn and say what the process gave back (see [`crate::itemize`]). The run goes on with what
-    /// it dropped computed again, and the state it saves lacks what was persisted and dropped, so
-    /// this is for measuring a run and not for one that is kept. `CORDIAL_MEMORY_LEDGER` asks for
-    /// the same.
-    memory_ledger: bool,
 }
 
 impl SemanticCargoOptions {

@@ -1,7 +1,8 @@
 //! Resident memory of this process, read for performance events.
 //!
 //! Tracing events carry these numbers next to their durations, so a run's log
-//! shows where memory grew without attaching a profiler. Linux reads
+//! shows the OS memory envelope beside the Hotpath profile. These samples do not
+//! attribute allocations or prove which operation owns live heap. Linux reads
 //! `/proc/self/status`; elsewhere no sample is available.
 
 use tracing::instrument;
@@ -45,7 +46,6 @@ pub(crate) fn log(phase: &str) {
             phase,
             resident_kib = memory.resident_kib(),
             peak_kib = memory.peak_kib(),
-            held_kib = crate::memory_limit::meter_kib().unwrap_or(0),
             "memory"
         );
     }
@@ -54,7 +54,8 @@ pub(crate) fn log(phase: &str) {
 /// Logs this process's memory every second while a long phase runs.
 ///
 /// A phase that grows without bound never reaches its end-of-phase sample; this
-/// shows the climb as it happens, labelled with the phase that causes it.
+/// shows the envelope as it changes, labelled with the active phase. Concurrent
+/// operations can also affect that envelope.
 #[derive(Debug)]
 pub(crate) struct Watch {
     stop: std::sync::Arc<std::sync::atomic::AtomicBool>,

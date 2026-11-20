@@ -122,7 +122,6 @@ impl SourceDatabase {
                 self.evidence_done();
             }
             self.audit_reused_evidence();
-            self.itemize_memory("evidence");
             self.evict_regenerable("evidence");
             #[cfg(any(
                 feature = "error_sites",
