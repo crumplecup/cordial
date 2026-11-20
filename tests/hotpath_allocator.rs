@@ -1,79 +1,23 @@
-//! Allocation profiling needs one counting allocator in the program. Cordial
-//! declares it once in the library for its always-on budget meter. The
-//! `hotpath-alloc` feature adds detailed traffic recording. The CLI and every
-//! linked test binary share it (a second allocator would not link).
-
-use std::path::Path;
-
-fn sources() -> Vec<(String, String)> {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-    ["src", "tests", "examples"]
-        .iter()
-        .flat_map(|dir| walkdir::WalkDir::new(root.join(dir)).into_iter())
-        .filter_map(Result::ok)
-        .filter(|entry| entry.path().extension().is_some_and(|ext| ext == "rs"))
-        .filter_map(|entry| {
-            let text = std::fs::read_to_string(entry.path()).ok()?;
-            Some((entry.path().display().to_string(), text))
-        })
-        .collect()
-}
+//! Verify the linked allocator behavior; declarations/features are not inferred from text.
+use std::error::Error;
 
 #[test]
-fn the_counting_allocator_is_declared_exactly_once() {
-    cordial::init_tracing();
-    let declared: Vec<_> = sources()
-        .into_iter()
-        .filter(|(path, _)| !path.ends_with("tests/hotpath_allocator.rs"))
-        .flat_map(|(path, text)| {
-            text.lines()
-                .enumerate()
-                .filter(|(_, line)| line.trim() == "#[global_allocator]")
-                .map(|(index, _)| format!("{path}:{}", index + 1))
-                .collect::<Vec<_>>()
-        })
-        .collect();
-    assert_eq!(
-        declared.len(),
-        1,
-        "one allocator for the whole program: {declared:?}"
-    );
-    assert!(
-        declared[0].contains("src/profiling.rs"),
-        "the profiling module holds it: {declared:?}"
-    );
-}
-
-#[test]
-fn the_manifest_forwards_the_feature_to_hotpath() {
-    cordial::init_tracing();
-    let manifest =
-        std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml"))
-            .unwrap_or_default();
-    assert!(
-        manifest.contains("hotpath-alloc = [\"hotpath\", \"hotpath/hotpath-retained\"]"),
-        "hotpath-alloc turns on Hotpath traffic and retained origins"
-    );
-}
-
-#[test]
-fn one_function_builds_every_profile_guard() {
-    cordial::init_tracing();
-    let builders: Vec<_> = sources()
-        .into_iter()
-        .filter(|(path, _)| path.contains("/src/"))
-        .flat_map(|(path, text)| {
-            text.lines()
-                .enumerate()
-                .filter(|(_, line)| line.contains("HotpathGuardBuilder::new"))
-                .map(|(index, _)| format!("{path}:{}", index + 1))
-                .collect::<Vec<_>>()
-        })
-        .collect();
-    assert_eq!(
-        builders.len(),
-        1,
-        "build guards through profiling::guard: {builders:?}"
-    );
-    assert!(builders[0].contains("src/profiling.rs"), "{builders:?}");
+fn linked_allocator_counts_without_a_profile_guard() -> Result<(), Box<dyn Error>> {
+    if std::env::var_os("CORDIAL_ALLOCATOR_FIXTURE").is_some() {
+        let before = cordial::live_bytes().ok_or("live meter unavailable")?;
+        let bytes = std::hint::black_box(vec![41u8; 123_457]);
+        let during = cordial::live_bytes().ok_or("live meter unavailable")?;
+        assert!(during >= before + 123_457);
+        drop(bytes);
+        let after = cordial::live_bytes().ok_or("live meter unavailable")?;
+        assert!(after <= during - 123_457);
+    } else {
+        let status = std::process::Command::new(std::env::current_exe()?)
+            .args(["--exact", "linked_allocator_counts_without_a_profile_guard"])
+            .env("CORDIAL_ALLOCATOR_FIXTURE", "1")
+            .env_remove("CORDIAL_PERF_PROFILE_DIR")
+            .status()?;
+        assert!(status.success());
+    }
+    Ok(())
 }

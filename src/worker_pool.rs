@@ -47,6 +47,7 @@ pub fn pool_size() -> usize {
 
 static RUNTIME: OnceLock<Option<Runtime>> = OnceLock::new();
 
+#[hotpath::measure]
 pub(crate) fn runtime() -> Option<&'static Runtime> {
     RUNTIME
         .get_or_init(|| {
@@ -89,6 +90,7 @@ fn gate() -> &'static Gate {
 /// Allow `workers` items to run at once (at least one, and not more than [`pool_size`]). It takes
 /// effect at once for the items that have not started, and for those that have when they finish.
 #[instrument(level = "debug")]
+#[hotpath::measure]
 pub fn allow(workers: usize) {
     let gate = gate();
     let wanted = workers.clamp(1, pool_size());
@@ -158,9 +160,15 @@ where
     W: Fn(&R, &T) + Send + Sync + 'static,
     S: Fn(usize) -> bool + Send + Sync + 'static,
 {
+    #[hotpath::measure(impl_type = "Round")]
+    fn work_item(&self, resource: &R, index: usize) {
+        (self.work)(resource, &self.items[self.start + index]);
+    }
+
     /// One task: wait for the gate, take the next item (items are taken in order, so the ones taken
     /// are always the first of the range), run it on the blocking pool with a resource, and give
     /// both back.
+    #[hotpath::measure(impl_type = "Round")]
     async fn item(self: Arc<Self>, dispatch: tracing::Dispatch) {
         let Ok(permit) = Arc::clone(&gate().permits).acquire_owned().await else {
             return;
@@ -194,7 +202,7 @@ where
         let outcome = tokio::task::block_in_place(|| {
             tracing::dispatcher::with_default(&dispatch, || {
                 std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    (self.work)(&resource, &self.items[self.start + taken]);
+                    self.work_item(&resource, taken);
                 }))
             })
         });
@@ -233,6 +241,7 @@ where
 ///
 /// Resumes the panic of an item that panicked, after the ones that had started are done.
 #[instrument(level = "debug", skip_all, fields(items = range.len()))]
+#[hotpath::measure]
 pub fn run_items<T, R, W, S>(
     items: &Arc<[T]>,
     range: Range<usize>,
@@ -267,7 +276,7 @@ where
                 && round.next.load(Ordering::SeqCst) < length
             {
                 let index = round.next.fetch_add(1, Ordering::SeqCst);
-                (round.work)(&resource, &round.items[round.start + index]);
+                round.work_item(&resource, index);
             }
         }
         return round.next.load(Ordering::SeqCst).min(length);

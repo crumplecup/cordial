@@ -474,3 +474,34 @@ Cordial binary or full program was executed.
 Phase 3 completion gate: all-features/all-targets Clippy with warnings denied
 passed. All seven lifecycle fixtures also passed with no default features and
 with timing-only Hotpath enabled; disabled allocation capture stays explicit.
+
+### Phase 4 operation and concurrency coverage
+
+The shared native collector now attaches Hotpath syntax facts to its existing
+function inventory: direct measurement, conditional attributes, async bodies,
+closures and async blocks. `operation_coverage` reads these through `IrView`.
+The old debug/info-only text scan is replaced by a controlled loader fixture
+containing untraced functions and escaping bodies. The allocator test verifies
+the linked live meter with no guard, rather than matching declarations or Cargo
+feature strings.
+
+The shared worker runtime, round dispatch, poll-aware async task and synchronous
+worker item have Hotpath scopes. Named worker scopes surround both parallel
+Salsa verification paths. No synchronous guard spans an await. Hotpath supplies
+thread/operation identity but has no supported cross-spawn parent-link API in
+the pinned integration; the report does not invent parent allocation ownership.
+
+Every manifest carries all ten inventory regions, controlled evidence and
+remaining unverified boundaries. It also preserves collection/display overrides
+that can reduce coverage. Registry overflow, depth limits, unscoped work,
+recorder and TLS exclusions remain Hotpath's exact counters, to be consumed in
+phase 5. Pipeline target coverage, delayed background/TLS destruction, opaque
+dependency internals and external child/native heaps remain explicitly
+unverified. Those are visible boundaries, not claims that a full program has
+been measured. No full-program execution was performed.
+
+Phase 4 validation: all-features/all-targets Clippy with warnings denied passed.
+Controlled allocation, linked allocator, shared IR coverage, lifecycle, worker
+origin and existing worker-pool behavior fixtures passed. A 4,097-byte allocation
+on each of three workers survives as exactly 12,291 bytes under the named worker
+operation. No Cordial invocation or full-program benchmark was used.

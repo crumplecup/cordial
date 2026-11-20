@@ -93,6 +93,7 @@ pub(crate) fn finish(reason: FinishReason) {
     finish_owned(None, reason);
 }
 
+#[cfg(feature = "cli")]
 pub(crate) fn configure(root: &Path, export: Option<&Path>, identity: Identity) -> io::Result<()> {
     let mut held = HELD
         .lock()

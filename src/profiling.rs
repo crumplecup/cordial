@@ -49,8 +49,14 @@ pub(crate) fn guard(caller: &'static str, path: std::path::PathBuf) -> hotpath::
 }
 
 pub(crate) mod capture;
+mod coverage;
 mod process;
+pub use coverage::{Boundary, boundaries};
+#[cfg(feature = "tracing")]
+pub use coverage::{OperationCoverage, operation_coverage};
 
 pub use capture::{Capture, FinishReason, Identity, Manifest, ReportStatus, RunReport, read_run};
+#[cfg(feature = "cli")]
+pub(crate) use process::configure;
 pub use process::{ProcessProfile, test_run_directory};
-pub(crate) use process::{configure, expect_child, expect_child_for, finish};
+pub(crate) use process::{expect_child, expect_child_for, finish};

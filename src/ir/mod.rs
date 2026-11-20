@@ -147,7 +147,8 @@ pub use source_attributes::{
 };
 #[cfg(feature = "tracing")]
 pub use tracing_source::{
-    ATTR_SOURCE_TRACING_INVENTORY, SourceTracingFunction, SourceTracingInventory,
+    ATTR_SOURCE_TRACING_INVENTORY, SourceHotpathFunction, SourceTracingFunction,
+    SourceTracingInventory,
 };
 #[cfg(feature = "tracing")]
 pub(crate) use {

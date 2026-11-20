@@ -66,6 +66,30 @@ impl SourceTracingInventory {
                     .iter()
                     .any(|attr| attr.instrument() && attr.path() != "cfg_attr"),
                 context,
+                hotpath: Some(super::SourceHotpathFunction {
+                    measured: item
+                        .attributes()
+                        .iter()
+                        .any(|attr| attr.path() == "hotpath::measure"),
+                    conditional: item
+                        .attributes()
+                        .iter()
+                        .any(|attr| attr.path() == "cfg_attr"),
+                    asynchronous: function.async_token().is_some(),
+                    closures: function.body().map_or(0, |body| {
+                        body.syntax()
+                            .descendants()
+                            .filter_map(ast::ClosureExpr::cast)
+                            .count()
+                    }),
+                    async_blocks: function.body().map_or(0, |body| {
+                        body.syntax()
+                            .descendants()
+                            .filter_map(ast::BlockExpr::cast)
+                            .filter(|block| block.async_token().is_some())
+                            .count()
+                    }),
+                }),
             });
         }
         Ok(Self {

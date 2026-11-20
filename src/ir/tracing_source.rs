@@ -36,6 +36,10 @@ pub struct SourceTracingFunction {
     #[getter(copy)]
     prover_visible_instrument: bool,
     context: FnContext,
+    /// Hotpath syntax evidence collected from the same canonical source tree.
+    #[serde(default)]
+    #[builder(default)]
+    hotpath: Option<SourceHotpathFunction>,
 }
 
 /// Snapshot-bound inventory. Even an empty source file has this fact; absence
@@ -48,4 +52,19 @@ pub struct SourceTracingInventory {
     #[getter(copy)]
     source_digest: [u8; 32],
     functions: Vec<SourceTracingFunction>,
+}
+
+/// Syntax evidence, not proof that a function executed or a cfg was enabled.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SourceHotpathFunction {
+    /// An unconditional, directly spelled Hotpath measurement attribute.
+    pub measured: bool,
+    /// Conditional attributes need producer-feature validation.
+    pub conditional: bool,
+    /// Async bodies require poll-aware measurement.
+    pub asynchronous: bool,
+    /// Closures may escape the enclosing function or execute on another worker.
+    pub closures: usize,
+    /// Async blocks need their own poll-aware scope if they escape.
+    pub async_blocks: usize,
 }

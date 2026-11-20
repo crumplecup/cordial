@@ -419,9 +419,7 @@ impl super::SourceDatabase {
                 .for_each(|(part, db)| {
                     tracing::dispatcher::with_default(&dispatch, || {
                         ra_ap_hir::attach_db(&db, || {
-                            <dyn salsa::Database>::verify_persisted_memos_by_closure_part(
-                                &db, part, threads,
-                            );
+                            verify_closure_part(&db, part, threads);
                         });
                     });
                 });
@@ -433,7 +431,7 @@ impl super::SourceDatabase {
             handles.into_par_iter().enumerate().for_each(|(part, db)| {
                 tracing::dispatcher::with_default(&dispatch, || {
                     ra_ap_hir::attach_db(&db, || {
-                        <dyn salsa::Database>::verify_persisted_memos_part(&db, part, parts);
+                        verify_query_part(&db, part, parts);
                     });
                 });
             });
@@ -478,4 +476,15 @@ impl super::SourceDatabase {
             }
         });
     }
+}
+
+// Named worker boundaries retain dependency attribution on the worker's thread.
+#[hotpath::measure]
+fn verify_closure_part(db: &RootDatabase, part: usize, parts: usize) {
+    <dyn salsa::Database>::verify_persisted_memos_by_closure_part(db, part, parts);
+}
+
+#[hotpath::measure]
+fn verify_query_part(db: &RootDatabase, part: usize, parts: usize) {
+    <dyn salsa::Database>::verify_persisted_memos_part(db, part, parts);
 }

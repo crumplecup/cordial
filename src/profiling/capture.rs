@@ -126,6 +126,12 @@ pub struct Manifest {
     pub staging: PathBuf,
     /// Expected children, including those that never started capture.
     pub children: Vec<Child>,
+    /// Coverage inventory and remaining unverified boundaries.
+    #[serde(default)]
+    pub boundaries: Vec<super::Boundary>,
+    /// Hotpath configuration overrides that may reduce collection or display.
+    #[serde(default)]
+    pub overrides: std::collections::BTreeMap<String, String>,
     /// Finalization or export error, if any.
     pub error: Option<String>,
 }
@@ -214,6 +220,17 @@ impl Capture {
             .map_or_else(|| root.join(&run_id), |ticket| ticket.root.clone());
         let manifest = Manifest {
             schema: 1,
+            boundaries: super::boundaries(),
+            overrides: std::env::vars()
+                .filter(|(key, _)| {
+                    key.starts_with("HOTPATH_")
+                        && (key.contains("LIMIT")
+                            || key.contains("SAMPLING")
+                            || key == "HOTPATH_REPORT"
+                            || key == "HOTPATH_FOCUS"
+                            || key == "HOTPATH_THREADS_HIDE_INTERNAL")
+                })
+                .collect(),
             run_id,
             process_id: id.clone(),
             parent: ticket.as_ref().map(|ticket| ticket.parent.clone()),
