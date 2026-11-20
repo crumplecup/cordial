@@ -1349,6 +1349,17 @@ impl Drop for HotpathGuard {
                 ))
             };
 
+            #[cfg(feature = "hotpath-alloc")]
+            {
+                report.allocation = Some(crate::functions::alloc::report::allocation_report(
+                    functions_stats.as_ref(),
+                ));
+            }
+            #[cfg(not(feature = "hotpath-alloc"))]
+            {
+                report.allocation = Some(crate::json::AllocationReport::disabled());
+            }
+
             // A cloud report lists every entry (`0` is unlimited): the server
             // diffs reports by name and truncates for display itself, while a
             // client-side top-N cannot be undone.

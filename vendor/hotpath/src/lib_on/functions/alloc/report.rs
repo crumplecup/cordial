@@ -296,3 +296,56 @@ pub(crate) fn build_functions_list_timing(
         tool: None,
     }
 }
+
+/// Exact counters are independent of display metric, precision, and row limits.
+pub(crate) fn allocation_report(
+    stats: Option<&HashMap<u32, FunctionStats>>,
+) -> crate::json::AllocationReport {
+    use crate::json::{
+        AllocationAccounting, AllocationReport, AllocationStatus, ExactFunctionAllocation,
+        ExactThreadAllocation,
+    };
+    let mut functions = stats.map(|stats| {
+        stats
+            .values()
+            .map(|s| ExactFunctionAllocation {
+                id: s.id,
+                name: s.name.to_owned(),
+                calls: s.count,
+                bytes: (!s.is_async).then(|| s.total_bytes()),
+                count: (!s.is_async).then(|| s.total_count()),
+            })
+            .collect::<Vec<_>>()
+    });
+    if let Some(rows) = &mut functions {
+        rows.sort_by_key(|r| r.id);
+    }
+    AllocationReport {
+        schema_version: 1,
+        functions_status: if stats.is_some() {
+            AllocationStatus::Available
+        } else {
+            AllocationStatus::Unavailable
+        },
+        accounting: Some(if *super::guard::ALLOC_CUMULATIVE {
+            AllocationAccounting::Inclusive
+        } else {
+            AllocationAccounting::Exclusive
+        }),
+        functions,
+        threads: Some(
+            super::core::get_registered_thread_stats()
+                .into_iter()
+                .map(
+                    |(tid, allocated_bytes, freed_bytes, name)| ExactThreadAllocation {
+                        tid,
+                        allocated_bytes,
+                        freed_bytes,
+                        name,
+                    },
+                )
+                .collect(),
+        ),
+        coverage: Some(super::core::coverage_snapshot()),
+    }
+}

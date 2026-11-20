@@ -2,6 +2,8 @@
 //! Gated behind the `json` feature (implied by `hotpath`, `cloud`, and
 //! `tui`), so consumers can parse reports without the profiler.
 
+mod allocation;
+pub use allocation::*;
 pub mod cloud_api;
 mod formatted;
 pub mod policy_file;

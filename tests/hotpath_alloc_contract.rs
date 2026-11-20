@@ -22,6 +22,11 @@ fn nested() -> (Vec<u8>, Vec<u8>) {
 }
 
 #[hotpath::measure]
+fn exact_precision() -> Vec<u8> {
+    vec![31; 12_345]
+}
+
+#[hotpath::measure]
 fn resizing() -> Vec<u8> {
     let mut bytes = Vec::with_capacity(32);
     bytes.resize(32, 1);
@@ -268,10 +273,19 @@ fn capture_fixture() -> Result<()> {
     if mode == "depth" {
         check_depth_limit();
         drop(guard);
+        let report: Value =
+            serde_json::from_str(&std::fs::read_to_string(&path).into_diagnostic()?)
+                .into_diagnostic()?;
+        assert!(
+            report["allocation"]["coverage"]["depth_limit_hits"]
+                .as_u64()
+                .is_some_and(|n| n >= 1)
+        );
         return Ok(());
     }
     let retained = nested();
     let resized = resizing();
+    let precise = exact_precision();
     failed_reallocation();
     unsuccessful_requests();
     let allocated = std::thread::Builder::new()
@@ -310,11 +324,62 @@ fn capture_fixture() -> Result<()> {
                 .map_err(|_| miette::miette!("short-lived worker panicked"))?;
         }
     }
-    drop((retained, resized, second));
+    drop((retained, resized, second, precise));
     drop(guard);
 
     let report: Value = serde_json::from_str(&std::fs::read_to_string(path).into_diagnostic()?)
         .into_diagnostic()?;
+    let exact = report["allocation"].clone();
+    let decoded: hotpath::json::AllocationReport =
+        serde_json::from_value(exact.clone()).into_diagnostic()?;
+    assert_eq!(serde_json::to_value(decoded).into_diagnostic()?, exact);
+    assert_eq!(exact["functions_status"], "available");
+    assert_eq!(
+        exact["accounting"],
+        if mode == "inclusive" {
+            "inclusive"
+        } else {
+            "exclusive"
+        }
+    );
+    let precise = exact["functions"]
+        .as_array()
+        .and_then(|rows| {
+            rows.iter().find(|r| {
+                r["name"]
+                    .as_str()
+                    .is_some_and(|s| s.ends_with("::exact_precision"))
+            })
+        })
+        .unwrap_or_else(|| panic!("exact row: {exact}"));
+    assert_eq!(precise["bytes"], 12_345);
+    assert_eq!(precise["count"], 1);
+    assert_eq!(
+        precise["id"],
+        row(&report, "functions_alloc", "::exact_precision")["id"]
+    );
+    assert!(
+        exact["coverage"]["recorder_allocated_bytes"]
+            .as_u64()
+            .is_some_and(|n| n > 0)
+    );
+    assert!(
+        exact["coverage"]["unscoped_allocated_bytes"]
+            .as_u64()
+            .is_some_and(|n| n > 0)
+    );
+    assert!(
+        exact["coverage"]["before_thread_tracking_allocated_bytes"]
+            .as_u64()
+            .is_some_and(|n| n > 0)
+    );
+    assert_eq!(exact["coverage"]["dropped_measurements"], 0);
+    assert!(
+        exact["threads"]
+            .as_array()
+            .is_some_and(|rows| rows.iter().any(|r| r["name"] == "fixture-free"
+                && r["freed_bytes"].as_u64().is_some_and(|n| n >= 192)))
+    );
     let (leaf_total, nested_total, resize_total) = match mode.as_str() {
         "inclusive" => ("128 B", "384 B", "112 B"),
         "count" => ("1", "1", "3"),
@@ -374,12 +439,34 @@ fn capture_fixture() -> Result<()> {
         mode == "internal",
         "the reserved hp- prefix hides application threads too"
     );
+    if mode != "internal" {
+        assert!(
+            exact["coverage"]["hidden_thread_allocated_bytes"]
+                .as_u64()
+                .is_some_and(|n| n >= 72)
+        );
+    }
     // Name-based thread exclusion does not remove measured function traffic.
     assert_eq!(
         row(&report, "functions_alloc", "::reserved_name_worker")["total"],
         if mode == "count" { "1" } else { "72 B" }
     );
     if mode == "overflow" {
+        assert!(
+            exact["coverage"]["overflow_threads"]
+                .as_u64()
+                .is_some_and(|n| n > 0)
+        );
+        assert!(
+            exact["coverage"]["overflow_allocated_bytes"]
+                .as_u64()
+                .is_some_and(|n| n > 0)
+        );
+        assert!(
+            exact["coverage"]["overflow_freed_bytes"]
+                .as_u64()
+                .is_some_and(|n| n > 0)
+        );
         assert_eq!(
             row(&report, "functions_alloc", "::short_lived")["calls"],
             260

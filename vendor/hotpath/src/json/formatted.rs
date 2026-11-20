@@ -1305,6 +1305,8 @@ pub struct JsonReport {
     pub functions_timing: Option<JsonFunctionsList>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub functions_alloc: Option<JsonFunctionsList>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub allocation: Option<crate::json::AllocationReport>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub functions_cpu: Option<JsonFunctionsCpu>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1346,6 +1348,7 @@ impl JsonReport {
             time_sampling: None,
             functions_timing: None,
             functions_alloc: None,
+            allocation: None,
             functions_cpu: None,
             functions_icount: None,
             channels: None,

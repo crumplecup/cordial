@@ -56,6 +56,7 @@ pub(crate) fn push_alloc_stack() {
         // Checked before `depth` moves: the panic allocates, and
         // `track_alloc` must still index a valid frame.
         if depth > max_depth {
+            super::coverage::add(&super::coverage::DEPTH_HITS, 1);
             panic!(
                 "hotpath: more than {max_depth} nested measured functions on one thread in alloc mode. \
                  Raise the limit by rebuilding with HOTPATH_ALLOC_MAX_DEPTH set (e.g. HOTPATH_ALLOC_MAX_DEPTH=256)."
@@ -214,6 +215,7 @@ impl Drop for MeasurementGuardSync {
             crate::lib_on::caller_stack::pop_caller();
         }
         let (bytes_total, count_total) = if cross_thread {
+            super::coverage::add(&super::coverage::CROSS_THREAD, 1);
             (None, None)
         } else {
             let (bytes, count) = pop_alloc_stack();
@@ -347,6 +349,7 @@ impl MeasurementGuardSyncWithLog {
             crate::lib_on::caller_stack::pop_caller();
         }
         let (bytes_total, count_total) = if cross_thread {
+            super::coverage::add(&super::coverage::CROSS_THREAD, 1);
             (None, None)
         } else {
             let (bytes, count) = pop_alloc_stack();
@@ -385,6 +388,7 @@ impl Drop for MeasurementGuardSyncWithLog {
             crate::lib_on::caller_stack::pop_caller();
         }
         let (bytes_total, count_total) = if cross_thread {
+            super::coverage::add(&super::coverage::CROSS_THREAD, 1);
             (None, None)
         } else {
             let (bytes, count) = pop_alloc_stack();

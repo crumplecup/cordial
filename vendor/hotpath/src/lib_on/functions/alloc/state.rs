@@ -20,11 +20,13 @@ static LOST_MEASUREMENTS: std::sync::atomic::AtomicBool = std::sync::atomic::Ato
 
 fn add_measurement(m: Measurement) {
     if !MEASUREMENT_QUEUES.is_active() {
+        super::coverage::add(&super::coverage::INACTIVE, 1);
         return;
     }
     let _result = MEASUREMENT_PRODUCER.try_with(|producer| producer.push(m));
-    #[cfg(feature = "hotpath-ordered-drain")]
     if _result.is_err() {
+        super::coverage::add(&super::coverage::DROPPED, 1);
+        #[cfg(feature = "hotpath-ordered-drain")]
         LOST_MEASUREMENTS.store(true, std::sync::atomic::Ordering::Release);
     }
 }

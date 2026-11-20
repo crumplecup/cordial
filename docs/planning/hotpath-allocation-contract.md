@@ -1,6 +1,6 @@
 # Hotpath allocation capability contract
 
-Status: live-meter checkpoint, 2026-11-19. This records the dependency contract,
+Status: exact-report checkpoint, 2026-11-19. This records the dependency contract,
 not completion of the [memory measurement plan](memory-measurement.md).
 
 ## Controlled evidence
@@ -69,8 +69,14 @@ proves guard creation/teardown cannot reset or disable the meter.
 
 ## Remaining Hotpath dependency work
 
-The extension has no retained-origin API, exact JSON export, or coverage counters.
-Those requirements remain pending in Hotpath. Do not implement counters or a
+The extension now exports exact numeric function/thread rows and accounting mode
+in `JsonReport::allocation`, independent of display limits or byte/count display
+selection. Timing-only reports mark allocation disabled. Lifetime coverage
+counters expose recorder, unscoped, pre-thread-capture, hidden/overflow threads,
+TLS unavailability, depth hits, cross-thread guards, inactive and dropped
+measurements. These counters overlap; they are not a disjoint partition.
+`tests/hotpath_json.rs` also checks integer precision above 2^53 and null values.
+The retained-origin API remains pending in Hotpath. Do not implement counters or a
 pointer registry in Cordial or infer retained memory from function/thread traffic.
 The following full contract remains the acceptance target; the work above covers
 successful requests and the lifetime meter, not every item below.
@@ -118,7 +124,7 @@ meter with baseline and exclusions explicit.
 
 Phase 1 is committed. Phase 2 now has a patched Hotpath lifetime live/peak meter
 and successful-request traffic counting, with Cordial's budget source migrated
-and `cap` removed. Retained-origin attribution and dependency report/coverage
-APIs remain pending, so phase 2 is incomplete. Later lifecycle and ingestion work
-may use the proven traffic path, carrying those limitations as allowed by the
+and `cap` removed. Exact JSON and traffic coverage APIs are implemented;
+retained-origin attribution remains pending, so phase 2 is incomplete. Later
+lifecycle and ingestion work may use the proven traffic path, carrying those limitations as allowed by the
 plan. It must not claim retained-origin or complete RAM attribution.

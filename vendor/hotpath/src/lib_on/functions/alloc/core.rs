@@ -1,3 +1,4 @@
+use super::coverage as c;
 use std::cell::Cell;
 use std::sync::atomic::{AtomicU32, AtomicU64, AtomicU8, Ordering};
 
@@ -149,12 +150,14 @@ enum ThreadSlot {
 
 #[inline]
 fn thread_slot() -> ThreadSlot {
-    THREAD_ALLOC_SLOT_IDX.with(|slot_idx| match slot_idx.get() {
-        SLOT_UNSET => thread_slot_slow(slot_idx),
-        SLOT_INTERNAL => ThreadSlot::Internal,
-        SLOT_OVERFLOW => ThreadSlot::Overflow,
-        idx => ThreadSlot::Tracked(&THREAD_ALLOC_STATS[idx as usize]),
-    })
+    THREAD_ALLOC_SLOT_IDX
+        .try_with(|slot_idx| match slot_idx.get() {
+            SLOT_UNSET => thread_slot_slow(slot_idx),
+            SLOT_INTERNAL => ThreadSlot::Internal,
+            SLOT_OVERFLOW => ThreadSlot::Overflow,
+            idx => ThreadSlot::Tracked(&THREAD_ALLOC_STATS[idx as usize]),
+        })
+        .unwrap_or(ThreadSlot::Internal)
 }
 
 /// One-time per-thread registration, running on the thread itself on its
@@ -180,6 +183,7 @@ fn thread_slot_slow(slot_idx: &Cell<u32>) -> ThreadSlot {
             ThreadSlot::Tracked(&THREAD_ALLOC_STATS[idx])
         }
         None => {
+            c::add(&c::OVERFLOW_THREADS, 1);
             slot_idx.set(SLOT_OVERFLOW);
             ThreadSlot::Overflow
         }
@@ -382,53 +386,101 @@ pub(crate) fn route_alloc_add(_stack: &AllocationInfoStack, _bytes: u64, _count:
 
 #[inline]
 pub(crate) fn track_alloc(size: usize) {
-    let mut tracking_enabled = true;
-    ALLOCATIONS.with(|stack| {
-        tracking_enabled = stack.tracking_enabled.get();
-        if !tracking_enabled {
-            return;
+    let tracked = ALLOCATIONS.try_with(|stack| {
+        if !stack.tracking_enabled.get() {
+            c::add(&c::RECORDER_ALLOC, size);
+            return false;
         }
         let depth = stack.depth.get() as usize;
         let info = &stack.elements[depth];
         info.bytes_total.set(info.bytes_total.get() + size as u64);
         info.count_total.set(info.count_total.get() + 1);
+        if depth == 0 {
+            c::add(&c::UNSCOPED_BYTES, size);
+            c::add(&c::UNSCOPED_COUNT, 1);
+        }
         route_alloc_add(stack, size as u64, 1);
+        true
     });
-
-    if !tracking_enabled {
+    match tracked {
+        Ok(false) => return,
+        Err(_) => {
+            c::add(&c::TLS_ALLOC, size);
+            return;
+        }
+        Ok(true) => {}
+    }
+    if THREAD_TRACKING_ENABLED.load(Ordering::Relaxed) == 0 {
+        c::add(&c::BEFORE_ALLOC, size);
         return;
     }
-
-    if THREAD_TRACKING_ENABLED.load(Ordering::Relaxed) != 0 {
-        match thread_slot() {
-            ThreadSlot::Tracked(slot) => {
-                slot.alloc_bytes.fetch_add(size as u64, Ordering::Relaxed);
-            }
-            ThreadSlot::Overflow => {
-                OVERFLOW_ALLOC_BYTES.fetch_add(size as u64, Ordering::Relaxed);
-            }
-            ThreadSlot::Internal => {}
+    match thread_slot() {
+        ThreadSlot::Tracked(slot) => {
+            slot.alloc_bytes.fetch_add(size as u64, Ordering::Relaxed);
         }
+        ThreadSlot::Overflow => {
+            OVERFLOW_ALLOC_BYTES.fetch_add(size as u64, Ordering::Relaxed);
+        }
+        ThreadSlot::Internal => c::add(&c::HIDDEN_ALLOC, size),
     }
 }
 
 #[inline]
 pub(crate) fn track_dealloc(size: usize) {
-    let tracking_enabled = ALLOCATIONS.with(|stack| stack.tracking_enabled.get());
-    if !tracking_enabled {
+    match ALLOCATIONS.try_with(|stack| stack.tracking_enabled.get()) {
+        Ok(false) => {
+            c::add(&c::RECORDER_FREE, size);
+            return;
+        }
+        Err(_) => {
+            c::add(&c::TLS_FREE, size);
+            return;
+        }
+        Ok(true) => {}
+    }
+    if THREAD_TRACKING_ENABLED.load(Ordering::Relaxed) == 0 {
+        c::add(&c::BEFORE_FREE, size);
         return;
     }
-
-    if THREAD_TRACKING_ENABLED.load(Ordering::Relaxed) != 0 {
-        match thread_slot() {
-            ThreadSlot::Tracked(slot) => {
-                slot.dealloc_bytes.fetch_add(size as u64, Ordering::Relaxed);
-            }
-            ThreadSlot::Overflow => {
-                OVERFLOW_DEALLOC_BYTES.fetch_add(size as u64, Ordering::Relaxed);
-            }
-            ThreadSlot::Internal => {}
+    match thread_slot() {
+        ThreadSlot::Tracked(slot) => {
+            slot.dealloc_bytes.fetch_add(size as u64, Ordering::Relaxed);
         }
+        ThreadSlot::Overflow => {
+            OVERFLOW_DEALLOC_BYTES.fetch_add(size as u64, Ordering::Relaxed);
+        }
+        ThreadSlot::Internal => c::add(&c::HIDDEN_FREE, size),
+    }
+}
+
+/// Lifetime counters. Live workloads may be between independent atomic updates;
+/// quiesce workers when reconciling an exact fixture.
+pub(crate) fn coverage_snapshot() -> crate::json::AllocationCoverage {
+    crate::json::AllocationCoverage {
+        thread_tracking_started: THREAD_TRACKING_ENABLED.load(Ordering::Acquire) != 0,
+        thread_capacity: MAX_THREADS,
+        registered_threads: THREAD_ALLOC_STATS
+            .iter()
+            .filter(|s| s.tid.load(Ordering::Acquire) != 0)
+            .count(),
+        overflow_threads: c::read(&c::OVERFLOW_THREADS),
+        overflow_allocated_bytes: OVERFLOW_ALLOC_BYTES.load(Ordering::Relaxed),
+        overflow_freed_bytes: OVERFLOW_DEALLOC_BYTES.load(Ordering::Relaxed),
+        hidden_thread_allocated_bytes: c::read(&c::HIDDEN_ALLOC),
+        hidden_thread_freed_bytes: c::read(&c::HIDDEN_FREE),
+        recorder_allocated_bytes: c::read(&c::RECORDER_ALLOC),
+        recorder_freed_bytes: c::read(&c::RECORDER_FREE),
+        unscoped_allocated_bytes: c::read(&c::UNSCOPED_BYTES),
+        unscoped_allocation_count: c::read(&c::UNSCOPED_COUNT),
+        before_thread_tracking_allocated_bytes: c::read(&c::BEFORE_ALLOC),
+        before_thread_tracking_freed_bytes: c::read(&c::BEFORE_FREE),
+        tls_unavailable_allocated_bytes: c::read(&c::TLS_ALLOC),
+        tls_unavailable_freed_bytes: c::read(&c::TLS_FREE),
+        depth_limit: MAX_DEPTH,
+        depth_limit_hits: c::read(&c::DEPTH_HITS),
+        cross_thread_guards: c::read(&c::CROSS_THREAD),
+        inactive_measurements: c::read(&c::INACTIVE),
+        dropped_measurements: c::read(&c::DROPPED),
     }
 }
 

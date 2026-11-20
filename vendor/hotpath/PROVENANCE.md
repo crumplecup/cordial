@@ -31,8 +31,12 @@ fixtures, with and without detailed profiling. `tests/hotpath_alloc_contract.rs`
 checks traffic and profile-guard independence in fresh test processes. No real
 program is profiled by these fixtures.
 
-This is a local dependency extension, not an upstream release. Retained origins,
-exact JSON, coverage counters, and full lifecycle integration remain pending in
+The versioned `allocation` JSON section exports exact numeric rows and explicit
+accounting/disabled states alongside display fields. Lifetime coverage counters
+make traffic exclusions and instrumentation losses visible.
+
+This is a local dependency extension, not an upstream release. Retained origins
+and full lifecycle integration remain pending in
 `docs/planning/memory-measurement.md`. Do not describe this patch as complete RAM
 attribution. Keep the patch file synchronized when updating the vendored code.
 

@@ -2,8 +2,8 @@
 
 Status: **Active implementation, 2026-11-19.** Phase 1 is complete. Phase 2's
 Hotpath extension supplies the always-on live/peak meter and corrects failed
-request counting; `cap` is removed. Retained origins and dependency report/coverage
-APIs remain pending. Subsequent lifecycle/coverage work remains pending.
+request counting; `cap` is removed. Exact JSON and traffic coverage counters are
+implemented; retained origins remain pending. Subsequent lifecycle/coverage work remains pending.
 
 ## Objective and decisions
 
@@ -109,8 +109,8 @@ for observed results, remaining boundaries, and the required dependency work.
 
 The local dependency patch now supplies a lifetime live/peak meter and counts
 only successful allocation requests. Cordial's budget reads Hotpath directly;
-`cap` has been removed. Exact JSON, retained origins, and coverage APIs remain
-pending.
+`cap` has been removed. Exact numeric JSON and traffic coverage counters are implemented. Retained
+origins remain pending.
 
 Therefore the current report can locate allocation churn, but cannot yet answer
 all of “what holds RAM now.” Do not relabel thread allocation-minus-free as
@@ -339,3 +339,23 @@ Validation:
 Retained origins, exact report fields, and coverage APIs remain pending in phase
 2. Process lifetime capture and report ingestion remain phases 3–5. The new meter
 alone does not complete RAM attribution.
+
+### Phase 2 exact-report checkpoint
+
+Hotpath now emits a versioned `allocation` JSON section alongside its display
+fields. Exact byte/count rows preserve function ids and accounting mode and are
+independent of display metric and row limits. Timing-only reports explicitly
+mark allocation recording disabled. Missing allocation values remain null.
+Lifetime coverage counters expose recorder/unscoped traffic, pre-thread capture,
+hidden threads, thread overflow, unavailable TLS, depth hits, cross-thread guards,
+inactive recording, and dropped measurements. These counters overlap and must
+not be added as a disjoint partition. Retained origins remain the next phase-2
+capability; no complete RAM-attribution claim is made.
+
+Controlled tests cover exact capture in both metrics/modes, coverage counters,
+large integer serialization (without allocating large buffers), missing values,
+and timing-only disabled reports. No Cordial command or full program was run.
+
+Gate evidence: `cargo clippy --all-features --all-targets -- -D warnings`,
+`cargo fmt --all --check`, the all-features JSON/traffic fixtures, and the
+timing-only JSON fixtures passed. Patch reconstruction matches byte for byte.
