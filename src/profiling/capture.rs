@@ -30,6 +30,8 @@ pub enum ReportStatus {
     Running,
     /// A complete Hotpath JSON document was written.
     Complete,
+    /// A known exited process did not finish capture.
+    Incomplete,
     /// This executable has no Hotpath recorder.
     Disabled,
     /// An expected process/report never appeared.
@@ -64,6 +66,9 @@ pub struct Child {
     pub id: String,
     /// Restart number, zero for the first child.
     pub restart: usize,
+    /// Expected workload identity even if the child never starts capture.
+    #[serde(default)]
+    pub identity: Identity,
     /// Actual child pid after spawn.
     pub pid: Option<u32>,
     /// Child exit code; absent for a signal or a child still running.
@@ -133,6 +138,7 @@ pub(crate) struct Ticket {
     pub id: String,
     pub parent: String,
     pub restart: usize,
+    pub identity: Identity,
 }
 
 /// Owns exactly one Hotpath guard and its publication. Explicit finish is idempotent.
@@ -286,7 +292,14 @@ impl Capture {
                 .root
                 .join(format!("{}.hotpath.json", self.manifest.process_id));
         }
-        self.manifest.identity = identity;
+        let previous = &self.manifest.identity;
+        self.manifest.identity = Identity {
+            state: identity.state.or_else(|| previous.state.clone()),
+            repeat: identity.repeat.or(previous.repeat),
+            binary: identity.binary.or_else(|| previous.binary.clone()),
+            test: identity.test.or_else(|| previous.test.clone()),
+            ..identity
+        };
         self.manifest.export = export.map(|path| {
             let stem = path.file_stem().unwrap_or_default().to_string_lossy();
             path.with_file_name(format!("{stem}-{}.json", self.manifest.process_id))
@@ -298,11 +311,16 @@ impl Capture {
         Ok(())
     }
 
-    pub(crate) fn expect_child(&mut self, restart: usize) -> io::Result<Ticket> {
+    pub(crate) fn expect_child(
+        &mut self,
+        restart: usize,
+        identity: Identity,
+    ) -> io::Result<Ticket> {
         let id = unique_id();
         self.manifest.children.push(Child {
             id: id.clone(),
             restart,
+            identity: identity.clone(),
             pid: None,
             exit_code: None,
             exited: false,
@@ -315,6 +333,7 @@ impl Capture {
             id,
             parent: self.manifest.process_id.clone(),
             restart,
+            identity,
         })
     }
 
@@ -410,14 +429,22 @@ fn copy_new(source: &Path, target: &Path) -> io::Result<()> {
     output.flush()
 }
 
+// Ignore report payloads while validating: finalization must not build a second
+// in-memory copy of the raw report when the workload is already near its budget.
+#[derive(Deserialize)]
+struct Envelope {
+    #[serde(rename = "type")]
+    kind: String,
+    functions_timing: std::collections::BTreeMap<String, serde::de::IgnoredAny>,
+}
+
 fn report_status(path: &Path) -> ReportStatus {
-    match std::fs::read(path) {
+    match std::fs::File::open(path) {
         Err(error) if error.kind() == io::ErrorKind::NotFound => ReportStatus::Missing,
         Err(_) => ReportStatus::WriteFailed,
-        Ok(bytes) => match serde_json::from_slice::<serde_json::Value>(&bytes) {
-            Ok(value)
-                if value["type"] == "hotpath_report" && value["functions_timing"].is_object() =>
-            {
+        Ok(file) => match serde_json::from_reader::<_, Envelope>(io::BufReader::new(file)) {
+            Ok(envelope) if envelope.kind == "hotpath_report" => {
+                let _ = envelope.functions_timing;
                 ReportStatus::Complete
             }
             _ => ReportStatus::Malformed,
@@ -430,6 +457,8 @@ fn report_status(path: &Path) -> ReportStatus {
 pub struct RunReport {
     /// Expected process identity.
     pub process_id: String,
+    /// Expected workload identity, including when capture never started.
+    pub expected: Option<Identity>,
     /// Durable producer record, absent when capture never started.
     pub manifest: Option<Manifest>,
     /// Verified current raw report status. Running is always incomplete.
@@ -454,27 +483,27 @@ pub fn read_run(root: &Path) -> io::Result<Vec<RunReport>> {
             manifest.process_id.clone(),
             RunReport {
                 process_id: manifest.process_id.clone(),
+                expected: Some(manifest.identity.clone()),
                 manifest: Some(manifest),
                 status,
             },
         );
     }
-    let missing: Vec<_> = records
+    let children: Vec<_> = records
         .values()
         .filter_map(|record| record.manifest.as_ref())
-        .flat_map(|manifest| manifest.children.iter())
-        .filter(|child| !records.contains_key(&child.id))
-        .map(|child| child.id.clone())
+        .flat_map(|manifest| manifest.children.iter().cloned())
         .collect();
-    for id in missing {
-        records.insert(
-            id.clone(),
-            RunReport {
-                process_id: id,
-                manifest: None,
-                status: ReportStatus::Missing,
-            },
-        );
+    for child in children {
+        let record = records.entry(child.id.clone()).or_insert(RunReport {
+            process_id: child.id,
+            expected: Some(child.identity),
+            manifest: None,
+            status: ReportStatus::Missing,
+        });
+        if record.status == ReportStatus::Running && child.exited {
+            record.status = ReportStatus::Incomplete;
+        }
     }
     Ok(records.into_values().collect())
 }

@@ -1,11 +1,10 @@
 # Memory measurement through Hotpath allocation profiling
 
-Status: **Active implementation, 2026-11-20.** Phases 1–2 are implemented;
-phase 3 process ownership and durable report linkage are in progress.
+Status: **Active implementation, 2026-11-20.** Phases 1–3 are implemented and
+gated. Phase 4 operation coverage is next.
 Hotpath supplies the always-on live/peak meter, retained allocation origins,
 exact JSON and explicit coverage counters; `cap` and the parallel diagnostics
-are removed. Process lifecycle, operation coverage and ingestion remain phases
-3–5. No full-program measurement has been authorized or performed.
+are removed. Operation coverage and ingestion remain phases 4–5. No full-program measurement has been authorized or performed.
 
 ## Objective and decisions
 
@@ -443,3 +442,35 @@ teardown, errors, unwind, controlled termination, missing/crashed children,
 resumes, exports and output overrides. The all-features/all-targets Clippy gate,
 formatting, whitespace checks and byte-for-byte vendor patch reconstruction
 passed.
+
+### Phase 3 test and workflow linkage
+
+`profile_test()` is the explicit test-thread owner: declare it before fixtures
+to capture setup and normal teardown. A helper thread owns the same `Capture`
+used by the CLI, keeping report shutdown out of test-thread TLS destruction.
+The compatibility `init_tracing` start remains available and records
+`first_init_tracing`, which is explicitly a late boundary. Nextest's existing
+event stream durably registers started/completed tests, including ones that
+never initialize capture. The shared perf reader joins these expectations to
+unique process manifests without losing original binary/test names or repeats.
+
+Workflow child tickets carry cold/warm/incremental state and repeat through
+isolation restarts. Expected child metadata survives outside the disposable
+cold store. The workflow does not infer child features from its driver: each
+manifest records its actual producer features. Library workflow calls without
+an installed process owner still need standalone expected-child collection in
+phase 5; they must not be presented as verified complete captures.
+
+Publication is serialized with competing controlled-exit callers. Raw JSON
+validation streams and ignores payloads rather than building another report
+DOM while memory is under pressure. A parent-observed exited child whose
+manifest remains running is collected as incomplete.
+
+All 17 focused tests passed across `hotpath_lifecycle`, `perf_profile`,
+`perf_workflow` and `perf_workflow_partial`. Workflow tests use tiny shell
+stand-ins; lifecycle tests launch only their own unit-test executable. No
+Cordial binary or full program was executed.
+
+Phase 3 completion gate: all-features/all-targets Clippy with warnings denied
+passed. All seven lifecycle fixtures also passed with no default features and
+with timing-only Hotpath enabled; disabled allocation capture stays explicit.

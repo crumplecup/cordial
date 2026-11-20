@@ -48,9 +48,9 @@ pub(crate) fn guard(caller: &'static str, path: std::path::PathBuf) -> hotpath::
     guard
 }
 
-mod capture;
+pub(crate) mod capture;
 mod process;
 
 pub use capture::{Capture, FinishReason, Identity, Manifest, ReportStatus, RunReport, read_run};
 pub use process::{ProcessProfile, test_run_directory};
-pub(crate) use process::{configure, expect_child, finish};
+pub(crate) use process::{configure, expect_child, expect_child_for, finish};

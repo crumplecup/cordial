@@ -1,35 +1,32 @@
-//! Per-test profiling for `cordial perf tests profile`.
-//!
-//! When `CORDIAL_PERF_PROFILE_DIR` is set, a test process starts a `hotpath`
-//! guard at the first `init_tracing` and the guard writes its report, named from
-//! nextest's `NEXTEST_BINARY_ID` and `NEXTEST_TEST_NAME`, when the test ends.
-//! Nothing runs without the variable, so ordinary test runs are untouched.
-//!
-//! The guard lives on a helper thread. Its report is written when it drops, and
-//! that cannot happen inside the test thread's own thread-local destruction (the
-//! report needs thread-local state that is already gone). The test thread holds
-//! a [`Finish`] instead, whose destructor tells the helper to drop the guard and
-//! waits until the report is on disk.
+//! Per-test ownership of the shared Hotpath capture. Reporting stays on a helper
+//! thread because Hotpath needs TLS that is unavailable during test TLS teardown.
 
-use crate::sync::mpsc;
+use crate::profiling::{Capture, FinishReason, Identity};
 use std::cell::RefCell;
+use std::io;
+use std::marker::PhantomData;
 use std::path::PathBuf;
+use std::rc::Rc;
+use std::sync::mpsc;
 use std::thread::JoinHandle;
 
-/// Held by the test thread; ending the thread finishes the report.
 struct Finish {
-    done: Option<mpsc::Sender<()>>,
+    done: mpsc::Sender<FinishReason>,
     helper: Option<JoinHandle<()>>,
 }
 
 impl Drop for Finish {
-    #[tracing::instrument(level = "trace", skip(self))]
     fn drop(&mut self) {
-        drop(self.done.take());
+        let reason = if std::thread::panicking() {
+            FinishReason::Panic
+        } else {
+            FinishReason::Normal
+        };
+        let _ = self.done.send(reason);
         if let Some(helper) = self.helper.take()
             && helper.join().is_err()
         {
-            tracing::warn!("the profile thread panicked; this test has no report");
+            eprintln!("cordial: the profile thread panicked; this test has no report");
         }
     }
 }
@@ -38,49 +35,88 @@ thread_local! {
     static FINISH: RefCell<Option<Finish>> = const { RefCell::new(None) };
 }
 
-/// The file a test's report goes to, or `None` when this is not a profile run.
-#[tracing::instrument(level = "debug")]
-#[hotpath::measure]
-fn report_path() -> Option<PathBuf> {
-    let dir = std::env::var_os("CORDIAL_PERF_PROFILE_DIR")?;
-    let binary = std::env::var("NEXTEST_BINARY_ID").ok()?;
-    let test = std::env::var("NEXTEST_TEST_NAME").ok()?;
-    let name = format!("{binary}${test}.json").replace('/', "_");
-    Some(PathBuf::from(dir).join(name))
+/// Test-thread owner. Declare before fixtures so its drop follows their teardown.
+/// Inactive outside `CORDIAL_PERF_PROFILE_DIR` runs. Each measured test must run
+/// in its own process (as nextest does); Hotpath cannot restart within libtest.
+pub struct TestProfileGuard {
+    active: bool,
+    thread: PhantomData<Rc<()>>,
 }
 
-/// Start profiling this test if the run asked for it.
-#[tracing::instrument(level = "debug")]
-#[hotpath::measure]
-pub(super) fn start() {
-    let Some(path) = report_path() else {
-        return;
+impl Drop for TestProfileGuard {
+    fn drop(&mut self) {
+        if self.active {
+            FINISH.with(|slot| drop(slot.borrow_mut().take()));
+        }
+    }
+}
+
+/// Begin capture before test setup. Call before `init_tracing` or any fixtures.
+pub fn profile_test() -> io::Result<TestProfileGuard> {
+    let active = begin("test_entry")?;
+    Ok(TestProfileGuard {
+        active,
+        thread: PhantomData,
+    })
+}
+
+fn begin(boundary: &str) -> io::Result<bool> {
+    let Some(root) = std::env::var_os("CORDIAL_PERF_PROFILE_DIR") else {
+        return Ok(false);
+    };
+    let identity = Identity {
+        role: "test".to_owned(),
+        boundary: boundary.to_owned(),
+        binary: Some(std::env::var("NEXTEST_BINARY_ID").map_err(io::Error::other)?),
+        test: Some(std::env::var("NEXTEST_TEST_NAME").map_err(io::Error::other)?),
+        repeat: std::env::var("CORDIAL_PROFILE_REPEAT")
+            .ok()
+            .and_then(|value| value.parse().ok()),
+        ..Identity::default()
     };
     FINISH.with(|slot| {
         let mut slot = slot.borrow_mut();
         if slot.is_some() {
-            return;
+            return Ok(false);
         }
-        let (done, finished) = crate::sync::channel!((), "profile-done");
-        let (ready, started) = crate::sync::channel!((), "profile-ready");
-        let spawned = std::thread::Builder::new()
+        let (done, finished) = mpsc::channel();
+        let (ready, started) = mpsc::channel();
+        let helper = std::thread::Builder::new()
             .name("cordial-profile".to_owned())
             .spawn(move || {
-                let _guard = crate::profiling::guard("test", path);
-                let _ = ready.send(());
-                // Waits for the sender to drop, which is the test ending.
-                let _ = finished.recv();
-                // `_guard` drops here, which writes the report.
-            });
-        match spawned {
-            Ok(helper) => {
-                let _ = started.recv();
+                let mut capture = match Capture::start(&PathBuf::from(root), identity) {
+                    Ok(capture) => capture,
+                    Err(error) => {
+                        let _ = ready.send(Err(error));
+                        return;
+                    }
+                };
+                let _ = ready.send(Ok(()));
+                let reason = finished.recv().unwrap_or(FinishReason::Panic);
+                if let Err(error) = capture.finish(reason) {
+                    eprintln!("cordial: could not finish test capture: {error}");
+                }
+            })?;
+        match started.recv().map_err(io::Error::other)? {
+            Ok(()) => {
                 *slot = Some(Finish {
-                    done: Some(done),
+                    done,
                     helper: Some(helper),
                 });
+                Ok(true)
             }
-            Err(error) => tracing::warn!(%error, "could not start the profile thread"),
+            Err(error) => {
+                let _ = helper.join();
+                Err(error)
+            }
         }
-    });
+    })
+}
+
+/// Compatibility for existing tests. Its late boundary is recorded, never
+/// represented as complete coverage of the test's setup.
+pub(super) fn start() {
+    if let Err(error) = begin("first_init_tracing") {
+        eprintln!("cordial: could not start test capture: {error}");
+    }
 }

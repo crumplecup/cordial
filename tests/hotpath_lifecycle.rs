@@ -48,6 +48,36 @@ fn fixture() -> Result {
     let root = std::env::var_os("CORDIAL_LIFECYCLE_ROOT").ok_or("fixture root")?;
     let root = Path::new(&root);
     match mode.as_str() {
+        "test_early" => {
+            let _owner = cordial::profile_test()?;
+            let bytes = setup();
+            cordial::init_tracing();
+            workload();
+            drop(bytes);
+        }
+        "test_legacy" => {
+            cordial::init_tracing();
+            workload();
+        }
+        "workflow" => {
+            use std::os::unix::fs::PermissionsExt;
+            let owner = ProcessProfile::start_in(&root.join("profiles"), identity())?;
+            let project = root.join("project");
+            std::fs::create_dir_all(&project)?;
+            std::fs::write(project.join("edited.rs"), "original")?;
+            let program = root.join("stand-in");
+            std::fs::write(&program, "#!/bin/sh\nexit 0\n")?;
+            std::fs::set_permissions(&program, std::fs::Permissions::from_mode(0o755))?;
+            let request = cordial::perf::WorkflowRequestBuilder::default()
+                .name("fixture")
+                .program(program)
+                .repeat(2u32)
+                .edit(Some("edited.rs".into()))
+                .build()?;
+            let records = cordial::perf::measure_workflow(&project, &root.join("work"), &request)?;
+            assert_eq!(records.len(), 3);
+            owner.finish(FinishReason::Normal);
+        }
         "capture" | "error" | "watchdog" | "panic" | "crash" => {
             let mut capture = Capture::start(&root.join("early"), identity())?;
             let old = capture.manifest_path();
@@ -127,7 +157,8 @@ fn fixture() -> Result {
 }
 
 fn launch(mode: &str, root: &Path) -> Result {
-    let status = Command::new(std::env::current_exe()?)
+    let mut command = Command::new(std::env::current_exe()?);
+    command
         .args(["--exact", "fixture", "--nocapture"])
         .env("CORDIAL_LIFECYCLE_FIXTURE", mode)
         .env("CORDIAL_LIFECYCLE_ROOT", root)
@@ -136,7 +167,15 @@ fn launch(mode: &str, root: &Path) -> Result {
         .env_remove("CORDIAL_PERF_PROFILE_DIR")
         .env("HOTPATH_OUTPUT_PATH", root.join("must-not-overwrite.json"))
         .env("HOTPATH_OUTPUT_FORMAT", "table")
-        .status()?;
+        .env("HOTPATH_METRICS_SERVER_OFF", "1");
+    if mode.starts_with("test_") {
+        command
+            .env("CORDIAL_PERF_PROFILE_DIR", root)
+            .env("NEXTEST_BINARY_ID", "fixture/binary")
+            .env("NEXTEST_TEST_NAME", "setup::teardown")
+            .env("CORDIAL_PROFILE_REPEAT", "3");
+    }
+    let status = command.status()?;
     assert_eq!(status.code(), Some(if mode == "crash" { 19 } else { 0 }));
     Ok(())
 }
@@ -286,5 +325,98 @@ fn resumed_children_missing_children_and_spawn_errors_remain_linked() -> Result 
             );
         }
     }
+    Ok(())
+}
+
+#[test]
+fn test_ownership_and_expected_tests_share_process_manifests() -> Result {
+    use cordial::perf::{TestExpectations, read_captures, read_profiles};
+    for mode in ["test_early", "test_legacy"] {
+        let root = tempfile::tempdir()?;
+        let mut expected = TestExpectations::new(root.path().join("repeat-3.expected.json"));
+        expected.observe(
+            r#"{"type":"test","event":"started","name":"fixture/binary$setup::teardown"}"#,
+            Some(3),
+        )?;
+        expected.observe(
+            r#"{"type":"test","event":"started","name":"fixture/binary$never_initialized"}"#,
+            Some(3),
+        )?;
+        launch(mode, root.path())?;
+        let reports = read_captures(root.path())?;
+        assert_eq!(reports.len(), 2);
+        assert_eq!(
+            reports
+                .iter()
+                .filter(|report| report.status == ReportStatus::Missing)
+                .count(),
+            1
+        );
+        let manifest = reports
+            .iter()
+            .find_map(|report| report.manifest.as_ref())
+            .ok_or("manifest")?;
+        assert_eq!(manifest.identity.repeat, Some(3));
+        assert_eq!(manifest.identity.binary.as_deref(), Some("fixture/binary"));
+        assert_eq!(
+            manifest.identity.boundary,
+            if mode == "test_early" {
+                "test_entry"
+            } else {
+                "first_init_tracing"
+            }
+        );
+        let profiles = read_profiles(root.path())?;
+        assert_eq!(profiles.len(), usize::from(cfg!(feature = "hotpath")));
+        if cfg!(feature = "hotpath") {
+            assert!(
+                profiles[0]
+                    .functions()
+                    .iter()
+                    .any(|function| function.name().ends_with("::teardown"))
+            );
+            if mode == "test_early" {
+                assert!(
+                    profiles[0]
+                        .functions()
+                        .iter()
+                        .any(|function| function.name().ends_with("::setup"))
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn workflow_expectations_preserve_state_and_repeat_outside_cold_store() -> Result {
+    let root = tempfile::tempdir()?;
+    launch("workflow", root.path())?;
+    let reports = cordial::perf::read_captures(&root.path().join("profiles"))?;
+    assert_eq!(reports.len(), 7);
+    let parent = reports
+        .iter()
+        .find_map(|report| report.manifest.as_ref())
+        .ok_or("parent")?;
+    assert_eq!(parent.children.len(), 6);
+    for round in 1..=2 {
+        for state in ["cold", "warm", "incremental"] {
+            assert!(
+                parent
+                    .children
+                    .iter()
+                    .any(|child| child.identity.state.as_deref() == Some(state)
+                        && child.identity.repeat == Some(round)
+                        && child.exited)
+            );
+        }
+    }
+    assert_eq!(
+        reports
+            .iter()
+            .filter(|report| report.status == ReportStatus::Missing)
+            .count(),
+        6
+    );
     Ok(())
 }

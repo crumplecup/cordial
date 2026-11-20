@@ -362,15 +362,7 @@ fn workflow(
 #[hotpath::measure]
 fn profile(ctx: &ActCtx, name: &str, options: TimingOptions) -> CordialResult<()> {
     let store = PerfStore::new(ctx.store());
-    let stamp = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)?
-        .as_secs();
-    let directory = ctx
-        .store()
-        .perf_dir()
-        .join("profiles")
-        .join(format!("{stamp}-{name}"));
-    std::fs::create_dir_all(&directory)?;
+    let directory = crate::profiling::test_run_directory(&store.raw_dir().join("profiles"))?;
     let request = TimingRequest::new(
         name.to_owned(),
         NextestRequest::new(

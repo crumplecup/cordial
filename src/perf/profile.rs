@@ -95,6 +95,25 @@ fn timing_of(report: &serde_json::Value) -> (u64, Vec<FunctionTiming>) {
 #[hotpath::measure]
 pub fn read_profiles(dir: &Path) -> CordialResult<Vec<TestProfile>> {
     let mut profiles = Vec::new();
+    for captured in read_captures(dir)? {
+        if captured.status != crate::profiling::ReportStatus::Complete {
+            continue;
+        }
+        let Some(manifest) = captured.manifest else {
+            continue;
+        };
+        let (Some(binary), Some(name)) = (manifest.identity.binary, manifest.identity.test) else {
+            continue;
+        };
+        let report: serde_json::Value = serde_json::from_reader(std::io::BufReader::new(
+            std::fs::File::open(manifest.report)?,
+        ))?;
+        let (wall, functions) = timing_of(&report);
+        profiles.push(
+            TestProfile::new(binary, name, wall, functions)
+                .with_usage(ProfileUsage::from_report(&report)),
+        );
+    }
     for entry in std::fs::read_dir(dir)? {
         let path = entry?.path();
         let Some(stem) = path
@@ -229,4 +248,101 @@ pub fn profiled(
         .channels(usage.channels().clone())
         .values(usage.values().clone())
         .build()
+}
+
+/// Durable expected-test inventory, populated from nextest's existing event stream.
+/// No test initialization is needed for an expected missing report to remain visible.
+pub struct TestExpectations {
+    path: std::path::PathBuf,
+    identities: Vec<crate::profiling::Identity>,
+}
+
+impl TestExpectations {
+    /// A unique inventory file for one invocation/repeat.
+    pub fn new(path: std::path::PathBuf) -> Self {
+        Self {
+            path,
+            identities: Vec::new(),
+        }
+    }
+
+    /// Register a started or completed test before the caller processes its result.
+    pub fn observe(&mut self, line: &str, repeat: Option<u64>) -> CordialResult<()> {
+        if !line.starts_with('{') {
+            return Ok(());
+        }
+        let event: serde_json::Value = serde_json::from_str(line)?;
+        if event["type"] != "test"
+            || !matches!(event["event"].as_str(), Some("started" | "ok" | "failed"))
+        {
+            return Ok(());
+        }
+        let Some(name) = event["name"].as_str() else {
+            return Ok(());
+        };
+        let (binary, test) = name.split_once('$').unwrap_or(("", name));
+        let identity = crate::profiling::Identity {
+            role: "test".to_owned(),
+            binary: Some(binary.to_owned()),
+            test: Some(test.to_owned()),
+            repeat,
+            boundary: "expected_test_entry".to_owned(),
+            ..crate::profiling::Identity::default()
+        };
+        if !self.identities.contains(&identity) {
+            self.identities.push(identity);
+            crate::profiling::capture::write_json(&self.path, &self.identities)?;
+        }
+        Ok(())
+    }
+}
+
+/// Read the shared process manifests for both workflows and test profiles.
+/// Expected tests without capture and expected children without manifests survive.
+pub fn read_captures(root: &Path) -> CordialResult<Vec<crate::profiling::RunReport>> {
+    use crate::profiling::{Identity, ReportStatus, RunReport};
+    let mut records = BTreeMap::new();
+    let mut expected = Vec::new();
+    let mut pending = vec![root.to_path_buf()];
+    while let Some(directory) = pending.pop() {
+        for record in crate::profiling::read_run(&directory)? {
+            records.insert(record.process_id.clone(), record);
+        }
+        for entry in std::fs::read_dir(&directory)? {
+            let path = entry?.path();
+            if path.is_dir() {
+                pending.push(path);
+            } else if path.to_string_lossy().ends_with(".expected.json") {
+                let identities: Vec<Identity> =
+                    serde_json::from_reader(std::io::BufReader::new(std::fs::File::open(&path)?))?;
+                expected.extend(
+                    identities
+                        .into_iter()
+                        .enumerate()
+                        .map(|(index, identity)| (format!("{}:{index}", path.display()), identity)),
+                );
+            }
+        }
+    }
+    for (id, identity) in expected {
+        let captured = records.values().any(|record| {
+            record.expected.as_ref().is_some_and(|actual| {
+                actual.binary == identity.binary
+                    && actual.test == identity.test
+                    && actual.repeat == identity.repeat
+            })
+        });
+        if !captured {
+            records.insert(
+                id.clone(),
+                RunReport {
+                    process_id: id,
+                    expected: Some(identity),
+                    manifest: None,
+                    status: ReportStatus::Missing,
+                },
+            );
+        }
+    }
+    Ok(records.into_values().collect())
 }

@@ -91,7 +91,11 @@ pub fn measure(root: &Path, request: &TimingRequest, raw_dir: &Path) -> CordialR
     let mut runs = Vec::new();
     for repeat in 1..=(*request.repeat()).max(1) {
         let raw = raw_dir.join(format!("{stamp}-{}-{repeat}.jsonl", request.set()));
-        runs.push(run(root, request.nextest(), &raw)?);
+        let nextest = request
+            .nextest()
+            .clone()
+            .with_env("CORDIAL_PROFILE_REPEAT", repeat.to_string());
+        runs.push(run(root, &nextest, &raw)?);
     }
     record_of(root, request.set(), request.nextest().threads(), &runs)
 }

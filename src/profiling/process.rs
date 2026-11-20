@@ -24,16 +24,14 @@ impl ProcessProfile {
         let root = crate::default_store_home()
             .join(crate::project_slug_from_path(&project))
             .join("perf/raw/profiles");
-        let identity = Identity {
-            role: if ticket.is_some() {
-                "isolation_child"
-            } else {
-                "cli"
-            }
-            .to_owned(),
-            boundary: "process_entry".to_owned(),
-            ..Identity::default()
-        };
+        let identity = ticket.as_ref().map_or_else(
+            || Identity {
+                role: "cli".to_owned(),
+                boundary: "process_entry".to_owned(),
+                ..Identity::default()
+            },
+            |ticket| ticket.identity.clone(),
+        );
         Self::start_at(&root, identity, ticket)
     }
 
@@ -77,18 +75,14 @@ impl Drop for ProcessProfile {
 }
 
 fn finish_owned(id: Option<&str>, reason: FinishReason) {
-    let capture = match HELD.lock() {
-        Ok(mut held)
-            if id.is_none_or(|id| {
-                held.as_ref()
-                    .is_some_and(|capture| capture.manifest().process_id == id)
-            }) =>
-        {
-            held.take()
-        }
-        _ => None,
-    };
-    if let Some(mut capture) = capture
+    // Serialize publication with every controlled-exit caller. A watchdog must
+    // not exit the process while the ordinary owner is still writing its report.
+    if let Ok(mut held) = HELD.lock()
+        && id.is_none_or(|id| {
+            held.as_ref()
+                .is_some_and(|capture| capture.manifest().process_id == id)
+        })
+        && let Some(mut capture) = held.take()
         && let Err(error) = capture.finish(reason)
     {
         eprintln!("cordial: could not finish Hotpath capture: {error}");
@@ -110,13 +104,24 @@ pub(crate) fn configure(root: &Path, export: Option<&Path>, identity: Identity) 
 }
 
 pub(crate) fn expect_child(restart: usize) -> io::Result<Option<ChildProfile>> {
+    expect_child_for(restart, None)
+}
+
+pub(crate) fn expect_child_for(
+    restart: usize,
+    identity: Option<Identity>,
+) -> io::Result<Option<ChildProfile>> {
     let mut held = HELD
         .lock()
         .map_err(|_| io::Error::other("profile owner poisoned"))?;
     held.as_mut()
         .map(|capture| {
+            let identity = identity.unwrap_or_else(|| Identity {
+                role: "isolation_child".to_owned(),
+                ..capture.manifest().identity.clone()
+            });
             capture
-                .expect_child(restart)
+                .expect_child(restart, identity)
                 .map(|ticket| ChildProfile { ticket })
         })
         .transpose()

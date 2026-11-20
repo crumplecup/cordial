@@ -155,11 +155,31 @@ pub fn run(root: &Path, request: &NextestRequest, raw: &Path) -> CordialResult<V
         ),
     }
     let mut child = command.spawn()?;
+    let profile_dir = request
+        .env()
+        .iter()
+        .find(|(key, _)| key == "CORDIAL_PERF_PROFILE_DIR")
+        .map(|(_, value)| std::path::PathBuf::from(value));
+    let repeat = request
+        .env()
+        .iter()
+        .rev()
+        .find(|(key, _)| key == "CORDIAL_PROFILE_REPEAT")
+        .and_then(|(_, value)| value.parse().ok());
+    let mut expectations = profile_dir.map(|directory| {
+        super::TestExpectations::new(directory.join(format!(
+            "{}.expected.json",
+            raw.file_stem().unwrap_or_default().to_string_lossy()
+        )))
+    });
     let mut events = String::new();
     if let Some(stdout) = child.stdout.take() {
         for line in BufReader::new(stdout).lines() {
             let line = line?;
             writeln!(log, "{line}")?;
+            if let Some(expected) = &mut expectations {
+                expected.observe(&line, repeat)?;
+            }
             events.push_str(&line);
             events.push('\n');
         }

@@ -22,7 +22,8 @@ pub use environment::{ChangeKind, EnvironmentChange, PerfEnvironment, RA_AP_VERS
 pub use identity::{PerfIdentity, PerfIdentityBuilder};
 pub use nextest::{NextestRequest, TestRun, build_targets, parse_events};
 pub use profile::{
-    TestProfile, aggregate, attach, fixed_ns, parse_duration, parse_report, profiled, read_profiles,
+    TestExpectations, TestProfile, aggregate, attach, fixed_ns, parse_duration, parse_report,
+    profiled, read_captures, read_profiles,
 };
 pub use record::{
     FunctionTiming, PerfState, PerfSubject, RECORD_SCHEMA, RunRecord, RunRecordBuilder,

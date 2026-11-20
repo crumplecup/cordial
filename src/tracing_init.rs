@@ -3,6 +3,7 @@
 use tracing_subscriber::EnvFilter;
 
 mod profile;
+pub use profile::{TestProfileGuard, profile_test};
 
 /// The variable that makes the log show each span when it ends, with the time it took.
 pub const LOG_SPANS_VARIABLE: &str = "CORDIAL_LOG_SPANS";

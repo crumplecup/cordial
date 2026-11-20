@@ -141,13 +141,26 @@ fn run_once(
     root: &Path,
     work_home: &Path,
     step: Step,
+    state: &str,
+    repeat: u32,
 ) -> CordialResult<StageSample> {
     let ledger_path = work_home
         .join(project_slug_from_path(root))
         .join("ledger.json");
     let before = std::fs::read(&ledger_path).ok();
     let started = Instant::now();
-    let status = Command::new(request.program())
+    let profile = crate::profiling::expect_child_for(
+        0,
+        Some(crate::profiling::Identity {
+            role: "workflow_child".to_owned(),
+            boundary: "process_entry".to_owned(),
+            state: Some(state.to_owned()),
+            repeat: Some(u64::from(repeat)),
+            ..crate::profiling::Identity::default()
+        }),
+    )?;
+    let mut command = Command::new(request.program());
+    command
         .arg("--project")
         .arg(root)
         .arg("--store-home")
@@ -155,8 +168,28 @@ fn run_once(
         .args(step.arguments())
         .env("CORDIAL_NO_PROGRESS", "1")
         .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .status()?;
+        .stdout(Stdio::null());
+    if let Some(profile) = &profile {
+        let (name, value) = profile.environment()?;
+        command.env(name, value);
+    }
+    let spawned = command.spawn();
+    if let (Some(profile), Err(error)) = (&profile, &spawned) {
+        profile.observe(None, None, Some(error.to_string()))?;
+    }
+    let mut child = spawned?;
+    if let Some(profile) = &profile {
+        profile.observe(Some(child.id()), None, None)?;
+    }
+    let waited = child.wait();
+    if let Some(profile) = &profile {
+        profile.observe(
+            None,
+            waited.as_ref().ok().map(|status| status.code()),
+            waited.as_ref().err().map(ToString::to_string),
+        )?;
+    }
+    let status = waited?;
     let process = u64::try_from(started.elapsed().as_nanos()).unwrap_or(u64::MAX);
     if !status.success() {
         return Err(CordialError::perf(
@@ -193,7 +226,7 @@ fn edited_run(
 ) -> CordialResult<StageSample> {
     let path = root.join(file);
     let original = edit_file(&path, round)?;
-    let sample = run_once(request, root, work_home, Step::Submit);
+    let sample = run_once(request, root, work_home, Step::Submit, "incremental", round);
     std::fs::write(&path, original)?;
     sample
 }
@@ -259,8 +292,22 @@ fn run_states(root: &Path, work_home: &Path, request: &WorkflowRequest) -> State
             if slug_dir.exists() {
                 std::fs::remove_dir_all(&slug_dir)?;
             }
-            cold.push(run_once(request, root, work_home, Step::Open)?);
-            warm.push(run_once(request, root, work_home, Step::Submit)?);
+            cold.push(run_once(
+                request,
+                root,
+                work_home,
+                Step::Open,
+                "cold",
+                round,
+            )?);
+            warm.push(run_once(
+                request,
+                root,
+                work_home,
+                Step::Submit,
+                "warm",
+                round,
+            )?);
             if let Some(file) = request.edit() {
                 incremental.push(edited_run(request, root, work_home, file, round)?);
             }
