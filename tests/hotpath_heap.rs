@@ -73,8 +73,12 @@ fn inplace_realloc_counts_the_size_difference_and_failure_changes_nothing() {
         assert!(allocator.alloc_zeroed(layout(512)).is_null());
         assert_eq!(allocator.live_bytes(), 0);
         assert_eq!(allocator.peak_live_bytes(), 0);
+        #[cfg(feature = "hotpath-alloc")]
+        let origin = hotpath::MeasurementGuardSync::new("original block", false, false);
         let first = allocator.alloc(layout(32));
         assert!(!first.is_null());
+        #[cfg(feature = "hotpath-alloc")]
+        drop(origin);
         first.write(73);
         let grown = allocator.realloc(first, layout(32), 64);
         assert_eq!(grown, first);
@@ -89,9 +93,35 @@ fn inplace_realloc_counts_the_size_difference_and_failure_changes_nothing() {
         assert_eq!(shrunk.read(), 73);
         assert_eq!(allocator.live_bytes(), 16);
         assert_eq!(allocator.peak_live_bytes(), 64);
+        #[cfg(feature = "hotpath-alloc")]
+        {
+            let snapshot = allocator.heap_snapshot();
+            let original = snapshot
+                .origins
+                .iter()
+                .find(|r| r.name.as_deref() == Some("original block"))
+                .unwrap_or_else(|| panic!("lost original allocation: {snapshot:?}"));
+            assert_eq!(original.live_bytes, 16);
+            assert_eq!(original.live_allocations, 1);
+            assert_eq!(snapshot.origins[0].live_bytes, 0);
+            assert_eq!(snapshot.peak_live_bytes, 64);
+            assert_eq!(snapshot.live_header_bytes, std::mem::size_of::<usize>());
+        }
         allocator.dealloc(shrunk, layout(16));
     }
     assert_eq!(allocator.live_bytes(), 0);
+    #[cfg(feature = "hotpath-alloc")]
+    {
+        let snapshot = allocator.heap_snapshot();
+        assert_eq!(snapshot.live_bytes, 0);
+        assert_eq!(snapshot.peak_live_bytes, 64);
+        assert_eq!(snapshot.allocation_failures, 2);
+        assert_eq!(snapshot.reallocation_failures, 1);
+        assert_eq!(snapshot.successful_allocations, 1);
+        assert_eq!(snapshot.successful_reallocations, 2);
+        assert_eq!(snapshot.allocated_bytes, 112);
+        assert_eq!(snapshot.freed_bytes, 112);
+    }
 }
 
 struct AlwaysMoves;
@@ -132,8 +162,12 @@ fn moved_realloc_preserves_contents_and_does_not_invent_a_live_peak() {
     // SAFETY: nonzero layouts; only successful realloc pointers are used; final
     // free uses the most recent pointer/layout, exactly once.
     unsafe {
+        #[cfg(feature = "hotpath-alloc")]
+        let origin = hotpath::MeasurementGuardSync::new("original block", false, false);
         let first = allocator.alloc(layout(32));
         assert!(!first.is_null());
+        #[cfg(feature = "hotpath-alloc")]
+        drop(origin);
         first.write(61);
         let grown = allocator.realloc(first, layout(32), 64);
         assert!(!grown.is_null());
@@ -147,6 +181,20 @@ fn moved_realloc_preserves_contents_and_does_not_invent_a_live_peak() {
         assert_eq!(shrunk.read(), 61);
         assert_eq!(allocator.live_bytes(), 16);
         assert_eq!(allocator.peak_live_bytes(), 64);
+        #[cfg(feature = "hotpath-alloc")]
+        {
+            let snapshot = allocator.heap_snapshot();
+            let original = snapshot
+                .origins
+                .iter()
+                .find(|r| r.name.as_deref() == Some("original block"))
+                .unwrap_or_else(|| panic!("lost original allocation: {snapshot:?}"));
+            assert_eq!(original.live_bytes, 16);
+            assert_eq!(original.live_allocations, 1);
+            assert_eq!(snapshot.origins[0].live_bytes, 0);
+            assert_eq!(snapshot.peak_live_bytes, 64);
+            assert_eq!(snapshot.live_header_bytes, std::mem::size_of::<usize>());
+        }
         allocator.dealloc(shrunk, layout(16));
     }
     assert_eq!(allocator.live_bytes(), 0);

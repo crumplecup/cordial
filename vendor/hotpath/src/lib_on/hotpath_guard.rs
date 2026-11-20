@@ -254,6 +254,8 @@ pub struct HotpathGuardBuilder {
     time_sampling: crate::lib_on::sampling::TimeSamplingConfig,
     user_metadata: HashMap<String, String>,
     criterion: Option<crate::json::JsonCriterion>,
+    #[cfg(feature = "hotpath-retained")]
+    heap_provider: Option<fn() -> crate::HeapSnapshot>,
 }
 
 impl HotpathGuardBuilder {
@@ -298,7 +300,19 @@ impl HotpathGuardBuilder {
             time_sampling: crate::lib_on::sampling::TimeSamplingConfig::default(),
             user_metadata: HashMap::new(),
             criterion: None,
+            #[cfg(feature = "hotpath-retained")]
+            heap_provider: None,
         }
+    }
+
+    /// Attach the process-global allocator's retained-heap snapshot function.
+    /// Captures a baseline before guard initialization and a final snapshot
+    /// before report construction. Peaks remain allocator-lifetime peaks;
+    /// baseline subtraction does not produce an interval peak.
+    #[cfg(feature = "hotpath-retained")]
+    pub fn heap_provider(mut self, provider: fn() -> crate::HeapSnapshot) -> Self {
+        self.heap_provider = Some(provider);
+        self
     }
 
     /// Sets which latency percentiles to compute (e.g. `&[50.0, 95.0, 99.9]`).
@@ -541,6 +555,8 @@ impl HotpathGuardBuilder {
     /// `HOTPATH_USER_METADATA` is not a comma-separated list of `key=value`
     /// pairs with unique, non-empty keys.
     pub fn build(self) -> HotpathGuard {
+        #[cfg(feature = "hotpath-retained")]
+        let heap_baseline = self.heap_provider.map(|provider| provider());
         #[cfg(feature = "dev")]
         crate::dev_logging::init_logging();
 
@@ -561,7 +577,8 @@ impl HotpathGuardBuilder {
         let percentiles = normalize_percentiles(&self.percentiles);
         let user_metadata = resolve_user_metadata(self.user_metadata);
 
-        HotpathGuard::new(
+        #[allow(unused_mut)]
+        let mut guard = HotpathGuard::new(
             self.caller_name,
             &percentiles,
             self.functions_limit,
@@ -581,7 +598,13 @@ impl HotpathGuardBuilder {
             self.threads_limit,
             user_metadata,
             self.criterion,
-        )
+        );
+        #[cfg(feature = "hotpath-retained")]
+        {
+            guard.heap_provider = self.heap_provider;
+            guard.heap_baseline = heap_baseline;
+        }
+        guard
     }
 
     /// Builds the guard and moves it to a background thread that keeps it alive.
@@ -641,6 +664,10 @@ pub struct HotpathGuard {
     threads_limit: usize,
     user_metadata: BTreeMap<String, String>,
     criterion: Option<crate::json::JsonCriterion>,
+    #[cfg(feature = "hotpath-retained")]
+    heap_provider: Option<fn() -> crate::HeapSnapshot>,
+    #[cfg(feature = "hotpath-retained")]
+    heap_baseline: Option<crate::HeapSnapshot>,
     #[cfg(feature = "hotpath-meta")]
     _meta_guard: Option<hotpath_meta::HotpathGuard>,
 }
@@ -1026,6 +1053,10 @@ impl HotpathGuard {
             threads_limit,
             user_metadata,
             criterion,
+            #[cfg(feature = "hotpath-retained")]
+            heap_provider: None,
+            #[cfg(feature = "hotpath-retained")]
+            heap_baseline: None,
             #[cfg(feature = "hotpath-meta")]
             _meta_guard,
         }
@@ -1087,7 +1118,6 @@ fn build_icount_list(
 impl Drop for HotpathGuard {
     fn drop(&mut self) {
         let _suspend = crate::lib_on::SuspendAllocTracking::new();
-
         #[cfg(feature = "hotpath-cpu")]
         let cpu_report: Option<Result<crate::functions::cpu::CpuReport, String>> = if self
             .sections_mode
@@ -1135,6 +1165,8 @@ impl Drop for HotpathGuard {
         if let Some(f) = self.before_shutdown.take() {
             f();
         }
+        #[cfg(feature = "hotpath-retained")]
+        let heap = self.heap_provider.map(|provider| provider());
 
         let wrapper_guard = self.wrapper_guard.take().unwrap();
         drop(wrapper_guard);
@@ -1354,6 +1386,16 @@ impl Drop for HotpathGuard {
                 report.allocation = Some(crate::functions::alloc::report::allocation_report(
                     functions_stats.as_ref(),
                 ));
+                #[cfg(feature = "hotpath-retained")]
+                if let Some(allocation) = &mut report.allocation {
+                    allocation.heap_status = if heap.is_some() {
+                        crate::json::AllocationStatus::Available
+                    } else {
+                        crate::json::AllocationStatus::Unavailable
+                    };
+                    allocation.heap = heap;
+                    allocation.heap_baseline = self.heap_baseline.take();
+                }
             }
             #[cfg(not(feature = "hotpath-alloc"))]
             {

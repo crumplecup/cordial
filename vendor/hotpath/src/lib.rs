@@ -22,6 +22,12 @@ extern crate self as hotpath;
 
 mod allocator;
 pub use allocator::CountingAllocator;
+#[cfg(feature = "hotpath-retained")]
+mod retained;
+#[cfg(feature = "hotpath-retained")]
+pub use retained::MAX_ALLOCATION_ORIGINS;
+mod heap;
+pub use heap::{HeapSnapshot, OriginKind, RetainedOrigin};
 
 #[cfg(feature = "hotpath")]
 #[doc(inline)]

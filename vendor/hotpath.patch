@@ -1,15 +1,16 @@
 --- a/Cargo.toml
 +++ b/Cargo.toml
-@@ -30,6 +30,8 @@
+@@ -30,6 +30,9 @@
  features = ["hotpath-alloc"]
  
  [features]
 +# Always-on requested live/peak bytes, independent of detailed profiling.
 +hotpath-live = []
++hotpath-retained = ["hotpath-alloc", "hotpath-live"]
  async-channel = ["dep:async-channel"]
  async-lock = ["dep:async-lock"]
  axum-0-8 = [
-@@ -240,245 +242,65 @@
+@@ -240,245 +243,65 @@
  name = "hotpath"
  path = "src/lib.rs"
  
@@ -316,17 +317,18 @@
  version = "1.7"
 --- /dev/null
 +++ b/src/allocator.rs
-@@ -0,0 +1,143 @@
+@@ -0,0 +1,251 @@
 +// Original source: https://github.com/fornwall/allocation-counter
 +// Licensed under Apache-2.0 OR MIT. Adapted by Hotpath, then extended with an
-+// optional always-on live/peak meter; see ../PROVENANCE.md.
++// optional live/peak and retained-origin tracking; see ../PROVENANCE.md.
 +
 +use std::alloc::{GlobalAlloc, Layout, System};
 +#[cfg(feature = "hotpath-live")]
 +use std::sync::atomic::{AtomicUsize, Ordering};
 +
 +/// Allocator with optional function traffic (`hotpath-alloc`) and requested
-+/// live/peak bytes (`hotpath-live`). Without either feature it is a pass-through.
++/// live/peak bytes (`hotpath-live`). `hotpath-retained` adds bounded retained
++/// origins and private block prefixes. Without any of these it is a pass-through.
 +///
 +/// The live meter belongs to this allocator instance. Declare one instance as
 +/// the global allocator to measure the process's Rust heap. It includes recorder
@@ -334,6 +336,8 @@
 +/// guard. Native allocations bypassing this allocator are outside its scope.
 +pub struct CountingAllocator<A = System> {
 +    inner: A,
++    #[cfg(feature = "hotpath-retained")]
++    origins: crate::retained::Registry,
 +    #[cfg(feature = "hotpath-live")]
 +    live: AtomicUsize,
 +    #[cfg(feature = "hotpath-live")]
@@ -350,6 +354,8 @@
 +    pub const fn with(inner: A) -> Self {
 +        Self {
 +            inner,
++            #[cfg(feature = "hotpath-retained")]
++            origins: crate::retained::Registry::new(crate::MAX_ALLOCATION_ORIGINS),
 +            #[cfg(feature = "hotpath-live")]
 +            live: AtomicUsize::new(0),
 +            #[cfg(feature = "hotpath-live")]
@@ -357,10 +363,32 @@
 +        }
 +    }
 +
++    /// Detailed-mode constructor with a smaller logical registry capacity.
++    /// Storage remains fixed; capacity is clamped to MAX_ALLOCATION_ORIGINS.
++    #[cfg(feature = "hotpath-retained")]
++    pub const fn with_origin_capacity(inner: A, capacity: usize) -> Self {
++        Self {
++            inner,
++            origins: crate::retained::Registry::new(capacity),
++            live: AtomicUsize::new(0),
++            peak: AtomicUsize::new(0),
++        }
++    }
++
++    /// Coherent requested-heap and retained-origin snapshot at a lock point.
++    /// Rows reconcile internally during concurrent allocation. The cheap atomic
++    /// meter reconciles with them once allocator calls quiesce. Snapshot storage
++    /// is recorder work, and may itself appear in a global allocator snapshot.
++    #[cfg(feature = "hotpath-retained")]
++    pub fn heap_snapshot(&self) -> crate::HeapSnapshot {
++        self.origins.snapshot()
++    }
++
 +    /// Exact requested bytes outstanding through this instance. Starts at zero
 +    /// on construction; there is no profile-dependent baseline or reset.
 +    ///
-+    /// Counter updates use atomics without allocating, locking, or accessing TLS.
++    /// Live-only updates use atomics without allocation, locking or TLS.
++    /// Retained mode also serializes registry updates; it never allocates metadata.
 +    /// Successful allocations update before returning; frees update before
 +    /// forwarding to the inner allocator. Concurrent calls may be in flight.
 +    /// Allocator overhead, retention, and temporary storage inside realloc are
@@ -382,19 +410,19 @@
 +        self.peak.load(Ordering::Relaxed)
 +    }
 +
-+    #[cfg(feature = "hotpath-live")]
++    #[cfg(all(feature = "hotpath-live", not(feature = "hotpath-retained")))]
 +    fn add_live(&self, size: usize) {
 +        let live = self.live.fetch_add(size, Ordering::Relaxed) + size;
 +        self.peak.fetch_max(live, Ordering::Relaxed);
 +    }
 +
-+    #[cfg(feature = "hotpath-live")]
++    #[cfg(all(feature = "hotpath-live", not(feature = "hotpath-retained")))]
 +    fn remove_live(&self, size: usize) {
 +        self.live.fetch_sub(size, Ordering::Relaxed);
 +    }
 +
 +    fn allocated(&self, size: usize) {
-+        #[cfg(feature = "hotpath-live")]
++        #[cfg(all(feature = "hotpath-live", not(feature = "hotpath-retained")))]
 +        self.add_live(size);
 +        #[cfg(feature = "hotpath-alloc")]
 +        crate::lib_on::functions::alloc::core::track_alloc(size);
@@ -409,60 +437,197 @@
 +    }
 +}
 +
-+// SAFETY: pointers and layouts are forwarded unchanged to A. Tracking touches
-+// only counters and never the allocation; failed requests do not update them.
++// SAFETY: each user layout is extended by a private prefix only in retained
++// mode. The returned pointer preserves alignment and has the requested usable
++// length. Matching free/realloc reconstructs the same backing layout, and no
++// registry lock is held while calling the inner allocator.
 +unsafe impl<A: GlobalAlloc> GlobalAlloc for CountingAllocator<A> {
 +    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-+        // SAFETY: caller supplies a valid layout, forwarded unchanged.
-+        let ptr = unsafe { self.inner.alloc(layout) };
-+        if !ptr.is_null() {
-+            self.allocated(layout.size());
-+        }
-+        ptr
++        // SAFETY: caller supplies a valid nonzero layout.
++        unsafe { self.allocate(layout, false) }
 +    }
 +
 +    unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
-+        // SAFETY: caller supplies a valid layout, forwarded unchanged.
-+        let ptr = unsafe { self.inner.alloc_zeroed(layout) };
-+        if !ptr.is_null() {
-+            self.allocated(layout.size());
-+        }
-+        ptr
++        // SAFETY: caller supplies a valid nonzero layout; the entire backing
++        // block is zeroed before writing only its private prefix.
++        unsafe { self.allocate(layout, true) }
 +    }
 +
 +    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-+        #[cfg(feature = "hotpath-live")]
++        #[cfg(feature = "hotpath-retained")]
++        let (ptr, backing) = {
++            // SAFETY: a successful allocation had a valid extended layout.
++            let (backing, offset) = unsafe { backing_layout(layout).unwrap_unchecked() };
++            // SAFETY: ptr was returned at exactly offset into the backing block;
++            // its aligned prefix contains the origin written by this instance.
++            let base = unsafe { ptr.sub(offset) };
++            let origin = unsafe { base.cast::<usize>().read() };
++            self.origins
++                .free(origin, layout.size(), offset, &self.live, &self.peak);
++            (base, backing)
++        };
++        #[cfg(not(feature = "hotpath-retained"))]
++        let backing = layout;
++        #[cfg(all(feature = "hotpath-live", not(feature = "hotpath-retained")))]
 +        self.remove_live(layout.size());
 +        #[cfg(feature = "hotpath-alloc")]
 +        crate::lib_on::functions::alloc::core::track_dealloc(layout.size());
-+        // SAFETY: caller supplies a live block from this instance with its layout.
-+        unsafe { self.inner.dealloc(ptr, layout) };
++        // SAFETY: matching backing pointer/layout, still live in A.
++        unsafe { self.inner.dealloc(ptr, backing) };
 +    }
 +
 +    unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
-+        // SAFETY: caller supplies a live block, its layout, and valid new size.
-+        let new_ptr = unsafe { self.inner.realloc(ptr, layout, new_size) };
-+        if !new_ptr.is_null() {
-+            #[cfg(feature = "hotpath-live")]
-+            if new_size >= layout.size() {
-+                self.add_live(new_size - layout.size());
-+            } else {
-+                self.remove_live(layout.size() - new_size);
-+            }
-+            // Traffic counts the full successful replacement, independent of
-+            // whether A moved the block. Live counts only the size difference.
-+            #[cfg(feature = "hotpath-alloc")]
-+            {
-+                crate::lib_on::functions::alloc::core::track_dealloc(layout.size());
-+                crate::lib_on::functions::alloc::core::track_alloc(new_size);
-+            }
++        #[cfg(feature = "hotpath-retained")]
++        let (base, backing, offset, origin, backing_size) = {
++            // SAFETY: successful original allocation had a valid extension.
++            let (backing, offset) = unsafe { backing_layout(layout).unwrap_unchecked() };
++            let replacement = Layout::from_size_align(new_size, layout.align())
++                .ok()
++                .and_then(backing_layout);
++            let Some((replacement, _)) = replacement else {
++                self.origins.failed(true);
++                return std::ptr::null_mut();
++            };
++            // SAFETY: valid original allocation with its private aligned prefix.
++            let base = unsafe { ptr.sub(offset) };
++            let origin = unsafe { base.cast::<usize>().read() };
++            (base, backing, offset, origin, replacement.size())
++        };
++        #[cfg(not(feature = "hotpath-retained"))]
++        let (base, backing, offset, backing_size) = (ptr, layout, 0, new_size);
++        // SAFETY: valid original backing block and a valid nonzero new size.
++        // Alignment is unchanged, hence the user offset also stays unchanged.
++        let replacement = unsafe { self.inner.realloc(base, backing, backing_size) };
++        if replacement.is_null() {
++            #[cfg(feature = "hotpath-retained")]
++            self.origins.failed(true);
++            return replacement;
 +        }
-+        new_ptr
++        #[cfg(feature = "hotpath-retained")]
++        self.origins
++            .resize(origin, layout.size(), new_size, &self.live, &self.peak);
++        #[cfg(all(feature = "hotpath-live", not(feature = "hotpath-retained")))]
++        if new_size >= layout.size() {
++            self.add_live(new_size - layout.size());
++        } else {
++            self.remove_live(layout.size() - new_size);
++        }
++        // Traffic counts a full replacement at the resizing operation. Retained
++        // bytes remain attached to the original allocation, even after moving.
++        #[cfg(feature = "hotpath-alloc")]
++        {
++            crate::lib_on::functions::alloc::core::track_dealloc(layout.size());
++            crate::lib_on::functions::alloc::core::track_alloc(new_size);
++        }
++        // SAFETY: extended replacement holds offset plus new_size user bytes.
++        unsafe { replacement.add(offset) }
++    }
++}
++
++#[cfg(feature = "hotpath-retained")]
++fn backing_layout(layout: Layout) -> Option<(Layout, usize)> {
++    Layout::new::<usize>().extend(layout).ok()
++}
++
++impl<A: GlobalAlloc> CountingAllocator<A> {
++    unsafe fn allocate(&self, layout: Layout, zeroed: bool) -> *mut u8 {
++        #[cfg(feature = "hotpath-retained")]
++        let (backing, offset) = match backing_layout(layout) {
++            Some(pair) => pair,
++            None => {
++                self.origins.failed(false);
++                return std::ptr::null_mut();
++            }
++        };
++        #[cfg(not(feature = "hotpath-retained"))]
++        let (backing, offset) = (layout, 0);
++        // SAFETY: valid layout; zeroed requests preserve the inner guarantee.
++        let base = unsafe {
++            if zeroed {
++                self.inner.alloc_zeroed(backing)
++            } else {
++                self.inner.alloc(backing)
++            }
++        };
++        if base.is_null() {
++            #[cfg(feature = "hotpath-retained")]
++            self.origins.failed(false);
++            return base;
++        }
++        #[cfg(feature = "hotpath-retained")]
++        {
++            let source = crate::lib_on::functions::alloc::core::current_origin();
++            let origin =
++                self.origins
++                    .allocate(source, layout.size(), offset, &self.live, &self.peak);
++            // SAFETY: backing begins with a valid, aligned usize prefix, outside
++            // the user region. The same tag survives any successful realloc.
++            unsafe { base.cast::<usize>().write(origin) };
++        }
++        self.allocated(layout.size());
++        // SAFETY: offset plus the requested size fits this backing allocation.
++        unsafe { base.add(offset) }
 +    }
 +}
 --- /dev/null
++++ b/src/heap.rs
+@@ -0,0 +1,53 @@
++//! Requested heap snapshot types. Collection requires `hotpath-retained`.
++#[cfg_attr(feature = "json", derive(serde::Serialize, serde::Deserialize))]
++#[derive(Debug, Clone, Copy, PartialEq, Eq)]
++#[cfg_attr(feature = "json", serde(rename_all = "snake_case"))]
++pub enum OriginKind {
++    Unscoped,
++    Recorder,
++    TlsUnavailable,
++    Overflow,
++    Function,
++}
++
++#[cfg_attr(feature = "json", derive(serde::Serialize, serde::Deserialize))]
++#[derive(Debug, Clone, PartialEq, Eq)]
++pub struct RetainedOrigin {
++    /// Allocator-instance identity, stable until that allocator is dropped.
++    pub id: usize,
++    pub kind: OriginKind,
++    pub name: Option<String>,
++    pub live_bytes: usize,
++    pub live_allocations: usize,
++    /// Individual origin's lifetime peak; these peaks must not be summed.
++    pub peak_live_bytes: usize,
++}
++
++/// One coherent registry snapshot. Requested bytes exclude the embedded registry,
++/// private block prefixes, allocator overhead/retention, native allocations and
++/// temporary realloc backing. Recorder heap allocations are included.
++/// All counters and peaks span this allocator's lifetime, with a zero baseline.
++/// Origin rows are exclusive, even when function traffic uses inclusive mode.
++#[cfg_attr(feature = "json", derive(serde::Serialize, serde::Deserialize))]
++#[derive(Debug, Clone, PartialEq, Eq)]
++pub struct HeapSnapshot {
++    pub live_bytes: usize,
++    pub peak_live_bytes: usize,
++    pub live_allocations: usize,
++    pub allocated_bytes: u64,
++    pub freed_bytes: u64,
++    pub successful_allocations: u64,
++    pub successful_reallocations: u64,
++    pub deallocations: u64,
++    pub allocation_failures: u64,
++    pub reallocation_failures: u64,
++    pub origin_capacity: usize,
++    pub registered_origins: usize,
++    pub overflow_allocations: u64,
++    pub overflow_allocated_bytes: u64,
++    /// Embedded registry storage, outside requested-byte accounting.
++    pub registry_bytes: usize,
++    /// Prefixes including alignment padding of currently live user blocks.
++    pub live_header_bytes: usize,
++    pub origins: Vec<RetainedOrigin>,
++}
+--- /dev/null
 +++ b/src/json/allocation.rs
-@@ -0,0 +1,84 @@
+@@ -0,0 +1,91 @@
 +//! Exact allocation data. All coverage counters span the process lifetime;
 +//! function rows span the report's collection window and must not be added in
 +//! inclusive mode. Unsupported/disabled measurements never become zero.
@@ -520,6 +685,7 @@
 +    pub tls_unavailable_freed_bytes: u64,
 +    pub depth_limit: usize,
 +    pub depth_limit_hits: u64,
++    pub unwound_polls: u64,
 +    pub cross_thread_guards: u64,
 +    pub inactive_measurements: u64,
 +    pub dropped_measurements: u64,
@@ -528,6 +694,9 @@
 +#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 +pub struct AllocationReport {
 +    pub schema_version: u32,
++    pub heap_status: AllocationStatus,
++    pub heap_baseline: Option<crate::HeapSnapshot>,
++    pub heap: Option<crate::HeapSnapshot>,
 +    pub functions_status: AllocationStatus,
 +    pub accounting: Option<AllocationAccounting>,
 +    pub functions: Option<Vec<ExactFunctionAllocation>>,
@@ -539,6 +708,9 @@
 +    pub fn disabled() -> Self {
 +        Self {
 +            schema_version: 1,
++            heap_status: AllocationStatus::Disabled,
++            heap_baseline: None,
++            heap: None,
 +            functions_status: AllocationStatus::Disabled,
 +            accounting: None,
 +            functions: None,
@@ -579,13 +751,19 @@
  pub mod policy_file;
 --- a/src/lib.rs
 +++ b/src/lib.rs
-@@ -19,6 +19,9 @@
+@@ -19,6 +19,15 @@
  // Lets in-crate code use `#[hotpath::measure]`, whose expansion names
  // `hotpath::` paths.
  extern crate self as hotpath;
 +
 +mod allocator;
 +pub use allocator::CountingAllocator;
++#[cfg(feature = "hotpath-retained")]
++mod retained;
++#[cfg(feature = "hotpath-retained")]
++pub use retained::MAX_ALLOCATION_ORIGINS;
++mod heap;
++pub use heap::{HeapSnapshot, OriginKind, RetainedOrigin};
  
  #[cfg(feature = "hotpath")]
  #[doc(inline)]
@@ -665,7 +843,12 @@
  use std::cell::Cell;
  use std::sync::atomic::{AtomicU32, AtomicU64, AtomicU8, Ordering};
  
-@@ -149,12 +150,14 @@
+@@ -145,16 +146,19 @@
+     Overflow,
+     /// A hidden internal thread: not counted at all.
+     Internal,
++    TlsUnavailable,
+ }
  
  #[inline]
  fn thread_slot() -> ThreadSlot {
@@ -682,11 +865,11 @@
 +            SLOT_OVERFLOW => ThreadSlot::Overflow,
 +            idx => ThreadSlot::Tracked(&THREAD_ALLOC_STATS[idx as usize]),
 +        })
-+        .unwrap_or(ThreadSlot::Internal)
++        .unwrap_or(ThreadSlot::TlsUnavailable)
  }
  
  /// One-time per-thread registration, running on the thread itself on its
-@@ -180,6 +183,7 @@
+@@ -180,6 +184,7 @@
              ThreadSlot::Tracked(&THREAD_ALLOC_STATS[idx])
          }
          None => {
@@ -694,7 +877,23 @@
              slot_idx.set(SLOT_OVERFLOW);
              ThreadSlot::Overflow
          }
-@@ -382,53 +386,101 @@
+@@ -292,6 +297,7 @@
+ }
+ 
+ pub(crate) struct AllocationInfo {
++    pub(crate) origin: Cell<Option<&'static str>>,
+     pub(crate) bytes_total: Cell<u64>,
+     pub(crate) count_total: Cell<u64>,
+ }
+@@ -325,6 +331,7 @@
+     pub(crate) static ALLOCATIONS: AllocationInfoStack = const { AllocationInfoStack {
+         depth: Cell::new(0),
+         elements: [const { AllocationInfo {
++            origin: Cell::new(None),
+             bytes_total: Cell::new(0),
+             count_total: Cell::new(0),
+         } }; MAX_DEPTH + 1],
+@@ -382,63 +389,116 @@
  
  #[inline]
  pub(crate) fn track_alloc(size: usize) {
@@ -752,6 +951,7 @@
 +            OVERFLOW_ALLOC_BYTES.fetch_add(size as u64, Ordering::Relaxed);
 +        }
 +        ThreadSlot::Internal => c::add(&c::HIDDEN_ALLOC, size),
++        ThreadSlot::TlsUnavailable => c::add(&c::TLS_ALLOC, size),
      }
  }
  
@@ -793,6 +993,7 @@
 +            OVERFLOW_DEALLOC_BYTES.fetch_add(size as u64, Ordering::Relaxed);
 +        }
 +        ThreadSlot::Internal => c::add(&c::HIDDEN_FREE, size),
++        ThreadSlot::TlsUnavailable => c::add(&c::TLS_FREE, size),
 +    }
 +}
 +
@@ -821,12 +1022,54 @@
 +        tls_unavailable_freed_bytes: c::read(&c::TLS_FREE),
 +        depth_limit: MAX_DEPTH,
 +        depth_limit_hits: c::read(&c::DEPTH_HITS),
++        unwound_polls: c::read(&c::UNWOUND_POLLS),
 +        cross_thread_guards: c::read(&c::CROSS_THREAD),
 +        inactive_measurements: c::read(&c::INACTIVE),
 +        dropped_measurements: c::read(&c::DROPPED),
      }
  }
  
+ #[inline]
+ pub(crate) fn set_alloc_tracking_enabled(enabled: bool) -> bool {
+-    ALLOCATIONS.with(|stack| {
+-        let previous = stack.tracking_enabled.get();
+-        stack.tracking_enabled.set(enabled);
+-        previous
+-    })
++    ALLOCATIONS
++        .try_with(|stack| {
++            let previous = stack.tracking_enabled.get();
++            stack.tracking_enabled.set(enabled);
++            previous
++        })
++        .unwrap_or(false)
+ }
+ 
+ #[inline]
+@@ -450,3 +510,23 @@
+ pub(crate) fn resume_alloc_tracking(previous_enabled: bool) {
+     let _ = set_alloc_tracking_enabled(previous_enabled);
+ }
++
++/// Allocation origin is independent of thread registry availability or traffic
++/// mode. Never allocates, initializes lazy configuration, or panics during TLS
++/// teardown. Blocks keep the resulting origin id through scope/thread exit.
++#[cfg(feature = "hotpath-retained")]
++pub(crate) fn current_origin() -> crate::retained::Source {
++    use crate::retained::Source;
++    ALLOCATIONS
++        .try_with(|stack| {
++            if !stack.tracking_enabled.get() {
++                Source::Recorder
++            } else {
++                stack.elements[stack.depth.get() as usize]
++                    .origin
++                    .get()
++                    .map_or(Source::Unscoped, Source::Function)
++            }
++        })
++        .unwrap_or(Source::TlsUnavailable)
++}
 --- /dev/null
 +++ b/src/lib_on/functions/alloc/coverage.rs
 @@ -0,0 +1,19 @@
@@ -839,7 +1082,7 @@
 +counters! {
 +    OVERFLOW_THREADS, HIDDEN_ALLOC, HIDDEN_FREE, RECORDER_ALLOC, RECORDER_FREE,
 +    UNSCOPED_BYTES, UNSCOPED_COUNT, BEFORE_ALLOC, BEFORE_FREE, TLS_ALLOC, TLS_FREE,
-+    DEPTH_HITS, CROSS_THREAD, INACTIVE, DROPPED,
++    DEPTH_HITS, UNWOUND_POLLS, CROSS_THREAD, INACTIVE, DROPPED,
 +}
 +
 +pub(crate) fn add(counter: &AtomicU64, amount: usize) {
@@ -851,7 +1094,15 @@
 +}
 --- a/src/lib_on/functions/alloc/guard.rs
 +++ b/src/lib_on/functions/alloc/guard.rs
-@@ -56,6 +56,7 @@
+@@ -49,19 +49,21 @@
+     LazyLock::new(|| crate::shared::env_flag("HOTPATH_ALLOC_CUMULATIVE"));
+ 
+ #[inline]
+-pub(crate) fn push_alloc_stack() {
++pub(crate) fn push_alloc_stack(name: &'static str) {
+     crate::functions::alloc::core::ALLOCATIONS.with(|stack| {
+         let max_depth = crate::functions::alloc::core::MAX_DEPTH;
+         let depth = stack.depth.get() as usize + 1;
          // Checked before `depth` moves: the panic allocates, and
          // `track_alloc` must still index a valid frame.
          if depth > max_depth {
@@ -859,7 +1110,23 @@
              panic!(
                  "hotpath: more than {max_depth} nested measured functions on one thread in alloc mode. \
                   Raise the limit by rebuilding with HOTPATH_ALLOC_MAX_DEPTH set (e.g. HOTPATH_ALLOC_MAX_DEPTH=256)."
-@@ -214,6 +215,7 @@
+             );
+         }
+         stack.depth.set(depth as u32);
++        stack.elements[depth].origin.set(Some(name));
+         stack.elements[depth].bytes_total.set(0);
+         stack.elements[depth].count_total.set(0);
+     });
+@@ -178,7 +180,7 @@
+     fn build(name: &'static str, wrapper: bool, skipped: bool, caller_scoped: bool) -> Self {
+         let _suspend = crate::lib_on::SuspendAllocTracking::new();
+         if !skipped {
+-            push_alloc_stack();
++            push_alloc_stack(name);
+         }
+         if caller_scoped {
+             crate::lib_on::caller_stack::push_caller(name);
+@@ -214,6 +216,7 @@
              crate::lib_on::caller_stack::pop_caller();
          }
          let (bytes_total, count_total) = if cross_thread {
@@ -867,7 +1134,16 @@
              (None, None)
          } else {
              let (bytes, count) = pop_alloc_stack();
-@@ -347,6 +349,7 @@
+@@ -310,7 +313,7 @@
+         let _suspend = crate::lib_on::SuspendAllocTracking::new();
+         let caller_scoped = !wrapper && !skipped;
+         if !skipped {
+-            push_alloc_stack();
++            push_alloc_stack(name);
+         }
+         if caller_scoped {
+             crate::lib_on::caller_stack::push_caller(name);
+@@ -347,6 +350,7 @@
              crate::lib_on::caller_stack::pop_caller();
          }
          let (bytes_total, count_total) = if cross_thread {
@@ -875,7 +1151,7 @@
              (None, None)
          } else {
              let (bytes, count) = pop_alloc_stack();
-@@ -385,6 +388,7 @@
+@@ -385,6 +389,7 @@
              crate::lib_on::caller_stack::pop_caller();
          }
          let (bytes_total, count_total) = if cross_thread {
@@ -883,9 +1159,30 @@
              (None, None)
          } else {
              let (bytes, count) = pop_alloc_stack();
+@@ -506,7 +511,7 @@
+     #[test]
+     fn nesting_up_to_max_depth_keeps_frames_exclusive() {
+         for _ in 0..MAX_DEPTH {
+-            push_alloc_stack();
++            push_alloc_stack("depth fixture");
+         }
+         track_alloc(64);
+         assert_eq!(pop_alloc_stack(), (64, 1));
+@@ -519,7 +524,7 @@
+     #[should_panic(expected = "HOTPATH_ALLOC_MAX_DEPTH")]
+     fn nesting_past_max_depth_panics_with_hint() {
+         for _ in 0..=MAX_DEPTH {
+-            push_alloc_stack();
+-        }
+-    }
+-}
++            push_alloc_stack("depth fixture");
++        }
++    }
++}
 --- a/src/lib_on/functions/alloc/report.rs
 +++ b/src/lib_on/functions/alloc/report.rs
-@@ -296,3 +296,56 @@
+@@ -296,3 +296,59 @@
          tool: None,
      }
  }
@@ -915,6 +1212,9 @@
 +    }
 +    AllocationReport {
 +        schema_version: 1,
++        heap_status: AllocationStatus::Unavailable,
++        heap_baseline: None,
++        heap: None,
 +        functions_status: if stats.is_some() {
 +            AllocationStatus::Available
 +        } else {
@@ -1070,26 +1370,279 @@
  
  cfg_if::cfg_if! {
      if #[cfg(feature = "hotpath-alloc")] {
+--- a/src/lib_on/futures/wrapper.rs
++++ b/src/lib_on/futures/wrapper.rs
+@@ -18,11 +18,26 @@
+ 
+ #[cfg(feature = "hotpath-alloc")]
+ #[inline]
+-fn measure_poll_alloc<R>(poll_fn: impl FnOnce() -> R) -> (R, Option<u64>, Option<u64>) {
+-    crate::functions::alloc::guard::push_alloc_stack();
++fn measure_poll_alloc<R>(
++    origin: &'static str,
++    poll_fn: impl FnOnce() -> R,
++) -> (R, Option<u64>, Option<u64>) {
++    struct PopOnUnwind;
++    impl Drop for PopOnUnwind {
++        fn drop(&mut self) {
++            crate::functions::alloc::coverage::add(
++                &crate::functions::alloc::coverage::UNWOUND_POLLS,
++                1,
++            );
++            crate::functions::alloc::guard::pop_alloc_stack();
++        }
++    }
++    crate::functions::alloc::guard::push_alloc_stack(origin);
++    let unwind = PopOnUnwind;
+ 
+     let result = poll_fn();
+ 
++    std::mem::forget(unwind);
+     let (bytes, count) = crate::functions::alloc::guard::pop_alloc_stack();
+ 
+     (result, Some(bytes), Some(count))
+@@ -30,7 +45,11 @@
+ 
+ #[cfg(not(feature = "hotpath-alloc"))]
+ #[inline]
+-fn measure_poll_alloc<R>(poll_fn: impl FnOnce() -> R) -> (R, Option<u64>, Option<u64>) {
++fn measure_poll_alloc<R>(
++    origin: &'static str,
++    poll_fn: impl FnOnce() -> R,
++) -> (R, Option<u64>, Option<u64>) {
++    let _ = origin;
+     (poll_fn(), None, None)
+ }
+ 
+@@ -59,6 +78,7 @@
+         // attribution). Set for measured async function bodies, None for
+         // `future!` expression wrappers.
+         caller_scope: Option<&'static str>,
++        allocation_origin: &'static str,
+     }
+ 
+     impl<F: Future> PinnedDrop for InstrumentedFuture<F> {
+@@ -121,6 +141,7 @@
+             timed,
+             alloc_bridge,
+             caller_scope,
++            allocation_origin: caller_scope.unwrap_or(location),
+         }
+     }
+ }
+@@ -165,10 +186,11 @@
+ 
+         // Don't instrument future unless visible, only collect alloc data
+         if !visible {
+-            let (result, poll_alloc_bytes, poll_alloc_count) = measure_poll_alloc(|| {
+-                let _caller_scope = CallerScopeGuard::enter(*this.caller_scope);
+-                this.inner.poll(cx)
+-            });
++            let (result, poll_alloc_bytes, poll_alloc_count) =
++                measure_poll_alloc(*this.allocation_origin, || {
++                    let _caller_scope = CallerScopeGuard::enter(*this.caller_scope);
++                    this.inner.poll(cx)
++                });
+             if let (Some(bytes), Some(count), Some(bridge)) = (
+                 poll_alloc_bytes,
+                 poll_alloc_count,
+@@ -186,10 +208,11 @@
+         let call_id = *this.call_id;
+ 
+         let start = (*this.timed).then(Instant::now);
+-        let (result, poll_alloc_bytes, poll_alloc_count) = measure_poll_alloc(|| {
+-            let _caller_scope = CallerScopeGuard::enter(*this.caller_scope);
+-            this.inner.poll(cx)
+-        });
++        let (result, poll_alloc_bytes, poll_alloc_count) =
++            measure_poll_alloc(*this.allocation_origin, || {
++                let _caller_scope = CallerScopeGuard::enter(*this.caller_scope);
++                this.inner.poll(cx)
++            });
+         let poll_duration_ns =
+             start.map(|start| Instant::now().duration_since(start).as_nanos() as u64);
+         if let (Some(bytes), Some(count), Some(bridge)) = (
+@@ -253,6 +276,7 @@
+         alloc_bridge: Option<Arc<AsyncAllocBridge>>,
+         // See `InstrumentedFuture::caller_scope`.
+         caller_scope: Option<&'static str>,
++        allocation_origin: &'static str,
+     }
+ 
+     impl<F: Future> PinnedDrop for InstrumentedFutureLog<F> {
+@@ -315,6 +339,7 @@
+             timed,
+             alloc_bridge,
+             caller_scope,
++            allocation_origin: caller_scope.unwrap_or(location),
+         }
+     }
+ }
+@@ -339,10 +364,11 @@
+         let visible = *this.visible;
+ 
+         if !visible {
+-            let (result, poll_alloc_bytes, poll_alloc_count) = measure_poll_alloc(|| {
+-                let _caller_scope = CallerScopeGuard::enter(*this.caller_scope);
+-                this.inner.poll(cx)
+-            });
++            let (result, poll_alloc_bytes, poll_alloc_count) =
++                measure_poll_alloc(*this.allocation_origin, || {
++                    let _caller_scope = CallerScopeGuard::enter(*this.caller_scope);
++                    this.inner.poll(cx)
++                });
+             if let (Some(bytes), Some(count), Some(bridge)) = (
+                 poll_alloc_bytes,
+                 poll_alloc_count,
+@@ -360,10 +386,11 @@
+         let call_id = *this.call_id;
+ 
+         let start = (*this.timed).then(Instant::now);
+-        let (result, poll_alloc_bytes, poll_alloc_count) = measure_poll_alloc(|| {
+-            let _caller_scope = CallerScopeGuard::enter(*this.caller_scope);
+-            this.inner.poll(cx)
+-        });
++        let (result, poll_alloc_bytes, poll_alloc_count) =
++            measure_poll_alloc(*this.allocation_origin, || {
++                let _caller_scope = CallerScopeGuard::enter(*this.caller_scope);
++                this.inner.poll(cx)
++            });
+         let poll_duration_ns =
+             start.map(|start| Instant::now().duration_since(start).as_nanos() as u64);
+         if let (Some(bytes), Some(count), Some(bridge)) = (
 --- a/src/lib_on/hotpath_guard.rs
 +++ b/src/lib_on/hotpath_guard.rs
-@@ -1349,6 +1349,17 @@
+@@ -254,6 +254,8 @@
+     time_sampling: crate::lib_on::sampling::TimeSamplingConfig,
+     user_metadata: HashMap<String, String>,
+     criterion: Option<crate::json::JsonCriterion>,
++    #[cfg(feature = "hotpath-retained")]
++    heap_provider: Option<fn() -> crate::HeapSnapshot>,
+ }
+ 
+ impl HotpathGuardBuilder {
+@@ -298,7 +300,19 @@
+             time_sampling: crate::lib_on::sampling::TimeSamplingConfig::default(),
+             user_metadata: HashMap::new(),
+             criterion: None,
+-        }
++            #[cfg(feature = "hotpath-retained")]
++            heap_provider: None,
++        }
++    }
++
++    /// Attach the process-global allocator's retained-heap snapshot function.
++    /// Captures a baseline before guard initialization and a final snapshot
++    /// before report construction. Peaks remain allocator-lifetime peaks;
++    /// baseline subtraction does not produce an interval peak.
++    #[cfg(feature = "hotpath-retained")]
++    pub fn heap_provider(mut self, provider: fn() -> crate::HeapSnapshot) -> Self {
++        self.heap_provider = Some(provider);
++        self
+     }
+ 
+     /// Sets which latency percentiles to compute (e.g. `&[50.0, 95.0, 99.9]`).
+@@ -541,6 +555,8 @@
+     /// `HOTPATH_USER_METADATA` is not a comma-separated list of `key=value`
+     /// pairs with unique, non-empty keys.
+     pub fn build(self) -> HotpathGuard {
++        #[cfg(feature = "hotpath-retained")]
++        let heap_baseline = self.heap_provider.map(|provider| provider());
+         #[cfg(feature = "dev")]
+         crate::dev_logging::init_logging();
+ 
+@@ -561,7 +577,8 @@
+         let percentiles = normalize_percentiles(&self.percentiles);
+         let user_metadata = resolve_user_metadata(self.user_metadata);
+ 
+-        HotpathGuard::new(
++        #[allow(unused_mut)]
++        let mut guard = HotpathGuard::new(
+             self.caller_name,
+             &percentiles,
+             self.functions_limit,
+@@ -581,7 +598,13 @@
+             self.threads_limit,
+             user_metadata,
+             self.criterion,
+-        )
++        );
++        #[cfg(feature = "hotpath-retained")]
++        {
++            guard.heap_provider = self.heap_provider;
++            guard.heap_baseline = heap_baseline;
++        }
++        guard
+     }
+ 
+     /// Builds the guard and moves it to a background thread that keeps it alive.
+@@ -641,6 +664,10 @@
+     threads_limit: usize,
+     user_metadata: BTreeMap<String, String>,
+     criterion: Option<crate::json::JsonCriterion>,
++    #[cfg(feature = "hotpath-retained")]
++    heap_provider: Option<fn() -> crate::HeapSnapshot>,
++    #[cfg(feature = "hotpath-retained")]
++    heap_baseline: Option<crate::HeapSnapshot>,
+     #[cfg(feature = "hotpath-meta")]
+     _meta_guard: Option<hotpath_meta::HotpathGuard>,
+ }
+@@ -1026,6 +1053,10 @@
+             threads_limit,
+             user_metadata,
+             criterion,
++            #[cfg(feature = "hotpath-retained")]
++            heap_provider: None,
++            #[cfg(feature = "hotpath-retained")]
++            heap_baseline: None,
+             #[cfg(feature = "hotpath-meta")]
+             _meta_guard,
+         }
+@@ -1087,7 +1118,6 @@
+ impl Drop for HotpathGuard {
+     fn drop(&mut self) {
+         let _suspend = crate::lib_on::SuspendAllocTracking::new();
+-
+         #[cfg(feature = "hotpath-cpu")]
+         let cpu_report: Option<Result<crate::functions::cpu::CpuReport, String>> = if self
+             .sections_mode
+@@ -1135,6 +1165,8 @@
+         if let Some(f) = self.before_shutdown.take() {
+             f();
+         }
++        #[cfg(feature = "hotpath-retained")]
++        let heap = self.heap_provider.map(|provider| provider());
+ 
+         let wrapper_guard = self.wrapper_guard.take().unwrap();
+         drop(wrapper_guard);
+@@ -1348,6 +1380,27 @@
+                     self.criterion.clone(),
                  ))
              };
- 
++
 +            #[cfg(feature = "hotpath-alloc")]
 +            {
 +                report.allocation = Some(crate::functions::alloc::report::allocation_report(
 +                    functions_stats.as_ref(),
 +                ));
++                #[cfg(feature = "hotpath-retained")]
++                if let Some(allocation) = &mut report.allocation {
++                    allocation.heap_status = if heap.is_some() {
++                        crate::json::AllocationStatus::Available
++                    } else {
++                        crate::json::AllocationStatus::Unavailable
++                    };
++                    allocation.heap = heap;
++                    allocation.heap_baseline = self.heap_baseline.take();
++                }
 +            }
 +            #[cfg(not(feature = "hotpath-alloc"))]
 +            {
 +                report.allocation = Some(crate::json::AllocationReport::disabled());
 +            }
-+
+ 
              // A cloud report lists every entry (`0` is unlimited): the server
              // diffs reports by name and truncates for display itself, while a
-             // client-side top-N cannot be undone.
 --- a/src/lib_on.rs
 +++ b/src/lib_on.rs
 @@ -141,7 +141,6 @@
@@ -1100,3 +1653,265 @@
  pub use functions::{
      measure_async, measure_async_future, measure_async_future_log, measure_async_log,
      measure_sync_log, MeasurementGuardAsync, MeasurementGuardSync,
+--- /dev/null
++++ b/src/retained.rs
+@@ -0,0 +1,259 @@
++//! Bounded allocation-origin retention, owned by the allocator instance.
++//! No pointer registry or dynamic metadata allocation is used.
++use std::cell::UnsafeCell;
++use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
++
++use crate::{HeapSnapshot, OriginKind, RetainedOrigin};
++
++pub const MAX_ALLOCATION_ORIGINS: usize = 1024;
++const RESERVED: usize = 4;
++const SLOTS: usize = MAX_ALLOCATION_ORIGINS + RESERVED;
++
++#[derive(Clone, Copy)]
++pub(crate) enum Source {
++    Unscoped,
++    Recorder,
++    TlsUnavailable,
++    Function(&'static str),
++}
++
++#[derive(Clone, Copy)]
++struct Slot {
++    name: Option<&'static str>,
++    live: usize,
++    blocks: usize,
++    peak: usize,
++}
++impl Slot {
++    const EMPTY: Self = Self {
++        name: None,
++        live: 0,
++        blocks: 0,
++        peak: 0,
++    };
++}
++
++struct State {
++    capacity: usize,
++    used: usize,
++    slots: [Slot; SLOTS],
++    live: usize,
++    peak: usize,
++    blocks: usize,
++    headers: usize,
++    allocated: u64,
++    freed: u64,
++    allocations: u64,
++    reallocations: u64,
++    deallocations: u64,
++    alloc_failures: u64,
++    realloc_failures: u64,
++    overflow_allocations: u64,
++    overflow_bytes: u64,
++}
++
++pub(crate) struct Registry {
++    locked: AtomicBool,
++    state: UnsafeCell<State>,
++}
++// SAFETY: every access to state holds the spinlock. No inner allocator call,
++// TLS access, formatting, heap allocation or user callback runs under the lock.
++unsafe impl Sync for Registry {}
++
++struct Unlock<'a>(&'a AtomicBool);
++impl Drop for Unlock<'_> {
++    fn drop(&mut self) {
++        self.0.store(false, Ordering::Release);
++    }
++}
++
++impl Registry {
++    pub(crate) const fn new(capacity: usize) -> Self {
++        Self {
++            locked: AtomicBool::new(false),
++            state: UnsafeCell::new(State {
++                capacity: if capacity > MAX_ALLOCATION_ORIGINS {
++                    MAX_ALLOCATION_ORIGINS
++                } else {
++                    capacity
++                },
++                used: 0,
++                slots: [Slot::EMPTY; SLOTS],
++                live: 0,
++                peak: 0,
++                blocks: 0,
++                headers: 0,
++                allocated: 0,
++                freed: 0,
++                allocations: 0,
++                reallocations: 0,
++                deallocations: 0,
++                alloc_failures: 0,
++                realloc_failures: 0,
++                overflow_allocations: 0,
++                overflow_bytes: 0,
++            }),
++        }
++    }
++
++    fn with<R>(&self, f: impl FnOnce(&mut State) -> R) -> R {
++        while self
++            .locked
++            .compare_exchange_weak(false, true, Ordering::Acquire, Ordering::Relaxed)
++            .is_err()
++        {
++            std::hint::spin_loop();
++        }
++        let _unlock = Unlock(&self.locked);
++        // SAFETY: exclusive lock protects state, and the borrow cannot escape f.
++        f(unsafe { &mut *self.state.get() })
++    }
++
++    pub(crate) fn allocate(
++        &self,
++        source: Source,
++        size: usize,
++        header: usize,
++        live: &AtomicUsize,
++        peak: &AtomicUsize,
++    ) -> usize {
++        self.with(|s| {
++            let id = match source {
++                Source::Unscoped => 0,
++                Source::Recorder => 1,
++                Source::TlsUnavailable => 2,
++                Source::Function(name) => {
++                    if let Some(i) = s.slots[RESERVED..RESERVED + s.used]
++                        .iter()
++                        .position(|slot| slot.name == Some(name))
++                    {
++                        RESERVED + i
++                    } else if s.used < s.capacity {
++                        let i = RESERVED + s.used;
++                        s.slots[i].name = Some(name);
++                        s.used += 1;
++                        i
++                    } else {
++                        s.overflow_allocations += 1;
++                        s.overflow_bytes += size as u64;
++                        3
++                    }
++                }
++            };
++            let slot = &mut s.slots[id];
++            slot.live += size;
++            slot.blocks += 1;
++            slot.peak = slot.peak.max(slot.live);
++            s.live += size;
++            s.peak = s.peak.max(s.live);
++            s.blocks += 1;
++            s.headers += header;
++            s.allocated += size as u64;
++            s.allocations += 1;
++            live.store(s.live, Ordering::Relaxed);
++            peak.store(s.peak, Ordering::Relaxed);
++            id
++        })
++    }
++
++    pub(crate) fn free(
++        &self,
++        id: usize,
++        size: usize,
++        header: usize,
++        live: &AtomicUsize,
++        peak: &AtomicUsize,
++    ) {
++        self.with(|s| {
++            s.slots[id].live -= size;
++            s.slots[id].blocks -= 1;
++            s.live -= size;
++            s.blocks -= 1;
++            s.headers -= header;
++            s.freed += size as u64;
++            s.deallocations += 1;
++            live.store(s.live, Ordering::Relaxed);
++            peak.store(s.peak, Ordering::Relaxed);
++        });
++    }
++
++    pub(crate) fn resize(
++        &self,
++        id: usize,
++        old: usize,
++        new: usize,
++        live: &AtomicUsize,
++        peak: &AtomicUsize,
++    ) {
++        self.with(|s| {
++            let slot = &mut s.slots[id];
++            slot.live = slot.live - old + new;
++            slot.peak = slot.peak.max(slot.live);
++            s.live = s.live - old + new;
++            s.peak = s.peak.max(s.live);
++            s.allocated += new as u64;
++            s.freed += old as u64;
++            s.reallocations += 1;
++            live.store(s.live, Ordering::Relaxed);
++            peak.store(s.peak, Ordering::Relaxed);
++        });
++    }
++
++    pub(crate) fn failed(&self, realloc: bool) {
++        self.with(|s| {
++            if realloc {
++                s.realloc_failures += 1;
++            } else {
++                s.alloc_failures += 1;
++            }
++        });
++    }
++
++    pub(crate) fn snapshot(&self) -> HeapSnapshot {
++        // Capacity is allocated before locking; copying slots cannot allocate.
++        // Recorder suppression ensures the snapshot's own storage is explicit.
++        let _suspend = crate::lib_on::SuspendAllocTracking::new();
++        let mut rows = Vec::with_capacity(SLOTS);
++        let mut snapshot = self.with(|s| {
++            rows.extend_from_slice(&s.slots[..RESERVED + s.used]);
++            HeapSnapshot {
++                live_bytes: s.live,
++                peak_live_bytes: s.peak,
++                live_allocations: s.blocks,
++                allocated_bytes: s.allocated,
++                freed_bytes: s.freed,
++                successful_allocations: s.allocations,
++                successful_reallocations: s.reallocations,
++                deallocations: s.deallocations,
++                allocation_failures: s.alloc_failures,
++                reallocation_failures: s.realloc_failures,
++                origin_capacity: s.capacity,
++                registered_origins: s.used,
++                overflow_allocations: s.overflow_allocations,
++                overflow_allocated_bytes: s.overflow_bytes,
++                registry_bytes: std::mem::size_of::<Self>(),
++                live_header_bytes: s.headers,
++                origins: Vec::new(),
++            }
++        });
++        snapshot.origins = rows
++            .into_iter()
++            .enumerate()
++            .map(|(id, slot)| RetainedOrigin {
++                id,
++                kind: match id {
++                    0 => OriginKind::Unscoped,
++                    1 => OriginKind::Recorder,
++                    2 => OriginKind::TlsUnavailable,
++                    3 => OriginKind::Overflow,
++                    _ => OriginKind::Function,
++                },
++                name: slot.name.map(str::to_owned),
++                live_bytes: slot.live,
++                live_allocations: slot.blocks,
++                peak_live_bytes: slot.peak,
++            })
++            .collect();
++        snapshot
++    }
++}

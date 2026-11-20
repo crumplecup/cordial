@@ -1,9 +1,10 @@
 # Memory measurement through Hotpath allocation profiling
 
-Status: **Active implementation, 2026-11-19.** Phase 1 is complete. Phase 2's
-Hotpath extension supplies the always-on live/peak meter and corrects failed
-request counting; `cap` is removed. Exact JSON and traffic coverage counters are
-implemented; retained origins remain pending. Subsequent lifecycle/coverage work remains pending.
+Status: **Active implementation, 2026-11-19.** Phases 1–2 are implemented.
+Hotpath supplies the always-on live/peak meter, retained allocation origins,
+exact JSON and explicit coverage counters; `cap` and the parallel diagnostics
+are removed. Process lifecycle, operation coverage and ingestion remain phases
+3–5. No full-program measurement has been authorized or performed.
 
 ## Objective and decisions
 
@@ -107,14 +108,16 @@ Controlled fixtures now verify the traffic behavior, including migrating async
 functions and cancellation. See the [capability contract](hotpath-allocation-contract.md)
 for observed results, remaining boundaries, and the required dependency work.
 
-The local dependency patch now supplies a lifetime live/peak meter and counts
-only successful allocation requests. Cordial's budget reads Hotpath directly;
-`cap` has been removed. Exact numeric JSON and traffic coverage counters are implemented. Retained
-origins remain pending.
+The local dependency patch now supplies lifetime live/peak requested bytes,
+retained allocation origins, successful-request traffic, exact JSON and coverage
+counters. Cordial's budget reads Hotpath directly; `cap` has been removed. The
+[capability contract](hotpath-allocation-contract.md) defines intervals, baseline,
+origin identity, bounds, metadata overhead, failure and concurrency behavior.
 
-Therefore the current report can locate allocation churn, but cannot yet answer
-all of “what holds RAM now.” Do not relabel thread allocation-minus-free as
-retained ownership: cross-thread frees alone invalidate that interpretation.
+The dependency can now identify outstanding requested heap by allocation origin.
+Process lifetime and operation coverage still need phases 3–4, and ingestion
+needs phase 5 before a complete memory explanation is available. Do not relabel
+thread allocation-minus-free as retained ownership.
 
 ## Coverage inventory
 
@@ -359,3 +362,37 @@ and timing-only disabled reports. No Cordial command or full program was run.
 Gate evidence: `cargo clippy --all-features --all-targets -- -D warnings`,
 `cargo fmt --all --check`, the all-features JSON/traffic fixtures, and the
 timing-only JSON fixtures passed. Patch reconstruction matches byte for byte.
+
+### Phase 2 retained-origin completion
+
+Hotpath's optional `hotpath-retained` now tags blocks with origin ids and keeps
+bounded origin counters within the same allocator. Scope/thread exit,
+cross-thread frees and moved/in-place realloc preserve original attribution.
+Unscoped, recorder, unavailable-TLS and origin-overflow buckets remain explicit;
+their outstanding totals reconcile with process requested bytes. Failed requests
+leave the old state intact. Detailed mode reports registry and live prefix bytes
+separately; live-only builds retain the cheap two-atomic budget meter.
+
+The single Cordial guard construction point supplies Hotpath's snapshot provider.
+Exact reports carry a pre-initialization baseline and a final heap snapshot,
+while preserving lifetime peak semantics and explicit disabled/unavailable
+states. Async poll unwinding restores its frame and exposes incomplete traffic.
+The contract above documents the API, limits, observer effects and controlled
+unit evidence. This completes phase 2's dependency capability work; it does not
+complete the process/operation coverage or report ingestion in phases 3–5.
+
+Validation:
+
+- The final all-features focused suite passed 25 tests across `hotpath_heap`,
+  `hotpath_alloc_contract`, `hotpath_json`, `hotpath_retained`, `live_bytes`,
+  `hotpath_allocator` and `salsa_eviction`. The contract fixture launches eight
+  isolated scenarios in the same unit-test executable; retained-origin evidence
+  includes eight local-allocator cases.
+- Live-only `hotpath_heap` and `live_bytes` passed all seven tests with
+  `--no-default-features`. Timing-only JSON fixtures passed with
+  `--no-default-features --features hotpath`.
+- `cargo clippy --all-features --all-targets -- -D warnings` passed. Selecting
+  both `cordial` and `hotpath` also checked the dependency's library with Clippy,
+  rather than relying on Cargo's dependency lint suppression.
+- Formatting, whitespace and byte-for-byte patch reconstruction passed.
+- No Cordial command, benchmark or full-program measurement was run.

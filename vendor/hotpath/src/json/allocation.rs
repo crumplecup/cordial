@@ -55,6 +55,7 @@ pub struct AllocationCoverage {
     pub tls_unavailable_freed_bytes: u64,
     pub depth_limit: usize,
     pub depth_limit_hits: u64,
+    pub unwound_polls: u64,
     pub cross_thread_guards: u64,
     pub inactive_measurements: u64,
     pub dropped_measurements: u64,
@@ -63,6 +64,9 @@ pub struct AllocationCoverage {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AllocationReport {
     pub schema_version: u32,
+    pub heap_status: AllocationStatus,
+    pub heap_baseline: Option<crate::HeapSnapshot>,
+    pub heap: Option<crate::HeapSnapshot>,
     pub functions_status: AllocationStatus,
     pub accounting: Option<AllocationAccounting>,
     pub functions: Option<Vec<ExactFunctionAllocation>>,
@@ -74,6 +78,9 @@ impl AllocationReport {
     pub fn disabled() -> Self {
         Self {
             schema_version: 1,
+            heap_status: AllocationStatus::Disabled,
+            heap_baseline: None,
+            heap: None,
             functions_status: AllocationStatus::Disabled,
             accounting: None,
             functions: None,

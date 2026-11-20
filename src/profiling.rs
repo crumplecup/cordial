@@ -9,8 +9,9 @@
 /// The program's one allocator. Hotpath's always-on live meter supplies the
 /// budget reading in every build, including recorder allocations and work
 /// outside measured scopes. `hotpath-alloc` additionally enables detailed
-/// function and thread traffic. Requested live bytes exclude allocator overhead
-/// and retention; OS readings remain a separate envelope/backstop.
+/// function/thread traffic and retained allocation origins. Requested live bytes
+/// exclude allocator overhead and retention; OS readings remain a separate
+/// envelope/backstop.
 #[global_allocator]
 static ALLOCATOR: hotpath::CountingAllocator = hotpath::CountingAllocator::new();
 
@@ -31,7 +32,7 @@ pub fn live_bytes() -> Option<u64> {
 #[tracing::instrument(level = "debug", skip(path))]
 #[hotpath::measure]
 pub(crate) fn guard(caller: &'static str, path: std::path::PathBuf) -> hotpath::HotpathGuard {
-    hotpath::HotpathGuardBuilder::new(caller)
+    let builder = hotpath::HotpathGuardBuilder::new(caller)
         .format(hotpath::Format::JsonPretty)
         .output_path(path)
         .functions_limit(0)
@@ -39,8 +40,10 @@ pub(crate) fn guard(caller: &'static str, path: std::path::PathBuf) -> hotpath::
         .mutexes_limit(0)
         .rw_locks_limit(0)
         .io_limit(0)
-        .threads_limit(0)
-        .build()
+        .threads_limit(0);
+    #[cfg(feature = "hotpath-alloc")]
+    let builder = builder.heap_provider(|| ALLOCATOR.heap_snapshot());
+    builder.build()
 }
 
 /// The guard of the run's profile, kept where the memory watchdog can write it: it ends the process

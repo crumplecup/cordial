@@ -32,6 +32,7 @@ features = ["hotpath-alloc"]
 [features]
 # Always-on requested live/peak bytes, independent of detailed profiling.
 hotpath-live = []
+hotpath-retained = ["hotpath-alloc", "hotpath-live"]
 async-channel = ["dep:async-channel"]
 async-lock = ["dep:async-lock"]
 axum-0-8 = [

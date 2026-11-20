@@ -51,8 +51,8 @@ fn the_manifest_forwards_the_feature_to_hotpath() {
         std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml"))
             .unwrap_or_default();
     assert!(
-        manifest.contains("hotpath-alloc = [\"hotpath\", \"hotpath/hotpath-alloc\"]"),
-        "hotpath-alloc turns on hotpath's counting"
+        manifest.contains("hotpath-alloc = [\"hotpath\", \"hotpath/hotpath-retained\"]"),
+        "hotpath-alloc turns on Hotpath traffic and retained origins"
     );
 }
 

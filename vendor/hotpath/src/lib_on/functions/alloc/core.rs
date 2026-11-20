@@ -146,6 +146,7 @@ enum ThreadSlot {
     Overflow,
     /// A hidden internal thread: not counted at all.
     Internal,
+    TlsUnavailable,
 }
 
 #[inline]
@@ -157,7 +158,7 @@ fn thread_slot() -> ThreadSlot {
             SLOT_OVERFLOW => ThreadSlot::Overflow,
             idx => ThreadSlot::Tracked(&THREAD_ALLOC_STATS[idx as usize]),
         })
-        .unwrap_or(ThreadSlot::Internal)
+        .unwrap_or(ThreadSlot::TlsUnavailable)
 }
 
 /// One-time per-thread registration, running on the thread itself on its
@@ -296,6 +297,7 @@ pub(crate) fn get_registered_thread_stats() -> Vec<(u64, u64, u64, Option<String
 }
 
 pub(crate) struct AllocationInfo {
+    pub(crate) origin: Cell<Option<&'static str>>,
     pub(crate) bytes_total: Cell<u64>,
     pub(crate) count_total: Cell<u64>,
 }
@@ -329,6 +331,7 @@ thread_local! {
     pub(crate) static ALLOCATIONS: AllocationInfoStack = const { AllocationInfoStack {
         depth: Cell::new(0),
         elements: [const { AllocationInfo {
+            origin: Cell::new(None),
             bytes_total: Cell::new(0),
             count_total: Cell::new(0),
         } }; MAX_DEPTH + 1],
@@ -422,6 +425,7 @@ pub(crate) fn track_alloc(size: usize) {
             OVERFLOW_ALLOC_BYTES.fetch_add(size as u64, Ordering::Relaxed);
         }
         ThreadSlot::Internal => c::add(&c::HIDDEN_ALLOC, size),
+        ThreadSlot::TlsUnavailable => c::add(&c::TLS_ALLOC, size),
     }
 }
 
@@ -450,6 +454,7 @@ pub(crate) fn track_dealloc(size: usize) {
             OVERFLOW_DEALLOC_BYTES.fetch_add(size as u64, Ordering::Relaxed);
         }
         ThreadSlot::Internal => c::add(&c::HIDDEN_FREE, size),
+        ThreadSlot::TlsUnavailable => c::add(&c::TLS_FREE, size),
     }
 }
 
@@ -478,6 +483,7 @@ pub(crate) fn coverage_snapshot() -> crate::json::AllocationCoverage {
         tls_unavailable_freed_bytes: c::read(&c::TLS_FREE),
         depth_limit: MAX_DEPTH,
         depth_limit_hits: c::read(&c::DEPTH_HITS),
+        unwound_polls: c::read(&c::UNWOUND_POLLS),
         cross_thread_guards: c::read(&c::CROSS_THREAD),
         inactive_measurements: c::read(&c::INACTIVE),
         dropped_measurements: c::read(&c::DROPPED),
@@ -486,11 +492,13 @@ pub(crate) fn coverage_snapshot() -> crate::json::AllocationCoverage {
 
 #[inline]
 pub(crate) fn set_alloc_tracking_enabled(enabled: bool) -> bool {
-    ALLOCATIONS.with(|stack| {
-        let previous = stack.tracking_enabled.get();
-        stack.tracking_enabled.set(enabled);
-        previous
-    })
+    ALLOCATIONS
+        .try_with(|stack| {
+            let previous = stack.tracking_enabled.get();
+            stack.tracking_enabled.set(enabled);
+            previous
+        })
+        .unwrap_or(false)
 }
 
 #[inline]
@@ -501,4 +509,24 @@ pub(crate) fn suspend_alloc_tracking() -> bool {
 #[inline]
 pub(crate) fn resume_alloc_tracking(previous_enabled: bool) {
     let _ = set_alloc_tracking_enabled(previous_enabled);
+}
+
+/// Allocation origin is independent of thread registry availability or traffic
+/// mode. Never allocates, initializes lazy configuration, or panics during TLS
+/// teardown. Blocks keep the resulting origin id through scope/thread exit.
+#[cfg(feature = "hotpath-retained")]
+pub(crate) fn current_origin() -> crate::retained::Source {
+    use crate::retained::Source;
+    ALLOCATIONS
+        .try_with(|stack| {
+            if !stack.tracking_enabled.get() {
+                Source::Recorder
+            } else {
+                stack.elements[stack.depth.get() as usize]
+                    .origin
+                    .get()
+                    .map_or(Source::Unscoped, Source::Function)
+            }
+        })
+        .unwrap_or(Source::TlsUnavailable)
 }

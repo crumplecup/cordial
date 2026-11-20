@@ -163,6 +163,13 @@ async fn cancelled() {
     std::hint::black_box((held, teardown));
 }
 
+#[hotpath::measure]
+async fn panicking_async() {
+    let held = vec![37_u8; 24];
+    std::hint::black_box(&held);
+    std::panic::panic_any("controlled poll unwind");
+}
+
 struct DropAllocation;
 
 impl Drop for DropAllocation {
@@ -219,6 +226,7 @@ fn allocation_contract() -> Result<()> {
         "internal",
         "depth",
         "lifetime",
+        "unwind",
     ] {
         let output = std::process::Command::new(std::env::current_exe().into_diagnostic()?)
             .args(["--exact", "capture_fixture", "--nocapture"])
@@ -270,6 +278,25 @@ fn capture_fixture() -> Result<()> {
         .functions_limit(0)
         .threads_limit(0)
         .build();
+    if mode == "unwind" {
+        let mut future = Box::pin(panicking_async());
+        assert!(
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                future
+                    .as_mut()
+                    .poll(&mut Context::from_waker(Waker::noop()))
+            }))
+            .is_err()
+        );
+        drop(future);
+        drop(leaf());
+        drop(guard);
+        let report: Value = serde_json::from_str(&std::fs::read_to_string(path).into_diagnostic()?)
+            .into_diagnostic()?;
+        assert_eq!(report["allocation"]["coverage"]["unwound_polls"], 1);
+        assert_eq!(row(&report, "functions_alloc", "::leaf")["total"], "128 B");
+        return Ok(());
+    }
     if mode == "depth" {
         check_depth_limit();
         drop(guard);
@@ -334,6 +361,8 @@ fn capture_fixture() -> Result<()> {
         serde_json::from_value(exact.clone()).into_diagnostic()?;
     assert_eq!(serde_json::to_value(decoded).into_diagnostic()?, exact);
     assert_eq!(exact["functions_status"], "available");
+    assert_eq!(exact["heap_status"], "unavailable");
+    assert!(exact["heap"].is_null());
     assert_eq!(
         exact["accounting"],
         if mode == "inclusive" {

@@ -322,6 +322,9 @@ pub(crate) fn allocation_report(
     }
     AllocationReport {
         schema_version: 1,
+        heap_status: AllocationStatus::Unavailable,
+        heap_baseline: None,
+        heap: None,
         functions_status: if stats.is_some() {
             AllocationStatus::Available
         } else {

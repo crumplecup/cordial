@@ -49,7 +49,7 @@ pub(crate) static ALLOC_CUMULATIVE: LazyLock<bool> =
     LazyLock::new(|| crate::shared::env_flag("HOTPATH_ALLOC_CUMULATIVE"));
 
 #[inline]
-pub(crate) fn push_alloc_stack() {
+pub(crate) fn push_alloc_stack(name: &'static str) {
     crate::functions::alloc::core::ALLOCATIONS.with(|stack| {
         let max_depth = crate::functions::alloc::core::MAX_DEPTH;
         let depth = stack.depth.get() as usize + 1;
@@ -63,6 +63,7 @@ pub(crate) fn push_alloc_stack() {
             );
         }
         stack.depth.set(depth as u32);
+        stack.elements[depth].origin.set(Some(name));
         stack.elements[depth].bytes_total.set(0);
         stack.elements[depth].count_total.set(0);
     });
@@ -179,7 +180,7 @@ impl MeasurementGuardSync {
     fn build(name: &'static str, wrapper: bool, skipped: bool, caller_scoped: bool) -> Self {
         let _suspend = crate::lib_on::SuspendAllocTracking::new();
         if !skipped {
-            push_alloc_stack();
+            push_alloc_stack(name);
         }
         if caller_scoped {
             crate::lib_on::caller_stack::push_caller(name);
@@ -312,7 +313,7 @@ impl MeasurementGuardSyncWithLog {
         let _suspend = crate::lib_on::SuspendAllocTracking::new();
         let caller_scoped = !wrapper && !skipped;
         if !skipped {
-            push_alloc_stack();
+            push_alloc_stack(name);
         }
         if caller_scoped {
             crate::lib_on::caller_stack::push_caller(name);
@@ -510,7 +511,7 @@ mod tests {
     #[test]
     fn nesting_up_to_max_depth_keeps_frames_exclusive() {
         for _ in 0..MAX_DEPTH {
-            push_alloc_stack();
+            push_alloc_stack("depth fixture");
         }
         track_alloc(64);
         assert_eq!(pop_alloc_stack(), (64, 1));
@@ -523,7 +524,7 @@ mod tests {
     #[should_panic(expected = "HOTPATH_ALLOC_MAX_DEPTH")]
     fn nesting_past_max_depth_panics_with_hint() {
         for _ in 0..=MAX_DEPTH {
-            push_alloc_stack();
+            push_alloc_stack("depth fixture");
         }
     }
 }
