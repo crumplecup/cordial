@@ -649,6 +649,7 @@ pub struct HotpathGuard {
     format: Format,
     wrapper_guard: Option<MeasurementGuardSync>,
     output_path: Option<PathBuf>,
+    output_pinned: bool,
     sections_mode: SectionsMode,
     start_time: Instant,
     before_shutdown: Option<Box<dyn FnOnce() + Send + Sync>>,
@@ -673,6 +674,15 @@ pub struct HotpathGuard {
 }
 
 impl HotpathGuard {
+    /// Pin a collector-owned destination and format, ignoring HOTPATH_OUTPUT_PATH/FORMAT.
+    /// This reserves unique machine-readable artifacts for process collectors.
+    pub fn pin_output(&mut self, path: impl AsRef<std::path::Path>, format: Format) {
+        self.output_path = Some(resolve_output_path(path));
+        self.format = format;
+        self.output_pinned = true;
+    }
+
+
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         caller_name: &'static str,
@@ -1038,6 +1048,7 @@ impl HotpathGuard {
             format,
             wrapper_guard: Some(wrapper_guard),
             output_path,
+            output_pinned: false,
             sections_mode,
             start_time,
             before_shutdown,
@@ -1265,13 +1276,20 @@ impl Drop for HotpathGuard {
             }
         };
 
-        let output = OutputDestination::from_path(self.output_path.take());
+        let output = if self.output_pinned {
+            match self.output_path.take() {
+                Some(path) => OutputDestination::File(path),
+                None => OutputDestination::Stdout,
+            }
+        } else {
+            OutputDestination::from_path(self.output_path.take())
+        };
         crate::output_on::set_use_colors(
             matches!(output, OutputDestination::Stdout)
                 && std::env::var("NO_COLOR").is_err()
                 && std::io::IsTerminal::is_terminal(&std::io::stdout()),
         );
-        let format = if std::env::var("HOTPATH_OUTPUT_FORMAT").is_ok() {
+        let format = if !self.output_pinned && std::env::var("HOTPATH_OUTPUT_FORMAT").is_ok() {
             Format::from_env()
         } else {
             self.format

@@ -246,7 +246,7 @@ pub fn no_room_exit(floor_kib: u64) -> ! {
     crate::flush_current();
     log_footprint("no room to work in");
     crate::run_metrics::write_ended("memory no room", &status.phase());
-    crate::profiling::finish();
+    crate::profiling::finish(crate::profiling::FinishReason::NoRoom);
     std::process::exit(crate::MEMORY_STUCK_EXIT)
 }
 
@@ -275,7 +275,7 @@ pub fn resume_exit() -> ! {
     crate::flush_current();
     log_footprint("ended to be followed by another process");
     crate::run_metrics::write_ended("memory checkpoint", &status.phase());
-    crate::profiling::finish();
+    crate::profiling::finish(crate::profiling::FinishReason::Resume);
     std::process::exit(MEMORY_RESUME_EXIT)
 }
 
@@ -981,6 +981,6 @@ fn stop(held_kib: u64, resident_kib: u64, budget: &Budget) -> ! {
         held_kib,
     });
     // The profile of the run that was stopped is the one that says where its memory went.
-    crate::profiling::finish();
+    crate::profiling::finish(crate::profiling::FinishReason::Watchdog);
     std::process::exit(MEMORY_LIMIT_EXIT)
 }

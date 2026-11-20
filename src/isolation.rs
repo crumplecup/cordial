@@ -385,7 +385,9 @@ async fn child(
     progress: &std::path::Path,
     results: &std::path::Path,
 ) -> std::io::Result<ExitStatus> {
-    tokio::process::Command::new(program)
+    let profile = crate::profiling::expect_child(resumes)?;
+    let mut command = tokio::process::Command::new(program);
+    command
         .args(arguments)
         .env(RESUMABLE_VARIABLE, "1")
         .env(RESUMES_VARIABLE, resumes.to_string())
@@ -397,8 +399,29 @@ async fn child(
                 .to_string(),
         )
         .env(crate::RESULT_STORE_VARIABLE, results)
-        .kill_on_drop(true)
-        .spawn()?
-        .wait()
-        .await
+        .kill_on_drop(true);
+    if let Some(profile) = &profile {
+        let (key, value) = profile.environment()?;
+        command.env(key, value);
+    }
+    let mut child = match command.spawn() {
+        Ok(child) => child,
+        Err(error) => {
+            if let Some(profile) = &profile {
+                profile.observe(None, None, Some(error.to_string()))?;
+            }
+            return Err(error);
+        }
+    };
+    if let Some(profile) = &profile {
+        profile.observe(child.id(), None, None)?;
+    }
+    let status = child.wait().await;
+    if let Some(profile) = &profile {
+        match &status {
+            Ok(status) => profile.observe(None, Some(status.code()), None)?,
+            Err(error) => profile.observe(None, None, Some(error.to_string()))?,
+        }
+    }
+    status
 }

@@ -107,25 +107,61 @@ impl Cli {
     #[instrument(level = "debug", skip(self), err(level = "warn"))]
     #[hotpath::measure]
     pub fn act(self) -> CordialResult<()> {
+        let code = self.act_with_exit_code()?;
+        if code != 0 {
+            crate::profiling::finish(crate::profiling::FinishReason::Error);
+            std::process::exit(code);
+        }
+        Ok(())
+    }
+
+    /// Dispatch and return the isolation driver's exit code after its stack has unwound.
+    #[instrument(level = "debug", skip(self), err(level = "warn"))]
+    #[hotpath::measure]
+    pub fn act_with_exit_code(self) -> CordialResult<i32> {
         let project_root = match &self.project {
             Some(path) => path.clone(),
             None => std::env::current_dir()?,
         };
         let slug = project_slug_from_path(&project_root);
         let store_home = self.store_home.clone().unwrap_or_else(default_store_home);
-        if self.memory_isolation && !crate::memory_limit::resumable() {
-            // The run is a child of this process, and this one ends with what the last ended with.
-            // What the children hand on goes in a file in the run cache, which is on the disk.
+        let store_root = store_home.join(&slug);
+        let store = StoreLayout::from_root(store_root.clone(), slug);
+        let configured = crate::load_cordial_config(&project_root, &store_home);
+        let driver = self.memory_isolation && !crate::memory_limit::resumable();
+        let export = configured.hotpath().output_path().as_ref().map(|path| {
+            if path.is_absolute() {
+                path.clone()
+            } else {
+                store_root.join(path)
+            }
+        });
+        crate::profiling::configure(
+            &store.perf_dir().join("raw/profiles"),
+            export.as_deref(),
+            crate::profiling::Identity {
+                role: if driver {
+                    "isolation_driver"
+                } else if crate::memory_limit::resumable() {
+                    "isolation_child"
+                } else {
+                    "cli"
+                }
+                .to_owned(),
+                boundary: "process_entry".to_owned(),
+                ..crate::profiling::Identity::default()
+            },
+        )?;
+        if driver {
             let program = std::env::current_exe()?;
             let arguments: Vec<std::ffi::OsString> = std::env::args_os().skip(1).collect();
-            let results = store_home.join(&slug).join("run-results");
+            let results = store_root.join("run-results");
             let code = crate::drive_resumable(&program, &arguments, &results)?;
-            std::process::exit(code);
+            return Ok(code);
         }
         // What a process of a run that keeps its results in a store has gathered is written when it
         // ends (the store itself is opened once the workspace is loaded, and named for its inputs).
         let _results = crate::result_store::FlushOnDrop;
-        let configured = crate::load_cordial_config(&project_root, &store_home);
         let limit =
             crate::resolve_memory_limit(self.memory_limit, configured.memory_limit().as_deref());
         // The budget is the whole run's: a process of a run in processes spends what is left of it
@@ -144,33 +180,6 @@ impl Cli {
             configured.memory_parsimony().as_deref(),
         ));
         let _footprint = crate::FootprintOnDrop;
-        let store_root = store_home.join(&slug);
-        let store = StoreLayout::from_root(store_root.clone(), slug);
-        // The guard spans command execution and writes its report on drop.
-        #[cfg(feature = "hotpath")]
-        let _hotpath = {
-            let config = crate::load_cordial_config(&project_root, &store_home);
-            let path = config
-                .hotpath()
-                .output_path()
-                .as_ref()
-                .map(|configured| {
-                    if configured.is_absolute() {
-                        configured.clone()
-                    } else {
-                        store_root.join(configured)
-                    }
-                })
-                .unwrap_or_else(|| {
-                    std::env::temp_dir()
-                        .join(format!("cordial-hotpath-{}.json", std::process::id()))
-                });
-            tracing::info!(path = %path.display(), "hotpath report");
-            // Held where the memory watchdog can write the report too: it exits the process, which
-            // does not drop what a function holds.
-            crate::profiling::hold(crate::profiling::guard("cordial", path));
-            crate::profiling::Held
-        };
         #[cfg(feature = "quality")]
         let json_worklist = matches!(
             &self.command,
@@ -190,13 +199,15 @@ impl Cli {
         } else {
             Arc::new(LineProgress::new())
         };
-        self.command.act(ActCtx::new(
-            project_root,
-            store,
-            self.crate_name,
-            self.store_home,
-            progress,
-            self.stop_after,
-        ))
+        self.command
+            .act(ActCtx::new(
+                project_root,
+                store,
+                self.crate_name,
+                self.store_home,
+                progress,
+                self.stop_after,
+            ))
+            .map(|()| 0)
     }
 }

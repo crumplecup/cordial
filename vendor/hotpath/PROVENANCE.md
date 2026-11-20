@@ -34,6 +34,9 @@ The downstream extension is implemented in Hotpath, not in Cordial:
   exclusions. The live meter has a construction-time zero baseline, no reset,
   and a lifetime peak. Concurrent live and peak reads are independent; in-flight
   calls can be between updates. Quiescent reads reconcile exactly.
+- `HotpathGuard::pin_output` reserves a collector-owned destination and JSON
+  format that runtime output environment variables cannot redirect. Default
+  builder behavior remains unchanged. Cordial uses it for unique raw reports.
 
 `tests/hotpath_heap.rs` in Cordial exercises this API with small local allocator
 fixtures, with and without detailed profiling. `tests/hotpath_alloc_contract.rs`

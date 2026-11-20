@@ -1,6 +1,7 @@
 # Memory measurement through Hotpath allocation profiling
 
-Status: **Active implementation, 2026-11-19.** Phases 1–2 are implemented.
+Status: **Active implementation, 2026-11-20.** Phases 1–2 are implemented;
+phase 3 process ownership and durable report linkage are in progress.
 Hotpath supplies the always-on live/peak meter, retained allocation origins,
 exact JSON and explicit coverage counters; `cap` and the parallel diagnostics
 are removed. Process lifecycle, operation coverage and ingestion remain phases
@@ -396,3 +397,49 @@ Validation:
   rather than relying on Cargo's dependency lint suppression.
 - Formatting, whitespace and byte-for-byte patch reconstruction passed.
 - No Cordial command, benchmark or full-program measurement was run.
+
+### Phase 3 process ownership checkpoint
+
+`ProcessProfile` owns CLI capture before tracing/argument parsing. Configuration
+relocates its durable manifest without restarting Hotpath. Command setup, result
+flushes, footprint logging and normal command teardown occur before finalization.
+The isolation driver returns its status through `act_with_exit_code`, so its
+ordinary stack also tears down before the process owner finishes. Direct library
+users of `Cli::act` can install the same explicit process owner.
+
+Each run has a unique directory under `perf/raw/profiles/`. Each process writes
+its own manifest and raw Hotpath report; the parent registers expected child
+identities before spawn and records pid/exit/spawn errors. A child inherits the
+run identity, parent and restart number. Actual producer features and executable,
+Hotpath version, accounting/display mode and optional state/repeat/test identity
+are recorded. Missing child manifests and truncated/deleted reports remain
+visible to `profiling::read_run`. The manifest pieces form the run record without
+multiple processes rewriting one shared JSON file.
+
+The collector stages Hotpath's report at a unique temporary path, then validates
+and publishes it under the store. Configured output paths produce an additional
+export suffixed by process identity, never an overwrite of the configured base
+file. Hotpath's pinned output API prevents output environment overrides from
+redirecting or colliding with the reserved raw artifact. Normal/error returns,
+unwind, memory-watchdog, no-room and resume exits have distinct completion
+reasons; only ordinary returns promise normal workload stack teardown. A valid
+report after watchdog/resume termination is still a partial workload lifetime.
+Repeated finish calls preserve the first result. Uncatchable termination leaves
+`running` with no completion time/reason, rather than a complete or zero report.
+
+Inspection of the pinned dependency found no nonterminal checkpoint/snapshot
+report API. Guard shutdown drains and terminates the workers. Restarting guards
+does not create a valid continuous capture because transport/registry state is
+process-global. Phase 3 therefore preserves manifest/staging evidence on an
+interruption and does not fabricate checkpoint reports. Allocator snapshots
+remain Hotpath's own API; they are not a substitute report stream.
+
+Controlled evidence is in `tests/hotpath_lifecycle.rs`; the next checkpoint
+connects test lifetime ownership and expected-report collection to the existing
+perf path. No Cordial command or full-program measurement is used.
+
+Checkpoint validation: all five lifecycle unit tests passed, including setup and
+teardown, errors, unwind, controlled termination, missing/crashed children,
+resumes, exports and output overrides. The all-features/all-targets Clippy gate,
+formatting, whitespace checks and byte-for-byte vendor patch reconstruction
+passed.

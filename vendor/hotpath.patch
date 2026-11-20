@@ -836,6 +836,16 @@
  }
  
  pub struct ValHandle;
+@@ -217,6 +157,9 @@
+ }
+ 
+ impl HotpathGuard {
++    /// No-op without profiling; matches the enabled collector API.
++    pub fn pin_output(&mut self, _path: impl AsRef<std::path::Path>, _format: Format) {}
++
+     pub(crate) fn new() -> Self {
+         Self {}
+     }
 --- a/src/lib_on/functions/alloc/core.rs
 +++ b/src/lib_on/functions/alloc/core.rs
 @@ -1,3 +1,4 @@
@@ -1576,7 +1586,15 @@
      }
  
      /// Builds the guard and moves it to a background thread that keeps it alive.
-@@ -641,6 +664,10 @@
+@@ -626,6 +649,7 @@
+     format: Format,
+     wrapper_guard: Option<MeasurementGuardSync>,
+     output_path: Option<PathBuf>,
++    output_pinned: bool,
+     sections_mode: SectionsMode,
+     start_time: Instant,
+     before_shutdown: Option<Box<dyn FnOnce() + Send + Sync>>,
+@@ -641,11 +665,24 @@
      threads_limit: usize,
      user_metadata: BTreeMap<String, String>,
      criterion: Option<crate::json::JsonCriterion>,
@@ -1587,7 +1605,29 @@
      #[cfg(feature = "hotpath-meta")]
      _meta_guard: Option<hotpath_meta::HotpathGuard>,
  }
-@@ -1026,6 +1053,10 @@
+ 
+ impl HotpathGuard {
++    /// Pin a collector-owned destination and format, ignoring HOTPATH_OUTPUT_PATH/FORMAT.
++    /// This reserves unique machine-readable artifacts for process collectors.
++    pub fn pin_output(&mut self, path: impl AsRef<std::path::Path>, format: Format) {
++        self.output_path = Some(resolve_output_path(path));
++        self.format = format;
++        self.output_pinned = true;
++    }
++
++
+     #[allow(clippy::too_many_arguments)]
+     pub(crate) fn new(
+         caller_name: &'static str,
+@@ -1011,6 +1048,7 @@
+             format,
+             wrapper_guard: Some(wrapper_guard),
+             output_path,
++            output_pinned: false,
+             sections_mode,
+             start_time,
+             before_shutdown,
+@@ -1026,6 +1064,10 @@
              threads_limit,
              user_metadata,
              criterion,
@@ -1598,7 +1638,7 @@
              #[cfg(feature = "hotpath-meta")]
              _meta_guard,
          }
-@@ -1087,7 +1118,6 @@
+@@ -1087,7 +1129,6 @@
  impl Drop for HotpathGuard {
      fn drop(&mut self) {
          let _suspend = crate::lib_on::SuspendAllocTracking::new();
@@ -1606,7 +1646,7 @@
          #[cfg(feature = "hotpath-cpu")]
          let cpu_report: Option<Result<crate::functions::cpu::CpuReport, String>> = if self
              .sections_mode
-@@ -1135,6 +1165,8 @@
+@@ -1135,6 +1176,8 @@
          if let Some(f) = self.before_shutdown.take() {
              f();
          }
@@ -1615,7 +1655,30 @@
  
          let wrapper_guard = self.wrapper_guard.take().unwrap();
          drop(wrapper_guard);
-@@ -1348,6 +1380,27 @@
+@@ -1233,13 +1276,20 @@
+             }
+         };
+ 
+-        let output = OutputDestination::from_path(self.output_path.take());
++        let output = if self.output_pinned {
++            match self.output_path.take() {
++                Some(path) => OutputDestination::File(path),
++                None => OutputDestination::Stdout,
++            }
++        } else {
++            OutputDestination::from_path(self.output_path.take())
++        };
+         crate::output_on::set_use_colors(
+             matches!(output, OutputDestination::Stdout)
+                 && std::env::var("NO_COLOR").is_err()
+                 && std::io::IsTerminal::is_terminal(&std::io::stdout()),
+         );
+-        let format = if std::env::var("HOTPATH_OUTPUT_FORMAT").is_ok() {
++        let format = if !self.output_pinned && std::env::var("HOTPATH_OUTPUT_FORMAT").is_ok() {
+             Format::from_env()
+         } else {
+             self.format
+@@ -1348,6 +1398,27 @@
                      self.criterion.clone(),
                  ))
              };

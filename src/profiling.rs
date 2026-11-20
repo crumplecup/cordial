@@ -34,7 +34,7 @@ pub fn live_bytes() -> Option<u64> {
 pub(crate) fn guard(caller: &'static str, path: std::path::PathBuf) -> hotpath::HotpathGuard {
     let builder = hotpath::HotpathGuardBuilder::new(caller)
         .format(hotpath::Format::JsonPretty)
-        .output_path(path)
+        .output_path(&path)
         .functions_limit(0)
         .channels_limit(0)
         .mutexes_limit(0)
@@ -43,43 +43,14 @@ pub(crate) fn guard(caller: &'static str, path: std::path::PathBuf) -> hotpath::
         .threads_limit(0);
     #[cfg(feature = "hotpath-alloc")]
     let builder = builder.heap_provider(|| ALLOCATOR.heap_snapshot());
-    builder.build()
+    let mut guard = builder.build();
+    guard.pin_output(path, hotpath::Format::JsonPretty);
+    guard
 }
 
-/// The guard of the run's profile, kept where the memory watchdog can write it: it ends the process
-/// with `exit`, which runs no destructor, and a run killed for memory is the one whose profile is
-/// wanted.
-#[cfg(feature = "hotpath")]
-static HELD: std::sync::Mutex<Option<hotpath::HotpathGuard>> = std::sync::Mutex::new(None);
+mod capture;
+mod process;
 
-/// Keep `guard` until [`finish`] or the end of the run.
-#[cfg(feature = "hotpath")]
-#[tracing::instrument(level = "debug", skip(guard))]
-pub(crate) fn hold(guard: hotpath::HotpathGuard) {
-    if let Ok(mut held) = HELD.lock() {
-        *held = Some(guard);
-    }
-}
-
-/// Write the profile now, if one is kept (the report is written when the guard drops). Nothing
-/// without the `hotpath` feature.
-#[tracing::instrument(level = "debug")]
-pub(crate) fn finish() {
-    #[cfg(feature = "hotpath")]
-    {
-        let guard = HELD.lock().ok().and_then(|mut held| held.take());
-        drop(guard);
-    }
-}
-
-/// What the command's scope holds: on drop, writes the profile if it was not written already.
-#[cfg(feature = "hotpath")]
-#[derive(Debug)]
-pub(crate) struct Held;
-
-#[cfg(feature = "hotpath")]
-impl Drop for Held {
-    fn drop(&mut self) {
-        finish();
-    }
-}
+pub use capture::{Capture, FinishReason, Identity, Manifest, ReportStatus, RunReport, read_run};
+pub use process::{ProcessProfile, test_run_directory};
+pub(crate) use process::{configure, expect_child, finish};

@@ -157,6 +157,9 @@ impl Default for HotpathGuard {
 }
 
 impl HotpathGuard {
+    /// No-op without profiling; matches the enabled collector API.
+    pub fn pin_output(&mut self, _path: impl AsRef<std::path::Path>, _format: Format) {}
+
     pub(crate) fn new() -> Self {
         Self {}
     }
