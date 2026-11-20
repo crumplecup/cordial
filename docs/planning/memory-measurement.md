@@ -1,11 +1,13 @@
 # Memory measurement through Hotpath allocation profiling
 
-Status: **Infrastructure complete for maintainer review, 2026-11-20.**
+Status: **Infrastructure complete; first target measurement authorized, 2026-11-20.**
 Phases 1–5 are implemented and gated. Phase 5 unifies import, storage,
 rendering and comparison through the existing perf path.
 Hotpath supplies the always-on live/peak meter, retained allocation origins,
 exact JSON and explicit coverage counters; `cap` and the parallel diagnostics
-are removed. No full-program measurement has been authorized or performed.
+are removed. The maintainer has authorized measuring `elicit_doc` without the
+1.5 GB budget, after completing stable measurement tracking. No target run has
+been performed yet.
 The remaining full-program boundaries are explicit in every report.
 
 ## Objective and decisions
@@ -23,7 +25,8 @@ Validation for this effort is through unit tests with small, controlled fixtures
 Do not benchmark Cordial or profile full programs during this phase. Put the
 infrastructure in place and demonstrate it through those tests for maintainer
 review first. After that, discuss using `elicit_doc` as a real-program target;
-that measurement is deferred and is not authorized by this plan.
+that measurement was initially deferred. The maintainer has now authorized it;
+Cordial self-analysis remains outside the validation scope.
 
 This is the implementation plan for memory measurement. It complements
 [performance metrics](performance-metrics.md) and narrows the allocation claims
@@ -562,5 +565,24 @@ Phase 5 validation:
 Phase checkpoints: phase 3 commits `ac9946fa` and `4b7cd789`; phase 4 commit
 `f88cf4b4`; phase 5 is recorded by the commit containing this evidence.
 No Cordial command or full-program benchmark was executed. Full-program
-measurement remains deferred for maintainer review and a separate discussion
-of `elicit_doc`.
+measurement remained deferred at that checkpoint for maintainer review and a
+separate discussion of `elicit_doc`.
+
+### Authorized first measurement: durable workflow tracking
+
+The maintainer authorized an unlimited-budget cold measurement of `elicit_doc`.
+The existing perf workflow now supports `--cold-only`, forwards both resolved
+memory controls to its child, and records those controls alongside the program
+path. Its existing immutable records and linked raw captures live in the stable
+project perf store; only the existing work cache is disposable. Producer manifests
+record the executable's revision and checkout state at build time. Older
+manifests retain explicitly unknown build provenance. Baseline selection remains
+explicit.
+
+Validation: all 38 focused tests passed across `perf_workflow`,
+`perf_workflow_partial`, `perf_memory`, `hotpath_lifecycle`, `perf_record`, and
+`perf_compare`. New fixtures cover cold-only execution, zero-budget forwarding,
+reusable scratch state, preserved capture history, immutable record storage,
+and older manifests. All-features/all-targets Clippy with warnings denied,
+formatting, and whitespace checks passed. These checks launch controlled
+fixtures, not Cordial analysis of this repository.

@@ -27,6 +27,18 @@ pub struct WorkflowRequest {
     /// A file the incremental state edits (one comment line, restored after).
     #[builder(default)]
     edit: Option<PathBuf>,
+    /// Measure only the cold state, without warm runs or source edits.
+    #[builder(default)]
+    #[getter(copy)]
+    cold_only: bool,
+    /// Explicit child stop limit in bytes; zero disables it.
+    #[builder(default)]
+    #[getter(copy)]
+    memory_limit: Option<u64>,
+    /// Explicit child pressure target in bytes; zero disables it with a zero limit.
+    #[builder(default)]
+    #[getter(copy)]
+    memory_target: Option<u64>,
 }
 
 /// What one run of the pipeline left behind.
@@ -175,6 +187,12 @@ fn run_once(
         .env("CORDIAL_NO_PROGRESS", "1")
         .stdin(Stdio::null())
         .stdout(Stdio::null());
+    if let Some(limit) = request.memory_limit() {
+        command.arg("--memory-limit").arg(limit.to_string());
+    }
+    if let Some(target) = request.memory_target() {
+        command.arg("--memory-target").arg(target.to_string());
+    }
     let (name, value) = profile.environment()?;
     command.env(name, value);
     let observed = (|| -> CordialResult<std::process::ExitStatus> {
@@ -324,6 +342,9 @@ fn run_states(root: &Path, work_home: &Path, request: &WorkflowRequest) -> State
                 round,
                 &mut captures,
             )?);
+            if request.cold_only() {
+                continue;
+            }
             warm.push(run_once(
                 request,
                 root,
@@ -383,6 +404,19 @@ fn records_of(
             continue;
         }
         let (stages, counters, metrics) = fold(&samples);
+        let mut notes = metrics.notes().clone();
+        notes.insert(
+            "workflow.program".into(),
+            request.program().display().to_string(),
+        );
+        for (name, value) in [
+            ("memory.limit_bytes", request.memory_limit()),
+            ("memory.target_bytes", request.memory_target()),
+        ] {
+            if let Some(value) = value {
+                notes.insert(name.into(), value.to_string());
+            }
+        }
         records.push(
             RunRecordBuilder::default()
                 .identity(identity.clone())
@@ -393,7 +427,7 @@ fn records_of(
                 .memory(state_memory)
                 .counters(counters)
                 .values(metrics.values().clone())
-                .notes(metrics.notes().clone())
+                .notes(notes)
                 .build()?,
         );
     }

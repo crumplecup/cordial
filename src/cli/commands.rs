@@ -319,6 +319,7 @@ pub(super) struct ActCtx {
     store_home: Option<PathBuf>,
     progress: Arc<dyn ProgressSink>,
     stop_after: Option<String>,
+    memory_budget: crate::Budget,
 }
 
 impl Commands {

@@ -98,6 +98,12 @@ pub struct Manifest {
     pub pid: u32,
     /// Executable path of the producer.
     pub executable: Option<PathBuf>,
+    /// Source revision observed when this executable was built, absent outside Git.
+    #[serde(default)]
+    pub producer_revision: Option<String>,
+    /// Whether the producer checkout had changes when it was built.
+    #[serde(default)]
+    pub producer_dirty: Option<bool>,
     /// Workload provenance.
     pub identity: Identity,
     /// Actual Cargo feature flags, as normalized by Cargo's build environment.
@@ -239,6 +245,8 @@ impl Capture {
             restart: ticket.as_ref().map_or(0, |ticket| ticket.restart),
             pid: std::process::id(),
             executable: std::env::current_exe().ok(),
+            producer_revision: option_env!("CORDIAL_BUILD_REVISION").map(str::to_owned),
+            producer_dirty: option_env!("CORDIAL_BUILD_DIRTY").and_then(|value| value.parse().ok()),
             identity,
             features: env!("CORDIAL_BUILD_FEATURES")
                 .split(',')

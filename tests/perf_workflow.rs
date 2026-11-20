@@ -102,6 +102,103 @@ fn without_an_edit_file_only_cold_and_warm_are_recorded() -> Result<()> {
 }
 
 #[test]
+fn cold_only_passes_zero_budgets_and_preserves_history_in_the_reusable_store() -> Result<()> {
+    let scratch = tempfile::tempdir().into_diagnostic()?;
+    let project = scratch.path().join("example");
+    fs::create_dir_all(&project).into_diagnostic()?;
+    fs::write(project.join("edited.rs"), "original\n").into_diagnostic()?;
+    let program = fake_cordial(scratch.path())?;
+    let fake = fs::read_to_string(&program).into_diagnostic()?;
+    let checked = fake.replace(
+        "while [ $# -gt 0 ]; do",
+        "limit=unset; target=unset\nwhile [ $# -gt 0 ]; do",
+    ).replace(
+        "    *) shift ;;",
+        "    --memory-limit) limit=\"$2\"; shift 2 ;;\n    --memory-target) target=\"$2\"; shift 2 ;;\n    open) shift ;;\n    *) exit 91 ;;",
+    ).replace(
+        "dir=\"$home/$(basename \"$project\")\"",
+        "[ \"$limit\" = 0 ] && [ \"$target\" = 0 ] || exit 92\ndir=\"$home/$(basename \"$project\")\"",
+    );
+    fs::write(&program, checked).into_diagnostic()?;
+    let layout = cordial::StoreLayout::from_root(scratch.path().join("store"), "example");
+    let store = cordial::perf::PerfStore::new(&layout);
+    let work = layout.perf_dir().join("work");
+    fs::create_dir_all(work.join("example")).into_diagnostic()?;
+    fs::write(work.join("example/ledger.json"), "stale").into_diagnostic()?;
+    let history = store.raw_dir().join("earlier.hotpath.json");
+    fs::create_dir_all(store.raw_dir()).into_diagnostic()?;
+    fs::write(&history, "preserved").into_diagnostic()?;
+    let request = WorkflowRequestBuilder::default()
+        .name("example")
+        .program(program)
+        .repeat(1u32)
+        .edit(Some("edited.rs".into()))
+        .cold_only(true)
+        .memory_limit(Some(0u64))
+        .memory_target(Some(0u64))
+        .build()
+        .into_diagnostic()?;
+    let records = measure_workflow(&project, &work, &request).into_diagnostic()?;
+    assert_eq!(records.len(), 1);
+    let record = &records[0];
+    assert_eq!(record.state(), Some(PerfState::Cold));
+    assert_eq!(
+        record.notes().get("memory.limit_bytes").map(String::as_str),
+        Some("0")
+    );
+    assert_eq!(
+        record
+            .notes()
+            .get("memory.target_bytes")
+            .map(String::as_str),
+        Some("0")
+    );
+    assert_eq!(
+        record
+            .stages()
+            .iter()
+            .find(|stage| stage.name() == "phase/load_and_probe")
+            .map(|stage| stage.time().median()),
+        Some(9000)
+    );
+    let saved = store.save(record).into_diagnostic()?;
+    assert_eq!(
+        cordial::perf::PerfStore::load(&saved).into_diagnostic()?,
+        *record
+    );
+    assert_eq!(store.list().into_diagnostic()?.len(), 1);
+    assert!(store.save(record).is_err(), "history is immutable");
+    assert_eq!(fs::read_to_string(history).into_diagnostic()?, "preserved");
+    assert_eq!(
+        fs::read_to_string(project.join("edited.rs")).into_diagnostic()?,
+        "original\n"
+    );
+    Ok(())
+}
+
+#[test]
+fn cold_measurement_cli_accepts_global_zero_budgets() -> Result<()> {
+    use clap::Parser;
+    let cli = cordial::Cli::try_parse_from([
+        "cordial",
+        "perf",
+        "workflow",
+        "example",
+        "--cold-only",
+        "--repeat",
+        "1",
+        "--memory-limit",
+        "0",
+        "--memory-target",
+        "0",
+    ])
+    .into_diagnostic()?;
+    assert_eq!(cli.memory_limit, Some(cordial::MemoryLimit::Bytes(0)));
+    assert_eq!(cli.memory_target, Some(cordial::MemoryLimit::Bytes(0)));
+    Ok(())
+}
+
+#[test]
 fn a_failing_command_is_an_error_and_still_restores_the_edit() -> Result<()> {
     cordial::init_tracing();
     let scratch = tempfile::tempdir().into_diagnostic()?;

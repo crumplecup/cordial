@@ -92,6 +92,8 @@ fn manifest(root: &Path) -> Manifest {
         restart: 0,
         pid: 42,
         executable: None,
+        producer_revision: Some("fixture-revision".into()),
+        producer_dirty: Some(false),
         identity: Identity {
             role: "test".into(),
             binary: Some("fixture".into()),
@@ -205,6 +207,7 @@ fn exact_integers_and_local_identities_survive_import_storage_and_display() -> R
         "thread 5",
         "individual peak=20000 B",
         "OS envelope: unavailable",
+        "fixture-revision",
     ] {
         assert!(display.contains(expected), "{expected}: {display}");
     }
@@ -213,6 +216,20 @@ fn exact_integers_and_local_identities_survive_import_storage_and_display() -> R
         ProfileUsage::from_report(&raw).allocations()[0].total_bytes(),
         PRECISE
     );
+    Ok(())
+}
+
+#[test]
+fn older_manifests_leave_producer_revision_explicitly_unknown() -> Result {
+    let root = tempfile::tempdir()?;
+    let original = manifest(root.path());
+    let mut old = serde_json::to_value(original)?;
+    let fields = old.as_object_mut().ok_or("manifest object")?;
+    fields.remove("producer_revision");
+    fields.remove("producer_dirty");
+    let restored: Manifest = serde_json::from_value(old)?;
+    assert_eq!(restored.producer_revision, None);
+    assert_eq!(restored.producer_dirty, None);
     Ok(())
 }
 
@@ -531,7 +548,7 @@ fn workflow_imports_exact_child_reports_without_a_driver_profile() -> Result {
     std::fs::create_dir_all(&project)?;
     let request = cordial::perf::WorkflowRequestBuilder::default()
         .name("unit-fixture")
-        .program(script)
+        .program(script.clone())
         .repeat(2u32)
         .build()?;
     let records = cordial::perf::measure_workflow(&project, &root.path().join("work"), &request)?;
@@ -561,6 +578,10 @@ fn workflow_imports_exact_child_reports_without_a_driver_profile() -> Result {
             assert_eq!(capture.status, MemoryStatus::Available);
             let manifest = capture.capture.manifest.as_ref().ok_or("manifest")?;
             assert_eq!(
+                manifest.producer_revision.as_deref(),
+                option_env!("CORDIAL_BUILD_REVISION")
+            );
+            assert_eq!(
                 manifest.identity.state,
                 record.state().map(|state| state.to_string())
             );
@@ -588,5 +609,42 @@ fn workflow_imports_exact_child_reports_without_a_driver_profile() -> Result {
         repeats.sort();
         assert_eq!(repeats, vec![Some(1), Some(2)]);
     }
+    let earlier_reports: Vec<_> = records
+        .iter()
+        .flat_map(|record| record.memory())
+        .filter_map(|capture| {
+            capture
+                .capture
+                .manifest
+                .as_ref()
+                .map(|manifest| manifest.report.clone())
+        })
+        .collect();
+    let request = cordial::perf::WorkflowRequestBuilder::default()
+        .name("unit-fixture-cold")
+        .program(script)
+        .repeat(1u32)
+        .cold_only(true)
+        .memory_limit(Some(0u64))
+        .memory_target(Some(0u64))
+        .build()?;
+    let cold = cordial::perf::measure_workflow(&project, &root.path().join("work"), &request)?;
+    assert_eq!(cold.len(), 1);
+    assert_eq!(cold[0].state(), Some(cordial::perf::PerfState::Cold));
+    assert_eq!(
+        cold[0]
+            .memory()
+            .iter()
+            .filter(|capture| capture.status == MemoryStatus::Available)
+            .count(),
+        1
+    );
+    assert!(
+        earlier_reports.iter().all(|path| path.is_file()),
+        "resetting the working cache preserves earlier raw captures"
+    );
+    let store = PerfStore::new(&StoreLayout::from_root(root.path().join("history"), "perf"));
+    let loaded = PerfStore::load(&store.save(&cold[0])?)?;
+    assert_eq!(loaded, cold[0]);
     Ok(())
 }

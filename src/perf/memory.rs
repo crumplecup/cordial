@@ -396,8 +396,10 @@ pub fn render_memory(captures: &[MemoryCapture], top: usize) -> String {
             );
             let _ = writeln!(
                 out,
-                "    producer={} features={:?} traffic={} accounting={} raw={}",
+                "    producer={} revision={:?} dirty_at_build={:?} features={:?} traffic={} accounting={} raw={}",
                 manifest.hotpath_version,
+                manifest.producer_revision,
+                manifest.producer_dirty,
                 manifest.features,
                 manifest.traffic_metric,
                 manifest.accounting,

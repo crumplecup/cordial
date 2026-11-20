@@ -2,8 +2,8 @@
 
 Hotpath is the allocation measurement authority. Cordial owns capture lifetimes,
 expected process/test identities, storage and presentation. The implementation
-is validated with controlled unit fixtures. Full-program measurement, including
-`elicit_doc`, awaits maintainer review and a separate target discussion.
+is validated with controlled unit fixtures. The maintainer has authorized the
+first full-program measurement on `elicit_doc`, without a memory budget.
 
 The global `hotpath::CountingAllocator` provides the live requested-byte meter
 used by budget control in every build. Detailed recording is optional:
@@ -44,6 +44,31 @@ in a distinct project-derived directory outside the disposable project store.
 retaining the raw report path.
 Existing records without these fields remain readable and explicitly lack a
 capture inventory.
+
+## Tracking a real workload
+
+Use the project's stable default store and the existing perf workflow collector:
+
+```sh
+cordial --project /home/erik/repos/elicit_doc --memory-limit 0 --memory-target 0 \
+  perf workflow elicit-doc-memory --cold-only --repeat 1
+```
+
+`--cold-only` records one cold analysis without warm runs or source edits. The
+working cache is reused under `perf/work`; only its disposable project state is
+reset. Records remain immutable JSON files under `perf/records`, with raw Hotpath
+captures linked from each record. There is no separate store home per run.
+The CLI passes its resolved memory limit and pressure target to measured children
+and records both settings in the run's notes, including explicit zero values.
+The target revision belongs to the record identity. Each producer manifest
+preserves its own source revision and dirty status observed at build time, actual
+features, lifecycle and coverage. Older manifests leave build provenance unknown.
+
+Use `perf list`, `perf compare` and `perf baseline` for history. A measurement
+does not advance the baseline automatically. Individual capture identities keep
+raw files distinct; that is evidence storage within the shared history, not a
+new project store for each run. RSS remains separate OS-envelope evidence and
+does not establish allocation ownership.
 
 ## Quantities and limits
 

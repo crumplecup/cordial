@@ -166,15 +166,14 @@ impl Cli {
             crate::resolve_memory_limit(self.memory_limit, configured.memory_limit().as_deref());
         // The budget is the whole run's: a process of a run in processes spends what is left of it
         // when the driver, which is part of the run, has what it holds.
-        crate::enforce(
-            crate::resolve_memory_target(
-                limit,
-                self.memory_target,
-                configured.memory_target().as_deref(),
-                crate::available_memory(),
-            )
-            .reserving(crate::reserved_by_driver()),
-        );
+        let budget = crate::resolve_memory_target(
+            limit,
+            self.memory_target,
+            configured.memory_target().as_deref(),
+            crate::available_memory(),
+        )
+        .reserving(crate::reserved_by_driver());
+        crate::enforce(budget.clone());
         crate::be_parsimonious_at(crate::resolve_parsimony(
             self.memory_parsimony,
             configured.memory_parsimony().as_deref(),
@@ -207,6 +206,7 @@ impl Cli {
                 self.store_home,
                 progress,
                 self.stop_after,
+                budget,
             ))
             .map(|()| 0)
     }

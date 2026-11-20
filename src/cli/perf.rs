@@ -39,6 +39,9 @@ pub enum PerfCommands {
         /// The cordial executable to measure (default: this one).
         #[arg(long)]
         program: Option<PathBuf>,
+        /// Record only the cold analysis, without warm runs or source edits.
+        #[arg(long)]
+        cold_only: bool,
     },
     /// Compare a record against its baseline (or any other record) and say what
     /// moved: exact counters, timings beyond noise and tolerance, changed inputs.
@@ -152,7 +155,8 @@ impl PerfCommands {
                 repeat,
                 top,
                 program,
-            } => workflow(ctx, &name, (repeat, top), program),
+                cold_only,
+            } => workflow(ctx, &name, (repeat, top), program, cold_only),
             Self::Tests { command } => command.act(ctx),
         }
     }
@@ -319,6 +323,7 @@ fn workflow(
     name: &str,
     (repeat, top): (u32, usize),
     program: Option<PathBuf>,
+    cold_only: bool,
 ) -> CordialResult<()> {
     let store_home = ctx
         .store_home()
@@ -339,6 +344,9 @@ fn workflow(
         .program(program)
         .repeat(repeat)
         .edit(edit)
+        .cold_only(cold_only)
+        .memory_limit(Some(ctx.memory_budget().bytes()))
+        .memory_target(Some(ctx.memory_budget().ladder_bytes()))
         .build()?;
     let store = PerfStore::new(ctx.store());
     let work = ctx.store().perf_dir().join("work");
