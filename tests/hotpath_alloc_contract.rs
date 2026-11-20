@@ -213,6 +213,7 @@ fn allocation_contract() -> Result<()> {
         "overflow",
         "internal",
         "depth",
+        "lifetime",
     ] {
         let output = std::process::Command::new(std::env::current_exe().into_diagnostic()?)
             .args(["--exact", "capture_fixture", "--nocapture"])
@@ -255,6 +256,9 @@ fn capture_fixture() -> Result<()> {
         cordial::live_bytes().is_some(),
         "link Cordial's shared allocator"
     );
+    if mode == "lifetime" {
+        return check_meter_lifetime(&path);
+    }
     let guard = hotpath::HotpathGuardBuilder::new("fixture")
         .format(hotpath::Format::JsonPretty)
         .output_path(&path)
@@ -332,11 +336,10 @@ fn capture_fixture() -> Result<()> {
         row(&report, "functions_alloc", "::failed_reallocation")["total"],
         if mode == "count" { "1" } else { "48 B" }
     );
-    // Capability gap in 0.31.2: alloc and alloc_zeroed record requests before
-    // checking success. This is traffic, and cannot support a live-heap claim.
+    // The dependency patch records successful requests only, in both metrics.
     assert_eq!(
         row(&report, "functions_alloc", "::unsuccessful_requests")["total"],
-        if mode == "count" { "2" } else { "48 B" }
+        if mode == "count" { "0" } else { "0 B" }
     );
     let freeing = row(&report, "threads", "fixture-free");
     assert!(
@@ -395,5 +398,32 @@ fn capture_fixture() -> Result<()> {
         );
         assert!(reported > 0, "exited short-lived workers remain visible");
     }
+    Ok(())
+}
+
+fn check_meter_lifetime(path: &std::path::Path) -> Result<()> {
+    let meter = hotpath::CountingAllocator::new();
+    let layout = Layout::array::<u8>(48).into_diagnostic()?;
+    // SAFETY: valid nonzero layout; each successful block is freed exactly
+    // once through its originating allocator with the matching layout.
+    unsafe {
+        let before_guard = meter.alloc(layout);
+        assert!(!before_guard.is_null());
+        assert_eq!(meter.live_bytes(), 48);
+        let guard = hotpath::HotpathGuardBuilder::new("lifetime")
+            .format(hotpath::Format::JsonPretty)
+            .output_path(path)
+            .build();
+        assert_eq!(meter.live_bytes(), 48);
+        drop(guard);
+        assert_eq!(meter.live_bytes(), 48);
+        let after_guard = meter.alloc_zeroed(layout);
+        assert!(!after_guard.is_null());
+        assert_eq!(meter.live_bytes(), 96);
+        meter.dealloc(before_guard, layout);
+        meter.dealloc(after_guard, layout);
+    }
+    assert_eq!(meter.live_bytes(), 0);
+    assert_eq!(meter.peak_live_bytes(), 96);
     Ok(())
 }

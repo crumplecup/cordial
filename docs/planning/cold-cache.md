@@ -60,8 +60,9 @@ Each lands with a unit test on a toy database or a specimen before it is run on 
 The memory limit is judged by what the program holds, not by the resident memory. A run that had freed
 all but 240 MB (counted by `hotpath-alloc`) still read as 1.5 GB resident, because glibc keeps freed
 pages in its arenas, and no amount of freeing brings a limit on that reading back under it: the ladder
-escalated to its last rung and recomputed the same values on every chunk. `cap::Cap` wraps the
-program's allocator and counts the live bytes (`cordial::live_bytes`); the ladder, the stop and the
+escalated to its last rung and recomputed the same values on every chunk. Hotpath's always-on
+requested-byte meter counts live bytes (`cordial::live_bytes`), including builds without detailed
+profiling; the ladder, the stop and the
 priming's headroom read that, and the resident memory is a backstop at twice the limit, for the
 machine's memory. The costly actions of the ladder back off, doubling their wait, after each round
 that gives back less than 8 MB.

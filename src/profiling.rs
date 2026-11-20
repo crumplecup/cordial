@@ -6,31 +6,18 @@
 //! declare its own (a second would not link). The guard that writes a profile
 //! belongs here too once there is one place that builds it.
 
-/// What the program's allocator wraps: the system's, and, when allocation profiling is on, the
-/// counter that counts the bytes and the allocations of every function hotpath measures and of
-/// every thread, for the profile.
-#[cfg(feature = "hotpath-alloc")]
-type Heap = hotpath::CountingAllocator;
-#[cfg(not(feature = "hotpath-alloc"))]
-type Heap = std::alloc::System;
-
-#[cfg(feature = "hotpath-alloc")]
-const HEAP: Heap = hotpath::CountingAllocator::with(std::alloc::System);
-#[cfg(not(feature = "hotpath-alloc"))]
-const HEAP: Heap = std::alloc::System;
-
-/// The program's one allocator, wrapped to count the bytes that are live. The resident memory is not
-/// that: an allocator may keep what the program frees (a run holding 240 MB read as 1.5 GB), so a
-/// limit on it cannot be met by freeing anything. The count is the program's own holding, whatever
-/// the allocator does with the pages. One allocator for the whole program, so a binary does not
-/// declare its own (a second would not link).
+/// The program's one allocator. Hotpath's always-on live meter supplies the
+/// budget reading in every build, including recorder allocations and work
+/// outside measured scopes. `hotpath-alloc` additionally enables detailed
+/// function and thread traffic. Requested live bytes exclude allocator overhead
+/// and retention; OS readings remain a separate envelope/backstop.
 #[global_allocator]
-static ALLOCATOR: cap::Cap<Heap> = cap::Cap::new(HEAP, usize::MAX);
+static ALLOCATOR: hotpath::CountingAllocator = hotpath::CountingAllocator::new();
 
 /// The bytes the program holds now, as the allocator counts them.
 #[must_use]
 pub fn live_bytes() -> Option<u64> {
-    u64::try_from(ALLOCATOR.allocated()).ok()
+    u64::try_from(ALLOCATOR.live_bytes()).ok()
 }
 
 /// The guard that records a profile and writes it to `path` when it drops. Without

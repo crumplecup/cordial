@@ -1,8 +1,9 @@
 # Memory measurement through Hotpath allocation profiling
 
 Status: **Active implementation, 2026-11-19.** Phase 1 is complete. Phase 2's
-traffic capability fixtures are in place; live/peak and retained-origin APIs
-remain blocked on a Hotpath extension. Subsequent coverage work remains pending.
+Hotpath extension supplies the always-on live/peak meter and corrects failed
+request counting; `cap` is removed. Retained origins and dependency report/coverage
+APIs remain pending. Subsequent lifecycle/coverage work remains pending.
 
 ## Objective and decisions
 
@@ -86,7 +87,7 @@ automatically to the parent function that scheduled it.
 
 ### Capability boundary in the locked dependency
 
-Inspection of the installed `hotpath` **0.31.2** source establishes:
+Inspection of the unpatched `hotpath` **0.31.2** source established:
 
 - Function allocation frames track allocated bytes and count. Deallocation
   updates thread totals, not the function that originally allocated the block.
@@ -106,10 +107,14 @@ Controlled fixtures now verify the traffic behavior, including migrating async
 functions and cancellation. See the [capability contract](hotpath-allocation-contract.md)
 for observed results, remaining boundaries, and the required dependency work.
 
+The local dependency patch now supplies a lifetime live/peak meter and counts
+only successful allocation requests. Cordial's budget reads Hotpath directly;
+`cap` has been removed. Exact JSON, retained origins, and coverage APIs remain
+pending.
+
 Therefore the current report can locate allocation churn, but cannot yet answer
-all of “what holds RAM now.” Recheck the exact dependency API before choosing an
-extension. Do not relabel thread allocation-minus-free as retained ownership:
-cross-thread frees alone invalidate that interpretation.
+all of “what holds RAM now.” Do not relabel thread allocation-minus-free as
+retained ownership: cross-thread frees alone invalidate that interpretation.
 
 ## Coverage inventory
 
@@ -286,11 +291,51 @@ command or full-program measurement was run.
 Added `tests/hotpath_alloc_contract.rs` and documented its observed results in
 the [Hotpath capability contract](hotpath-allocation-contract.md). The contract
 specifies the missing live/peak, retained-origin, cheap budget-meter, exact JSON,
-and coverage APIs required from Hotpath. `cap` remains solely to preserve the
-operational budget meter. RAM attribution is not complete, and phases 3–5 remain
-pending.
+and coverage APIs required from Hotpath. At that checkpoint, `cap` remained to
+preserve the operational budget meter. RAM attribution was incomplete and phases
+3–5 were pending; the next checkpoint below supersedes the meter status.
 
 Validation: the controlled allocation contract passes all six subprocess
 scenarios, and the four Salsa eviction tests still pass.
 `cargo clippy --all-features --all-targets -- -D warnings`, formatting, and
 `git diff --check` pass. No Cordial command or full-program measurement was run.
+
+### Phase 2 live-meter checkpoint
+
+Vendored the published Hotpath 0.31.2 runtime with provenance, upstream license,
+and a reproducible patch. The extension adds `hotpath-live`, independent of
+function profiling, and uses one allocator implementation in every build.
+Its live and lifetime-peak counters need two atomic integers per allocator
+instance, no metadata allocation or pointer registry. Failed requests now count
+zero traffic; realloc uses a size difference for live bytes and full replacement
+size for traffic. The contract documents concurrency and requested-byte limits.
+
+The dependency fixtures pass before Cordial's meter migration. Cordial now uses
+Hotpath's global allocator directly in every build; `cap` and the System-only
+branch are removed. Operational budget/OS sampling, pressure, eviction, and
+persistence paths are preserved. The existing allocator policy test no longer
+requires an obsolete feature-gated declaration. The public live-meter fixtures
+now use small allocations rather than a million objects or a 64 MiB buffer.
+Their two scenarios run in one test to avoid interference through the global
+meter under the default test runner.
+
+Validation:
+
+- `cargo test --all-features --test hotpath_heap --test hotpath_alloc_contract
+  --test live_bytes --test hotpath_allocator --test salsa_eviction --
+  --test-threads=1` passed the focused suite, including all seven isolated
+  allocation-contract scenarios and all four cache-behavior fixtures.
+- `cargo test --no-default-features --test hotpath_heap` passed all six isolated
+  allocator fixtures. The final public-meter test also passed with
+  `--no-default-features` and `--all-features` after combining its scenarios.
+- `cargo clippy --all-features --all-targets -- -D warnings` and
+  `cargo fmt --all --check` passed on the final source. Standalone compiler and
+  Clippy checks covered the new allocator's pass-through and live-only paths.
+- Applying `vendor/hotpath.patch` to the published source reproduces the
+  vendored source byte for byte. The staged whitespace check passes while
+  preserving upstream fixture bytes and unified-diff context lines.
+- No Cordial command, benchmark, or full-program measurement was run.
+
+Retained origins, exact report fields, and coverage APIs remain pending in phase
+2. Process lifetime capture and report ingestion remain phases 3–5. The new meter
+alone does not complete RAM attribution.

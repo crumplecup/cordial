@@ -1,7 +1,7 @@
 # Hotpath allocation capability contract
 
-Status: capability checkpoint, 2026-11-19. This records the locked dependency's
-behavior, not completion of the [memory measurement plan](memory-measurement.md).
+Status: live-meter checkpoint, 2026-11-19. This records the dependency contract,
+not completion of the [memory measurement plan](memory-measurement.md).
 
 ## Controlled evidence
 
@@ -9,7 +9,8 @@ behavior, not completion of the [memory measurement plan](memory-measurement.md)
 It never invokes Cordial or analyzes a project. Process isolation gives each
 case fresh Hotpath counters and environment settings.
 
-The dependency is `hotpath` 0.31.2. These are observed allocation-traffic results:
+The dependency is `hotpath` 0.31.2 with the local allocation capability patch in
+`vendor/hotpath.patch`. These are observed allocation-traffic results:
 
 | Fixture | Evidence |
 | --- | --- |
@@ -17,7 +18,7 @@ The dependency is `hotpath` 0.31.2. These are observed allocation-traffic result
 | Retained return values | The nested operations return their buffers to the caller. Scope exit still records their allocation traffic; it does not report the outstanding bytes later held by each origin. |
 | Grow and shrink | A 32-byte buffer grows to 64, then shrinks to 16. Hotpath reports 112 bytes and three allocation events, rather than a 16-byte live buffer or a net growth of minus 16. |
 | Failed realloc | A local Hotpath allocator wraps a fault injector that allocates 48 bytes and rejects a 96-byte realloc. Hotpath records 48 bytes and one allocation; failure preserves the original block. |
-| Failed alloc/zeroed alloc | Two rejected 24-byte requests still produce 48 bytes and two events. The dependency counts requests before checking their success. This prevents treating these totals as successful allocated bytes. |
+| Failed alloc/zeroed alloc | Two rejected 24-byte requests produce zero bytes and zero events with the patch. The unpatched dependency counted 48 bytes and two events before checking success; the fixture now guards the correction. |
 | Cross-thread free | One worker allocates 192 bytes, another frees the returned buffer. The freeing thread records the free; its measured function allocates zero bytes. Allocation minus free on a thread cannot identify outstanding allocation origins. |
 | Migrating async future | A future allocates 64 bytes, yields, moves to another thread, and allocates 96. Its function reports 160 bytes and two events. |
 | Cancellation and teardown | A future allocates 80 bytes, then is cancelled from another thread. Its row records 80 bytes. A measured destructor allocates 40 bytes separately; even inclusive async totals omit destructor work outside the poll interval. |
@@ -31,20 +32,48 @@ tracking, thread counters begin on initialization, and human-formatted byte
 fields lose precision above byte-sized display units. None of those boundaries
 has been reconciled against a full-program run.
 
-The source locations are the installed crate's `src/lib_on/functions/allocator.rs`,
-`functions/alloc/{core,guard,report}.rs`, `futures/wrapper.rs`, `caller_stack.rs`,
-`threads.rs`, and `build.rs`. The public
-[allocator documentation](https://hotpath.rs/functions) also describes the
-non-profiling allocator as a pass-through. It supplies no cheap always-on budget
-meter through that configuration.
+Relevant vendored sources are `src/allocator.rs`,
+`src/lib_on/functions/alloc/{core,guard,report}.rs`, `futures/wrapper.rs`,
+`caller_stack.rs`, `threads.rs`, and `build.rs`. The public
+[allocator documentation](https://hotpath.rs/functions) describes the unpatched
+non-profiling allocator as a pass-through; the local extension below changes
+that only when its new feature is enabled.
 
-## Required Hotpath dependency work
+## Implemented Hotpath live meter
 
-The inspected 0.31.2 API has no process live/peak meter or retained allocation
-origins. These requirements remain **blocked on a Hotpath extension**. Keep
-`cap` for operational budget enforcement until its replacement passes the
-following contract. Do not implement these counters or a pointer registry in
-Cordial, and do not infer retained memory from function or thread traffic.
+The local extension adds `hotpath-live` independently of `hotpath` and
+`hotpath-alloc`. Cordial enables it unconditionally and installs one
+`hotpath::CountingAllocator` as its global allocator. `cordial::live_bytes()`
+reads that allocator's `live_bytes()`; `cap` is removed. OS envelope sampling,
+budget thresholds, backoff, and cache eviction retain their operational roles.
+
+The API is allocator-instance based, starts at zero on construction, and has no
+reset. `live_bytes()` returns exact outstanding requested bytes;
+`peak_live_bytes()` is their high-water mark over that instance's lifetime.
+Successful realloc changes live bytes by the size difference, independent of
+movement, while traffic counts a full replacement. Failed requests change
+neither. Native allocations, allocator overhead/retention, and temporary backing
+storage inside realloc are outside requested-byte accounting.
+
+The meter uses two atomic integers per allocator instance and allocates no
+metadata. It counts unscoped work, recorder work, and allocations before/after a
+profile guard. Live and peak are independent atomic reads. In-flight calls can
+be between counter updates; after calls complete, counters reconcile exactly.
+There is no transactional live/peak snapshot or interval peak/reset API yet.
+
+`tests/hotpath_heap.rs` proves successful and zeroed allocations, both realloc
+movement cases, failure preservation, independent instances, overlapping workers,
+and frees after allocating-thread exit, with small fixtures in both ordinary
+and detailed-profiling builds. The `lifetime` subprocess in the traffic contract
+proves guard creation/teardown cannot reset or disable the meter.
+
+## Remaining Hotpath dependency work
+
+The extension has no retained-origin API, exact JSON export, or coverage counters.
+Those requirements remain pending in Hotpath. Do not implement counters or a
+pointer registry in Cordial or infer retained memory from function/thread traffic.
+The following full contract remains the acceptance target; the work above covers
+successful requests and the lifetime meter, not every item below.
 
 The extension must provide these behaviors within Hotpath:
 
@@ -87,8 +116,9 @@ meter with baseline and exclusions explicit.
 
 ## Checkpoint and next work
 
-Phase 1 is committed. The capability fixture establishes the existing traffic
-path; it does not complete phase 2's live-memory requirements. No dependency
-extension or `cap` removal has been made. Later lifecycle and ingestion work may
-use the proven traffic path, carrying these limitations explicitly as allowed by
-the plan. It must not claim retained-origin or complete RAM attribution.
+Phase 1 is committed. Phase 2 now has a patched Hotpath lifetime live/peak meter
+and successful-request traffic counting, with Cordial's budget source migrated
+and `cap` removed. Retained-origin attribution and dependency report/coverage
+APIs remain pending, so phase 2 is incomplete. Later lifecycle and ingestion work
+may use the proven traffic path, carrying those limitations as allowed by the
+plan. It must not claim retained-origin or complete RAM attribution.

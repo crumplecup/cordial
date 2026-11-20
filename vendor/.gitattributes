@@ -1,0 +1,4 @@
+# Unified diffs use a single space for an empty context line.
+hotpath.patch whitespace=-blank-at-eol
+# Preserve the upstream profiler fixture byte for byte.
+hotpath/src/lib_on/functions/callgrind/fixtures/instructions.callgrind whitespace=-blank-at-eol
