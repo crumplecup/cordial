@@ -1,8 +1,8 @@
 # Memory measurement through Hotpath allocation profiling
 
-Status: **Active implementation, 2026-11-19.** Phase 1 removes the duplicate
-diagnostics. Subsequent phases establish Hotpath capabilities and coverage;
-their completion requires the evidence described below.
+Status: **Active implementation, 2026-11-19.** Phase 1 is complete. Phase 2's
+traffic capability fixtures are in place; live/peak and retained-origin APIs
+remain blocked on a Hotpath extension. Subsequent coverage work remains pending.
 
 ## Objective and decisions
 
@@ -101,6 +101,10 @@ Inspection of the installed `hotpath` **0.31.2** source establishes:
 - The inspected interface does not provide retained bytes by allocation origin
   or a live/peak API that can replace Cordial's `cap` meter. Human-formatted report
   byte strings also lose precision in the current reader.
+
+Controlled fixtures now verify the traffic behavior, including migrating async
+functions and cancellation. See the [capability contract](hotpath-allocation-contract.md)
+for observed results, remaining boundaries, and the required dependency work.
 
 Therefore the current report can locate allocation churn, but cannot yet answer
 all of “what holds RAM now.” Recheck the exact dependency API before choosing an
@@ -276,3 +280,17 @@ Validation: `cargo test --all-features --test salsa_eviction -- --test-threads=1
 passes all four controlled cache tests.
 `cargo clippy --all-features --all-targets -- -D warnings` passes. No Cordial
 command or full-program measurement was run.
+
+### Phase 2 capability checkpoint
+
+Added `tests/hotpath_alloc_contract.rs` and documented its observed results in
+the [Hotpath capability contract](hotpath-allocation-contract.md). The contract
+specifies the missing live/peak, retained-origin, cheap budget-meter, exact JSON,
+and coverage APIs required from Hotpath. `cap` remains solely to preserve the
+operational budget meter. RAM attribution is not complete, and phases 3–5 remain
+pending.
+
+Validation: the controlled allocation contract passes all six subprocess
+scenarios, and the four Salsa eviction tests still pass.
+`cargo clippy --all-features --all-targets -- -D warnings`, formatting, and
+`git diff --check` pass. No Cordial command or full-program measurement was run.
