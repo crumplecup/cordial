@@ -41,6 +41,20 @@ fn heap() -> hotpath::HeapSnapshot {
             live_allocations: 1,
             peak_live_bytes: 20000,
         }],
+        peak: Some(hotpath::HeapPeak {
+            schema_version: 1,
+            interval: hotpath::PeakInterval::AllocatorLifetimeZeroBaseline,
+            tie_policy: hotpath::PeakTiePolicy::FirstAttainment,
+            event_sequence: 1,
+            live_bytes: 20000,
+            live_allocations: 1,
+            origin_updates: 1,
+            origins: vec![hotpath::PeakOrigin {
+                id: 4,
+                live_bytes: 20000,
+                live_allocations: 1,
+            }],
+        }),
     }
 }
 
@@ -206,6 +220,8 @@ fn exact_integers_and_local_identities_survive_import_storage_and_display() -> R
         "thread 4",
         "thread 5",
         "individual peak=20000 B",
+        "simultaneous global heap peak: 20000 B",
+        "at-peak origin 4",
         "OS envelope: unavailable",
         "fixture-revision",
     ] {
@@ -216,6 +232,147 @@ fn exact_integers_and_local_identities_survive_import_storage_and_display() -> R
         ProfileUsage::from_report(&raw).allocations()[0].total_bytes(),
         PRECISE
     );
+    Ok(())
+}
+
+#[test]
+fn peak_composition_preserves_large_integers_through_import_and_storage() -> Result {
+    let root = tempfile::tempdir()?;
+    let manifest = manifest(root.path());
+    let mut data = allocation();
+    let heap = data.heap.as_mut().ok_or("heap")?;
+    heap.peak_live_bytes = PRECISE as usize;
+    heap.origins[0].peak_live_bytes = PRECISE as usize;
+    let peak = heap.peak.as_mut().ok_or("peak")?;
+    peak.live_bytes = PRECISE as usize;
+    peak.origins[0].live_bytes = PRECISE as usize;
+    publish(&manifest, Some(&data))?;
+    let memory = read_memory(root.path())?;
+    assert_eq!(memory[0].status, MemoryStatus::Available);
+    assert!(memory[0].attribution_complete());
+    let record = record(memory)?;
+    let store = PerfStore::new(&StoreLayout::from_root(
+        root.path().join("store"),
+        "fixture",
+    ));
+    let loaded = PerfStore::load(&store.save(&record)?)?;
+    assert_eq!(loaded, record);
+    assert!(
+        render_memory(loaded.memory(), 1)
+            .contains("simultaneous global heap peak: 9007199254740993 B")
+    );
+    assert!(!render_memory(loaded.memory(), 0).contains("at-peak origin"));
+    assert_eq!(
+        loaded.memory()[0]
+            .allocation
+            .as_ref()
+            .and_then(|allocation| allocation.heap.as_ref())
+            .and_then(|heap| heap.peak.as_ref())
+            .map(|peak| peak.origins.len()),
+        Some(1)
+    );
+    Ok(())
+}
+
+#[test]
+fn legacy_heap_without_peak_composition_is_readable_but_never_substitutes_ending_origins() -> Result
+{
+    let root = tempfile::tempdir()?;
+    let manifest = manifest(root.path());
+    publish(&manifest, Some(&allocation()))?;
+    let current = capture(&manifest);
+    let mut raw: serde_json::Value = serde_json::from_slice(&std::fs::read(&manifest.report)?)?;
+    for section in ["heap", "heap_baseline"] {
+        raw["allocation"][section]
+            .as_object_mut()
+            .ok_or("heap object")?
+            .remove("peak");
+    }
+    std::fs::write(&manifest.report, serde_json::to_vec(&raw)?)?;
+    let legacy = capture(&manifest);
+    assert_eq!(legacy.status, MemoryStatus::Available);
+    assert_eq!(
+        legacy
+            .allocation
+            .as_ref()
+            .and_then(|allocation| allocation.heap.as_ref())
+            .and_then(|heap| heap.peak.as_ref()),
+        None
+    );
+    assert!(!legacy.attribution_complete());
+    let display = render_memory(std::slice::from_ref(&legacy), 10);
+    assert!(display.contains("composition: unavailable; ending origins are not a substitute"));
+    assert!(!display.contains("at-peak origin"));
+    let comparison = compare(&record(vec![legacy])?, &record(vec![current])?, 0.0);
+    assert!(!comparison.memory_complete());
+    assert!(comparison.allocations().is_empty());
+    Ok(())
+}
+
+#[test]
+fn invalid_peak_composition_is_rejected_instead_of_reported_as_exact() -> Result {
+    let root = tempfile::tempdir()?;
+    let manifest = manifest(root.path());
+    for variant in 0..8 {
+        let mut data = allocation();
+        let peak = data
+            .heap
+            .as_mut()
+            .ok_or("heap")?
+            .peak
+            .as_mut()
+            .ok_or("peak")?;
+        match variant {
+            0 => peak.origins[0].live_bytes -= 1,
+            1 => peak.origins[0].live_allocations += 1,
+            2 => peak.origins.push(peak.origins[0].clone()),
+            3 => peak.origins[0].id = 999,
+            4 => peak.event_sequence = 2,
+            5 => peak.origin_updates = 2,
+            6 => peak.schema_version = 99,
+            _ => {
+                peak.live_bytes = usize::MAX;
+                peak.origins[0].live_bytes = usize::MAX;
+                peak.origins.push(hotpath::PeakOrigin {
+                    id: 5,
+                    live_bytes: 1,
+                    live_allocations: 1,
+                });
+                data.heap
+                    .as_mut()
+                    .ok_or("heap")?
+                    .origins
+                    .push(hotpath::RetainedOrigin {
+                        id: 5,
+                        kind: hotpath::OriginKind::Function,
+                        name: Some("overflowing sum".into()),
+                        live_bytes: 0,
+                        live_allocations: 0,
+                        peak_live_bytes: 1,
+                    });
+            }
+        }
+        publish(&manifest, Some(&data))?;
+        let result = capture(&manifest);
+        assert_eq!(
+            result.status,
+            if variant == 6 {
+                MemoryStatus::Unsupported
+            } else {
+                MemoryStatus::Malformed
+            },
+            "variant {variant}"
+        );
+        assert!(!result.attribution_complete());
+        let display = render_memory(std::slice::from_ref(&result), 10);
+        assert!(
+            !display.contains("at-peak origin"),
+            "variant {variant}: {display}"
+        );
+        assert!(display.contains("composition: invalid or unsupported"));
+        let comparison = compare(&record(vec![result.clone()])?, &record(vec![result])?, 0.0);
+        assert!(comparison.allocations().is_empty());
+    }
     Ok(())
 }
 
@@ -375,7 +532,7 @@ fn comparisons_require_matching_process_repeat_operation_and_accounting_boundari
     assert!(comparison.memory_complete());
     assert_eq!(comparison.allocations()[0].moved(), 10);
     assert!(render_comparison(&comparison, 10).contains("9007199254740993 B"));
-    for variant in 0..5 {
+    for variant in 0..6 {
         let mut changed = after.clone();
         match variant {
             0 => changed.capture.expected.as_mut().ok_or("identity")?.repeat = Some(2),
@@ -405,7 +562,20 @@ fn comparisons_require_matching_process_repeat_operation_and_accounting_boundari
                     .ok_or("rows")?[0]
                     .name = "different".into()
             }
-            _ => changed.issues.push("depth limit hits: 1".into()),
+            4 => changed.issues.push("depth limit hits: 1".into()),
+            _ => {
+                changed
+                    .allocation
+                    .as_mut()
+                    .ok_or("allocation")?
+                    .heap
+                    .as_mut()
+                    .ok_or("heap")?
+                    .peak
+                    .as_mut()
+                    .ok_or("peak")?
+                    .schema_version = 2
+            }
         }
         let comparison = compare(&record(vec![before.clone()])?, &record(vec![changed])?, 0.0);
         assert!(comparison.allocations().is_empty(), "variant {variant}");

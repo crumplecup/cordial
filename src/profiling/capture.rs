@@ -253,7 +253,7 @@ impl Capture {
                 .filter(|s| !s.is_empty())
                 .map(str::to_owned)
                 .collect(),
-            hotpath_version: "0.31.2+cordial-retained".to_owned(),
+            hotpath_version: "0.31.2+cordial-retained-peak-v1".to_owned(),
             timing_enabled: cfg!(feature = "hotpath"),
             allocation_enabled: cfg!(feature = "hotpath-alloc"),
             accounting: if !cfg!(feature = "hotpath-alloc") {

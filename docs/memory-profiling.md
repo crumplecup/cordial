@@ -78,6 +78,7 @@ does not establish allocation ownership.
 | Thread traffic | Allocated and freed requested bytes with capture-local thread id, including exited threads. The freeing thread does not establish retained ownership. |
 | Retained origin | Ending requested bytes and live allocation count charged to the allocation origin, even after its scope exits or another thread frees it. |
 | Heap live/peak | Requested bytes and allocator-lifetime peak, with zero lifetime baseline and a separate capture-start snapshot. Individual process/origin peaks and ending live values are never summed. |
+| Simultaneous peak composition | Versioned exclusive origin bytes/blocks at the first attainment of the global requested-heap peak. These components sum to that peak, including reserved buckets. Event sequence is allocator order, not a timestamp. Older captures explicitly lack this composition. |
 | Coverage | Allocator-lifetime overflow, unscoped, TLS, thread/depth and other loss counters. These are not interchangeable with the function collection interval. |
 | OS envelope | Unavailable in the perf allocation capture. Existing OS pressure telemetry remains a separate budget backstop. Native allocations, mmap, stacks, shared pages, allocator overhead/retention and private headers are outside requested sizes. RSS minus heap is not an ownership partition. |
 
@@ -118,3 +119,10 @@ The phase gate is `cargo clippy --all-features --all-targets -- -D warnings`.
 Do not execute Cordial or a real-program benchmark as part of this infrastructure
 validation. The ordered plan and checkpoint evidence are in
 [the memory measurement plan](planning/memory-measurement.md).
+
+The first unlimited-budget `elicit_doc` capture is complete. It predates
+simultaneous peak composition and cannot supply that breakdown. The follow-on
+[memory reduction plan](planning/memory-reduction.md) specifies additional
+measurement first, then recorder, IR, persistence and cache-lifetime changes.
+Only the peak-composition addition is implemented so far; other additions remain
+planned. The capture contract above describes the current infrastructure.

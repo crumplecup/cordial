@@ -278,10 +278,31 @@ impl MemoryCapture {
                     heap.overflow_allocations, heap.overflow_allocated_bytes
                 ));
             }
+            if heap.peak.is_none() {
+                result.issues.push("simultaneous global heap peak composition unavailable; ending origins are not a substitute".into());
+            }
         } else {
             result
                 .issues
                 .push("retained heap/origins unsupported".into());
+        }
+        for heap in [&allocation.heap_baseline, &allocation.heap]
+            .into_iter()
+            .flatten()
+        {
+            if let Some(peak) = &heap.peak {
+                if peak.schema_version != 1 {
+                    result.status = MemoryStatus::Unsupported;
+                    result
+                        .issues
+                        .push("unsupported Hotpath peak composition schema".into());
+                } else if !valid_peak(heap, peak) {
+                    result.status = MemoryStatus::Malformed;
+                    result
+                        .issues
+                        .push("inconsistent Hotpath peak composition".into());
+                }
+            }
         }
         if allocation
             .functions
@@ -343,6 +364,33 @@ impl MemoryCapture {
             )
         )
     }
+}
+
+/// Validate imported evidence without reconstructing allocation ownership.
+fn valid_peak(heap: &hotpath::HeapSnapshot, peak: &hotpath::HeapPeak) -> bool {
+    let mut ids = std::collections::BTreeSet::new();
+    let totals = peak
+        .origins
+        .iter()
+        .try_fold((0usize, 0usize), |(bytes, blocks), row| {
+            if !ids.insert(row.id) || !heap.origins.iter().any(|origin| origin.id == row.id) {
+                return None;
+            }
+            Some((
+                bytes.checked_add(row.live_bytes)?,
+                blocks.checked_add(row.live_allocations)?,
+            ))
+        });
+    let events = heap
+        .successful_allocations
+        .checked_add(heap.successful_reallocations)
+        .and_then(|count| count.checked_add(heap.deallocations));
+    totals == Some((peak.live_bytes, peak.live_allocations))
+        && peak.live_bytes == heap.peak_live_bytes
+        && peak.live_bytes >= heap.live_bytes
+        && events.is_some_and(|events| peak.event_sequence <= events)
+        && peak.origin_updates <= peak.event_sequence
+        && (peak.live_bytes == 0 || peak.event_sequence > 0)
 }
 
 /// Shared importer used by workflow children and test profiles.
@@ -438,6 +486,46 @@ pub fn render_memory(captures: &[MemoryCapture], top: usize) -> String {
                         origin.live_bytes,
                         origin.live_allocations,
                         origin.peak_live_bytes
+                    );
+                }
+                if let Some(peak) = heap
+                    .peak
+                    .as_ref()
+                    .filter(|peak| peak.schema_version == 1 && valid_peak(heap, peak))
+                {
+                    let _ = writeln!(
+                        out,
+                        "    simultaneous global heap peak: {} B; allocations={}; event={}; interval={:?}; tie={:?}; changed-origin copies={} (allocation origins, not semantic owners)",
+                        peak.live_bytes,
+                        peak.live_allocations,
+                        peak.event_sequence,
+                        peak.interval,
+                        peak.tie_policy,
+                        peak.origin_updates
+                    );
+                    let mut origins: Vec<_> = peak.origins.iter().collect();
+                    origins.sort_by_key(|origin| std::cmp::Reverse(origin.live_bytes));
+                    for origin in origins.into_iter().take(top) {
+                        let identity = heap.origins.iter().find(|row| row.id == origin.id);
+                        let _ = writeln!(
+                            out,
+                            "      at-peak origin {} {:?} {:?}: live={} B allocations={}",
+                            origin.id,
+                            identity.map(|row| row.kind),
+                            identity.and_then(|row| row.name.as_deref()),
+                            origin.live_bytes,
+                            origin.live_allocations
+                        );
+                    }
+                } else {
+                    let _ = writeln!(
+                        out,
+                        "{}",
+                        if heap.peak.is_some() {
+                            "    simultaneous global heap peak composition: invalid or unsupported; raw evidence retained"
+                        } else {
+                            "    simultaneous global heap peak composition: unavailable; ending origins are not a substitute"
+                        }
                     );
                 }
             } else {

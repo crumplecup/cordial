@@ -1,14 +1,14 @@
 # Memory measurement through Hotpath allocation profiling
 
-Status: **Infrastructure complete; first target measurement authorized, 2026-11-20.**
+Status: **Infrastructure complete; first target measurement recorded, 2026-11-20.**
 Phases 1–5 are implemented and gated. Phase 5 unifies import, storage,
 rendering and comparison through the existing perf path.
 Hotpath supplies the always-on live/peak meter, retained allocation origins,
 exact JSON and explicit coverage counters; `cap` and the parallel diagnostics
-are removed. The maintainer has authorized measuring `elicit_doc` without the
-1.5 GB budget, after completing stable measurement tracking. No target run has
-been performed yet.
-The remaining full-program boundaries are explicit in every report.
+are removed. The first unlimited-budget cold `elicit_doc` measurement completed
+successfully. The remaining full-program boundaries are explicit in every
+report. The follow-on [memory reduction plan](memory-reduction.md) starts with
+additional measurement before implementing the identified design wins.
 
 ## Objective and decisions
 
@@ -586,3 +586,18 @@ reusable scratch state, preserved capture history, immutable record storage,
 and older manifests. All-features/all-targets Clippy with warnings denied,
 formatting, and whitespace checks passed. These checks launch controlled
 fixtures, not Cordial analysis of this repository.
+
+### First target measurement completed
+
+Cordial `65cbde11` measured `elicit_doc` `8d2968a7` with both memory controls
+zero: one cold analysis, exit 0, 168.49 seconds. Requested heap peaked at
+2,535,814,534 bytes; allocation traffic was 20,365,878,282 bytes. The exact
+pipeline RSS high-water reading was 3,366,715,392 bytes, with a later rounded
+Hotpath maximum of approximately 3.2 GiB. Individual origin peaks do not provide
+a simultaneous ownership partition.
+
+The [analysis and raw evidence links](/home/erik/.cordial/elicit_doc/perf/1795226257-8d2968a7-memory-analysis.md)
+live in the existing stable perf store. The immutable record was preserved;
+no named baseline was promoted. The next proposed work is ordered in the
+[memory reduction plan](memory-reduction.md), including peak composition, exact
+OS observations, finer scopes and lifecycle coverage before optimization.

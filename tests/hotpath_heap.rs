@@ -121,6 +121,17 @@ fn inplace_realloc_counts_the_size_difference_and_failure_changes_nothing() {
         assert_eq!(snapshot.successful_reallocations, 2);
         assert_eq!(snapshot.allocated_bytes, 112);
         assert_eq!(snapshot.freed_bytes, 112);
+        let peak = snapshot
+            .peak
+            .as_ref()
+            .unwrap_or_else(|| panic!("missing peak"));
+        assert_eq!(peak.live_bytes, 64);
+        assert_eq!(peak.live_allocations, 1);
+        assert_eq!(
+            peak.event_sequence, 2,
+            "failed requests and shrinking do not replace the peak"
+        );
+        assert_eq!(peak.origin_updates, 2);
     }
 }
 

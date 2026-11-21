@@ -1,9 +1,10 @@
 # Hotpath allocation capability contract
 
-Status: phase 2 implemented, 2026-11-19. This establishes the dependency API and
-controlled evidence. Process lifecycle, operation coverage, ingestion and
-full-program attribution remain later work in the
-[memory measurement plan](memory-measurement.md).
+Status: dependency contract established in phase 2 of the original
+[memory measurement plan](memory-measurement.md), whose infrastructure phases
+are complete. Simultaneous peak composition was added in phase 1A of the
+[memory reduction plan](memory-reduction.md). Further measurement gaps and
+full-program attribution limits remain explicit there.
 
 ## Supported path
 
@@ -28,6 +29,7 @@ contains no replacement allocator profiler or pointer registry.
 | `peak_live_bytes()` | Highest simultaneous requested live bytes over that allocator's lifetime up to the read. No reset or interval-peak subtraction. |
 | `heap_snapshot()` | A coherent registry snapshot of live/peak requested bytes, live block count, traffic, failures, retained origins and overhead at one lock point. Available with `hotpath-retained`. |
 | `HeapSnapshot::origins` | Exclusive outstanding requested bytes/blocks by allocation origin, including explicit unscoped, recorder, unavailable-TLS and origin-overflow rows. Rows sum to snapshot live bytes/blocks. Origin is allocation location, not semantic ownership. |
+| `HeapSnapshot::peak` | Optional versioned simultaneous origin composition at the first attainment of the allocator-lifetime peak, with a zero baseline. Its rows sum to its byte/block totals. The event sequence counts successful alloc/free/realloc events under the registry lock, not wall time. Older captures have no composition. |
 | Function traffic | Successful allocation bytes/count within measured frames. Exclusive by default; `HOTPATH_ALLOC_CUMULATIVE=1` makes function traffic inclusive. Never add inclusive function rows. |
 | Thread traffic | Allocation/free bytes on the executing thread since thread tracking initialization. Allocation minus free on a thread does not identify retained origins. |
 | Report `heap_baseline` / `heap` | Before guard initialization / after the `before_shutdown` callback, before worker draining and report construction. Peaks remain lifetime peaks. These snapshots do not imply all workload teardown has occurred. |
@@ -49,6 +51,13 @@ registry snapshot's rows/totals are coherent even with workers allocating and
 freeing. It does not stop the workload. Snapshot storage is recorder work;
 when using the global allocator, its temporary buffer can appear at the sample
 point and its returned data can remain live afterward.
+
+Peak composition is updated inside that same critical section. A bounded list
+of changed origins avoids a full table copy at every new peak. Failed requests,
+frees and equal byte peaks do not replace the first peak composition; a later
+strictly higher peak includes intervening frees. `origin_updates` counts the
+changed-origin copies through the recorded peak and cannot exceed its successful
+event sequence. Registry and private-prefix overhead remain separately reported.
 
 Only allocations through this instance are valid inputs to its free/realloc.
 The global allocator tracks from process initialization, so a block predating a

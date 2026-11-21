@@ -27,7 +27,9 @@ mod retained;
 #[cfg(feature = "hotpath-retained")]
 pub use retained::MAX_ALLOCATION_ORIGINS;
 mod heap;
-pub use heap::{HeapSnapshot, OriginKind, RetainedOrigin};
+pub use heap::{
+    HeapPeak, HeapSnapshot, OriginKind, PeakInterval, PeakOrigin, PeakTiePolicy, RetainedOrigin,
+};
 
 #[cfg(feature = "hotpath")]
 #[doc(inline)]

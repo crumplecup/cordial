@@ -24,6 +24,14 @@ The downstream extension is implemented in Hotpath, not in Cordial:
   are reported separately. Origin overflow retains aggregate live bytes/blocks.
 - Realloc preserves original attribution; function traffic records the resizing
   operation. Snapshots copy under the registry lock and format outside it.
+- The same registry lock preserves exclusive origin bytes/blocks at the first
+  attainment of its lifetime requested-heap peak, with a successful-event
+  sequence and explicit interval/tie metadata. A bounded dirty-origin list
+  updates only origins changed since the previous peak. Metadata is embedded;
+  cheap `hotpath-live` builds retain only their existing two atomic counters.
+- `HeapSnapshot::peak` has its own schema version. Older captures deserialize
+  with no composition; ending origins are never used as a replacement. Current
+  Cordial manifests identify this extension as `0.31.2+cordial-retained-peak-v1`.
 - The builder's heap provider supplies pre-guard and final snapshots in exact
   JSON. Unscoped/recorder/TLS-unavailable buckets and traffic coverage limits are
   explicit. The allocation contract documents intervals and observer effects.
@@ -49,8 +57,9 @@ make traffic exclusions and instrumentation losses visible.
 
 This is a local dependency extension, not an upstream release. Phase 2's API and
 controlled evidence are documented in `docs/planning/hotpath-allocation-contract.md`.
-Full lifecycle integration, operation coverage and ingestion remain pending in
-`docs/planning/memory-measurement.md`. Do not describe this patch as complete
+Lifecycle integration, operation coverage and ingestion are recorded in
+`docs/planning/memory-measurement.md`; further measurement work is ordered in
+`docs/planning/memory-reduction.md`. Do not describe this patch as complete
 program RAM attribution. Keep the patch file synchronized when updating the vendored code.
 
 To reconstruct the source, extract the four paths listed above from the archive

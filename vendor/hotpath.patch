@@ -571,7 +571,7 @@
 +}
 --- /dev/null
 +++ b/src/heap.rs
-@@ -0,0 +1,53 @@
+@@ -0,0 +1,100 @@
 +//! Requested heap snapshot types. Collection requires `hotpath-retained`.
 +#[cfg_attr(feature = "json", derive(serde::Serialize, serde::Deserialize))]
 +#[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -595,6 +595,50 @@
 +    pub live_allocations: usize,
 +    /// Individual origin's lifetime peak; these peaks must not be summed.
 +    pub peak_live_bytes: usize,
++}
++
++/// Interval used by the simultaneous peak, independent of guard boundaries.
++#[cfg_attr(feature = "json", derive(serde::Serialize, serde::Deserialize))]
++#[derive(Debug, Clone, Copy, PartialEq, Eq)]
++#[cfg_attr(feature = "json", serde(rename_all = "snake_case"))]
++pub enum PeakInterval {
++    AllocatorLifetimeZeroBaseline,
++}
++
++/// Equal byte totals preserve the composition at the first attainment.
++#[cfg_attr(feature = "json", derive(serde::Serialize, serde::Deserialize))]
++#[derive(Debug, Clone, Copy, PartialEq, Eq)]
++#[cfg_attr(feature = "json", serde(rename_all = "snake_case"))]
++pub enum PeakTiePolicy {
++    FirstAttainment,
++}
++
++#[cfg_attr(feature = "json", derive(serde::Serialize, serde::Deserialize))]
++#[derive(Debug, Clone, PartialEq, Eq)]
++pub struct PeakOrigin {
++    /// Identity in `HeapSnapshot::origins`, not a name-based aggregate.
++    pub id: usize,
++    pub live_bytes: usize,
++    pub live_allocations: usize,
++}
++
++/// Exclusive origin composition at one linearized allocator event. These rows
++/// can be summed; individual origin peaks and ending ownership cannot.
++#[cfg_attr(feature = "json", derive(serde::Serialize, serde::Deserialize))]
++#[derive(Debug, Clone, PartialEq, Eq)]
++pub struct HeapPeak {
++    pub schema_version: u32,
++    pub interval: PeakInterval,
++    pub tie_policy: PeakTiePolicy,
++    /// Successful alloc/free/realloc sequence; zero denotes construction.
++    /// Failed requests do not advance this sequence. This is not wall time.
++    pub event_sequence: u64,
++    pub live_bytes: usize,
++    pub live_allocations: usize,
++    /// Number of changed-origin copies across all peak updates through this peak.
++    /// Bounded by the number of successful allocator events, not origins × events.
++    pub origin_updates: u64,
++    pub origins: Vec<PeakOrigin>,
 +}
 +
 +/// One coherent registry snapshot. Requested bytes exclude the embedded registry,
@@ -624,7 +668,21 @@
 +    /// Prefixes including alignment padding of currently live user blocks.
 +    pub live_header_bytes: usize,
 +    pub origins: Vec<RetainedOrigin>,
++    /// Absent in older captures; never substitute ending ownership.
++    #[cfg_attr(feature = "json", serde(default))]
++    pub peak: Option<HeapPeak>,
 +}
+--- a/src/json.rs
++++ b/src/json.rs
+@@ -2,6 +2,8 @@
+ //! Gated behind the `json` feature (implied by `hotpath`, `cloud`, and
+ //! `tui`), so consumers can parse reports without the profiler.
+ 
++mod allocation;
++pub use allocation::*;
+ pub mod cloud_api;
+ mod formatted;
+ pub mod policy_file;
 --- /dev/null
 +++ b/src/json/allocation.rs
 @@ -0,0 +1,91 @@
@@ -738,20 +796,9 @@
              functions_cpu: None,
              functions_icount: None,
              channels: None,
---- a/src/json.rs
-+++ b/src/json.rs
-@@ -2,6 +2,8 @@
- //! Gated behind the `json` feature (implied by `hotpath`, `cloud`, and
- //! `tui`), so consumers can parse reports without the profiler.
- 
-+mod allocation;
-+pub use allocation::*;
- pub mod cloud_api;
- mod formatted;
- pub mod policy_file;
 --- a/src/lib.rs
 +++ b/src/lib.rs
-@@ -19,6 +19,15 @@
+@@ -19,6 +19,17 @@
  // Lets in-crate code use `#[hotpath::measure]`, whose expansion names
  // `hotpath::` paths.
  extern crate self as hotpath;
@@ -763,7 +810,9 @@
 +#[cfg(feature = "hotpath-retained")]
 +pub use retained::MAX_ALLOCATION_ORIGINS;
 +mod heap;
-+pub use heap::{HeapSnapshot, OriginKind, RetainedOrigin};
++pub use heap::{
++    HeapPeak, HeapSnapshot, OriginKind, PeakInterval, PeakOrigin, PeakTiePolicy, RetainedOrigin,
++};
  
  #[cfg(feature = "hotpath")]
  #[doc(inline)]
@@ -846,6 +895,34 @@
      pub(crate) fn new() -> Self {
          Self {}
      }
+--- a/src/lib_on.rs
++++ b/src/lib_on.rs
+@@ -141,7 +141,6 @@
+ 
+ pub(crate) use impl_lock_debug;
+ 
+-pub use functions::allocator::CountingAllocator;
+ pub use functions::{
+     measure_async, measure_async_future, measure_async_future_log, measure_async_log,
+     measure_sync_log, MeasurementGuardAsync, MeasurementGuardSync,
+--- a/src/lib_on/functions.rs
++++ b/src/lib_on/functions.rs
+@@ -19,7 +19,6 @@
+ #[cfg(feature = "hotpath-callgrind")]
+ pub use callgrind::{register_callgrind_marker, CallgrindFuture};
+ 
+-pub(crate) mod allocator;
+ 
+ cfg_if::cfg_if! {
+     if #[cfg(feature = "hotpath-alloc")] {
+--- a/src/lib_on/functions/alloc.rs
++++ b/src/lib_on/functions/alloc.rs
+@@ -2,3 +2,5 @@
+ pub(crate) mod guard;
+ pub(crate) mod report;
+ pub(crate) mod state;
++
++pub(crate) mod coverage;
 --- a/src/lib_on/functions/alloc/core.rs
 +++ b/src/lib_on/functions/alloc/core.rs
 @@ -1,3 +1,4 @@
@@ -1269,14 +1346,6 @@
          LOST_MEASUREMENTS.store(true, std::sync::atomic::Ordering::Release);
      }
  }
---- a/src/lib_on/functions/alloc.rs
-+++ b/src/lib_on/functions/alloc.rs
-@@ -2,3 +2,5 @@
- pub(crate) mod guard;
- pub(crate) mod report;
- pub(crate) mod state;
-+
-+pub(crate) mod coverage;
 --- a/src/lib_on/functions/allocator.rs
 +++ /dev/null
 @@ -1,90 +0,0 @@
@@ -1370,16 +1439,6 @@
 -        new_ptr
 -    }
 -}
---- a/src/lib_on/functions.rs
-+++ b/src/lib_on/functions.rs
-@@ -19,7 +19,6 @@
- #[cfg(feature = "hotpath-callgrind")]
- pub use callgrind::{register_callgrind_marker, CallgrindFuture};
- 
--pub(crate) mod allocator;
- 
- cfg_if::cfg_if! {
-     if #[cfg(feature = "hotpath-alloc")] {
 --- a/src/lib_on/futures/wrapper.rs
 +++ b/src/lib_on/futures/wrapper.rs
 @@ -18,11 +18,26 @@
@@ -1706,25 +1765,17 @@
  
              // A cloud report lists every entry (`0` is unlimited): the server
              // diffs reports by name and truncates for display itself, while a
---- a/src/lib_on.rs
-+++ b/src/lib_on.rs
-@@ -141,7 +141,6 @@
- 
- pub(crate) use impl_lock_debug;
- 
--pub use functions::allocator::CountingAllocator;
- pub use functions::{
-     measure_async, measure_async_future, measure_async_future_log, measure_async_log,
-     measure_sync_log, MeasurementGuardAsync, MeasurementGuardSync,
 --- /dev/null
 +++ b/src/retained.rs
-@@ -0,0 +1,259 @@
+@@ -0,0 +1,347 @@
 +//! Bounded allocation-origin retention, owned by the allocator instance.
 +//! No pointer registry or dynamic metadata allocation is used.
 +use std::cell::UnsafeCell;
 +use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 +
-+use crate::{HeapSnapshot, OriginKind, RetainedOrigin};
++use crate::{
++    HeapPeak, HeapSnapshot, OriginKind, PeakInterval, PeakOrigin, PeakTiePolicy, RetainedOrigin,
++};
 +
 +pub const MAX_ALLOCATION_ORIGINS: usize = 1024;
 +const RESERVED: usize = 4;
@@ -1744,6 +1795,7 @@
 +    live: usize,
 +    blocks: usize,
 +    peak: usize,
++    dirty: bool,
 +}
 +impl Slot {
 +    const EMPTY: Self = Self {
@@ -1751,7 +1803,17 @@
 +        live: 0,
 +        blocks: 0,
 +        peak: 0,
++        dirty: false,
 +    };
++}
++
++#[derive(Clone, Copy)]
++struct PeakSlot {
++    live: usize,
++    blocks: usize,
++}
++impl PeakSlot {
++    const EMPTY: Self = Self { live: 0, blocks: 0 };
 +}
 +
 +struct State {
@@ -1760,6 +1822,13 @@
 +    slots: [Slot; SLOTS],
 +    live: usize,
 +    peak: usize,
++    peak_slots: [PeakSlot; SLOTS],
++    dirty: [u16; SLOTS],
++    dirty_len: usize,
++    peak_used: usize,
++    peak_blocks: usize,
++    peak_event: u64,
++    peak_origin_updates: u64,
 +    blocks: usize,
 +    headers: usize,
 +    allocated: u64,
@@ -1771,6 +1840,39 @@
 +    realloc_failures: u64,
 +    overflow_allocations: u64,
 +    overflow_bytes: u64,
++}
++
++impl State {
++    fn changed(&mut self, id: usize) {
++        if !self.slots[id].dirty {
++            self.slots[id].dirty = true;
++            self.dirty[self.dirty_len] = id as u16;
++            self.dirty_len += 1;
++        }
++    }
++
++    fn update_peak(&mut self) {
++        if self.live <= self.peak {
++            return;
++        }
++        // Each event dirties at most one origin. Copies are amortized over
++        // events since the previous peak, not a full-table scan at every peak.
++        for &id in &self.dirty[..self.dirty_len] {
++            let id = id as usize;
++            let slot = &mut self.slots[id];
++            self.peak_slots[id] = PeakSlot {
++                live: slot.live,
++                blocks: slot.blocks,
++            };
++            slot.dirty = false;
++        }
++        self.peak_origin_updates += self.dirty_len as u64;
++        self.dirty_len = 0;
++        self.peak = self.live;
++        self.peak_used = self.used;
++        self.peak_blocks = self.blocks;
++        self.peak_event = self.allocations + self.deallocations + self.reallocations;
++    }
 +}
 +
 +pub(crate) struct Registry {
@@ -1802,6 +1904,13 @@
 +                slots: [Slot::EMPTY; SLOTS],
 +                live: 0,
 +                peak: 0,
++                peak_slots: [PeakSlot::EMPTY; SLOTS],
++                dirty: [0; SLOTS],
++                dirty_len: 0,
++                peak_used: 0,
++                peak_blocks: 0,
++                peak_event: 0,
++                peak_origin_updates: 0,
 +                blocks: 0,
 +                headers: 0,
 +                allocated: 0,
@@ -1866,11 +1975,12 @@
 +            slot.blocks += 1;
 +            slot.peak = slot.peak.max(slot.live);
 +            s.live += size;
-+            s.peak = s.peak.max(s.live);
 +            s.blocks += 1;
 +            s.headers += header;
 +            s.allocated += size as u64;
 +            s.allocations += 1;
++            s.changed(id);
++            s.update_peak();
 +            live.store(s.live, Ordering::Relaxed);
 +            peak.store(s.peak, Ordering::Relaxed);
 +            id
@@ -1893,6 +2003,7 @@
 +            s.headers -= header;
 +            s.freed += size as u64;
 +            s.deallocations += 1;
++            s.changed(id);
 +            live.store(s.live, Ordering::Relaxed);
 +            peak.store(s.peak, Ordering::Relaxed);
 +        });
@@ -1911,10 +2022,11 @@
 +            slot.live = slot.live - old + new;
 +            slot.peak = slot.peak.max(slot.live);
 +            s.live = s.live - old + new;
-+            s.peak = s.peak.max(s.live);
 +            s.allocated += new as u64;
 +            s.freed += old as u64;
 +            s.reallocations += 1;
++            s.changed(id);
++            s.update_peak();
 +            live.store(s.live, Ordering::Relaxed);
 +            peak.store(s.peak, Ordering::Relaxed);
 +        });
@@ -1935,8 +2047,12 @@
 +        // Recorder suppression ensures the snapshot's own storage is explicit.
 +        let _suspend = crate::lib_on::SuspendAllocTracking::new();
 +        let mut rows = Vec::with_capacity(SLOTS);
++        let mut peak_rows = Vec::with_capacity(SLOTS);
 +        let mut snapshot = self.with(|s| {
 +            rows.extend_from_slice(&s.slots[..RESERVED + s.used]);
++            // All storage is reserved before taking the lock. No callbacks or
++            // allocator work occur while copying the coherent peak composition.
++            peak_rows.extend_from_slice(&s.peak_slots[..RESERVED + s.peak_used]);
 +            HeapSnapshot {
 +                live_bytes: s.live,
 +                peak_live_bytes: s.peak,
@@ -1955,6 +2071,16 @@
 +                registry_bytes: std::mem::size_of::<Self>(),
 +                live_header_bytes: s.headers,
 +                origins: Vec::new(),
++                peak: Some(HeapPeak {
++                    schema_version: 1,
++                    interval: PeakInterval::AllocatorLifetimeZeroBaseline,
++                    tie_policy: PeakTiePolicy::FirstAttainment,
++                    event_sequence: s.peak_event,
++                    live_bytes: s.peak,
++                    live_allocations: s.peak_blocks,
++                    origin_updates: s.peak_origin_updates,
++                    origins: Vec::new(),
++                }),
 +            }
 +        });
 +        snapshot.origins = rows
@@ -1975,6 +2101,17 @@
 +                peak_live_bytes: slot.peak,
 +            })
 +            .collect();
++        if let Some(peak) = &mut snapshot.peak {
++            peak.origins = peak_rows
++                .into_iter()
++                .enumerate()
++                .map(|(id, slot)| PeakOrigin {
++                    id,
++                    live_bytes: slot.live,
++                    live_allocations: slot.blocks,
++                })
++                .collect();
++        }
 +        snapshot
 +    }
 +}

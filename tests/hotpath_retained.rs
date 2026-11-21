@@ -47,6 +47,171 @@ fn reconciles(snapshot: &HeapSnapshot) {
         snapshot.allocated_bytes - snapshot.freed_bytes,
         snapshot.live_bytes as u64
     );
+    let peak = snapshot
+        .peak
+        .as_ref()
+        .unwrap_or_else(|| panic!("missing peak"));
+    assert_eq!(peak.live_bytes, snapshot.peak_live_bytes);
+    assert_eq!(
+        peak.origins.iter().map(|r| r.live_bytes).sum::<usize>(),
+        peak.live_bytes
+    );
+    assert_eq!(
+        peak.origins
+            .iter()
+            .map(|r| r.live_allocations)
+            .sum::<usize>(),
+        peak.live_allocations
+    );
+    assert!(peak.origin_updates <= peak.event_sequence);
+    assert!(
+        peak.event_sequence
+            <= snapshot.successful_allocations
+                + snapshot.successful_reallocations
+                + snapshot.deallocations
+    );
+    assert!(
+        peak.origins
+            .iter()
+            .all(|row| snapshot.origins.iter().any(|origin| origin.id == row.id))
+    );
+}
+
+fn peak_bytes(snapshot: &HeapSnapshot, name: &str) -> usize {
+    let id = origin(snapshot, name).id;
+    snapshot
+        .peak
+        .as_ref()
+        .and_then(|peak| peak.origins.iter().find(|row| row.id == id))
+        .map_or(0, |row| row.live_bytes)
+}
+
+#[test]
+fn peak_composition_preserves_first_attainment_and_clears_freed_origins_at_new_peaks() {
+    let allocator = CountingAllocator::new();
+    let empty = allocator.heap_snapshot();
+    reconciles(&empty);
+    assert_eq!(empty.peak.as_ref().map(|peak| peak.event_sequence), Some(0));
+    let first = allocate(&allocator, "first wave", 100);
+    // SAFETY: successful block owned here, freed once with matching layout.
+    unsafe {
+        allocator.dealloc(first, layout(100));
+    }
+    let second = allocate(&allocator, "second wave", 80);
+    let held = allocate(&allocator, "overlap", 30);
+    let peak = allocator.heap_snapshot();
+    reconciles(&peak);
+    assert_eq!(peak.peak_live_bytes, 110);
+    assert_eq!(peak_bytes(&peak, "first wave"), 0);
+    assert_eq!(peak_bytes(&peak, "second wave"), 80);
+    assert_eq!(peak_bytes(&peak, "overlap"), 30);
+    assert_eq!(peak.peak.as_ref().map(|peak| peak.event_sequence), Some(4));
+    // SAFETY: live second-wave allocation, freed once with matching layout.
+    unsafe {
+        allocator.dealloc(second, layout(80));
+    }
+    let replacement = allocate(&allocator, "tied wave", 80);
+    let tied = allocator.heap_snapshot();
+    reconciles(&tied);
+    assert_eq!(
+        tied.peak, peak.peak,
+        "ties must preserve the first composition"
+    );
+    assert_eq!(origin(&tied, "second wave").live_bytes, 0);
+    assert_eq!(peak_bytes(&tied, "tied wave"), 0);
+    // SAFETY: live replacement; success checked before using the resized block.
+    let replacement = unsafe { allocator.realloc(replacement, layout(80), 81) };
+    assert!(!replacement.is_null());
+    let grown = allocator.heap_snapshot();
+    reconciles(&grown);
+    assert_eq!(grown.peak_live_bytes, 111);
+    assert_eq!(peak_bytes(&grown, "second wave"), 0);
+    assert_eq!(peak_bytes(&grown, "overlap"), 30);
+    assert_eq!(peak_bytes(&grown, "tied wave"), 81);
+    assert_eq!(grown.peak.as_ref().map(|peak| peak.event_sequence), Some(7));
+    assert_eq!(grown.peak.as_ref().map(|peak| peak.origin_updates), Some(6));
+    assert!(
+        grown
+            .origins
+            .iter()
+            .map(|row| row.peak_live_bytes)
+            .sum::<usize>()
+            > grown.peak_live_bytes
+    );
+    // SAFETY: both blocks still owned here, matching latest layouts.
+    unsafe {
+        allocator.dealloc(replacement, layout(81));
+        allocator.dealloc(held, layout(30));
+    }
+    let ended = allocator.heap_snapshot();
+    reconciles(&ended);
+    assert_eq!(ended.live_bytes, 0);
+    assert_eq!(ended.peak, grown.peak);
+}
+
+#[test]
+fn increasing_peaks_copy_only_changed_origins_with_fixed_metadata() {
+    let allocator = CountingAllocator::new();
+    let names = ["a", "b", "c", "d", "e", "f", "g", "h"];
+    let pointers = names.map(|name| allocate(&allocator, name, 16));
+    let before = allocator.heap_snapshot();
+    reconciles(&before);
+    assert_eq!(
+        before.peak.as_ref().map(|peak| peak.origin_updates),
+        Some(8)
+    );
+    assert!(
+        before.registry_bytes < 128 * 1024,
+        "registry must remain bounded"
+    );
+    for pointer in pointers {
+        // SAFETY: each successful allocation freed exactly once, matching layout.
+        unsafe {
+            allocator.dealloc(pointer, layout(16));
+        }
+    }
+    let pointer = allocate(&allocator, "next peak", 129);
+    let after = allocator.heap_snapshot();
+    reconciles(&after);
+    assert_eq!(after.registry_bytes, before.registry_bytes);
+    assert_eq!(
+        after.peak.as_ref().map(|peak| peak.origin_updates),
+        Some(17)
+    );
+    assert!(names.iter().all(|name| peak_bytes(&after, name) == 0));
+    // SAFETY: final live block with matching allocator and layout.
+    unsafe {
+        allocator.dealloc(pointer, layout(129));
+    }
+}
+
+#[test]
+fn equal_byte_peaks_keep_the_first_block_count_and_origin_identity() {
+    let allocator = CountingAllocator::new();
+    let first = allocate(&allocator, "single block peak", 64);
+    // SAFETY: successful allocation owned here, matching layout.
+    unsafe {
+        allocator.dealloc(first, layout(64));
+    }
+    let split = [
+        allocate(&allocator, "split peak", 32),
+        allocate(&allocator, "split peak", 32),
+    ];
+    let snapshot = allocator.heap_snapshot();
+    reconciles(&snapshot);
+    assert_eq!(snapshot.live_allocations, 2);
+    assert_eq!(
+        snapshot.peak.as_ref().map(|peak| peak.live_allocations),
+        Some(1)
+    );
+    assert_eq!(peak_bytes(&snapshot, "single block peak"), 64);
+    assert_eq!(peak_bytes(&snapshot, "split peak"), 0);
+    for pointer in split {
+        // SAFETY: each split block freed once with the matching layout.
+        unsafe {
+            allocator.dealloc(pointer, layout(32));
+        }
+    }
 }
 
 #[test]
@@ -151,6 +316,14 @@ fn overflow_retains_aggregate_bytes_and_frees_without_misattributing_origins() {
         .unwrap_or_else(|| panic!("missing overflow row"));
     assert_eq!(row.live_bytes, 40);
     assert_eq!(row.live_allocations, 1);
+    assert_eq!(
+        snapshot
+            .peak
+            .as_ref()
+            .and_then(|peak| peak.origins.iter().find(|origin| origin.id == row.id))
+            .map(|row| row.live_bytes),
+        Some(40)
+    );
     // SAFETY: live blocks with matching allocator/layout, freed once each.
     unsafe {
         allocator.dealloc(first, layout(16));
@@ -258,6 +431,19 @@ fn report_carries_precapture_baseline_and_retained_origins_with_exact_roundtrip(
     assert_eq!(final_heap.live_bytes, 88);
     assert_eq!(final_heap.origins[1].kind, OriginKind::Recorder);
     assert_eq!(final_heap.origins[1].live_bytes, 16);
+    assert_eq!(baseline.peak.as_ref().map(|peak| peak.live_bytes), Some(24));
+    assert_eq!(
+        final_heap.peak.as_ref().map(|peak| peak.live_bytes),
+        Some(88)
+    );
+    assert_eq!(
+        final_heap
+            .peak
+            .as_ref()
+            .and_then(|peak| peak.origins.iter().find(|row| row.id == 1))
+            .map(|row| row.live_bytes),
+        Some(16)
+    );
     assert_eq!(origin(final_heap, "before capture").live_bytes, 24);
     assert_eq!(origin(final_heap, "during capture").live_bytes, 48);
     let json = serde_json::to_string(&exact).into_diagnostic()?;

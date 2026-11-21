@@ -434,6 +434,15 @@ fn memory_traffic(before: &RunRecord, after: &RunRecord) -> (Traffic, Traffic, V
         let (Some(am), Some(bm)) = (&a.capture.manifest, &b.capture.manifest) else {
             continue;
         };
+        let peak_contract = |item: &super::MemoryCapture| {
+            item.allocation
+                .as_ref()?
+                .heap
+                .as_ref()?
+                .peak
+                .as_ref()
+                .map(|peak| (peak.schema_version, peak.interval, peak.tie_policy))
+        };
         if am.hotpath_version != bm.hotpath_version
             || am.features != bm.features
             || am.accounting != bm.accounting
@@ -442,6 +451,7 @@ fn memory_traffic(before: &RunRecord, after: &RunRecord) -> (Traffic, Traffic, V
             || am.completion != bm.completion
             || am.boundaries != bm.boundaries
             || am.traffic_metric != "bytes"
+            || peak_contract(a) != peak_contract(b)
         {
             issues.push(format!("{key}: incompatible producer, accounting, metric or interval boundary; traffic comparison withheld"));
             continue;

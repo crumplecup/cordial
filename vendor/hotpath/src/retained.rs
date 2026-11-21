@@ -3,7 +3,9 @@
 use std::cell::UnsafeCell;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
-use crate::{HeapSnapshot, OriginKind, RetainedOrigin};
+use crate::{
+    HeapPeak, HeapSnapshot, OriginKind, PeakInterval, PeakOrigin, PeakTiePolicy, RetainedOrigin,
+};
 
 pub const MAX_ALLOCATION_ORIGINS: usize = 1024;
 const RESERVED: usize = 4;
@@ -23,6 +25,7 @@ struct Slot {
     live: usize,
     blocks: usize,
     peak: usize,
+    dirty: bool,
 }
 impl Slot {
     const EMPTY: Self = Self {
@@ -30,7 +33,17 @@ impl Slot {
         live: 0,
         blocks: 0,
         peak: 0,
+        dirty: false,
     };
+}
+
+#[derive(Clone, Copy)]
+struct PeakSlot {
+    live: usize,
+    blocks: usize,
+}
+impl PeakSlot {
+    const EMPTY: Self = Self { live: 0, blocks: 0 };
 }
 
 struct State {
@@ -39,6 +52,13 @@ struct State {
     slots: [Slot; SLOTS],
     live: usize,
     peak: usize,
+    peak_slots: [PeakSlot; SLOTS],
+    dirty: [u16; SLOTS],
+    dirty_len: usize,
+    peak_used: usize,
+    peak_blocks: usize,
+    peak_event: u64,
+    peak_origin_updates: u64,
     blocks: usize,
     headers: usize,
     allocated: u64,
@@ -50,6 +70,39 @@ struct State {
     realloc_failures: u64,
     overflow_allocations: u64,
     overflow_bytes: u64,
+}
+
+impl State {
+    fn changed(&mut self, id: usize) {
+        if !self.slots[id].dirty {
+            self.slots[id].dirty = true;
+            self.dirty[self.dirty_len] = id as u16;
+            self.dirty_len += 1;
+        }
+    }
+
+    fn update_peak(&mut self) {
+        if self.live <= self.peak {
+            return;
+        }
+        // Each event dirties at most one origin. Copies are amortized over
+        // events since the previous peak, not a full-table scan at every peak.
+        for &id in &self.dirty[..self.dirty_len] {
+            let id = id as usize;
+            let slot = &mut self.slots[id];
+            self.peak_slots[id] = PeakSlot {
+                live: slot.live,
+                blocks: slot.blocks,
+            };
+            slot.dirty = false;
+        }
+        self.peak_origin_updates += self.dirty_len as u64;
+        self.dirty_len = 0;
+        self.peak = self.live;
+        self.peak_used = self.used;
+        self.peak_blocks = self.blocks;
+        self.peak_event = self.allocations + self.deallocations + self.reallocations;
+    }
 }
 
 pub(crate) struct Registry {
@@ -81,6 +134,13 @@ impl Registry {
                 slots: [Slot::EMPTY; SLOTS],
                 live: 0,
                 peak: 0,
+                peak_slots: [PeakSlot::EMPTY; SLOTS],
+                dirty: [0; SLOTS],
+                dirty_len: 0,
+                peak_used: 0,
+                peak_blocks: 0,
+                peak_event: 0,
+                peak_origin_updates: 0,
                 blocks: 0,
                 headers: 0,
                 allocated: 0,
@@ -145,11 +205,12 @@ impl Registry {
             slot.blocks += 1;
             slot.peak = slot.peak.max(slot.live);
             s.live += size;
-            s.peak = s.peak.max(s.live);
             s.blocks += 1;
             s.headers += header;
             s.allocated += size as u64;
             s.allocations += 1;
+            s.changed(id);
+            s.update_peak();
             live.store(s.live, Ordering::Relaxed);
             peak.store(s.peak, Ordering::Relaxed);
             id
@@ -172,6 +233,7 @@ impl Registry {
             s.headers -= header;
             s.freed += size as u64;
             s.deallocations += 1;
+            s.changed(id);
             live.store(s.live, Ordering::Relaxed);
             peak.store(s.peak, Ordering::Relaxed);
         });
@@ -190,10 +252,11 @@ impl Registry {
             slot.live = slot.live - old + new;
             slot.peak = slot.peak.max(slot.live);
             s.live = s.live - old + new;
-            s.peak = s.peak.max(s.live);
             s.allocated += new as u64;
             s.freed += old as u64;
             s.reallocations += 1;
+            s.changed(id);
+            s.update_peak();
             live.store(s.live, Ordering::Relaxed);
             peak.store(s.peak, Ordering::Relaxed);
         });
@@ -214,8 +277,12 @@ impl Registry {
         // Recorder suppression ensures the snapshot's own storage is explicit.
         let _suspend = crate::lib_on::SuspendAllocTracking::new();
         let mut rows = Vec::with_capacity(SLOTS);
+        let mut peak_rows = Vec::with_capacity(SLOTS);
         let mut snapshot = self.with(|s| {
             rows.extend_from_slice(&s.slots[..RESERVED + s.used]);
+            // All storage is reserved before taking the lock. No callbacks or
+            // allocator work occur while copying the coherent peak composition.
+            peak_rows.extend_from_slice(&s.peak_slots[..RESERVED + s.peak_used]);
             HeapSnapshot {
                 live_bytes: s.live,
                 peak_live_bytes: s.peak,
@@ -234,6 +301,16 @@ impl Registry {
                 registry_bytes: std::mem::size_of::<Self>(),
                 live_header_bytes: s.headers,
                 origins: Vec::new(),
+                peak: Some(HeapPeak {
+                    schema_version: 1,
+                    interval: PeakInterval::AllocatorLifetimeZeroBaseline,
+                    tie_policy: PeakTiePolicy::FirstAttainment,
+                    event_sequence: s.peak_event,
+                    live_bytes: s.peak,
+                    live_allocations: s.peak_blocks,
+                    origin_updates: s.peak_origin_updates,
+                    origins: Vec::new(),
+                }),
             }
         });
         snapshot.origins = rows
@@ -254,6 +331,17 @@ impl Registry {
                 peak_live_bytes: slot.peak,
             })
             .collect();
+        if let Some(peak) = &mut snapshot.peak {
+            peak.origins = peak_rows
+                .into_iter()
+                .enumerate()
+                .map(|(id, slot)| PeakOrigin {
+                    id,
+                    live_bytes: slot.live,
+                    live_allocations: slot.blocks,
+                })
+                .collect();
+        }
         snapshot
     }
 }
