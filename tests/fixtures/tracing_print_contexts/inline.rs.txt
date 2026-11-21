@@ -1,0 +1,16 @@
+#[cfg(feature = "extra")]
+pub fn noisy() {
+    use std::println as stdout;
+    stdout!("only with the extra feature");
+}
+
+#[cfg(feature = "extra")]
+mod quiet {
+    macro_rules! println {
+        ($($arg:tt)*) => {};
+    }
+
+    pub fn local() {
+        println!("a local macro, not stdout");
+    }
+}

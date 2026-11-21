@@ -131,7 +131,7 @@ pub(super) fn clauses(expr: &CfgExpr, negated: bool) -> Vec<Clause> {
 /// The `cfg` predicates guarding `node`: its own attributes and those of every
 /// enclosing node in the same file, composed with `all`.
 #[instrument(level = "trace", skip_all)]
-pub(super) fn guard(node: &ra_ap_syntax::SyntaxNode) -> CfgExpr {
+pub(in crate::loader::database) fn guard(node: &ra_ap_syntax::SyntaxNode) -> CfgExpr {
     let predicates: Vec<CfgExpr> = node
         .ancestors()
         .filter_map(ast::AnyHasAttrs::cast)

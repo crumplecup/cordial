@@ -306,7 +306,7 @@ impl SourceDatabase {
             let evicted = stage.elapsed();
             let stage = std::time::Instant::now();
             #[cfg(feature = "tracing")]
-            self.merge_context_observability(graph)?;
+            self.merge_context_observability(graph, &added)?;
             let merged = stage.elapsed();
             let stage = std::time::Instant::now();
             if automatic {

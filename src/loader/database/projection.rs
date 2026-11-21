@@ -267,7 +267,7 @@ impl SourceDatabase {
         graph.set_attr(
             graph.root(),
             crate::ir::ATTR_SOURCE_OBSERVABILITY,
-            serde_json::to_value(self.project_observability(target.crate_root())?)?,
+            serde_json::to_value(self.project_observability(target.crate_root(), None)?)?,
         )?;
         #[cfg(feature = "verus_ir")]
         graph.set_attr(

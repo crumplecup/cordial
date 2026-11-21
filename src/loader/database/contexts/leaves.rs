@@ -55,10 +55,11 @@ impl SourceDatabase {
     pub(in crate::loader::database) fn merge_context_observability(
         &self,
         graph: &mut CrateIr,
+        context: &crate::ContextCrates,
     ) -> CordialResult<()> {
         use crate::IrView;
         let mut inventory = graph.source_observability()?;
-        let seen = self.project_observability(inventory.crate_root())?;
+        let seen = self.project_observability(inventory.crate_root(), Some(context))?;
         inventory.merge_context(seen);
         graph.set_attr(
             graph.root(),

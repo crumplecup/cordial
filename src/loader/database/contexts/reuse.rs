@@ -12,6 +12,8 @@
 //! - a gate in it is flipped by the context (the facts of its functions can differ),
 //! - it reads the cfg some way the gates do not say (`cfg!`, `cfg_attr`, `include!`, `#[path]`), so
 //!   that it cannot be taken to be unchanged,
+//! - it has no module in the ordinary build: its enclosing module may be gated, so there is no
+//!   ordinary scope whose semantic facts it could reuse,
 //! - it is the root of a crate (the context's crates are rooted at copies), or
 //! - it is above a copied file: a module is found from its parent's source root, so a copy under an
 //!   original would not be found. The files above are found from where a file is, conservatively: for
@@ -21,6 +23,7 @@ use std::collections::{BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 
 use ra_ap_cfg::CfgOptions;
+use ra_ap_hir::Semantics;
 use ra_ap_ide_db::base_db::SourceDatabase as RaSourceDatabase;
 use ra_ap_vfs::FileId;
 use tracing::instrument;
@@ -35,7 +38,7 @@ pub(in crate::loader::database) struct Reuse {
     pub(in crate::loader::database) files: usize,
     /// Files with a gate the context flips.
     pub(in crate::loader::database) flipped: usize,
-    /// Files that read the cfg some way the gates do not say.
+    /// Files whose ordinary facts cannot be reused: cfg readers, leaves, or inactive modules.
     pub(in crate::loader::database) unsure: usize,
     /// Crate roots, and files above a copied one, which are copied for the module tree.
     pub(in crate::loader::database) spine: usize,
@@ -120,6 +123,7 @@ impl SourceDatabase {
             ..Reuse::default()
         };
         let mut changed: BTreeSet<FileId> = BTreeSet::new();
+        let sema = Semantics::new(&self.db);
         for (file, path) in files {
             if is_a_leaf_file(path) {
                 // Counted with the files that read the cfg otherwise: it cannot be taken as unchanged.
@@ -128,7 +132,9 @@ impl SourceDatabase {
             } else if Flips::of_file(&self.db, *file, pairs, Reach::Written).is_flipped() {
                 reuse.flipped += 1;
                 changed.insert(*file);
-            } else if reads_cfg_otherwise(&self.db.file_text(*file).text(&self.db)) {
+            } else if reads_cfg_otherwise(&self.db.file_text(*file).text(&self.db))
+                || sema.file_to_module_defs(*file).next().is_none()
+            {
                 reuse.unsure += 1;
                 changed.insert(*file);
             }

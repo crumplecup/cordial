@@ -118,6 +118,18 @@ pub(crate) fn macro_at(
     scope: &ra_ap_syntax::SyntaxNode,
     path: &ast::Path,
 ) -> Option<SemanticMacroCall> {
+    // In inactive code the nearest scope may be an outer module. Its prelude is not evidence
+    // of what a macro in the inactive module resolves to (a local macro may shadow it there).
+    let around = sema.scope(scope)?;
+    if around
+        .module()
+        .krate(sema.db)
+        .cfg(sema.db)
+        .check(&super::contexts::guard(scope))
+        == Some(false)
+    {
+        return None;
+    }
     let mut kind = PathKind::Plain;
     let mut segments = Vec::new();
     for (index, segment) in path.segments().enumerate() {

@@ -12,12 +12,17 @@ impl SourceDatabase {
     pub(in crate::loader::database) fn project_observability(
         &self,
         root: &Path,
+        context: Option<&crate::ContextCrates>,
     ) -> CordialResult<SourceObservability> {
         let held = self.held_files(root)?;
         SourceObservability::collect_with(root, &held, |path, tree| {
+            let original = self.file_id(path)?;
+            let file = context
+                .and_then(|context| context.copy_of(original))
+                .unwrap_or(original);
             let key = ScanKey::new(
                 &self.db,
-                self.file_id(path)?,
+                file,
                 path.to_path_buf(),
                 tree.to_path_buf(),
                 root.to_path_buf(),
@@ -26,7 +31,7 @@ impl SourceDatabase {
             );
             match scan_queries::observability_file(&self.db, key) {
                 Some(found) => Ok(found.clone()),
-                None => self.observability_direct(path, tree, root),
+                None => self.observability_direct(file, path, tree, root),
             }
         })
     }
@@ -40,12 +45,12 @@ impl SourceDatabase {
     #[hotpath::measure(impl_type = "SourceDatabase")]
     fn observability_direct(
         &self,
+        file: ra_ap_vfs::FileId,
         path: &Path,
         tree: &Path,
         root: &Path,
     ) -> CordialResult<crate::ir::ObservabilityFile> {
         let sema = Semantics::new(&self.db);
-        let file = self.file_id(path)?;
         let edition = super::super::edition::edition_of(&self.db, file);
         if let Some(error) = edition.parse(&self.db).errors().first() {
             if crate::loader::path_has_fixtures(path, root) {
