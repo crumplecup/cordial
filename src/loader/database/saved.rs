@@ -32,6 +32,9 @@ const CONTEXTS: &str = "contexts";
 /// How much of the encoded state is held before it is written to the file.
 const WRITE_BUFFER_BYTES: usize = 1 << 20;
 
+/// How much of the saved Salsa state is buffered while its memos are restored.
+const READ_BUFFER_BYTES: usize = 64 * 1024;
+
 /// What a saved state restores to: the database, and the paths of the VFS it was saved with,
 /// in id order. Salsa's inputs are keyed by file id, so the next load must hand out the same
 /// ids to the same paths: it seeds its VFS with these.
@@ -164,7 +167,8 @@ impl SavedState {
             return Err("saved by another build of cordial".to_owned());
         }
         let (salsa, files, crates, paths, contexts) = (
-            self.read_part(SALSA)?,
+            std::fs::File::open(self.dir.join(SALSA))
+                .map_err(|error| format!("{SALSA} unreadable ({error})"))?,
             self.read_part(FILES)?,
             self.read_part(CRATES)?,
             self.read_part(PATHS)?,
@@ -174,7 +178,7 @@ impl SavedState {
         // goes on without it.
         catch_unwind(AssertUnwindSafe(|| {
             let mut database = RootDatabase::empty();
-            Self::decode_salsa(&mut database, &salsa)?;
+            Self::decode_salsa(&mut database, salsa)?;
             database.files().restore(
                 rmp_serde::from_slice(&files)
                     .map_err(|error| format!("files unreadable ({error})"))?,
@@ -223,16 +227,21 @@ impl SavedState {
     /// so the rate shows whether decoding or something else is what a restore waits for.
     #[instrument(level = "debug", skip_all)]
     #[hotpath::measure(impl_type = "SavedState")]
-    fn decode_salsa(database: &mut RootDatabase, salsa: &[u8]) -> Result<(), String> {
+    fn decode_salsa(database: &mut RootDatabase, salsa: std::fs::File) -> Result<(), String> {
         let started = std::time::Instant::now();
+        let bytes = salsa
+            .metadata()
+            .map_err(|error| format!("salsa state unreadable ({error})"))?
+            .len();
+        let reader = std::io::BufReader::with_capacity(READ_BUFFER_BYTES, salsa);
         let expanded_before = salsa::edges_expanded();
         let target: &mut dyn salsa::Database = database;
         target
-            .deserialize(&mut rmp_serde::Deserializer::from_read_ref(salsa))
+            .deserialize(&mut rmp_serde::Deserializer::new(reader))
             .map_err(|error| format!("salsa state unreadable ({error})"))?;
         tracing::debug!(
             target: "cordial::cache",
-            bytes = salsa.len(),
+            bytes,
             edges = salsa::edges_expanded() - expanded_before,
             micros = u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX),
             "decoded the saved Salsa memos"

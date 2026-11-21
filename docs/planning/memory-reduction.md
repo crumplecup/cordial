@@ -1,6 +1,6 @@
 # Memory measurement and reduction using upstream Hotpath
 
-Status: **Upstream restoration and phases 3–4 complete; phase 5 measured and Salsa reader compatibility tested, buffered restore pending, 2026-11-21.**
+Status: **Upstream restoration and phases 3–4 complete; phase 5 buffered restore measured and validated, phase 6 last-use audit next, 2026-11-21.**
 The immediate checkpoints restored published Hotpath with focused consumer
 tests and removed the graph-sized serialization copy. Existing measurement
 gaps are accepted and documented; they do not block application improvements.
@@ -385,6 +385,40 @@ Cordial still reads the complete Salsa file before decoding. This adjustment
 only enables reader compatibility; it does not itself remove that buffer or
 establish a RAM reduction. Buffered Cordial restore and a matched allocation
 comparison remain a subsequent checkpoint.
+
+## Checkpoint — Restore Salsa through bounded input
+
+Cordial now passes the Salsa file through a 64 KiB buffered reader rather than
+retaining its entire encoding alongside the restored database. The four small
+metadata files keep their existing slice decoders. Build fingerprint checks,
+the saved wire format and cold fallback remain unchanged. The enabled reader
+path uses the separately reviewed Salsa key adjustment above.
+
+The same three-file, macro-bearing allocation fixture reports the following
+upstream cumulative allocation traffic. Values retain Hotpath's displayed
+precision and units; nested rows overlap and must not be summed.
+
+| Operation | Whole-file input | Buffered input |
+| --- | --- | --- |
+| `SavedState::save` | 108.5 MB | 108.5 MB |
+| `SavedState::restore` | 340.8 MB | 252.5 MB |
+| `SavedState::read_part` | 97.2 MB, five calls | 477.2 KB, four calls |
+| `SavedState::decode_salsa` | 242.1 MB | 250.5 MB |
+
+The Salsa encoding is about 101.4 million bytes in both runs. Removing its
+input copy saves about 88.3 MB of total restore allocation traffic, approximately
+26%, after accounting for the reader decoder's additional allocations. The
+reader uses a bounded input buffer, but this does not bound individual decoded
+values or the database. The fixture confirms warm restoration and equivalent
+projected identities; these numbers do not establish retained-heap or RSS
+savings for a full program.
+
+All 38 tests in `saved_state_allocation`, `saved_state`, `saved_contexts` and
+`context_parses` passed through Nextest. They cover corrupt/truncated/missing
+state fallback, stable identities, edits and invalidation, unchanged-query
+reuse, context isolation, inactive files and restoration scaling. Formatting,
+all-feature/all-target Clippy with warnings denied, and diff checks passed.
+Cargo jobs ran sequentially. No Cordial CLI or full-program workload ran.
 
 ## Phase 1 — Restore upstream use and finish measurement infrastructure
 

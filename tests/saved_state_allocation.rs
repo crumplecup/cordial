@@ -89,7 +89,7 @@ fn upstream_hotpath_measures_database_save_and_restore() -> Result<()> {
     for (name, calls) in [
         ("SavedState::save", 1),
         ("SavedState::restore", 1),
-        ("SavedState::read_part", 5),
+        ("SavedState::read_part", 4),
         ("SavedState::decode_salsa", 1),
     ] {
         let row = rows
