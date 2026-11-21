@@ -54,6 +54,12 @@ fn what_is_written_and_read_back_is_what_it_always_was() {
         "an attribute is written as its key and its JSON"
     );
 
+    assert_eq!(
+        weight.packed(),
+        (1, 0),
+        "writing leaves the live cache cold"
+    );
+
     let read: NodeWeight =
         serde_json::from_value(written).unwrap_or_else(|error| panic!("{error}"));
     assert_eq!(read.packed(), (1, 0), "and read back it is bytes again");
@@ -84,4 +90,15 @@ fn the_latest_value_of_a_repeated_bulk_key_is_the_one_read() {
         weight.attr(ATTR_SEMANTIC_FUNCTION),
         Some(&json!({ "label": "second" }))
     );
+}
+
+#[test]
+fn messagepack_persistence_keeps_packed_values_and_does_not_warm_the_source() {
+    let weight = weight_with(ATTR_SEMANTIC_FUNCTION, facts());
+    let bytes = rmp_serde::to_vec(&weight).unwrap_or_else(|error| panic!("{error}"));
+    assert_eq!(weight.packed(), (1, 0));
+    let read: NodeWeight = rmp_serde::from_slice(&bytes).unwrap_or_else(|error| panic!("{error}"));
+    assert_eq!(read.packed(), (1, 0));
+    assert_eq!(read, weight);
+    assert_eq!(read.attr(ATTR_SEMANTIC_FUNCTION), Some(&facts()));
 }

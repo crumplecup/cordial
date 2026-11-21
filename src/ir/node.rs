@@ -227,17 +227,31 @@ impl Attr {
 /// as, so that what is saved and exported does not change.
 mod attrs_wire {
     use super::Attr;
-    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+    use serde::ser::SerializeSeq;
+    use serde::{Deserialize, Deserializer, Serializer};
 
     pub(super) fn serialize<S: Serializer>(
         attrs: &[(String, Attr)],
         serializer: S,
     ) -> Result<S::Ok, S::Error> {
-        let values: Vec<(&String, &serde_json::Value)> = attrs
-            .iter()
-            .filter_map(|(key, attr)| attr.value().map(|value| (key, value)))
-            .collect();
-        values.serialize(serializer)
+        // Decode a cold packed attribute only for this element. Serialization must
+        // not populate the live graph's decoded caches or retain a whole graph of JSON.
+        let mut values = serializer.serialize_seq(Some(attrs.len()))?;
+        for (key, attr) in attrs {
+            match attr {
+                Attr::Value(value) => values.serialize_element(&(key, value))?,
+                Attr::Packed(packed) => {
+                    if let Some(value) = packed.decoded.get() {
+                        values.serialize_element(&(key, value))?;
+                    } else {
+                        let value: serde_json::Value = rmp_serde::from_slice(&packed.bytes)
+                            .map_err(serde::ser::Error::custom)?;
+                        values.serialize_element(&(key, value))?;
+                    }
+                }
+            }
+        }
+        values.end()
     }
 
     pub(super) fn deserialize<'de, D: Deserializer<'de>>(

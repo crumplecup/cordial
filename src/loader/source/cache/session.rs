@@ -68,19 +68,6 @@ fn locked<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
-impl Drop for CacheToken {
-    /// The run's database ends with the run: nothing stays loaded once the work
-    /// that needed it is done.
-    #[tracing::instrument(level = "debug", skip(self))]
-    fn drop(&mut self) {
-        // The run is over; the cache files it started are finished before it
-        // returns, so nothing reads or exits on a half-written entry.
-        if let Some(cache) = locked(&self.cache).as_ref() {
-            cache.finish_writes();
-        }
-    }
-}
-
 impl CacheToken {
     /// Give this run the database that already holds its Cargo workspace.
     #[cfg(any(

@@ -17,6 +17,8 @@ const ZSTD_LEVEL: i32 = 3;
 /// time.
 const IO_BUFFER_BYTES: usize = 4 * 1024 * 1024;
 
+mod serialization;
+
 /// Serializable snapshot of a crate graph for cache read/write.
 #[derive(Debug, Clone, Serialize, Deserialize, derive_getters::Getters)]
 pub struct CrateIrSnapshot {
@@ -40,27 +42,7 @@ impl CrateIrSnapshot {
     #[instrument(level = "info", skip(self, path), err(level = "warn"))]
     #[hotpath::measure(impl_type = "CrateIrSnapshot")]
     pub fn write_cache(&self, path: &Path) -> CordialResult<()> {
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)?;
-        }
-        let started = std::time::Instant::now();
-        let encoder = zstd::stream::write::Encoder::new(fs::File::create(path)?, ZSTD_LEVEL)?;
-        // The JSON writer emits many small writes; batch them for the encoder.
-        let mut out = std::io::BufWriter::with_capacity(IO_BUFFER_BYTES, encoder);
-        serde_json::to_writer(&mut out, self)?;
-        out.into_inner()
-            .map_err(std::io::IntoInnerError::into_error)?
-            .finish()?;
-        tracing::debug!(
-            target: "cordial::metrics",
-            path = %path.display(),
-            bytes = fs::metadata(path).map(|meta| meta.len()).unwrap_or(0),
-            nodes = self.nodes().len(),
-            edges = self.edges().len(),
-            millis = started.elapsed().as_millis() as u64,
-            "ir file written"
-        );
-        Ok(())
+        serialization::write_cache(path, self, self.nodes.len(), self.edges.len())
     }
 }
 
@@ -310,13 +292,13 @@ impl CrateIr {
     ///
     /// # Errors
     ///
-    /// When the graph cannot be snapshotted or encoded.
+    /// When the graph cannot be encoded.
     #[instrument(level = "debug", skip(self), err(level = "warn"))]
     #[hotpath::measure(impl_type = "CrateIr")]
     pub fn to_stage_bytes(&self) -> CordialResult<Vec<u8>> {
         let encoder = zstd::stream::write::Encoder::new(Vec::new(), ZSTD_LEVEL)?;
         let mut out = std::io::BufWriter::with_capacity(IO_BUFFER_BYTES, encoder);
-        serde_json::to_writer(&mut out, &self.snapshot()?)?;
+        serde_json::to_writer(&mut out, &serialization::BorrowedSnapshot(self))?;
         Ok(out
             .into_inner()
             .map_err(std::io::IntoInnerError::into_error)?
@@ -378,7 +360,12 @@ impl CrateIr {
     #[instrument(level = "info", skip(self, path), err(level = "warn"))]
     #[hotpath::measure(impl_type = "CrateIr")]
     pub fn write_cache(&self, path: &Path) -> CordialResult<()> {
-        self.snapshot()?.write_cache(path)
+        serialization::write_cache(
+            path,
+            &serialization::BorrowedSnapshot(self),
+            self.graph.node_count(),
+            self.graph.edge_count(),
+        )
     }
 
     /// Read an IR file written by [`Self::write_cache`].

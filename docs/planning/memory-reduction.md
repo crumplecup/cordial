@@ -1,8 +1,8 @@
 # Memory measurement and reduction using upstream Hotpath
 
-Status: **Implementation resumed, 2026-11-20.**
-The immediate checkpoints are restoring published Hotpath with focused consumer
-tests, then removing the graph-sized serialization copy. Existing measurement
+Status: **Upstream restoration and persistence-copy removal complete, 2026-11-20.**
+The immediate checkpoints restored published Hotpath with focused consumer
+tests and removed the graph-sized serialization copy. Existing measurement
 gaps are accepted and documented; they do not block application improvements.
 Later instrumentation items remain optional follow-ups where they answer a
 specific optimization question. No further full-program run is authorized here.
@@ -79,6 +79,33 @@ All-features/all-targets Clippy with warnings denied, formatting and diff checks
 passed. Three memory-limit CLI workload tests were deliberately excluded; no
 Cordial workload or full-program measurement was executed. Unsupported async,
 retained ownership and dependency-interior coverage remains explicit.
+
+## Checkpoint evidence — borrowed IR persistence
+
+Phase 3 is complete. File and stage encoding serialize borrowed nodes, edges and
+indexes in the existing snapshot wire format. Owned snapshots remain available
+when ownership is needed. Packed attributes decode one cold value temporarily;
+serialization neither fills nor clears the live graph's decoded caches.
+
+The run cache encodes synchronously and publishes a same-directory temporary
+file atomically after success. This removes the background writer's deep graph
+copy and pending-writer bookkeeping. Failed publication removes the temporary
+file and preserves the prior destination. Normal error/unwind cleanup does not
+guarantee cleanup after an uncatchable process kill; an unpublished temporary
+file may remain. Encoding no longer overlaps later pipeline stages, so the
+whole-program throughput tradeoff remains unmeasured.
+
+Validation passed: six attribute-packing fixtures and five persistence fixtures,
+including file/stage wire equality, graph IDs and indexes, MessagePack, cold and
+warm attribute-cache state, atomic replacement and publication failures.
+Published Hotpath's cumulative allocation report on the same 4 MiB payload
+reported approximately **8.1 MB owned versus 4.0 MB borrowed**. This demonstrates
+the removed payload copy's allocation traffic, not a measured whole-program RSS
+or peak reduction. All-features/all-targets Clippy with warnings denied,
+formatting and diff checks passed. No Cordial or full-program workload ran.
+
+Optional instrumentation checkpoints 1B–1D and phases 2 and 4 onward remain as
+described below. There is no new full-program measurement authorization.
 
 ## Phase 1 — Restore upstream use and finish measurement infrastructure
 

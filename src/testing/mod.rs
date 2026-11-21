@@ -13,6 +13,15 @@ mod load_view;
 
 pub use run_key::run_cache_digest;
 
+/// Exercise the run cache's atomic publication without loading a workspace.
+///
+/// # Errors
+///
+/// Propagates encoding and publication failures.
+pub fn write_cached_ir(path: &std::path::Path, ir: &crate::CrateIr) -> crate::CordialResult<()> {
+    crate::run_cache::write_ir(path, ir)
+}
+
 #[cfg(feature = "shadow")]
 pub use shadow_oracle::{build_shadow_pair_report, build_shadow_pair_report_from_inventories};
 

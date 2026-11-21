@@ -24,8 +24,6 @@ pub(crate) struct RunCache {
     directory: PathBuf,
     inputs: Inputs,
     pruned: AtomicBool,
-    /// Writes of crate IR that are still running on their own threads.
-    pending: crate::sync::Mutex<Vec<std::thread::JoinHandle<CordialResult<()>>>>,
 }
 
 impl RunCache {
@@ -48,7 +46,6 @@ impl RunCache {
             root,
             inputs,
             pruned: AtomicBool::new(false),
-            pending: crate::sync::mutex!(Vec::new(), "run-cache-writers"),
         }
     }
 
@@ -63,48 +60,14 @@ impl RunCache {
         CrateIr::read_cache(&path).map(Some)
     }
 
-    /// Record a target's IR in this entry. The snapshot is taken now and written
-    /// on another thread, so the run goes on to its later stages while the file
-    /// is encoded; [`Self::finish_writes`] waits for it.
+    /// Encode the borrowed IR before returning. A temporary file is published
+    /// atomically only after encoding succeeds; no graph-sized snapshot is held.
     #[instrument(level = "debug", skip(self, ir), err(level = "warn"))]
     #[hotpath::measure(impl_type = "RunCache")]
     pub(crate) fn write_crate_ir(&self, crate_name: &str, ir: &CrateIr) -> CordialResult<()> {
         self.begin_write()?;
         let path = self.crate_path(crate_name);
-        let partial = partial_path(&path);
-        let snapshot = ir.snapshot()?;
-        let dispatch = tracing::dispatcher::get_default(Clone::clone);
-        let writer = std::thread::Builder::new()
-            .name("cordial-ir-cache-writer".to_owned())
-            .spawn(move || {
-                tracing::dispatcher::with_default(&dispatch, || {
-                    snapshot.write_cache(&partial)?;
-                    std::fs::rename(&partial, &path)?;
-                    Ok(())
-                })
-            })?;
-        locked(&self.pending).push(writer);
-        Ok(())
-    }
-
-    /// Wait for the IR writes this entry started. A failed write leaves no file
-    /// (a partial one is never renamed into place), so the next run analyses
-    /// again; it is logged, not an error of this run.
-    #[instrument(level = "debug", skip(self))]
-    #[hotpath::measure(impl_type = "RunCache")]
-    pub(crate) fn finish_writes(&self) {
-        let writers = std::mem::take(&mut *locked(&self.pending));
-        for writer in writers {
-            match writer.join() {
-                Ok(Ok(())) => {}
-                Ok(Err(error)) => {
-                    tracing::warn!(target: "cordial::cache", error = ?error, "could not record the analysis");
-                }
-                Err(_) => {
-                    tracing::warn!(target: "cordial::cache", "the cache writer panicked");
-                }
-            }
-        }
+        write_ir(&path, ir)
     }
 
     /// The workspace path-inclusion facts, if this entry has them.
@@ -249,11 +212,15 @@ fn read_json<T: DeserializeOwned>(path: &Path) -> CordialResult<Option<T>> {
     ))?))
 }
 
-/// Lock a mutex, taking the data even if a panicking holder poisoned it: the
-/// list of writers is still valid.
-#[instrument(level = "trace", skip(mutex))]
-fn locked<T>(mutex: &crate::sync::Mutex<T>) -> crate::sync::MutexGuard<'_, T> {
-    mutex
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
+/// Publish a complete borrowed graph; drop removes temporary files on errors or unwind.
+#[instrument(level = "debug", skip(path, ir), err(level = "warn"))]
+#[hotpath::measure]
+pub(crate) fn write_ir(path: &Path, ir: &CrateIr) -> CordialResult<()> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| std::io::Error::other("IR cache has no parent"))?;
+    let staged = tempfile::NamedTempFile::new_in(parent)?;
+    ir.write_cache(staged.path())?;
+    staged.persist(path).map_err(|error| error.error)?;
+    Ok(())
 }
