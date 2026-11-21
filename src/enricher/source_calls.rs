@@ -153,7 +153,9 @@ fn enrich_function(
                         is_function: view
                             .node(target)
                             .is_some_and(|node| node.kind() == &NodeKind::Item(ItemKind::Fn)),
-                        syntax: view.function_source_syntax(target)?,
+                        syntax: view
+                            .function_source_syntax(target)?
+                            .map(std::borrow::Cow::Owned),
                     }))
                 },
             )?

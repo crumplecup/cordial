@@ -1,6 +1,6 @@
 # Memory measurement and reduction using upstream Hotpath
 
-Status: **Upstream restoration and persistence-copy removal complete, 2026-11-20.**
+Status: **Upstream restoration, persistence-copy removal and phase 4 steps 1–2 complete, 2026-11-20.**
 The immediate checkpoints restored published Hotpath with focused consumer
 tests and removed the graph-sized serialization copy. Existing measurement
 gaps are accepted and documented; they do not block application improvements.
@@ -132,8 +132,34 @@ with payload size, clone count and cache warmth without a custom allocator.
 All 27 focused fixtures passed: attribute packing/sharing, IR persistence,
 semantic backend/callees/recording, cfg-context isolation/invalidation and apply
 snapshot consumption. All-features/all-targets Clippy with warnings denied,
-formatting and diff checks passed. No Cordial workload ran. Phase 4 steps 2–3
-and phases 5 onward remain planned.
+formatting and diff checks passed. No Cordial workload ran.
+
+## Checkpoint evidence — typed flow resolution
+
+Phase 4 step 2 is complete. File item collection retains typed syntax and
+semantic facts until flow resolution finishes, borrows the target's syntax for
+each call, then encodes each node attribute once. The transient typed facts are
+dropped after encoding; they are not another persistent fact cache. Attribute
+order, graph identities and the separate cfg databases are preserved.
+
+The same three-function fixture, with 32 calls in the target and 64 calls to
+that target, ran before and after through published Hotpath:
+
+| Operation | Before | After |
+| --- | ---: | ---: |
+| Flow resolution | 932.6 KB | 11.9 KB |
+| File item collection, including flow resolution | 2.3 MB | 1.4 MB |
+
+These are rounded cumulative allocation-traffic values. The rows overlap and
+must not be added; peak RAM and whole-program throughput remain unmeasured.
+The fixture verifies call identities, ranges, source digests and attribute order,
+and rejects a return to the previous payload-copying allocation cost.
+
+Validation: 33 focused fixtures cover attribute packing/sharing, persistence,
+typed conversion, semantic backend/callees/recording, cfg-context isolation and
+invalidation, conservative call-resolution contracts, and apply consumption.
+All-features/all-targets Clippy with warnings denied, formatting and diff checks
+passed. No Cordial workload ran. Phase 4 step 3 and phases 5 onward remain planned.
 
 ## Phase 1 — Restore upstream use and finish measurement infrastructure
 

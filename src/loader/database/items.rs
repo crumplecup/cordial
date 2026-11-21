@@ -163,6 +163,7 @@ pub(super) fn collect_items(
     let macros = source.proof_macro_syntax();
     let mut positions: HashMap<TextRange, (usize, String)> = HashMap::new();
     let mut items: Vec<ItemRecord> = Vec::new();
+    let mut functions = Vec::new();
     for item in source
         .tree()
         .syntax()
@@ -214,22 +215,34 @@ pub(super) fn collect_items(
         #[cfg(feature = "tracing")]
         let mut observed = None;
         let (mut function, mut definition, mut calls) = (None, None, Vec::new());
+        let mut function_facts = FunctionFacts::default();
         if let ast::Item::Fn(declared) = &item {
-            if let Some(collected) = collect_function(db, &sema, &source, declared, &mut weight)? {
-                definition = Some(collected.identity);
-                calls = collected.targets;
+            function_facts = collect_function(db, &sema, &source, declared)?;
+            if let Some(facts) = &function_facts.semantic {
+                definition = Some(*facts.definition());
+                calls = facts
+                    .calls()
+                    .iter()
+                    .filter_map(|call| match call.target() {
+                        SemanticCallTarget::Function(target) => Some(*target),
+                        _ => None,
+                    })
+                    .collect();
                 #[cfg(feature = "tracing")]
                 {
-                    observed = Some(collected.observed);
+                    observed = Some(ObservedCalls {
+                        callees: facts
+                            .calls()
+                            .iter()
+                            .filter_map(|call| call.callee().clone())
+                            .collect(),
+                        fallible: matches!(
+                            facts.result_recording(),
+                            crate::SemanticResultRecording::Result { .. }
+                        ),
+                    });
                 }
             }
-            weight.set_attr(
-                crate::ir::ATTR_FUNCTION_LOCATION,
-                serde_json::to_value(crate::FunctionLocation::new(
-                    source.path().to_path_buf(),
-                    u32::from(range.start()),
-                ))?,
-            );
             function = Some(range);
         }
         #[cfg(feature = "tracing")]
@@ -254,8 +267,34 @@ pub(super) fn collect_items(
             #[cfg(feature = "tracing")]
             observed,
         });
+        functions.push(function_facts);
     }
-    let shadows_extern_crates = resolve_flows(facts.scope(), &module_path, &mut items)?;
+    let shadows_extern_crates = resolve_flows(facts.scope(), &module_path, &mut items, &functions)?;
+    // Keep typed facts through resolution, then encode each attribute once. The
+    // insertion order matches the existing persisted node wire format.
+    for (item, function) in items.iter_mut().zip(functions) {
+        if let Some(syntax) = function.syntax {
+            item.weight.set_attr(
+                crate::ir::ATTR_FUNCTION_SOURCE_SYNTAX,
+                serde_json::to_value(syntax)?,
+            );
+        }
+        if let Some(semantic) = function.semantic {
+            item.weight.set_attr(
+                crate::ATTR_SEMANTIC_FUNCTION,
+                serde_json::to_value(semantic)?,
+            );
+        }
+        if let Some(range) = item.function {
+            item.weight.set_attr(
+                crate::ir::ATTR_FUNCTION_LOCATION,
+                serde_json::to_value(crate::FunctionLocation::new(
+                    source.path().to_path_buf(),
+                    u32::from(range.start()),
+                ))?,
+            );
+        }
+    }
     Ok(FileItems {
         module,
         items,
@@ -266,12 +305,13 @@ pub(super) fn collect_items(
 /// Resolve the calls of every top-level free function that has semantic facts,
 /// against the file's other items. Returns whether the file withdraws trust from
 /// the crate's names.
-#[instrument(level = "debug", skip(scope, items), err(level = "warn"))]
+#[instrument(level = "debug", skip(scope, items, functions), err(level = "warn"))]
 #[hotpath::measure]
 fn resolve_flows(
     scope: &crate::ir::SourceModuleScope,
     module_path: &str,
     items: &mut [ItemRecord],
+    functions: &[FunctionFacts],
 ) -> CordialResult<bool> {
     // In older editions a root declaration can shadow an absolute standard-library
     // path, and root macros or attributes can introduce extern aliases that
@@ -283,15 +323,6 @@ fn resolve_flows(
         || scope.extern_crates()
         || (module_path.is_empty() && scope.opaque());
     let trusted = !scope.opaque();
-    let syntax: Vec<Option<crate::ir::FunctionSourceSyntax>> = items
-        .iter()
-        .map(|item| {
-            item.weight
-                .attr(crate::ir::ATTR_FUNCTION_SOURCE_SYNTAX)
-                .map(|value| serde_json::from_value(value.clone()))
-                .transpose()
-        })
-        .collect::<Result<_, _>>()?;
     let by_definition: HashMap<SemanticItemId, usize> = items
         .iter()
         .enumerate()
@@ -299,25 +330,23 @@ fn resolve_flows(
         .collect();
     let mut flows = Vec::new();
     for (index, item) in items.iter().enumerate() {
-        let (Some(facts), true) = (&syntax[index], item.parent.is_none()) else {
+        let (Some(facts), true) = (&functions[index].syntax, item.parent.is_none()) else {
             continue;
         };
-        let Some(semantic) = item
-            .weight
-            .attr(crate::ATTR_SEMANTIC_FUNCTION)
-            .map(|value| serde_json::from_value::<crate::SemanticFunction>(value.clone()))
-            .transpose()?
-        else {
+        let Some(semantic) = &functions[index].semantic else {
             continue;
         };
         let mut calls = Vec::new();
         for call in facts.calls() {
-            let resolved = resolve_call(trusted, facts, call, Some(&semantic), &mut |target| {
+            let resolved = resolve_call(trusted, facts, call, Some(semantic), &mut |target| {
                 Ok(by_definition.get(&target).map(|place| TargetFacts {
                     key: *place,
                     beside_the_caller: items[*place].parent.is_none(),
                     is_function: items[*place].weight.kind() == &NodeKind::Item(ItemKind::Fn),
-                    syntax: syntax[*place].clone(),
+                    syntax: functions[*place]
+                        .syntax
+                        .as_ref()
+                        .map(std::borrow::Cow::Borrowed),
                 }))
             })?;
             calls.push((call.range().clone(), resolved));
@@ -462,44 +491,34 @@ fn item_kind(item: &ast::Item) -> (String, NodeKind) {
     )
 }
 
-/// What a function's collection found: the identity it resolved to, the functions
-/// its evidence says it calls, and what the observability pass reads.
-struct Collected {
-    identity: SemanticItemId,
-    targets: Vec<SemanticItemId>,
-    #[cfg(feature = "tracing")]
-    observed: ObservedCalls,
+/// Transient typed inputs to flow resolution. They are encoded only after the
+/// file's calls are resolved, then dropped rather than kept as another cache.
+#[derive(Default)]
+struct FunctionFacts {
+    syntax: Option<crate::ir::FunctionSourceSyntax>,
+    semantic: Option<crate::SemanticFunction>,
 }
 
-/// Add a function's syntax facts and semantic evidence to its weight, and return
-/// the identity it resolved to and the functions its evidence says it calls.
-#[instrument(
-    level = "trace",
-    skip(db, sema, source, function, weight),
-    err(level = "warn")
-)]
+/// Collect syntax and semantic facts without an intermediate JSON representation.
+#[instrument(level = "trace", skip(db, sema, source, function), err(level = "warn"))]
 fn collect_function(
     db: &RootDatabase,
     sema: &Semantics<'_, RootDatabase>,
     source: &DatabaseSource<'_>,
     function: &ast::Fn,
-    weight: &mut NodeWeight,
-) -> CordialResult<Option<Collected>> {
+) -> CordialResult<FunctionFacts> {
     // The current transform contract describes top-level free
     // functions. Methods/nested items retain their own nodes and
     // semantic facts without acquiring a free-function contract.
-    if function
+    let syntax = if function
         .syntax()
         .parent()
         .is_some_and(|parent| ast::SourceFile::can_cast(parent.kind()))
-        && let Some(facts) =
-            crate::ir::FunctionSourceSyntax::collect(source, function.syntax().text_range())
     {
-        weight.set_attr(
-            crate::ir::ATTR_FUNCTION_SOURCE_SYNTAX,
-            serde_json::to_value(facts)?,
-        );
-    }
+        crate::ir::FunctionSourceSyntax::collect(source, function.syntax().text_range())
+    } else {
+        None
+    };
     let definition = sema
         .to_def(function)
         .or_else(|| expanded_definition(sema, function));
@@ -512,37 +531,18 @@ fn collect_function(
         );
     }
     let Some(definition) = definition else {
-        return Ok(None);
+        return Ok(FunctionFacts {
+            syntax,
+            semantic: None,
+        });
     };
     let facts = queries::evidence_of(db, definition)
         .as_ref()
         .ok_or_else(|| CordialError::workspace_source_facts_missing("semantic function source"))?;
-    let facts = &queries::in_file(db, definition, facts);
-    weight.set_attr(crate::ATTR_SEMANTIC_FUNCTION, serde_json::to_value(facts)?);
-    let targets = facts
-        .calls()
-        .iter()
-        .filter_map(|call| match call.target() {
-            SemanticCallTarget::Function(target) => Some(*target),
-            _ => None,
-        })
-        .collect();
-    Ok(Some(Collected {
-        identity: *facts.definition(),
-        targets,
-        #[cfg(feature = "tracing")]
-        observed: ObservedCalls {
-            callees: facts
-                .calls()
-                .iter()
-                .filter_map(|call| call.callee().clone())
-                .collect(),
-            fallible: matches!(
-                facts.result_recording(),
-                crate::SemanticResultRecording::Result { .. }
-            ),
-        },
-    }))
+    Ok(FunctionFacts {
+        syntax,
+        semantic: Some(queries::in_file(db, definition, facts)),
+    })
 }
 
 /// `TextRange` has no serde in this build; it is saved as its two offsets.

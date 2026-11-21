@@ -15,7 +15,7 @@ use crate::ir::{
 
 /// What the resolver needs to know about the function a call resolved to.
 #[derive(Debug, Clone)]
-pub(crate) struct TargetFacts<K> {
+pub(crate) struct TargetFacts<'a, K> {
     /// How the caller refers to it: a graph node, or a place in a file's items.
     pub(crate) key: K,
     /// Whether it is declared in the calling function's own module.
@@ -23,7 +23,7 @@ pub(crate) struct TargetFacts<K> {
     /// Whether it is a function item.
     pub(crate) is_function: bool,
     /// Its syntax facts, when it has them (top-level free functions do).
-    pub(crate) syntax: Option<FunctionSourceSyntax>,
+    pub(crate) syntax: Option<std::borrow::Cow<'a, FunctionSourceSyntax>>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -45,12 +45,12 @@ pub(crate) enum Resolved<K> {
 /// `semantic`. `target_of` says what is known about a definition the call
 /// resolved to, or `None` when it names nothing here.
 #[tracing::instrument(level = "trace", skip_all, err(level = "warn"))]
-pub(crate) fn resolve_call<K: Copy>(
+pub(crate) fn resolve_call<'a, K: Copy>(
     namespace_trusted: bool,
     facts: &FunctionSourceSyntax,
     call: &FunctionCallSyntax,
     semantic: Option<&SemanticFunction>,
-    target_of: &mut dyn FnMut(SemanticItemId) -> CordialResult<Option<TargetFacts<K>>>,
+    target_of: &mut dyn FnMut(SemanticItemId) -> CordialResult<Option<TargetFacts<'a, K>>>,
 ) -> CordialResult<Resolved<K>> {
     use CallResolutionFailure as Failure;
     let unresolved = Resolved::Unresolved;
