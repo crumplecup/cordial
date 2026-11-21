@@ -147,15 +147,17 @@ impl CrateIr {
         map: &mut impl FnMut(crate::SemanticItemId) -> crate::SemanticItemId,
     ) -> CordialResult<()> {
         for weight in self.graph.node_weights_mut() {
-            if let Some(value) = weight.attr(crate::ATTR_SEMANTIC_FUNCTION).cloned() {
-                let function: crate::SemanticFunction = serde_json::from_value(value)?;
+            if let Some(function) =
+                weight.read_attr::<crate::SemanticFunction>(crate::ATTR_SEMANTIC_FUNCTION)?
+            {
                 weight.replace_attr(
                     crate::ATTR_SEMANTIC_FUNCTION,
                     serde_json::to_value(function.map_identities(map))?,
                 );
             }
-            if let Some(value) = weight.attr(crate::ATTR_SEMANTIC_CONTEXT_FUNCTIONS).cloned() {
-                let functions: Vec<crate::SemanticContextFunction> = serde_json::from_value(value)?;
+            if let Some(functions) = weight.read_attr::<Vec<crate::SemanticContextFunction>>(
+                crate::ATTR_SEMANTIC_CONTEXT_FUNCTIONS,
+            )? {
                 let mapped: Vec<crate::SemanticContextFunction> = functions
                     .into_iter()
                     .map(|function| function.map_identities(map))
@@ -185,13 +187,14 @@ impl CrateIr {
             id
         };
         for weight in self.graph.node_weights() {
-            if let Some(value) = weight.attr(crate::ATTR_SEMANTIC_FUNCTION) {
-                let function: crate::SemanticFunction = serde_json::from_value(value.clone())?;
+            if let Some(function) =
+                weight.read_attr::<crate::SemanticFunction>(crate::ATTR_SEMANTIC_FUNCTION)?
+            {
                 let _ = function.map_identities(&mut note);
             }
-            if let Some(value) = weight.attr(crate::ATTR_SEMANTIC_CONTEXT_FUNCTIONS) {
-                let functions: Vec<crate::SemanticContextFunction> =
-                    serde_json::from_value(value.clone())?;
+            if let Some(functions) = weight.read_attr::<Vec<crate::SemanticContextFunction>>(
+                crate::ATTR_SEMANTIC_CONTEXT_FUNCTIONS,
+            )? {
                 for function in functions {
                     let _ = function.map_identities(&mut note);
                 }

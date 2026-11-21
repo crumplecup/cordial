@@ -134,7 +134,7 @@ impl Query for BasicQuery {
                 .attr(key)
                 .and_then(|value| value.as_str())
                 .is_some_and(|actual| actual == expected),
-            (Some(key), None) => node.attr(key).is_some(),
+            (Some(key), None) => node.has_attr(key),
             _ => true,
         }
     }

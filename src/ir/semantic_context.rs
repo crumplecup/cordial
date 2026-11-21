@@ -174,7 +174,7 @@ impl ContextActivity {
         let mut active = Vec::new();
         if view
             .node(id)
-            .is_some_and(|node| node.attr(super::ATTR_SEMANTIC_FUNCTION).is_some())
+            .is_some_and(|node| node.has_attr(super::ATTR_SEMANTIC_FUNCTION))
         {
             active.push(SemanticContextKey::ordinary());
         }

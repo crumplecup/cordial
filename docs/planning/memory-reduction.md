@@ -1,6 +1,6 @@
 # Memory measurement and reduction using upstream Hotpath
 
-Status: **Upstream restoration, persistence-copy removal and phase 4 steps 1–2 complete, 2026-11-20.**
+Status: **Upstream restoration, persistence-copy removal and phase 4 steps 1–2 complete; step 3 in progress, 2026-11-20.**
 The immediate checkpoints restored published Hotpath with focused consumer
 tests and removed the graph-sized serialization copy. Existing measurement
 gaps are accepted and documented; they do not block application improvements.
@@ -159,7 +159,42 @@ Validation: 33 focused fixtures cover attribute packing/sharing, persistence,
 typed conversion, semantic backend/callees/recording, cfg-context isolation and
 invalidation, conservative call-resolution contracts, and apply consumption.
 All-features/all-targets Clippy with warnings denied, formatting and diff checks
-passed. No Cordial workload ran. Phase 4 step 3 and phases 5 onward remain planned.
+passed. No Cordial workload ran.
+
+## Checkpoint evidence — direct typed evidence reads
+
+The first part of phase 4 step 3 reads cold packed semantic evidence directly
+into its typed consumer, avoiding an intermediate expanded JSON tree. Presence
+queries and context-activity checks inspect keys without decoding values. Saved
+graph identity collection and remapping use the same typed path instead of
+cloning JSON. Warm raw-JSON caches retain their existing behavior; incompatible
+typed reads fall back to the JSON validation path with the existing error cause.
+The encoding and persistence wire format are unchanged.
+
+The same 256 KiB semantic-function fixture ran before and after through the
+unchanged published Hotpath, with construction outside the capture:
+
+| Operation | Before | After |
+| --- | ---: | ---: |
+| One typed evidence read | 515.5 KB | 256.2 KB |
+| Four consumer stages, dropping decoded caches between stages | 2.0 MB | 1.0 MB |
+
+These are rounded cumulative allocation-traffic values, not retained heap or
+whole-program RSS. Each consumer still allocates its actual typed result. The
+fixture also checks cold/warm cache state, wire round trips, latest repeated
+keys, missing evidence, JSON null presence, distinct cfg contexts and malformed
+evidence errors.
+
+Validation: all 40 focused fixtures passed, including saved-context identity
+remapping, semantic backend/callees/recording, context isolation/invalidation,
+call-resolution contracts and apply consumption. All-features/all-targets
+Clippy with warnings denied, formatting and diff checks passed. No Cordial or
+full-program workload ran.
+
+Phase 4 step 3 remains open for repeated whole-policy-inventory decoding and
+remaining field-only/context copies. In particular, source-call identity lookup
+still uses the raw JSON accessor when cfg-only functions require resolution.
+Phases 5 onward remain planned. No full-program measurement is authorized.
 
 ## Phase 1 — Restore upstream use and finish measurement infrastructure
 

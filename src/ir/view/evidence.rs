@@ -11,13 +11,12 @@ pub(super) fn optional<T: DeserializeOwned>(
     id: NodeId,
     key: &str,
 ) -> CordialResult<Option<T>> {
-    // Decode from the stored value in place: cloning it first copied whole-crate
-    // records (the type index, the plan) once per call.
-    Ok(view
-        .node(id)
-        .and_then(|node| node.attr(key))
-        .map(T::deserialize)
-        .transpose()?)
+    // Packed evidence goes straight to its typed consumer without retaining an
+    // expanded JSON tree. Ordinary values are still borrowed during decoding.
+    match view.node(id) {
+        Some(node) => Ok(node.weight().read_attr(key)?),
+        None => Ok(None),
+    }
 }
 
 #[cfg(any(

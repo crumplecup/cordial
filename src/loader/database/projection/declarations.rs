@@ -185,7 +185,7 @@ impl SourceDatabase {
                 let mut context_only = false;
                 for (_, node) in &ranges {
                     if !crate::IrView::node(graph, *node)
-                        .is_some_and(|found| found.attr(crate::ATTR_SEMANTIC_FUNCTION).is_some())
+                        .is_some_and(|found| found.has_attr(crate::ATTR_SEMANTIC_FUNCTION))
                         && !crate::IrView::semantic_context_functions(graph, *node)?.is_empty()
                     {
                         context_only = true;

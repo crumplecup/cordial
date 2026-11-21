@@ -13,6 +13,10 @@ pub trait NodeView {
     fn kind(&self) -> &NodeKind;
     /// Latest attribute value stored under `key`, if present.
     fn attr(&self, key: &str) -> Option<&serde_json::Value>;
+    /// Whether `key` is present, without decoding its value when supported.
+    fn has_attr(&self, key: &str) -> bool {
+        self.attr(key).is_some()
+    }
 }
 
 /// Opaque stable node identifier wrapping a petgraph index.
@@ -230,6 +234,18 @@ impl Attr {
             }
         }
     }
+
+    /// Read typed evidence directly from a cold encoding. The fallback keeps
+    /// the JSON reader's validation errors and serde representation behavior.
+    fn read<T: serde::de::DeserializeOwned>(&self) -> Option<serde_json::Result<T>> {
+        if let Self::Packed(packed) = self
+            && packed.decoded.get().is_none()
+            && let Ok(value) = rmp_serde::from_slice(&packed.bytes)
+        {
+            return Some(Ok(value));
+        }
+        self.value().map(T::deserialize)
+    }
 }
 
 /// How attributes are written and read: as the JSON values they always were, whatever they are held
@@ -309,6 +325,29 @@ impl NodeWeight {
             .and_then(|(_, attr)| attr.value())
     }
 
+    /// Whether a key is present, including JSON null, without decoding it.
+    #[instrument(level = "trace", skip(self))]
+    pub fn has_attr(&self, key: &str) -> bool {
+        self.attrs.iter().any(|(name, _)| name == key)
+    }
+
+    /// Read the latest typed evidence directly from its encoding when possible.
+    /// Successful packed reads leave the JSON cache cold; incompatible reads
+    /// use the existing JSON validation path.
+    #[instrument(level = "trace", skip(self))]
+    #[hotpath::measure]
+    pub(crate) fn read_attr<T: serde::de::DeserializeOwned>(
+        &self,
+        key: &str,
+    ) -> serde_json::Result<Option<T>> {
+        self.attrs
+            .iter()
+            .rev()
+            .find(|(name, _)| name == key)
+            .and_then(|(_, attr)| attr.read())
+            .transpose()
+    }
+
     /// Every attribute as the JSON value it is, in the order they were set (a copy: bulk attributes
     /// are held encoded).
     #[instrument(level = "trace", skip(self))]
@@ -371,6 +410,12 @@ impl<'a> NodeRef<'a> {
     pub fn attr(&self, key: &str) -> Option<&'a serde_json::Value> {
         self.weight.attr(key)
     }
+
+    /// Whether a key is present, without decoding it.
+    #[instrument(level = "trace", skip(self))]
+    pub fn has_attr(&self, key: &str) -> bool {
+        self.weight.has_attr(key)
+    }
 }
 
 impl NodeView for NodeRef<'_> {
@@ -387,5 +432,10 @@ impl NodeView for NodeRef<'_> {
     #[instrument(level = "trace", skip(self))]
     fn attr(&self, key: &str) -> Option<&serde_json::Value> {
         self.weight.attr(key)
+    }
+
+    #[instrument(level = "trace", skip(self))]
+    fn has_attr(&self, key: &str) -> bool {
+        self.weight.has_attr(key)
     }
 }
