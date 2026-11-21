@@ -986,6 +986,55 @@ There is no production RA storage change or per-context selector at this
 exploration checkpoint, and payload lifetime markers are not retained-byte or
 RSS measurements.
 
+**RA query-owned storage checkpoint, 2026-11-21.** The production owner query now
+returns an ordinary `DefMapPair` owning `triomphe::Arc<DefMap>` and
+`triomphe::Arc<LocalDefMap>`. Module/block creation stays in the same owner
+query. External-only and local-only readers use separate non-persisted tracked
+projections; combined readers and the stable fingerprint read the owner. The
+maps themselves are not cloned or separately persisted by these projections.
+This uses the existing Salsa APIs and spill store, with no Salsa storage or
+unsafe lifetime changes.
+
+The new `ra_def_map_storage` tests exercise actual RA collection on two tiny
+in-memory crates. Across cold/restored and resident/spilled owners, adding an
+unused dependency changes the local prelude while a warm external consumer
+stays cached. Adding a public function reaches that consumer. Both changes
+preserve existing module identities. A separate saved-consumer fixture uses
+the loader's cutoff and view-initialization protocol: body edits preserve the
+fingerprint and reuse the saved consumer, while public edits change its value.
+Cold/restored fingerprints and module identities agree. The native spill check
+first populates both projections, finds an encoded map owner and no separately
+encoded projection, observes no resident owner/projection memo values after
+retirement, then reads equal
+contents, identities and fingerprints without running collection again. It can
+retire those decoded values a second time. These are memo/identity checks;
+original-allocation release is established by the controlled ownership fixture,
+not by a native retained-byte or RSS measurement.
+
+Warm backdating and saved cutoffs have different boundaries. Saved consumers
+still use the existing combined external/local fingerprint after dependency
+flattening. Local-only changes can therefore invalidate saved external readers
+conservatively even though warm external readers remain cached. This change
+does not introduce separate external/local saved cutoffs. The persisted owner
+representation changes; existing saved-state build fingerprints reject caches
+from a different executable before decoding.
+
+The full 70-test Nextest run passed 69 checks; its saved-query accounting check
+reported only the new non-persisted external projection under map priming. That
+check now admits precisely that projection with the same count as the unchanged
+cold run, while continuing to reject actual map collection or other analysis
+there. All 9 affected checks then passed, covering that assertion, the three
+native RA checks and the five controlled ownership checks. The complete suite
+covers cfg collection, context crates/reuse/parsing, saved contexts, tracing
+prints/apply, Salsa ownership, eviction, spill and tracked identity, with
+`hotpath-alloc`. Formatting, all-feature/all-target Clippy with warnings denied
+and diff checks passed.
+
+Dependency-based context selection remains the next step: this
+storage change enables map payload retirement but does not yet select one
+completed context or bound input, identity and memo-header growth. No Cordial
+self-execution or full-program measurement is part of this checkpoint.
+
 ## Historical evidence
 
 The first cold capture used Cordial `65cbde11` against `elicit_doc` `8d2968a7`,

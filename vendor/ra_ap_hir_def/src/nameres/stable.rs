@@ -240,7 +240,7 @@ impl StableHash for LocalDefMap {
 pub fn def_map_fingerprint(db: &dyn base_db::SourceDatabase, krate: Crate) -> StableFingerprint {
     let pair = super::crate_local_def_map(db, krate);
     let mut cx = StableCx::new(db);
-    pair.def_map(db).stable_hash(&mut cx);
-    pair.local(db).stable_hash(&mut cx);
+    pair.def_map.stable_hash(&mut cx);
+    pair.local.stable_hash(&mut cx);
     cx.finish()
 }

@@ -407,20 +407,31 @@ pub struct ModuleData {
 
 #[inline]
 pub fn crate_def_map(db: &dyn SourceDatabase, crate_id: Crate) -> &DefMap {
-    crate_local_def_map(db, crate_id).def_map(db)
+    external_def_map(db, crate_id)
 }
 
-#[salsa::tracked(persist)]
-pub(crate) struct DefMapPair<'db> {
-    #[tracked]
-    #[returns(ref)]
-    pub(crate) def_map: DefMap,
-    #[returns(ref)]
-    pub(crate) local: LocalDefMap,
+// Keep the large payloads in the query memo so spilling that memo can release them.
+// Tracked module/block identities are still created by the same owner query.
+#[derive(Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub(crate) struct DefMapPair {
+    pub(crate) def_map: Arc<DefMap>,
+    pub(crate) local: Arc<LocalDefMap>,
+}
+
+// Independent projections backdate external and local changes separately. They share
+// allocations with the persisted owner, and must also be evicted to release the maps.
+#[salsa::tracked(returns(ref))]
+fn external_def_map(db: &dyn SourceDatabase, crate_id: Crate) -> Arc<DefMap> {
+    Arc::clone(&crate_local_def_map(db, crate_id).def_map)
+}
+
+#[salsa::tracked(returns(ref))]
+pub(crate) fn local_def_map(db: &dyn SourceDatabase, crate_id: Crate) -> Arc<LocalDefMap> {
+    Arc::clone(&crate_local_def_map(db, crate_id).local)
 }
 
 #[salsa::tracked(returns(ref), persist)]
-pub(crate) fn crate_local_def_map(db: &dyn SourceDatabase, crate_id: Crate) -> DefMapPair<'_> {
+pub(crate) fn crate_local_def_map(db: &dyn SourceDatabase, crate_id: Crate) -> DefMapPair {
     let krate = crate_id.data(db);
     let _p = tracing::info_span!(
         "crate_def_map_query",
@@ -450,7 +461,7 @@ pub(crate) fn crate_local_def_map(db: &dyn SourceDatabase, crate_id: Crate) -> D
     let (def_map, local_def_map) =
         collector::collect_defs(db, def_map, TreeId::new(root_file_id.into(), None), None);
 
-    DefMapPair::new(db, def_map, local_def_map)
+    DefMapPair { def_map: Arc::new(def_map), local: Arc::new(local_def_map) }
 }
 
 #[salsa::tracked(returns(ref), persist)]
@@ -474,7 +485,7 @@ pub fn block_def_map<'db>(db: &'db dyn SourceDatabase, block_id: BlockIdLt<'db>)
     let def_map = DefMap::empty(
         db,
         krate,
-        local_def_map.def_map(db).data.clone(),
+        local_def_map.def_map.data.clone(),
         module_data,
         Some(BlockInfo { block: block_id, parent: module }),
     );
@@ -483,7 +494,7 @@ pub fn block_def_map<'db>(db: &'db dyn SourceDatabase, block_id: BlockIdLt<'db>)
         db,
         def_map,
         TreeId::new(ast_id.file_id, Some(block_id)),
-        Some(local_def_map.local(db)),
+        Some(&local_def_map.local),
     );
     def_map
 }

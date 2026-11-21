@@ -511,6 +511,18 @@ fn a_restored_run_executes_few_rust_analyzer_queries() -> Result<()> {
 
     let mut by_step = std::collections::BTreeMap::<&str, usize>::new();
     for (name, count) in &restored {
+        // The external-map projection is deliberately not persisted: it clones the
+        // owner's Arc once per ordinary/dependency crate when priming reads the maps.
+        // Admit only that projection, with the same count as the unchanged cold run;
+        // rebuilding a map or any other analysis under this step still fails below.
+        if name == "build_definition_maps > external_def_map" {
+            assert_eq!(
+                *count,
+                cold.get(name).copied().unwrap_or_default(),
+                "restored priming projects the same crates as the cold run"
+            );
+            continue;
+        }
         // Copy selection checks whether an ordinary file has a module before
         // reusing its facts in a cfg context. Restore rebuilds this input-derived
         // source-root index once; it must not run other analysis under this step.

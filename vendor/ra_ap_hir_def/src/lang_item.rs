@@ -11,7 +11,7 @@ use crate::{
     AdtId, AssocItemId, AttrDefId, ConstId, Crate, EnumId, EnumVariantId, FunctionId, ImplId,
     ItemContainerId, MacroId, ModuleDefId, StaticId, StructId, TraitId, TypeAliasId, UnionId,
     attrs::AttrFlags,
-    nameres::{DefMap, assoc::TraitItems, crate_def_map, crate_local_def_map},
+    nameres::{DefMap, assoc::TraitItems, crate_def_map, local_def_map},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
@@ -125,7 +125,7 @@ pub fn lang_items(db: &dyn SourceDatabase, start_crate: Crate) -> LangItems {
     // while nameres.
     //
     // See https://github.com/rust-lang/rust-analyzer/pull/20475 for details.
-    for (_, (module, _)) in crate_local_def_map(db, start_crate).local(db).extern_prelude() {
+    for (_, (module, _)) in local_def_map(db, start_crate).extern_prelude() {
         // Some crates declares themselves as extern crate like `extern crate self as core`.
         // Ignore these to prevent cycles.
         let krate = module.krate(db);

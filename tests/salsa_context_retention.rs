@@ -48,7 +48,7 @@ impl Payload {
     }
 }
 
-/// The shape used by RA's `DefMapPair`: identity fields and a tracked semantic payload.
+/// RA's former `DefMapPair` shape: identity fields and a tracked semantic payload.
 #[salsa::tracked(persist)]
 struct Pair<'db> {
     name: usize,
