@@ -173,3 +173,57 @@ fn missing_and_corrupt_call_evidence_are_distinct() -> miette::Result<()> {
     assert!(ir.function_call_flow(leaf).is_err());
     Ok(())
 }
+
+#[cfg(feature = "tracing")]
+#[test]
+fn cfg_only_callers_preserve_conservative_flow_and_context_targets() -> miette::Result<()> {
+    cordial::init_tracing();
+    let fixture = copy_specimen("apply_failure_site")?;
+    fs::write(
+        fixture.path().join("src/main.rs"),
+        "fn ordinary() -> Result<(), std::io::Error> { Ok(()) }\n\
+         #[cfg(kani)]\nfn gated() { let _ = ordinary(); }\nfn main() {}\n",
+    )
+    .into_diagnostic()?;
+    let store = tempfile::tempdir().into_diagnostic()?;
+    let session = cordial::SessionBuilder::new(fixture.path())
+        .with_store_root(store.path())
+        .register(&*cordial::TRACING_ETIQUETTE)
+        .with_ir_snapshot()
+        .build();
+    cordial::Session::run(&session, &cordial::RunAll).into_diagnostic()?;
+    let ir = cordial::CrateIr::read_cache(&store.path().join("cache/strategy-specimen.ir.zst"))
+        .into_diagnostic()?;
+    let gated = ir
+        .node_by_path("gated")
+        .ok_or_else(|| miette::miette!("missing gated"))?;
+    let ordinary = ir
+        .node_by_path("ordinary")
+        .ok_or_else(|| miette::miette!("missing ordinary"))?;
+    assert!(ir.semantic_function(gated).into_diagnostic()?.is_none());
+    assert!(
+        !ir.semantic_context_functions(gated)
+            .into_diagnostic()?
+            .is_empty()
+    );
+    let flow = ir
+        .function_call_flow(gated)
+        .into_diagnostic()?
+        .ok_or_else(|| miette::miette!("missing gated flow"))?;
+    assert!(!flow.namespace_trusted());
+    assert_eq!(flow.calls().len(), 1);
+    assert_eq!(
+        flow.calls()[0].range(),
+        function_facts(&ir, "gated")?.calls()[0].range()
+    );
+    assert_eq!(
+        flow.calls()[0].resolution(),
+        &SourceCallResolution::Unresolved(CallResolutionFailure::OpaqueScope)
+    );
+    assert_eq!(
+        ir.context_children(gated, &cordial::SemanticContextKey::enabling(["kani"])),
+        [ordinary]
+    );
+    assert!(ir.children(gated, EdgeKind::Calls).is_empty());
+    Ok(())
+}

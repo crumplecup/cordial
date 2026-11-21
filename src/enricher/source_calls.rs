@@ -87,11 +87,14 @@ impl IrEnricher for SourceCallEnricher {
 /// identity is what made this stage cost the size of the project.
 #[tracing::instrument(level = "trace", skip(ir, function), err(level = "warn"))]
 fn definition_of(ir: &dyn IrView, function: NodeId) -> CordialResult<Option<SemanticItemId>> {
-    if let Some(facts) = ir
-        .node(function)
-        .and_then(|node| node.attr(ATTR_SEMANTIC_FUNCTION))
+    if let Some(node) = ir.node(function)
+        && node.has_attr(ATTR_SEMANTIC_FUNCTION)
     {
-        return Ok(facts["definition"].as_u64().map(SemanticItemId::new));
+        return Ok(node
+            .weight()
+            .attr_field(ATTR_SEMANTIC_FUNCTION, "definition")
+            .and_then(|value| value.as_u64())
+            .map(SemanticItemId::new));
     }
     Ok(ir
         .semantic_context_functions(function)?

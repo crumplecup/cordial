@@ -258,6 +258,16 @@ impl Attr {
         }
         self.value().map(T::deserialize)
     }
+
+    fn field(&self, field: &str) -> Option<serde_json::Value> {
+        if let Self::Packed(packed) = self
+            && packed.decoded.get().is_none()
+            && let Ok(value) = super::attribute_field::read(&packed.bytes, field)
+        {
+            return value;
+        }
+        self.value()?.get(field).cloned()
+    }
 }
 
 /// How attributes are written and read: as the JSON values they always were, whatever they are held
@@ -335,6 +345,19 @@ impl NodeWeight {
             .rev()
             .find(|(k, _)| k == key)
             .and_then(|(_, attr)| attr.value())
+    }
+
+    /// Copy one object field from the latest attribute under `key`.
+    /// Cold packed objects skip unrelated values and leave the JSON cache cold.
+    /// Missing fields and non-object attributes return `None`, as with JSON `get`.
+    #[instrument(level = "trace", skip(self))]
+    #[hotpath::measure]
+    pub fn attr_field(&self, key: &str, field: &str) -> Option<serde_json::Value> {
+        self.attrs
+            .iter()
+            .rev()
+            .find(|(name, _)| name == key)
+            .and_then(|(_, attr)| attr.field(field))
     }
 
     /// Whether a key is present, including JSON null, without decoding it.

@@ -1,6 +1,6 @@
 # Memory measurement and reduction using upstream Hotpath
 
-Status: **Upstream restoration, persistence-copy removal and phase 4 steps 1–2 complete; step 3 in progress, 2026-11-20.**
+Status: **Upstream restoration, persistence-copy removal and phase 4 steps 1–2 complete; step 3 in progress, 2026-11-21.**
 The immediate checkpoints restored published Hotpath with focused consumer
 tests and removed the graph-sized serialization copy. Existing measurement
 gaps are accepted and documented; they do not block application improvements.
@@ -192,8 +192,8 @@ Clippy with warnings denied, formatting and diff checks passed. No Cordial or
 full-program workload ran.
 
 Phase 4 step 3 remains open for repeated whole-policy-inventory decoding and
-remaining field-only/context copies. In particular, source-call identity lookup
-still uses the raw JSON accessor when cfg-only functions require resolution.
+remaining context copies. Source-call identity lookup now uses the field-only
+reader described below when cfg-only functions require resolution.
 Phases 5 onward remain planned. No full-program measurement is authorized.
 
 ## Checkpoint evidence — packed policy inventories
@@ -227,6 +227,38 @@ covering packing/sharing, typed evidence, persistence, semantic invalidation,
 apply consumption, policy findings, inactive sources and target identity.
 All-features/all-targets Clippy with warnings denied, formatting and diff checks
 passed. No Cordial CLI or full-program workload ran.
+
+## Checkpoint evidence — field-only packed reads
+
+Phase 4 step 3 now reads an ordinary function's definition ID directly from its
+packed object during cfg-only call resolution. The existing attribute storage
+skips unrelated encoded values through Serde and a borrowed MessagePack reader.
+It copies only the selected field and leaves the full JSON cache cold. There is
+no new fact cache, source scan or database sharing. Warm and unpacked lookups,
+missing fields, non-object values and latest-key precedence retain JSON lookup
+behavior; unknown fields and persistence wire values are preserved.
+
+The same fixture ran before and after through unchanged published Hotpath:
+
+| Lookup | Before | After |
+| --- | ---: | ---: |
+| Definition ID, 16 KiB unrelated payload | 17.3 KB | 16 B |
+| Definition ID, 256 KiB unrelated payload | 257.3 KB | 16 B |
+| Sixteen reads, 256 KiB unrelated payload | 257.3 KB | 256 B |
+
+These are upstream-formatted cumulative allocation-traffic values. Previously,
+the first read retained an expanded copy of the entire object in the JSON
+cache; subsequent reads reused it. Field-only reads no longer create that
+representation. Whole-program RSS and CPU tradeoffs remain unmeasured; each
+field lookup still traverses the encoded object. Repeated policy decoding and
+the remaining context copies are separate follow-ups within step 3.
+
+Validation: 36 focused fixtures passed, covering field lookup, packing, typed
+evidence, persistence, cfg isolation, conservative call resolution and apply
+consumption. The cfg-only caller retains its context-specific target edge and
+its opaque-namespace transformation refusal. All-features/all-targets Clippy
+with warnings denied, formatting and diff checks passed. No Cordial CLI or
+full-program workload ran.
 
 ## Phase 1 — Restore upstream use and finish measurement infrastructure
 

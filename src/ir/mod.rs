@@ -14,6 +14,7 @@
 mod antipattern_source;
 #[cfg(feature = "antipatterns")]
 pub use antipattern_source::{ATTR_SOURCE_ANTIPATTERNS, SourceAntipatterns};
+mod attribute_field;
 #[cfg(feature = "rustdoc")]
 mod attrs;
 mod crate_kind;
