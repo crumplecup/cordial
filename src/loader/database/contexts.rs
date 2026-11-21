@@ -1,12 +1,15 @@
-//! Cfg contexts as diffs on the database's cfg inputs.
+//! Harvesting cfg contexts from copies of the workspace's crates.
 //!
 //! rust-analyzer resolves only the code a crate's cfg set activates. A context
-//! is a change to that input: the workspace crates' `cfg_options` get the
-//! context's atoms enabled and disabled, salsa recomputes what depends on them
-//! (the crates' definition maps and whatever reads those), and the facts of the
-//! newly active code are copied into the IR before the next diff replaces them.
-//! Parse results, item trees, the sysroot and unchanged macro expansions are
-//! never recomputed, and only one variant is resident at a time.
+//! adds copied local crates with its atoms enabled and disabled, preserving the
+//! ordinary build's inputs and memoized results. Unchanged files may alias the
+//! originals; copied files share source text but have separate file identities
+//! and syntax trees. Context-specific semantic results are copied into the IR.
+//!
+//! Harvesting, observability and follow-up gate discovery must finish before
+//! the pass asks for eviction. Eviction currently follows the run's pressure
+//! policy and selects query kinds, not individual contexts; copied inputs and
+//! cached semantic working sets can therefore accumulate across contexts.
 
 mod copy_functions;
 mod flips;
@@ -27,6 +30,23 @@ use ra_ap_hir::{Crate, attach_db};
 use ra_ap_hir_expand::intern::Symbol;
 use ra_ap_ide_db::{RootDatabase, base_db::Crate as InputCrate};
 use tracing::instrument;
+
+impl super::SourceDatabase {
+    /// Finish the context's persistence work before asking for eviction. Keeping its
+    /// fingerprints now lets the final save reuse them without rebuilding its indexes.
+    #[instrument(level = "debug", skip(self, context))]
+    #[hotpath::measure(impl_type = "SourceDatabase")]
+    fn finish_context(&mut self, context: &crate::ContextCrates, after: &str) {
+        if self.saved.is_some() && !crate::result_store::active() && self.reuses_across_edits() {
+            ra_ap_hir::attach_db(&self.db, || {
+                for krate in context.shadows() {
+                    self.ask_crate_fingerprints(krate);
+                }
+            });
+        }
+        self.evict_regenerable(after);
+    }
+}
 
 /// The cfg atom named by `text`: a flag, or `key="value"`.
 #[instrument(level = "trace")]
@@ -50,7 +70,7 @@ pub(super) fn spell(atom: &CfgAtom) -> String {
 }
 
 /// The ordinary cfg sets of the workspace's own crates, kept so every diff is
-/// applied to the same base and the ordinary build can be restored exactly.
+/// applied to the same base without changing the ordinary build.
 #[derive(Debug)]
 pub(super) struct LocalCfgs {
     ordinary: Vec<(InputCrate, CfgOptions)>,

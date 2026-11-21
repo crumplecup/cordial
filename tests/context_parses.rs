@@ -49,6 +49,18 @@ fn parses_in_contexts(second_run: bool, with_tests: bool) -> Result<Vec<(String,
 
 /// The same, with the projection the last run made.
 fn run_in_contexts(second_run: bool, with_tests: bool) -> Result<(Vec<(String, u64)>, CrateIr)> {
+    let options = SemanticCargoOptions::default()
+        .with_cfg_contexts(vec![SemanticContextKey::enabling(["kani"])])
+        .with_cfg_planning(CfgPlanning::Explicit)
+        .with_evicts_between_chunks(true);
+    run_with_options(second_run, with_tests, &options)
+}
+
+fn run_with_options(
+    second_run: bool,
+    with_tests: bool,
+    options: &SemanticCargoOptions,
+) -> Result<(Vec<(String, u64)>, CrateIr)> {
     cordial::init_tracing();
     let root = tempfile::tempdir().into_diagnostic()?;
     for dir in ["src", "tests"] {
@@ -65,10 +77,6 @@ fn run_in_contexts(second_run: bool, with_tests: bool) -> Result<(Vec<(String, u
     }
     let state = tempfile::tempdir().into_diagnostic()?;
     let saved = SavedState::at(state.path().join("analysis-state"));
-    let options = SemanticCargoOptions::default()
-        .with_cfg_contexts(vec![SemanticContextKey::enabling(["kani"])])
-        .with_cfg_planning(CfgPlanning::Explicit)
-        .with_evicts_between_chunks(true);
     let mut sources = vec![root.path().join("src/lib.rs")];
     if with_tests {
         sources.push(root.path().join("tests/t.rs"));
@@ -96,7 +104,7 @@ fn run_in_contexts(second_run: bool, with_tests: bool) -> Result<(Vec<(String, u
         let subscriber = tracing_subscriber::registry()
             .with(MetricsLayer.with_filter(cordial::metrics_filter_with(true)));
         let _subscriber = tracing::subscriber::set_default(subscriber);
-        let mut session = SourceDatabase::load_saved(root.path(), &options, Some(saved.clone()))
+        let mut session = SourceDatabase::load_saved(root.path(), options, Some(saved.clone()))
             .into_diagnostic()?;
         graph = Some(
             session
@@ -149,6 +157,57 @@ fn by_pass(found: &[(String, u64)], query: &str) -> std::collections::BTreeMap<S
 
 /// The file-level query each copy of a file runs.
 const FILES_PARSE: &str = "> EditionedFileId::parse_";
+
+/// Persistence cutoffs for context copies are made before the context reaches eviction.
+/// The final save computes only the ordinary crate's cutoffs, and restoration reuses all of them.
+#[test]
+fn context_fingerprints_are_ready_before_eviction_and_reused_by_the_save() -> Result<()> {
+    let options = SemanticCargoOptions::default()
+        .with_cfg_contexts(vec![
+            SemanticContextKey::enabling(["kani"]),
+            SemanticContextKey::enabling(["creusot"]),
+        ])
+        .with_cfg_planning(CfgPlanning::Explicit)
+        .with_evicts_between_chunks(true)
+        .with_reuse_across_edits(true);
+    for restored in [false, true] {
+        let (found, _) = run_with_options(restored, false, &options)?;
+        for query in [
+            "def_map_fingerprint",
+            "inherent_impls_fingerprint",
+            "trait_impls_fingerprint",
+            "generated_in_fingerprint",
+        ] {
+            let count_at = |step: &str| -> u64 {
+                found
+                    .iter()
+                    .filter(|(key, _)| {
+                        key.starts_with("steps.")
+                            && key.contains(step)
+                            && key.ends_with(&format!("> {query}"))
+                    })
+                    .map(|(_, count)| *count)
+                    .sum()
+            };
+            let expected = u64::from(!restored);
+            let counts: Vec<_> = found
+                .iter()
+                .filter(|(key, _)| key.starts_with("steps.") && key.ends_with(query))
+                .collect();
+            assert_eq!(
+                count_at("finish_context"),
+                2 * expected,
+                "{query}, restored={restored}: {counts:#?}"
+            );
+            assert_eq!(
+                count_at("ask_fingerprints"),
+                expected,
+                "{query}, restored={restored}: {counts:#?}"
+            );
+        }
+    }
+    Ok(())
+}
 
 /// A context's copy of a file has the text of the original and another file id, and a syntax tree
 /// of its own: rust-analyzer tells which file a node is of by the tree it is in, so a tree cannot be

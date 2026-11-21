@@ -1,9 +1,9 @@
 //! The leaf pass: integration-test binaries read off the library.
 //!
 //! A test binary consumes the library and nothing consumes it. Its `#[test]`
-//! functions are active only under the `test` cfg, so the pass enters that
-//! context once, reads each leaf function's calls, and restores the ordinary
-//! build. Nothing here adds a node to the library's graph.
+//! functions are active only under the `test` cfg, so the pass reads each leaf
+//! function's calls from the context's copied crates. The ordinary build's
+//! inputs stay unchanged. Nothing here adds a node to the library's graph.
 
 use super::LocalCfgs;
 use super::copy_functions::copy_functions;
@@ -141,6 +141,7 @@ impl SourceDatabase {
             let added = match self.add_context_crates(&context) {
                 Ok(added) => added,
                 Err(error) => {
+                    self.evict_regenerable("failed leaf context registration");
                     outcome = Err(error);
                     break;
                 }
@@ -169,9 +170,9 @@ impl SourceDatabase {
             );
             merge(leaves, found);
             if outcome.is_err() {
+                self.finish_context(&added, "failed leaf context");
                 break;
             }
-            self.evict_regenerable("leaf context");
             for next in asked(
                 &self.db,
                 &context,
@@ -185,6 +186,8 @@ impl SourceDatabase {
                     queue.push_back(next);
                 }
             }
+            // Planning and persistence preparation finish before eviction.
+            self.finish_context(&added, "leaf context");
             // What a process that takes up the run needs to go on from here is kept, and the
             // process ends here if it is the kind that does.
             let state = LeavesState {

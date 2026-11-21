@@ -142,13 +142,18 @@ impl SourceDatabase {
         attach_db(&self.db, || {
             for krate in ra_ap_hir::Crate::all(&self.db) {
                 if krate.origin(&self.db).is_local() {
-                    let _ = def_map_fingerprint(&self.db, krate.base());
-                    let _ = inherent_impls_fingerprint(&self.db, krate.base());
-                    let _ = trait_impls_fingerprint(&self.db, krate.base());
-                    let _ = generated_in_fingerprint(&self.db, krate.base());
+                    self.ask_crate_fingerprints(krate.base());
                 }
             }
         });
+    }
+
+    /// Prepare one crate's persistence cutoffs while its semantic indexes are available.
+    pub(super) fn ask_crate_fingerprints(&self, krate: InputCrate) {
+        let _ = def_map_fingerprint(&self.db, krate);
+        let _ = inherent_impls_fingerprint(&self.db, krate);
+        let _ = trait_impls_fingerprint(&self.db, krate);
+        let _ = generated_in_fingerprint(&self.db, krate);
     }
 
     /// Ask for one fingerprint, so that a restored database has the query set up before a memo
@@ -162,10 +167,7 @@ impl SourceDatabase {
                 .into_iter()
                 .find(|krate| krate.origin(&self.db).is_local())
             {
-                let _ = def_map_fingerprint(&self.db, krate.base());
-                let _ = inherent_impls_fingerprint(&self.db, krate.base());
-                let _ = trait_impls_fingerprint(&self.db, krate.base());
-                let _ = generated_in_fingerprint(&self.db, krate.base());
+                self.ask_crate_fingerprints(krate.base());
             }
         });
     }

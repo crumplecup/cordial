@@ -271,7 +271,13 @@ impl SourceDatabase {
             let watch =
                 crate::process_memory::Watch::start(format!("cfg context {}", analysed.len() + 1));
             let stage = std::time::Instant::now();
-            let added = self.add_context_crates(&context)?;
+            let added = match self.add_context_crates(&context) {
+                Ok(added) => added,
+                Err(error) => {
+                    self.evict_regenerable("failed cfg context registration");
+                    return Err(error);
+                }
+            };
             let entered = stage.elapsed();
             crate::process_memory::log("cfg context entered");
             if pending.is_merged() && declares_a_name_twice(&self.db, &added.crate_set()) {
@@ -284,6 +290,7 @@ impl SourceDatabase {
                 for half in pending.halves().into_iter().rev() {
                     wanted.queue.push_front(half);
                 }
+                self.finish_context(&added, "split cfg context");
                 continue;
             }
             let index = u32::try_from(analysed.len()).unwrap_or(u32::MAX);
@@ -295,32 +302,37 @@ impl SourceDatabase {
                 context: &added,
             };
             let stage = std::time::Instant::now();
-            self.harvest(&context, index, &pairs, &files, graph)?;
+            let outcome = self.harvest(&context, index, &pairs, &files, graph);
             let harvested = stage.elapsed();
             crate::process_memory::log("cfg context harvested");
+            let outcome = outcome.and_then(|()| {
+                let stage = std::time::Instant::now();
+                #[cfg(feature = "tracing")]
+                self.merge_context_observability(graph, &added)?;
+                let merged = stage.elapsed();
+                let stage = std::time::Instant::now();
+                if automatic {
+                    wanted.add(asked(
+                        &self.db,
+                        &context,
+                        &mut covered,
+                        None,
+                        &added.crate_set(),
+                        &added.originals(),
+                    ));
+                }
+                Ok((merged, stage.elapsed()))
+            });
+            // Observability and gate discovery still read this context after harvesting.
+            // Ask for eviction only once those consumers have finished.
             let stage = std::time::Instant::now();
-            self.evict_regenerable("cfg context");
+            self.finish_context(&added, "cfg context");
             if crate::memory_limit::pressured() {
                 graph.drop_decoded_attrs();
             }
-            let evicted = stage.elapsed();
-            let stage = std::time::Instant::now();
-            #[cfg(feature = "tracing")]
-            self.merge_context_observability(graph, &added)?;
-            let merged = stage.elapsed();
-            let stage = std::time::Instant::now();
-            if automatic {
-                wanted.add(asked(
-                    &self.db,
-                    &context,
-                    &mut covered,
-                    None,
-                    &added.crate_set(),
-                    &added.originals(),
-                ));
-            }
-            let planned = stage.elapsed();
+            let finished = stage.elapsed();
             drop(watch);
+            let (merged, planned) = outcome?;
             // What a process that takes up the run needs to go on from here is kept, and the process
             // ends here if it is the kind that does.
             let state = self.contexts_state(analysed, &wanted, &covered);
@@ -332,7 +344,7 @@ impl SourceDatabase {
                 queued = wanted.queue.len(),
                 entered_ms = entered.as_millis() as u64,
                 harvested_ms = harvested.as_millis() as u64,
-                evicted_ms = evicted.as_millis() as u64,
+                finished_ms = finished.as_millis() as u64,
                 observability_ms = merged.as_millis() as u64,
                 planned_ms = planned.as_millis() as u64,
                 "cfg context analysed"

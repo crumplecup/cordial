@@ -1,6 +1,6 @@
 # Memory measurement and reduction using upstream Hotpath
 
-Status: **Upstream restoration, phases 3–4, narrow phase 5–6 reductions, phase 7 cold measurement review and getter scope reduction complete; cfg-context lifetime and stable IR identity are next, 2026-11-21.**
+Status: **Upstream restoration, phases 3–4, narrow phase 5–6 reductions, phase 7 cold measurement review, getter scope reduction and cfg-context last-consumer checkpoint complete; selective context retirement and stable IR identity are next, 2026-11-21.**
 The immediate checkpoints restored published Hotpath with focused consumer
 tests and removed the graph-sized serialization copy. Existing measurement
 gaps are accepted and documented; they do not block application improvements.
@@ -780,9 +780,10 @@ enabled. Formatting, `cargo clippy --offline --all-features --all-targets --
 copied crate/file registrations and keeps every context in `context_crates`.
 Unchanged files may alias ordinary files; copied files share their original's
 text allocation. Each copied crate still has separate definition maps and
-context-dependent query results. The existing eviction hook is conditional,
-does not retire a context, and runs before observability and planning have
-finished reading it. Removing a `ContextCrates` handle alone would not free
+context-dependent query results. The existing eviction hook is conditional
+and does not retire a context. It now runs after observability, planning and
+optional persistence fingerprint preparation have finished reading it.
+Removing a `ContextCrates` handle alone would not free
 Salsa's memo values, dependency records or interned identities.
 
 The target working set is shared workspace/dependency state plus **one active
@@ -837,6 +838,26 @@ Each step has its own focused Nextest, formatting, all-feature/all-target Clippy
 and diff gate, followed by a commit. No Cordial self-run or further full-program
 measurement is part of these steps. Remaining conversion-collector and generic
 semantic/persistence optimizations stay behind this context work.
+
+**Step 1 checkpoint.** Library and leaf passes now finish observability and
+follow-up discovery before asking for eviction, including rejected merged
+contexts and harvest failures. Registration failures also reach the existing
+eviction hook. When cross-edit persistence is enabled, each context prepares
+its persisted fingerprints before eviction; otherwise the final save could
+rebuild its semantic indexes. The final save reuses these fingerprints.
+The lifecycle descriptions now distinguish shared source text from separate
+syntax and semantic values. This checkpoint does not yet select context-only
+memos or make retained RAM bounded.
+
+All 51 focused Nextest tests passed with `hotpath-alloc`: `cfg_contexts`,
+`context_crates`, `context_reuse`, `context_parses`, `saved_contexts`,
+`tracing_print_contexts` and `tracing_apply_proof_context`. The new two-context
+fixture checks fingerprint execution at the context boundary, reuse at the
+final save and reuse after restoration. Cargo metadata subprocesses require
+registry access even when the outer Cargo invocation is offline; the complete
+successful run allowed that access. Formatting, all-feature/all-target Clippy
+with warnings denied and diff checks passed. No Cordial self-execution or
+full-program measurement ran.
 
 **Selective-eviction design to review in step 2.** Prefer extending the existing
 Salsa eviction operation with a dependency-based selection: seeds are the
