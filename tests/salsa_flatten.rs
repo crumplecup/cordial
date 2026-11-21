@@ -673,6 +673,17 @@ enum Trips {
 enum Format {
     Json,
     MessagePack,
+    JsonReader,
+    MessagePackReader,
+}
+
+impl Format {
+    const ALL: [Self; 4] = [
+        Self::Json,
+        Self::MessagePack,
+        Self::JsonReader,
+        Self::MessagePackReader,
+    ];
 }
 
 fn round_trip(db: &mut Db) -> (Db, String) {
@@ -705,12 +716,33 @@ fn round_trip_in(db: &mut Db, format: Format) -> (Db, usize) {
             .unwrap_or_else(|error| panic!("deserializing: {error}"));
             (restored, saved.len())
         }
+        Format::JsonReader => {
+            let saved = serde_json::to_vec(&<dyn Database>::as_serialize(db))
+                .unwrap_or_else(|error| panic!("serializing: {error}"));
+            let mut restored = Db::default();
+            let reader = std::io::BufReader::with_capacity(7, saved.as_slice());
+            <dyn Database>::deserialize(
+                &mut restored,
+                &mut serde_json::Deserializer::from_reader(reader),
+            )
+            .unwrap_or_else(|error| panic!("deserializing from reader: {error}"));
+            (restored, saved.len())
+        }
+        Format::MessagePackReader => {
+            let saved = rmp_serde::to_vec(&<dyn Database>::as_serialize(db))
+                .unwrap_or_else(|error| panic!("serializing: {error}"));
+            let mut restored = Db::default();
+            let reader = std::io::BufReader::with_capacity(7, saved.as_slice());
+            <dyn Database>::deserialize(&mut restored, &mut rmp_serde::Deserializer::new(reader))
+                .unwrap_or_else(|error| panic!("deserializing from reader: {error}"));
+            (restored, saved.len())
+        }
     }
 }
 
 /// Every way of saving and restoring that a test runs its changes after.
 fn all_ways() -> Vec<(Format, Trips)> {
-    [Format::Json, Format::MessagePack]
+    Format::ALL
         .into_iter()
         .flat_map(|format| [Trips::Once, Trips::Twice].map(|trips| (format, trips)))
         .collect()
@@ -1315,7 +1347,7 @@ fn sized_after_an_edit_to_the_second_group(asked: Asked, format: Format) -> usiz
 
 #[test]
 fn a_query_with_no_fingerprint_asked_for_is_walked_through_and_not_depended_on() {
-    for format in [Format::Json, Format::MessagePack] {
+    for format in Format::ALL {
         assert_eq!(
             sized_after_an_edit_to_the_second_group(Asked::BothGroups, format),
             0,
@@ -1398,7 +1430,7 @@ fn read_through_a_struct_after(cutoff: Cutoff, format: Format, edit: Edit) -> us
 
 #[test]
 fn a_query_read_through_a_tracked_struct_it_made_has_its_fingerprint_depended_on_too() {
-    for format in [Format::Json, Format::MessagePack] {
+    for format in Format::ALL {
         assert_eq!(
             read_through_a_struct_after(Cutoff::Registered, format, Edit::LeavesTheShape),
             0,

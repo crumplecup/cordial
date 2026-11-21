@@ -1257,6 +1257,12 @@ mod persistence {
         }
     }
 
+    // Slice deserializers can lend a key; reader deserializers reuse their input buffers.
+    // The borrowing annotation makes Serde keep the former borrowed and own only the latter.
+    #[derive(serde::Deserialize)]
+    #[serde(transparent)]
+    struct IngredientKey<'a>(#[serde(borrow)] std::borrow::Cow<'a, str>);
+
     pub struct DeserializeIngredient<'db, C>
     where
         C: Configuration,
@@ -1299,7 +1305,7 @@ mod persistence {
             let mut _sets = None;
             let mut universe: Vec<QueryEdge> = Vec::new();
 
-            while let Some(key) = access.next_key::<&str>()? {
+            while let Some(IngredientKey(key)) = access.next_key()? {
                 if key == "universe" {
                     universe = access.next_value()?;
                     continue;

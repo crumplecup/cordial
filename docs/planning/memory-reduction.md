@@ -1,6 +1,6 @@
 # Memory measurement and reduction using upstream Hotpath
 
-Status: **Upstream restoration and phases 3–4 complete; phase 5 measured, streaming restore needs dependency review, 2026-11-21.**
+Status: **Upstream restoration and phases 3–4 complete; phase 5 measured and Salsa reader compatibility tested, buffered restore pending, 2026-11-21.**
 The immediate checkpoints restored published Hotpath with focused consumer
 tests and removed the graph-sized serialization copy. Existing measurement
 gaps are accepted and documented; they do not block application improvements.
@@ -359,6 +359,32 @@ partially restored database is discarded. All nine tests in `saved_state` and
 all-target Clippy with warnings denied, and diff checks passed. Each Cargo
 command ran only after the previous one exited. No Cordial CLI or full-program
 workload ran.
+
+## Checkpoint — Let Salsa read keys from slices or readers
+
+The separately reviewed dependency scope is limited to accepting borrowed or
+owned ingredient-map keys. A private transparent key type uses `Cow<str>` with
+Serde's explicit borrowing annotation. Its generated visitor keeps slice-backed
+keys borrowed, accepts temporary strings from reader buffers, and moves owned
+strings when the deserializer supplies them. Each key is dropped after its map
+entry; it is not retained in the database. No encoder or wire format changes.
+
+The shared-set dependency fixture now restores JSON and MessagePack from both
+borrowed input and seven-byte buffered readers. The reader case first reproduced
+the borrowed-string failure without the decoder change. Existing checks cover
+repeated restores, selective invalidation after direct and shared-input edits,
+and tracked-field cutoff behavior. A reader-specific lazy-value fixture confirms
+that restore decodes no memo payloads, reads reuse saved queries, resaving keeps
+the exact MessagePack bytes without encoding values again, and a later edit
+still invalidates what it reaches. Thirty-one Salsa persistence tests and nine
+Cordial saved-state tests passed through Nextest across sequential Cargo runs.
+Formatting, all-feature/all-target Clippy with warnings denied, and diff checks
+passed. Cargo jobs ran sequentially; no Cordial CLI or full-program workload ran.
+
+Cordial still reads the complete Salsa file before decoding. This adjustment
+only enables reader compatibility; it does not itself remove that buffer or
+establish a RAM reduction. Buffered Cordial restore and a matched allocation
+comparison remain a subsequent checkpoint.
 
 ## Phase 1 — Restore upstream use and finish measurement infrastructure
 

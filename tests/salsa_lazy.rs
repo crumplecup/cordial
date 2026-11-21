@@ -162,3 +162,36 @@ fn an_edit_reaches_a_value_that_was_never_decoded() {
         "and only what was read ran"
     );
 }
+
+/// Reader-backed map keys do not force lazy memo values to decode or queries to run.
+#[test]
+fn a_streaming_restore_keeps_values_lazy_and_the_saved_bytes_unchanged() {
+    let mut db = Db::default();
+    Source::new(&db, 1);
+    read(&db, KEYS);
+    let saved = rmp_serde::to_vec(&<dyn Database>::as_serialize(&mut db))
+        .unwrap_or_else(|error| panic!("serializing: {error}"));
+    drop(db);
+
+    let decoded = DECODED.load(Ordering::SeqCst);
+    let executed = EXECUTED.load(Ordering::SeqCst);
+    let encoded = ENCODED.load(Ordering::SeqCst);
+    let mut restored = Db::default();
+    let reader = std::io::BufReader::with_capacity(7, saved.as_slice());
+    <dyn Database>::deserialize(&mut restored, &mut rmp_serde::Deserializer::new(reader))
+        .unwrap_or_else(|error| panic!("deserializing from reader: {error}"));
+    assert_eq!(DECODED.load(Ordering::SeqCst), decoded);
+    assert_eq!(EXECUTED.load(Ordering::SeqCst), executed);
+
+    assert_eq!(read(&restored, 5)[3], "3:1");
+    assert_eq!(DECODED.load(Ordering::SeqCst) - decoded, 5);
+    assert_eq!(EXECUTED.load(Ordering::SeqCst), executed);
+    let again = rmp_serde::to_vec(&<dyn Database>::as_serialize(&mut restored))
+        .unwrap_or_else(|error| panic!("serializing again: {error}"));
+    assert_eq!(ENCODED.load(Ordering::SeqCst), encoded);
+    assert_eq!(again, saved);
+
+    Source::get(&restored).set_value(&mut restored).to(2);
+    assert_eq!(read(&restored, 3)[1], "1:2");
+    assert_eq!(EXECUTED.load(Ordering::SeqCst) - executed, 3);
+}
