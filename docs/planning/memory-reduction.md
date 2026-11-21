@@ -880,6 +880,61 @@ reliably and cheaply, review explicit context ownership or database replacement
 with its recomputation cost before choosing an implementation. Do not silently
 fall back to flushing every query or mutating ordinary cfg inputs.
 
+**Step 2 storage gap, verified in source and a fixture, 2026-11-21.** Query memo selection
+alone cannot release every large context payload. In
+`vendor/ra_ap_hir_def/src/nameres.rs`, `crate_local_def_map` is a persisted
+query returning a `DefMapPair` tracked-struct handle. The tracked struct owns
+the `DefMap` and `LocalDefMap`; the function memo owns the handle. Salsa's
+current `values_in_memory` and `spill_persisted` implementations visit function
+memos, not tracked-struct fields. Spilling that query therefore spills its
+handle and leaves the maps in the tracked-struct table. Block definition maps,
+which are direct query values, have a different ownership path.
+
+The `salsa_context_retention` fixture models these two paths using 1, 4 and 16
+context inputs and weak lifetime markers. After global regenerable eviction
+and persisted spilling, original direct-query payloads are released,
+while tracked-struct payloads remain until the database is dropped. Encoded
+data stays in the fixture's in-memory store; this checks original-object
+ownership rather than total heap bytes or RSS. This fixture must become a
+release/re-entry check when the storage gap is addressed.
+
+The step-2 design review must explicitly cover this payload storage, before
+implementing dependency selection:
+
+| Candidate | Concrete change and checks | Tradeoff |
+| --- | --- | --- |
+| Move RA map payloads into query-owned values | Replace the payload-bearing tracked `DefMapPair` with query-owned data; retain module/block identities. Prove external-map versus local-map invalidation, module identity after recomputation, persistence and stable fingerprints. Then exercise release through the existing spill store. | Narrower storage change, but field-level backdating and the saved representation require care. Do not silently discard incremental reuse. |
+| Spill tracked payload fields within Salsa | Keep tracked identity/revision records and add lazy field storage through the existing spill store. Prove field borrowing, update/invalidation, restore and failure behavior before connecting context selection. | Preserves RA's data model but broadens Salsa's storage and unsafe lifetime obligations. This is a larger change and needs explicit review. |
+| Discard a separate context database | Materialize stable IR facts, then drop the entire database. Verify that no RA handle crosses the boundary. | Bounds that database's working set but may rebuild shared dependencies for every context; compare that cost before choosing it. |
+
+Prefer investigating the narrow RA payload change first, with the current
+tracked module/block identities retained. A concrete candidate is a persisted,
+ordinary query result owning `Arc<DefMap>` and `Arc<LocalDefMap>`, with separate
+tracked projection queries for external and local reads. The projections would
+clone the `Arc`, not the maps, and independently backdate equal results. Their
+non-persisted memo values must be evicted as well as spilling the owning result;
+otherwise a projection can keep the maps alive. Keep module creation in the
+same owner query so that changing payload storage does not deliberately change
+its tracked identity path. This is a candidate to validate, not an assertion
+that the existing invalidation and identity guarantees follow automatically.
+The review checks must include a local-prelude-only edit that leaves an
+external consumer's result reusable, a public-definition edit that invalidates
+it, ownership release after all projection references are evicted, re-entry
+with equal module identities, and cold/restored fingerprint equality. A plain
+pair replacement without these independent projections could broaden
+invalidation and is not the proposed implementation.
+
+The context-selection API remains necessary for
+other semantic memos and for retaining shared ordinary/dependency work. No
+storage redesign or new Salsa selection API has been implemented at this
+checkpoint. All 12 focused Nextest tests passed across `salsa_context_retention`,
+`salsa_eviction`, `salsa_spill` and `salsa_tracked_identity`, with `hotpath-alloc`.
+Formatting, all-feature/all-target Clippy with warnings denied and diff checks
+passed. No Cordial self-execution or full-program measurement ran.
+Stable IR identity remains the next ordered architectural step;
+stable identity by itself does not release a tracked payload or prove that a
+semantic fact is invariant across cfg contexts.
+
 ## Historical evidence
 
 The first cold capture used Cordial `65cbde11` against `elicit_doc` `8d2968a7`,
