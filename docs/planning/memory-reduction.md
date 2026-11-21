@@ -1,6 +1,6 @@
 # Memory measurement and reduction using upstream Hotpath
 
-Status: **Upstream restoration, phases 3–4, narrow phase 5–6 reductions, phase 7 cold measurement review, getter scope reduction, query-owned RA definition maps and direct-key map retirement complete; indirectly keyed context storage and stable IR identity remain, 2026-11-21.**
+Status: **Upstream restoration, phases 3–4, narrow phase 5–6 reductions, phase 7 cold measurement review, getter scope reduction, query-owned RA definition maps and crate/tracked-output value retirement complete; interned/composite context keys and stable IR identity remain, 2026-11-21.**
 The immediate checkpoints restored published Hotpath with focused consumer
 tests and removed the graph-sized serialization copy. Existing measurement
 gaps are accepted and documented; they do not block application improvements.
@@ -782,10 +782,12 @@ Unchanged files may alias ordinary files; copied files share their original's
 text allocation. Each copied crate still has separate definition maps and
 context-dependent query results. The last-consumer boundary now follows
 observability, planning and optional persistence fingerprint preparation.
-Direct-key map retirement now runs there: non-persisted values keyed by copied
-crates are dropped, and persisted values spill when a run cache is available,
-even without memory pressure. The existing broader eviction hook remains
-conditional and does not select individual contexts.
+Retirement now runs there for copied crate keys and tracked identities created
+by queries on those keys, transitively. Selected non-persisted values are
+dropped, and persisted values spill when a run cache is available, even without
+memory pressure. Interned fields and composite arguments do not yet propagate
+selection. The existing broader eviction hook remains conditional and does not
+select individual contexts.
 Removing a `ContextCrates` handle alone would not free
 Salsa's memo values, dependency records or interned identities.
 
@@ -1104,6 +1106,57 @@ Validation passed: all 74 tests across the 12 focused storage, cfg-context,
 saved-state and tracing/apply binaries with `hotpath-alloc`; formatting;
 all-feature/all-target Clippy with warnings denied; and diff checks. No Cordial
 self-execution or full-program measurement was used.
+
+**Tracked-output selection design, 2026-11-21.** Extend the exact-key selector
+using the tracked identities already recorded in each memo's query revisions.
+Starting with the copied crate IDs, inspect only the query ingredients attached
+to each selected key's struct ingredient. Add the tracked structs those queries
+created, and repeat for newly selected keys. Deduplicate keys in a temporary
+worklist; do not copy dependency edges, execute queries, decode values, or scan
+all allocated slots. Keep the existing direct-key drop/spill APIs unchanged.
+
+Review of the storage path confirms that these producer lists survive value
+dropping, spilling and saved-state serialization. They describe identities
+created directly by the query, rather than identities merely read or returned
+from another query. This distinction preserves shared dependency work first
+warmed during a context. Follow only these producer records, not ordinary read
+edges or specified-query outputs whose keys may belong to shared storage.
+Collect the complete selection before dropping any values, with exclusive
+database access and the existing memo inspection lifetime rules.
+
+Check 1/4/16 contexts, nested tracked outputs, shared work created during a
+context, empty/duplicate seeds, repeated retirement, original allocation
+release, re-entry and cold/saved state. Also exercise actual RA module-keyed
+values alongside crate maps. This extends retirement to direct tracked-output
+keys; it does not select interned locations or argument tuples by their fields,
+recover absent non-persisted producer memos after restore, or reclaim inputs,
+identity fields, memo headers or replaced memos. Step 2 remains partial.
+
+**Tracked-output retirement checkpoint, 2026-11-21.** Implemented the design
+above with an exclusive-access key collector over existing memo producer lists.
+It visits registered query ingredients only for selected struct keys, follows
+their tracked outputs transitively and deduplicates the temporary worklist.
+There is no new ownership graph, serialized field or slot scan. The existing
+last-consumer retirement path collects these keys before its existing drop/spill
+walks; without a store, persisted owners remain intact as before.
+
+The 1/4/16-context fixture releases original persisted and regenerable payloads
+keyed by modules and nested tracked outputs. Ordinary/dependency values remain
+resident, including dependency work first created inside a context and a shared
+identity returned by a context-keyed query. Empty/duplicate selections, repeated
+retirement, saved re-entry without producer execution, key collection without
+decoding values, and changed producer identities after edits all pass. The native RA
+fixture selects real module identities produced by the definition-map owner,
+retires their test payloads alongside maps, preserves dependency module/map
+values and re-enters with the same identities without definition-map collection.
+
+All 76 tests across the 12 storage, cfg-context, saved-state and tracing/apply
+binaries passed with `hotpath-alloc`. Formatting, all-feature/all-target Clippy
+with warnings denied, and diff checks passed. No Cordial self-execution or
+full-program measurement was used. These checks establish original allocation
+lifetime and memo residency, not a retained-byte total. Interned locations,
+composite keys, absent non-persisted producer records after restore and bounded
+input/identity/header storage remain outside this checkpoint; step 2 is partial.
 
 ## Historical evidence
 

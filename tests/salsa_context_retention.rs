@@ -14,6 +14,7 @@ static FIXTURE: Mutex<()> = Mutex::new(());
 static OWNERS: AtomicUsize = AtomicUsize::new(0);
 static EXTERNAL_READS: AtomicUsize = AtomicUsize::new(0);
 static LOCAL_READS: AtomicUsize = AtomicUsize::new(0);
+static MODULE_PRODUCERS: AtomicUsize = AtomicUsize::new(0);
 
 #[salsa::input(persist)]
 struct Context {
@@ -197,6 +198,162 @@ fn remembered_module(db: &dyn Database, inputs: MapInputs) -> Module<'_> {
 #[salsa::tracked(returns(ref), persist)]
 fn module_payload(db: &dyn Database, module: Module<'_>) -> Payload {
     Payload::new(*module.name(db))
+}
+
+#[salsa::input(persist)]
+struct ModuleContext {
+    #[returns(copy)]
+    name: usize,
+    #[returns(copy)]
+    dependency: MapInputs,
+}
+
+/// Returning another query's identity does not make it an output of this query.
+#[salsa::tracked(returns(copy), persist)]
+fn referenced_module(db: &dyn Database, context: ModuleContext) -> Module<'_> {
+    maps(db, context.dependency(db)).module
+}
+
+#[salsa::tracked(returns(copy), persist)]
+fn context_module(db: &dyn Database, context: ModuleContext) -> Module<'_> {
+    MODULE_PRODUCERS.fetch_add(1, Ordering::SeqCst);
+    let shared = referenced_module(db, context);
+    module_payload(db, shared);
+    Module::new(db, context.name(db))
+}
+
+#[salsa::tracked(returns(copy), persist)]
+fn child_module<'db>(db: &'db dyn Database, module: Module<'db>) -> Module<'db> {
+    MODULE_PRODUCERS.fetch_add(1, Ordering::SeqCst);
+    Module::new(db, *module.name(db) + 1)
+}
+
+#[salsa::tracked(returns(ref))]
+fn scratch_module_payload(db: &dyn Database, module: Module<'_>) -> Payload {
+    Payload::new(*module.name(db))
+}
+
+fn module_markers(db: &Db, modules: &[Module<'_>]) -> Vec<Weak<()>> {
+    modules
+        .iter()
+        .flat_map(|&module| {
+            [
+                Arc::downgrade(&module_payload(db, module).alive),
+                Arc::downgrade(&scratch_module_payload(db, module).alive),
+            ]
+        })
+        .collect()
+}
+
+/// Producer records select keys even when their payloads have no input dependencies, without
+/// following reads into shared work or treating a returned shared identity as newly created.
+#[test]
+fn tracked_outputs_release_nested_module_payloads_and_preserve_shared_work() {
+    let _fixture = FIXTURE.lock().unwrap();
+    let _reset = ResetSpillStore;
+    for contexts in [1, 4, 16] {
+        salsa::set_spill_store(Some(Arc::new(EncodedStore::default())));
+        let mut db = Db::default();
+        assert!(db.tracked_output_keys(&[]).is_empty());
+        let ordinary = MapInputs::new(&db, 100, 101, 102);
+        let ordinary_module = maps(&db, ordinary).module;
+        let ordinary_markers = module_markers(&db, &[ordinary_module]);
+        let dependency = MapInputs::new(&db, 200, 201, 202);
+        let mut expected = Vec::new();
+        let mut originals = Vec::new();
+        for _ in 0..contexts {
+            // Identical names still have context-specific producing keys.
+            let context = ModuleContext::new(&db, 7, dependency);
+            let root = context_module(&db, context);
+            let child = child_module(&db, root);
+            let grandchild = child_module(&db, child);
+            let modules = [root, child, grandchild];
+            let owned = module_markers(&db, &modules);
+            originals.extend(owned);
+            let identities = modules.map(|module| module.as_id());
+            let mut wanted: Vec<_> = std::iter::once(context.as_id()).chain(identities).collect();
+            wanted.sort();
+            let mut selected = db.tracked_output_keys(&[context.as_id(), context.as_id()]);
+            selected.sort();
+            assert_eq!(selected, wanted);
+            let shared = module_markers(&db, &[maps(&db, dependency).module]);
+            let producers = MODULE_PRODUCERS.load(Ordering::SeqCst);
+            retire_inputs(&mut db, &selected);
+            assert_eq!(
+                live(&originals),
+                0,
+                "completed module allocations are released"
+            );
+            assert_eq!(live(&ordinary_markers), 2);
+            assert_eq!(live(&shared), 2);
+            assert_eq!(MODULE_PRODUCERS.load(Ordering::SeqCst), producers);
+            assert_eq!(db.tracked_output_keys(&[context.as_id()]).len(), 4);
+            assert_eq!(held_for(&mut db, &selected, "module_payload"), 0);
+            expected.push((context, identities));
+        }
+
+        for restored in [false, true] {
+            if restored {
+                db = restore(&save(&mut db));
+            }
+            let producers = MODULE_PRODUCERS.load(Ordering::SeqCst);
+            let owners = OWNERS.load(Ordering::SeqCst);
+            for (context, identities) in &expected {
+                // Inspect and retire before re-entry, including after restoring spilled memos.
+                let selected = db.tracked_output_keys(&[context.as_id()]);
+                assert_eq!(selected.len(), 4);
+                for id in identities {
+                    assert!(selected.contains(id));
+                }
+                assert_eq!(held_for(&mut db, &selected, "module_payload"), 0);
+                retire_inputs(&mut db, &selected);
+                let root = context_module(&db, *context);
+                let child = child_module(&db, root);
+                let grandchild = child_module(&db, child);
+                let modules = [root, child, grandchild];
+                assert_eq!(modules.map(|module| module.as_id()), *identities);
+                let decoded = module_markers(&db, &modules);
+                for (module, value) in modules.into_iter().zip([7, 8, 9]) {
+                    assert_eq!(module_payload(&db, module).bytes[0], value);
+                }
+                retire_inputs(&mut db, &selected);
+                assert_eq!(live(&decoded), 0);
+                assert_eq!(
+                    module_payload(&db, maps(&db, ordinary).module).bytes[0],
+                    100
+                );
+                assert_eq!(
+                    module_payload(&db, maps(&db, dependency).module).bytes[0],
+                    200
+                );
+            }
+            assert_eq!(MODULE_PRODUCERS.load(Ordering::SeqCst), producers);
+            assert_eq!(OWNERS.load(Ordering::SeqCst), owners);
+        }
+    }
+}
+
+#[test]
+fn tracked_output_selection_uses_the_current_producers_after_an_edit() {
+    let _fixture = FIXTURE.lock().unwrap();
+    let mut db = Db::default();
+    let dependency = MapInputs::new(&db, 100, 101, 102);
+    let context = ModuleContext::new(&db, 7, dependency);
+    let original = context_module(&db, context);
+    let original_child = child_module(&db, original);
+    let previous = [original.as_id(), original_child.as_id()];
+    assert_eq!(db.tracked_output_keys(&[context.as_id()]).len(), 3);
+
+    context.set_name(&mut db).to(8);
+    let changed = context_module(&db, context);
+    let changed_child = child_module(&db, changed);
+    assert_eq!(module_payload(&db, changed_child).bytes[0], 9);
+    let current = [changed.as_id(), changed_child.as_id()];
+    let selected = db.tracked_output_keys(&[context.as_id()]);
+    assert_eq!(selected.len(), 3);
+    assert!(current.iter().all(|id| selected.contains(id)));
+    assert!(previous.iter().all(|id| !selected.contains(id)));
+    assert_eq!(maps(&db, dependency).external.bytes[0], 101);
 }
 
 /// Inspect only the existing saved dependency representation; this does not classify ownership.

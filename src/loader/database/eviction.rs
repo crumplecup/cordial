@@ -286,8 +286,8 @@ impl SourceDatabase {
         }
     }
 
-    /// Retire memos keyed directly by completed context crate inputs. Definition-map owners
-    /// and projections use these keys; indirectly keyed semantic values are left for later work.
+    /// Retire values keyed by completed context crates and their queries' tracked outputs.
+    /// Interned locations and composite query keys still require a separate ownership rule.
     #[instrument(level = "debug", skip(self, inputs))]
     #[hotpath::measure(impl_type = "SourceDatabase")]
     pub(super) fn retire_context_values(&mut self, inputs: &[salsa::Id], after: &str) {
@@ -296,18 +296,19 @@ impl SourceDatabase {
         }
         let started = std::time::Instant::now();
         let before = crate::process_memory::sample();
+        let keys = salsa::Database::tracked_output_keys(&mut self.db, inputs);
         let spilling = self.begin_spilling();
         let mut selected_regenerable = 0_u64;
         salsa::Database::values_in_memory_for_inputs(
             &mut self.db,
-            inputs,
+            &keys,
             true,
             false,
             &[],
             &mut |_, held| selected_regenerable += held,
         );
         let report = if spilling {
-            salsa::Database::spill_persisted_for_inputs(&mut self.db, inputs)
+            salsa::Database::spill_persisted_for_inputs(&mut self.db, &keys)
         } else {
             salsa::SpillReport::default()
         };
@@ -316,6 +317,7 @@ impl SourceDatabase {
             step = after,
             micros = u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX),
             inputs = inputs.len(),
+            keys = keys.len(),
             selected_regenerable,
             spilling,
             spilled = report.written,
@@ -323,7 +325,7 @@ impl SourceDatabase {
             dropped_again = report.dropped_again,
             resident_before_kib = before.map_or(0, |sample| sample.resident_kib()),
             resident_after_kib = crate::process_memory::sample().map_or(0, |sample| sample.resident_kib()),
-            "retired values keyed directly by completed context crates"
+            "retired values keyed by completed context crates and tracked outputs"
         );
     }
 

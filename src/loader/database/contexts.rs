@@ -7,9 +7,10 @@
 //! and syntax trees. Context-specific semantic results are copied into the IR.
 //!
 //! Harvesting, observability and follow-up gate discovery must finish before
-//! the pass retires values keyed directly by the context's copied crate inputs,
-//! including definition maps. Other eviction follows the run's pressure policy;
-//! indirectly keyed semantic values and copied inputs can still accumulate.
+//! the pass retires values keyed by copied crates and tracked outputs of their
+//! queries, including definition maps and module-keyed values. Other eviction
+//! follows the run's pressure policy; interned/composite keys and copied inputs
+//! can still accumulate.
 
 mod copy_functions;
 mod flips;

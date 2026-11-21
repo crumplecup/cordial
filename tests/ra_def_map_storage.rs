@@ -43,6 +43,15 @@ fn native_def_map_fingerprint(db: &dyn SourceDatabase, krate: Crate) -> u64 {
     fingerprint.hash
 }
 
+/// Use RA's real tracked module key with an immutable-field-only payload query.
+#[salsa::tracked(persist, returns(ref))]
+fn native_module_payload(
+    db: &dyn SourceDatabase,
+    module: ra_ap_hir_def::ModuleIdLt<'_>,
+) -> Vec<u8> {
+    vec![u8::from(module.containing_module_inside_def_map(db).is_some()); 4096]
+}
+
 struct Fixture {
     db: RootDatabase,
     graph: CrateGraphBuilder,
@@ -320,11 +329,29 @@ fn retiring_one_crate_preserves_dependency_maps_and_reenters_without_collection(
             let modules = fixture.modules();
             let fingerprint = def_map_fingerprint(&fixture.db, fixture.krate);
             ra_ap_hir_def::lang_item::lang_items(&fixture.db, fixture.krate);
+            let dependency_modules: Vec<_> = crate_def_map(&fixture.db, dependency)
+                .modules()
+                .map(|(id, _)| id)
+                .collect();
+            for &module in modules.iter().chain(&dependency_modules) {
+                native_module_payload(&fixture.db, module);
+            }
             if restored {
                 fixture.restore();
                 for krate in [fixture.krate, dependency] {
                     external_items(&fixture.db, krate);
                     ra_ap_hir_def::lang_item::lang_items(&fixture.db, krate);
+                }
+                let selected = fixture.db.tracked_output_keys(&[fixture.krate.as_id()]);
+                assert!(
+                    modules
+                        .iter()
+                        .all(|module| selected.contains(&module.as_id()))
+                );
+                // Persisted payloads restore as encoded bytes. Warm both sides so the
+                // retirement check below compares decoded resident values.
+                for &module in modules.iter().chain(&dependency_modules) {
+                    native_module_payload(&fixture.db, module);
                 }
             }
             let held_maps = |db: &mut RootDatabase, krate: Crate| {
@@ -345,7 +372,13 @@ fn retiring_one_crate_preserves_dependency_maps_and_reenters_without_collection(
             assert_eq!(held_maps(&mut fixture.db, dependency), shared_held);
             assert_eq!(executions.0.load(Ordering::SeqCst), 2);
             for _ in 0..2 {
-                let inputs = [fixture.krate.as_id()];
+                let inputs = fixture.db.tracked_output_keys(&[fixture.krate.as_id()]);
+                for module in &modules {
+                    assert!(inputs.contains(&module.as_id()));
+                }
+                for module in &dependency_modules {
+                    assert!(!inputs.contains(&module.as_id()));
+                }
                 fixture
                     .db
                     .values_in_memory_for_inputs(&inputs, true, false, &[], &mut |_, _| {});
@@ -353,12 +386,36 @@ fn retiring_one_crate_preserves_dependency_maps_and_reenters_without_collection(
                 assert!(report.written + report.dropped_again > 0);
                 assert_eq!(held_maps(&mut fixture.db, fixture.krate), 0);
                 assert_eq!(held_maps(&mut fixture.db, dependency), shared_held);
+                for (expected, modules) in [(0, &modules), (1, &dependency_modules)] {
+                    for module in modules {
+                        let mut held = 0;
+                        fixture.db.values_in_memory_for_inputs(
+                            &[module.as_id()],
+                            false,
+                            true,
+                            &["native_module_payload"],
+                            &mut |_, count| held += count,
+                        );
+                        assert_eq!(held, expected);
+                    }
+                }
                 let reads = EXTERNAL_READS.load(Ordering::SeqCst);
                 external_items(&fixture.db, dependency);
                 assert_eq!(EXTERNAL_READS.load(Ordering::SeqCst), reads);
                 assert_eq!(fixture.modules(), modules);
                 assert_eq!(def_map_fingerprint(&fixture.db, fixture.krate), fingerprint);
                 ra_ap_hir_def::lang_item::lang_items(&fixture.db, fixture.krate);
+                for &module in &modules {
+                    let expected = u8::from(
+                        module
+                            .containing_module_inside_def_map(&fixture.db)
+                            .is_some(),
+                    );
+                    assert_eq!(
+                        native_module_payload(&fixture.db, module),
+                        &vec![expected; 4096]
+                    );
+                }
                 assert_eq!(executions.0.load(Ordering::SeqCst), 2);
             }
         });

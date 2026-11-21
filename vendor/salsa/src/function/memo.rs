@@ -247,6 +247,11 @@ impl MemoHeader {
         self.revisions.origin()
     }
 
+    /// Tracked identities created by this query, retained independently of its value.
+    pub(crate) fn tracked_output_ids(&self) -> impl Iterator<Item = Id> + '_ {
+        self.revisions.tracked_struct_ids().iter().map(|&(_, id)| id)
+    }
+
     /// What this memo's own query says about a closure that passes through it: when it last
     /// changed, and whether it is a plain derived one (see [`crate::flatten::Closure`]).
     pub(crate) fn closure(&self) -> crate::flatten::Closure {

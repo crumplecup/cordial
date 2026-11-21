@@ -516,6 +516,38 @@ impl Zalsa {
         self.values_in_memory_matching(drop, include_persisted, only, None, after);
     }
 
+    /// Collect exact keys and the tracked outputs of queries keyed by them, transitively.
+    /// Only existing memo producer records are read; no queries execute or values decode.
+    /// Does not follow read dependencies, interned fields, or composite arguments. Missing
+    /// producer memos add no keys. All keys must belong to this database.
+    #[doc(hidden)]
+    pub fn tracked_output_keys(&mut self, inputs: &[Id]) -> Vec<Id> {
+        let mut seen = FxHashSet::default();
+        let mut keys: Vec<_> = inputs.iter().copied().filter(|id| seen.insert(*id)).collect();
+        let mut cursor = 0;
+        while let Some(&key) = keys.get(cursor) {
+            let index = self.ingredient_index(key).as_u32() as usize;
+            // Struct ingredients with no registered queries may have no mapping entry.
+            for &ingredient in self.memo_ingredient_indices.get(index).into_iter().flatten() {
+                let Some(function) = self.lookup_ingredient(ingredient).as_function() else {
+                    continue;
+                };
+                // SAFETY: Exclusive storage access prevents queries, slot reuse and memo
+                // replacement. The mapping lists only queries compatible with this key.
+                let Some(memo) = (unsafe { function.memo_unchecked(self, key) }) else {
+                    continue;
+                };
+                for output in memo.header().tracked_output_ids() {
+                    if seen.insert(output) {
+                        keys.push(output);
+                    }
+                }
+            }
+            cursor += 1;
+        }
+        keys
+    }
+
     /// Like [`Self::values_in_memory`], restricted to memos keyed directly by these inputs.
     /// An empty list selects nothing. This does not follow dependency edges or composite keys.
     #[doc(hidden)]

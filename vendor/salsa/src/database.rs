@@ -63,6 +63,18 @@ pub trait Database: Send + ZalsaDatabase + AsDynDatabase {
         zalsa_mut.values_in_memory(drop, include_persisted, only, |query, held| after(query, held));
     }
 
+    /// Collect these keys and the tracked identities created by queries keyed by them,
+    /// transitively. Uses existing memo producer records without executing queries or
+    /// decoding values. Does not follow reads, interned fields or composite arguments.
+    /// Missing producer memos (including non-persisted ones after restore) add no keys.
+    /// All keys must belong to this database. An empty list selects nothing.
+    ///
+    /// **WARNING:** Just like an ordinary write, this method triggers cancellation.
+    #[doc(hidden)]
+    fn tracked_output_keys(&mut self, inputs: &[crate::Id]) -> Vec<crate::Id> {
+        self.zalsa_mut().tracked_output_keys(inputs)
+    }
+
     /// Like [`Self::values_in_memory`], restricted to query memos keyed directly by `inputs`.
     /// Pass input IDs from this database. An empty list selects nothing; dependency edges,
     /// tracked identities and composite query keys are not followed.
