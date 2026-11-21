@@ -63,6 +63,23 @@ pub trait Database: Send + ZalsaDatabase + AsDynDatabase {
         zalsa_mut.values_in_memory(drop, include_persisted, only, |query, held| after(query, held));
     }
 
+    /// Like [`Self::values_in_memory`], restricted to query memos keyed directly by `inputs`.
+    /// Pass input IDs from this database. An empty list selects nothing; dependency edges,
+    /// tracked identities and composite query keys are not followed.
+    ///
+    /// **WARNING:** Just like an ordinary write, this method triggers cancellation.
+    fn values_in_memory_for_inputs(
+        &mut self,
+        inputs: &[crate::Id],
+        drop: bool,
+        include_persisted: bool,
+        only: &[&str],
+        after: &mut dyn FnMut(&'static str, u64),
+    ) {
+        self.zalsa_mut()
+            .values_in_memory_for_inputs(inputs, drop, include_persisted, only, after);
+    }
+
     /// Drop the values of every query that is not persisted: what a query computes again when
     /// something reads it, and that a saved state does not hold. Returns how many were dropped.
     ///
@@ -80,6 +97,16 @@ pub trait Database: Send + ZalsaDatabase + AsDynDatabase {
     fn spill_persisted(&mut self) -> crate::SpillReport {
         let zalsa_mut = self.zalsa_mut();
         zalsa_mut.spill_persisted()
+    }
+
+    /// Like [`Self::spill_persisted`], restricted to query memos keyed directly by `inputs`.
+    /// Pass input IDs from this database. An empty list selects nothing; dependency edges,
+    /// tracked identities and composite query keys are not followed. Without a spill store,
+    /// persisted values remain resident.
+    ///
+    /// **WARNING:** Just like an ordinary write, this method triggers cancellation.
+    fn spill_persisted_for_inputs(&mut self, inputs: &[crate::Id]) -> crate::SpillReport {
+        self.zalsa_mut().spill_persisted_for_inputs(inputs)
     }
 
     /// A "synthetic write" causes the system to act *as though* some

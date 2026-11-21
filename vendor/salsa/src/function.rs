@@ -388,6 +388,25 @@ where
         self.memo_ingredient_indices.get_zalsa_id(zalsa, id)
     }
 
+    /// Select keys without walking every allocated slot when retiring a few inputs.
+    fn selected_entries<'a>(
+        zalsa: &'a Zalsa,
+        inputs: Option<&'a FxHashSet<Id>>,
+    ) -> impl Iterator<Item = DatabaseKeyIndex> + 'a {
+        let indices = inputs.map(|_| C::SalsaStruct::lookup_ingredient_index(zalsa));
+        let selected = inputs.into_iter().flatten().filter_map(move |&id| {
+            let ingredient = zalsa.ingredient_index(id);
+            indices
+                .as_ref()?
+                .iter()
+                .any(|index| index == ingredient)
+                .then(|| DatabaseKeyIndex::new(ingredient, id))
+        });
+        selected.chain(
+            C::SalsaStruct::entries(zalsa).take(if inputs.is_none() { usize::MAX } else { 0 }),
+        )
+    }
+
     fn view_caster(&self) -> &DatabaseDownCaster<C::DbView> {
         self.view_caster
             .get()
@@ -617,13 +636,14 @@ where
         zalsa: &Zalsa,
         drop: bool,
         include_persisted: bool,
+        inputs: Option<&FxHashSet<Id>>,
     ) -> u64 {
         if drop && C::PERSIST && !include_persisted {
             // Not dropped, and not reported as if it were.
             return 0;
         }
         let mut held = 0;
-        for entry in <C::SalsaStruct<'_> as SalsaStructInDb>::entries(zalsa) {
+        for entry in Self::selected_entries(zalsa, inputs) {
             let memo_ingredient_index = self.memo_ingredient_indices.get(entry.ingredient_index());
             let Some(mut memo) = zalsa
                 .memo_table_for::<C::SalsaStruct<'_>>(entry.key_index())
@@ -649,6 +669,7 @@ where
         zalsa: &Zalsa,
         store: &dyn crate::spill::SpillStore,
         counters: &crate::spill::SpillCounters,
+        inputs: Option<&FxHashSet<Id>>,
     ) {
         #[cfg(feature = "persistence")]
         {
@@ -656,7 +677,7 @@ where
                 return;
             }
             let storage = zalsa.spill_storage();
-            for entry in <C::SalsaStruct<'_> as SalsaStructInDb>::entries(zalsa) {
+            for entry in Self::selected_entries(zalsa, inputs) {
                 let memo_ingredient_index =
                     self.memo_ingredient_indices.get(entry.ingredient_index());
                 let Some(mut memo) = zalsa
@@ -676,7 +697,7 @@ where
             }
         }
         #[cfg(not(feature = "persistence"))]
-        let _ = (zalsa, store, counters);
+        let _ = (zalsa, store, counters, inputs);
     }
 
     unsafe fn verify_persisted_by_closure(&self, zalsa: &Zalsa, db: RawDatabase<'_>) {

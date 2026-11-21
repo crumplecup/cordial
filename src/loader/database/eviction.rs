@@ -266,6 +266,67 @@ impl SourceDatabase {
         crate::memory_limit::resume_exit();
     }
 
+    /// Open the existing run-cache spill store, preserving persisted values if it is unavailable.
+    fn begin_spilling(&mut self) -> bool {
+        if self.spill.is_some() {
+            return true;
+        }
+        let Some(saved) = self.saved.as_ref() else {
+            return false;
+        };
+        match super::spill::Spilling::begin(&saved.spill_path()) {
+            Ok(spilling) => {
+                self.spill = Some(spilling);
+                true
+            }
+            Err(error) => {
+                tracing::warn!(error = ?error, "could not open the file for spilled values");
+                false
+            }
+        }
+    }
+
+    /// Retire memos keyed directly by completed context crate inputs. Definition-map owners
+    /// and projections use these keys; indirectly keyed semantic values are left for later work.
+    #[instrument(level = "debug", skip(self, inputs))]
+    #[hotpath::measure(impl_type = "SourceDatabase")]
+    pub(super) fn retire_context_values(&mut self, inputs: &[salsa::Id], after: &str) {
+        if inputs.is_empty() {
+            return;
+        }
+        let started = std::time::Instant::now();
+        let before = crate::process_memory::sample();
+        let spilling = self.begin_spilling();
+        let mut selected_regenerable = 0_u64;
+        salsa::Database::values_in_memory_for_inputs(
+            &mut self.db,
+            inputs,
+            true,
+            false,
+            &[],
+            &mut |_, held| selected_regenerable += held,
+        );
+        let report = if spilling {
+            salsa::Database::spill_persisted_for_inputs(&mut self.db, inputs)
+        } else {
+            salsa::SpillReport::default()
+        };
+        tracing::info!(
+            target: "cordial::eviction",
+            step = after,
+            micros = u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX),
+            inputs = inputs.len(),
+            selected_regenerable,
+            spilling,
+            spilled = report.written,
+            spilled_bytes = report.bytes,
+            dropped_again = report.dropped_again,
+            resident_before_kib = before.map_or(0, |sample| sample.resident_kib()),
+            resident_after_kib = crate::process_memory::sample().map_or(0, |sample| sample.resident_kib()),
+            "retired values keyed directly by completed context crates"
+        );
+    }
+
     /// If the run is under memory pressure, give the values of persisted memos to the spill file,
     /// which Salsa reads them back from when a query asks for the memo. Needs the database
     /// exclusively, like an eviction, and is for the same moments. Does nothing without a run
@@ -273,20 +334,8 @@ impl SourceDatabase {
     #[instrument(level = "debug", skip(self))]
     #[hotpath::measure(impl_type = "SourceDatabase")]
     pub(super) fn spill_under_pressure(&mut self, after: &str) {
-        if !crate::memory_limit::pressured() {
+        if !crate::memory_limit::pressured() || !self.begin_spilling() {
             return;
-        }
-        if self.spill.is_none() {
-            let Some(saved) = self.saved.as_ref() else {
-                return;
-            };
-            match super::spill::Spilling::begin(&saved.spill_path()) {
-                Ok(spilling) => self.spill = Some(spilling),
-                Err(error) => {
-                    tracing::warn!(error = ?error, "could not open the file for spilled values");
-                    return;
-                }
-            }
         }
         let before = crate::process_memory::sample();
         let started = std::time::Instant::now();

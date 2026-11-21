@@ -7,9 +7,9 @@
 //! and syntax trees. Context-specific semantic results are copied into the IR.
 //!
 //! Harvesting, observability and follow-up gate discovery must finish before
-//! the pass asks for eviction. Eviction currently follows the run's pressure
-//! policy and selects query kinds, not individual contexts; copied inputs and
-//! cached semantic working sets can therefore accumulate across contexts.
+//! the pass retires values keyed directly by the context's copied crate inputs,
+//! including definition maps. Other eviction follows the run's pressure policy;
+//! indirectly keyed semantic values and copied inputs can still accumulate.
 
 mod copy_functions;
 mod flips;
@@ -44,6 +44,11 @@ impl super::SourceDatabase {
                 }
             });
         }
+        let inputs: Vec<_> = context
+            .shadows()
+            .map(|krate| salsa::plumbing::AsId::as_id(&krate))
+            .collect();
+        self.retire_context_values(&inputs, after);
         self.evict_regenerable(after);
     }
 }

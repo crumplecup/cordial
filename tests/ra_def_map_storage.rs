@@ -15,6 +15,7 @@ use ra_ap_ide_db::base_db::{
     SourceRoot, VfsPath,
 };
 use ra_ap_ide_db::span::Edition;
+use salsa::plumbing::AsId;
 use salsa::{Database, SpillKey, SpillStore};
 use tracing_subscriber::layer::SubscriberExt;
 
@@ -296,6 +297,72 @@ fn spilled_maps_reenter_without_collection_and_keep_module_identity() {
             );
         }
     });
+}
+
+#[test]
+fn retiring_one_crate_preserves_dependency_maps_and_reenters_without_collection() {
+    let _fixture = FIXTURE.lock().unwrap();
+    let _reset = ResetStore;
+    for restored in [false, true] {
+        salsa::set_spill_store(Some(Arc::new(Store::default())));
+        let executions = MapExecutions::default();
+        let subscriber = tracing_subscriber::registry().with(executions.clone());
+        tracing::subscriber::with_default(subscriber, || {
+            let mut fixture = Fixture::new();
+            fixture.add_dependency();
+            let dependency = ra_ap_ide_db::base_db::all_crates(&fixture.db)
+                .iter()
+                .copied()
+                .find(|krate| *krate != fixture.krate)
+                .unwrap();
+            external_items(&fixture.db, dependency);
+            ra_ap_hir_def::lang_item::lang_items(&fixture.db, dependency);
+            let modules = fixture.modules();
+            let fingerprint = def_map_fingerprint(&fixture.db, fixture.krate);
+            ra_ap_hir_def::lang_item::lang_items(&fixture.db, fixture.krate);
+            if restored {
+                fixture.restore();
+                for krate in [fixture.krate, dependency] {
+                    external_items(&fixture.db, krate);
+                    ra_ap_hir_def::lang_item::lang_items(&fixture.db, krate);
+                }
+            }
+            let held_maps = |db: &mut RootDatabase, krate: Crate| {
+                let mut held = 0;
+                db.values_in_memory_for_inputs(
+                    &[krate.as_id()],
+                    false,
+                    true,
+                    &["crate_local_def_map", "external_def_map", "local_def_map"],
+                    &mut |_, count| held += count,
+                );
+                held
+            };
+            // Restored lang_items decodes its saved value without reading the non-persisted
+            // local projection. Cold reads warm all three maps; restored reads warm two.
+            let shared_held = if restored { 2 } else { 3 };
+            assert_eq!(held_maps(&mut fixture.db, fixture.krate), shared_held);
+            assert_eq!(held_maps(&mut fixture.db, dependency), shared_held);
+            assert_eq!(executions.0.load(Ordering::SeqCst), 2);
+            for _ in 0..2 {
+                let inputs = [fixture.krate.as_id()];
+                fixture
+                    .db
+                    .values_in_memory_for_inputs(&inputs, true, false, &[], &mut |_, _| {});
+                let report = fixture.db.spill_persisted_for_inputs(&inputs);
+                assert!(report.written + report.dropped_again > 0);
+                assert_eq!(held_maps(&mut fixture.db, fixture.krate), 0);
+                assert_eq!(held_maps(&mut fixture.db, dependency), shared_held);
+                let reads = EXTERNAL_READS.load(Ordering::SeqCst);
+                external_items(&fixture.db, dependency);
+                assert_eq!(EXTERNAL_READS.load(Ordering::SeqCst), reads);
+                assert_eq!(fixture.modules(), modules);
+                assert_eq!(def_map_fingerprint(&fixture.db, fixture.krate), fingerprint);
+                ra_ap_hir_def::lang_item::lang_items(&fixture.db, fixture.krate);
+                assert_eq!(executions.0.load(Ordering::SeqCst), 2);
+            }
+        });
+    }
 }
 
 #[test]

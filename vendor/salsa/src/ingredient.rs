@@ -194,6 +194,7 @@ pub trait Ingredient: Any + fmt::Debug + Send + Sync {
     /// How many of this ingredient's memos hold a value in memory, and, if `drop`, drop those
     /// values (a memo whose value cannot be decoded again from bytes is computed again when
     /// something reads it). Memos whose value cannot be computed again are left alone.
+    /// If `inputs` is present, visit only memos keyed directly by those IDs.
     ///
     /// # Safety
     ///
@@ -207,12 +208,14 @@ pub trait Ingredient: Any + fmt::Debug + Send + Sync {
         _zalsa: &Zalsa,
         _drop: bool,
         _include_persisted: bool,
+        _inputs: Option<&FxHashSet<Id>>,
     ) -> u64 {
         0
     }
 
     /// Write the values of this ingredient's persisted memos to `store` and drop them from memory
     /// (see [`crate::spill`]).
+    /// If `inputs` is present, visit only memos keyed directly by those IDs.
     ///
     /// # Safety
     ///
@@ -224,6 +227,7 @@ pub trait Ingredient: Any + fmt::Debug + Send + Sync {
         _zalsa: &Zalsa,
         _store: &dyn crate::spill::SpillStore,
         _counters: &crate::spill::SpillCounters,
+        _inputs: Option<&FxHashSet<Id>>,
     ) {
     }
 

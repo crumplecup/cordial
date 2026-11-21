@@ -5,7 +5,7 @@ use std::panic::RefUnwindSafe;
 use hashbrown::HashMap;
 use rustc_hash::FxHashMap;
 
-use crate::hash::TypeIdHasher;
+use crate::hash::{FxHashSet, TypeIdHasher};
 use crate::ingredient::{Ingredient, Jar};
 use crate::plumbing::SalsaStructInDb;
 use crate::runtime::Runtime;
@@ -511,6 +511,35 @@ impl Zalsa {
         drop: bool,
         include_persisted: bool,
         only: &[&str],
+        after: impl FnMut(&'static str, u64),
+    ) {
+        self.values_in_memory_matching(drop, include_persisted, only, None, after);
+    }
+
+    /// Like [`Self::values_in_memory`], restricted to memos keyed directly by these inputs.
+    /// An empty list selects nothing. This does not follow dependency edges or composite keys.
+    #[doc(hidden)]
+    pub fn values_in_memory_for_inputs(
+        &mut self,
+        inputs: &[Id],
+        drop: bool,
+        include_persisted: bool,
+        only: &[&str],
+        after: impl FnMut(&'static str, u64),
+    ) {
+        if inputs.is_empty() {
+            return;
+        }
+        let inputs = inputs.iter().copied().collect();
+        self.values_in_memory_matching(drop, include_persisted, only, Some(&inputs), after);
+    }
+
+    fn values_in_memory_matching(
+        &mut self,
+        drop: bool,
+        include_persisted: bool,
+        only: &[&str],
+        inputs: Option<&FxHashSet<Id>>,
         mut after: impl FnMut(&'static str, u64),
     ) {
         for ingredient in self.ingredients() {
@@ -518,7 +547,7 @@ impl Zalsa {
                 continue;
             }
             // SAFETY: `&mut self` is exclusive access to the storage, and the ingredient is its own.
-            let held = unsafe { ingredient.values_in_memory(self, drop, include_persisted) };
+            let held = unsafe { ingredient.values_in_memory(self, drop, include_persisted, inputs) };
             if held > 0 {
                 after(ingredient.debug_name(), held);
             }
@@ -531,13 +560,31 @@ impl Zalsa {
     /// [`crate::set_spill_store`] (nothing if none is set).
     #[doc(hidden)]
     pub fn spill_persisted(&mut self) -> crate::spill::SpillReport {
+        self.spill_persisted_matching(None)
+    }
+
+    /// Like [`Self::spill_persisted`], restricted to memos keyed directly by these inputs.
+    /// An empty list selects nothing. This does not follow dependency edges or composite keys.
+    #[doc(hidden)]
+    pub fn spill_persisted_for_inputs(&mut self, inputs: &[Id]) -> crate::spill::SpillReport {
+        if inputs.is_empty() {
+            return crate::spill::SpillReport::default();
+        }
+        let inputs = inputs.iter().copied().collect();
+        self.spill_persisted_matching(Some(&inputs))
+    }
+
+    fn spill_persisted_matching(
+        &mut self,
+        inputs: Option<&FxHashSet<Id>>,
+    ) -> crate::spill::SpillReport {
         let Some(store) = crate::spill::spill_store() else {
             return crate::spill::SpillReport::default();
         };
         let counters = crate::spill::SpillCounters::default();
         for ingredient in self.ingredients() {
             // SAFETY: `&mut self` is exclusive access to the storage, and the ingredient is its own.
-            unsafe { ingredient.spill_persisted(self, &*store, &counters) };
+            unsafe { ingredient.spill_persisted(self, &*store, &counters, inputs) };
         }
         store.flush();
         counters.report()

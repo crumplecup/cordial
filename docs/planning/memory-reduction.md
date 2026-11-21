@@ -1,6 +1,6 @@
 # Memory measurement and reduction using upstream Hotpath
 
-Status: **Upstream restoration, phases 3–4, narrow phase 5–6 reductions, phase 7 cold measurement review, getter scope reduction and cfg-context last-consumer checkpoint complete; selective context retirement and stable IR identity are next, 2026-11-21.**
+Status: **Upstream restoration, phases 3–4, narrow phase 5–6 reductions, phase 7 cold measurement review, getter scope reduction, query-owned RA definition maps and direct-key map retirement complete; indirectly keyed context storage and stable IR identity remain, 2026-11-21.**
 The immediate checkpoints restored published Hotpath with focused consumer
 tests and removed the graph-sized serialization copy. Existing measurement
 gaps are accepted and documented; they do not block application improvements.
@@ -780,9 +780,12 @@ enabled. Formatting, `cargo clippy --offline --all-features --all-targets --
 copied crate/file registrations and keeps every context in `context_crates`.
 Unchanged files may alias ordinary files; copied files share their original's
 text allocation. Each copied crate still has separate definition maps and
-context-dependent query results. The existing eviction hook is conditional
-and does not retire a context. It now runs after observability, planning and
-optional persistence fingerprint preparation have finished reading it.
+context-dependent query results. The last-consumer boundary now follows
+observability, planning and optional persistence fingerprint preparation.
+Direct-key map retirement now runs there: non-persisted values keyed by copied
+crates are dropped, and persisted values spill when a run cache is available,
+even without memory pressure. The existing broader eviction hook remains
+conditional and does not select individual contexts.
 Removing a `ContextCrates` handle alone would not free
 Salsa's memo values, dependency records or interned identities.
 
@@ -1030,10 +1033,77 @@ prints/apply, Salsa ownership, eviction, spill and tracked identity, with
 `hotpath-alloc`. Formatting, all-feature/all-target Clippy with warnings denied
 and diff checks passed.
 
-Dependency-based context selection remains the next step: this
-storage change enables map payload retirement but does not yet select one
-completed context or bound input, identity and memo-header growth. No Cordial
-self-execution or full-program measurement is part of this checkpoint.
+This storage checkpoint enabled map payload retirement without yet selecting
+one completed context or bounding input, identity and memo-header growth.
+The direct-key checkpoint below adds that first selection. No Cordial
+self-execution or full-program measurement was part of this checkpoint.
+
+**Direct-key retirement design, 2026-11-21.** Source review found a limit in
+the dependency-only proposal: immutable tracked identity fields add no input
+edge. A query keyed by a context's module can therefore hold a separate large
+value without reaching any of that context's input seeds. RA's `ModuleIdLt`
+uses these identity fields. The controlled ownership fixture checks this shape
+with 1, 4 and 16 contexts and an ordinary module, including save/restore. This
+does not establish how many production RA values have that shape.
+
+The first selective retirement should release the known map payloads without
+waiting for a complete ownership classifier:
+
+- Extend the existing Salsa value inspection/drop and persisted spill walks
+  with an optional set of exact input keys. Keep the existing unfiltered APIs
+  and the same memo lifetime/exclusive-access rules. An empty selection selects
+  nothing; it must not mean a global flush.
+- At the last-consumer boundary, select the completed context's copied crate
+  inputs. The map owner and both projections use these keys directly. Drop
+  selected non-persisted values and spill selected persisted values through the
+  existing store. Do not delete inputs, identities, edges or saved evidence.
+- Open the existing spill file at this boundary when a run cache exists, even
+  without memory pressure. Without a store, preserve persisted owners rather
+  than discarding them. Preserve ordinary/dependency map values, including
+  shared work first computed while processing a context.
+- Check original map payload release and shared residency for 1, 4 and 16
+  contexts, empty selections, repeated retirement, re-entry and saved/restored
+  state. Check native RA owner/projection residency and module identity too.
+  Select input IDs directly within compatible key ingredients instead of
+  scanning all registered key slots for each context. Memo residency counts
+  are not a retained-byte measurement.
+
+This is direct-key map retirement, not complete context retirement. Queries
+keyed by files, modules, interned locations or argument tuples are not selected
+merely because they read a copied crate. The next ownership design must account
+for these keys as well as input dependencies, using existing producer/output
+records where available. It must not infer ownership from creation time or
+copy a dependency graph for each context. The ordered identity and bounded-input
+work remains after this step.
+
+**Direct-key map retirement checkpoint, 2026-11-21.** Implemented the design
+above through the existing Salsa drop/spill walks and the existing run-cache
+spill file. The last-consumer boundary selects only copied crate input IDs;
+selection checks compatible key ingredients and does not enumerate every
+accumulated key slot. No input, identity, dependency edge or memo header is
+deleted. Without a store, persisted owners remain resident and saveable.
+
+The controlled 1/4/16-context fixture releases every original context map
+allocation while retaining ordinary and dependency map allocations, including
+dependency work first used during a context. Empty selections do nothing.
+Repeated retirement and cold/saved re-entry preserve module IDs and answers
+without rerunning map owners. The native two-crate RA fixture confirms owner
+and projection residency drops only for the selected crate, with shared maps
+still resident and re-entry requiring no definition-map collection. Restored
+`lang_items` decodes without warming its local projection; the native check
+expects that precise residency difference.
+
+The immutable-module-key fixture also confirms the dependency-only ownership
+gap in cold and saved/restored state: separate module-keyed payloads can have
+empty saved input dependencies. Step 2 remains partial until indirectly keyed
+values have an ownership rule covering tracked identities and composite keys.
+These tests establish original allocation lifetime and memo residency, not a
+production retained-byte total or bounded whole-context storage.
+
+Validation passed: all 74 tests across the 12 focused storage, cfg-context,
+saved-state and tracing/apply binaries with `hotpath-alloc`; formatting;
+all-feature/all-target Clippy with warnings denied; and diff checks. No Cordial
+self-execution or full-program measurement was used.
 
 ## Historical evidence
 
