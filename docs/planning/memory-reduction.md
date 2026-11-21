@@ -935,6 +935,57 @@ Stable IR identity remains the next ordered architectural step;
 stable identity by itself does not release a tracked payload or prove that a
 semantic fact is invariant across cfg contexts.
 
+**Query-owned storage exploration, 2026-11-21.** The controlled
+`salsa_context_retention` fixture now exercises an ordinary persisted owner of
+two `Arc` payloads, separate non-persisted external/local projection queries,
+and small persisted tracked module identities created by the owner. Projection
+reads share the owner's allocations. The candidate uses the existing Salsa
+APIs and spill store; it introduces no Salsa storage or unsafe lifetime change.
+
+The checks distinguish three mechanisms:
+
+- **Release and re-entry:** across 1, 4 and 16 inputs, evicting regenerable
+  projections and spilling persisted owners releases every original payload
+  marker. Re-entry decodes equal contents and module identities without
+  executing the owners, and those decoded payloads can be released again.
+- **All references matter:** spilling the owner alone leaves both original
+  maps alive through their projection memos. Evicting those memos releases the
+  remaining references. An implementation must include both ownership paths
+  in retirement, regardless of which is visited first.
+- **Independent invalidation:** local-only edits rerun the owner and local
+  consumer, while the external consumer remains cached; external-only edits
+  have the converse behavior. These checks cover warm, spilled-owner and
+  saved/restored owners. Consumers and projections are warm during the edits:
+  retiring a consumer's value would itself require recomputation. This does
+  not establish persisted-consumer cutoff behavior after an edit.
+
+The identity fixture also forces owner recomputation, rather than decoding,
+in cold and restored databases, while a separate persisted query retains the
+module identity. This is needed because successful decoding alone does not
+exercise tracked module creation a second time. Cold eviction forces execution;
+the restored case edits an input after eviction because snapshot bytes would
+otherwise allow decoding. Module identities remain equal in both cases.
+
+All 16 focused Nextest checks passed with `hotpath-alloc`, across
+`salsa_context_retention`, `salsa_eviction`, `salsa_spill` and
+`salsa_tracked_identity`.
+Formatting, all-feature/all-target Clippy with warnings denied and diff checks
+passed. No Cordial self-execution or full-program measurement ran.
+
+The production transition remains narrow: replace `DefMapPair`'s payload-bearing
+tracked struct with an ordinary query value owning the two maps through
+`triomphe::Arc`; retain the `crate_local_def_map` owner query and module/block
+creation paths. Route external-only access through an independently tracked
+projection and local-only access through its counterpart. Combined readers
+and the existing combined stable fingerprint can read the owner. Keep each
+map encoded once in the persisted owner; non-persisted projections add Arc
+references rather than a second persisted copy of a map. Validate actual RA
+collection, public/local changes, module identity, fingerprints and context
+save/restore before treating this fixture result as a production guarantee.
+There is no production RA storage change or per-context selector at this
+exploration checkpoint, and payload lifetime markers are not retained-byte or
+RSS measurements.
+
 ## Historical evidence
 
 The first cold capture used Cordial `65cbde11` against `elicit_doc` `8d2968a7`,
