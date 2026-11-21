@@ -1,6 +1,6 @@
 # Memory measurement and reduction using upstream Hotpath
 
-Status: **Upstream restoration and phases 3–4 complete; phase 5 buffered restore and phase 6 loader release validated, deeper semantic memo lifetimes still under review, 2026-11-21.**
+Status: **Upstream restoration and phases 3–4 complete; phase 5 buffered restore and phase 6 loader release validated; combined fixtures passed, matched measurement review next, 2026-11-21.**
 The immediate checkpoints restored published Hotpath with focused consumer
 tests and removed the graph-sized serialization copy. Existing measurement
 gaps are accepted and documented; they do not block application improvements.
@@ -455,6 +455,41 @@ decoded-policy lifetime, gated semantic demand, crate attributes and apply
 snapshot consumption. The Cordial self-analysis test was excluded. Formatting,
 all-feature/all-target Clippy with warnings denied, and diff checks passed.
 Cargo jobs ran sequentially. No Cordial CLI or full-program workload ran.
+
+## Checkpoint — Semantic lifetime audit and combined verification
+
+The remaining phase-6 candidates have different last consumers from the loader
+bundles. The audit follows the existing owners and query paths:
+
+| Representation | Producer and consumers | Release decision |
+| --- | --- | --- |
+| Per-crate loader bundles | `load_and_probe` loads them; workspace facts, call-graph setup and that crate's enrichers consume them. | Released after that crate's enrichers, as verified above. |
+| Decoded root policy inventories | IR attribute decoding supplies shared inventories to enrichers; packed bytes remain the canonical representation. | Released before snapshots and probes by the earlier policy-lifetime checkpoint. |
+| Parsed files and syntax maps | `SourceDatabase::collect_source` / `captured_source` obtain edition-aware parse and line-index queries; `SourceLoadView::with_syntax` also exposes this path to plugins. | A later crate or enricher may still request the same inputs. No new unconditional eviction is justified by this audit. |
+| Macro expansions, arguments and span maps | Rust-analyzer queries build them during definition-map construction and function evidence; subsequent cfg passes and target projections can request them again. | Existing pressure-driven scaffolding release remains. Earlier release needs a fixture demonstrating both last use and recomputation cost. |
+| Inference and definition maps | Priming, semantic evidence, cfg contexts and later dependent targets query the same database. Selected semantic results are projected into IR and saved query state. | Keep the shared database through its current session scope. Context-specific identities must remain distinct. |
+| Run database and captured source | `CacheToken` owns the database; loader views share its token and `ParsedSourceSession` retains it until the run scope ends. | Releasing a view does not release the database. Resetting the slot early could cause later syntax reads or projections to recreate state; there is no proven benefit yet. |
+
+This audit establishes no further last-use boundary for individual semantic
+memos. It does not establish that those memos are inexpensive or small. Avoid
+turning the accepted measurement gaps into another prerequisite for program
+improvements: the shipped copy/lifetime changes are ready for combined
+verification and the agreed measurement review. Further Salsa dependency-edge
+flattening work remains a separate scope decision; the borrowed/owned key change
+did not authorize redesigning its serializer.
+
+All 26 combined Nextest cases passed across semantic backend/workspace,
+context reuse/crates, cfg contexts, macro expansion, result-cache behavior and
+memory pressure (133.745 seconds, four test processes). Checks include zero
+macro re-expansion after restoration, cross-file and context-edit invalidation,
+result-cache invalidation, equal graphs after spill/reload and under simulated
+pressure, and the existing unlimited-budget behavior. Together with the 38
+buffered-restore checks and 12 loader-release checks, this continuation passed
+76 focused cases. Formatting, all-feature/all-target Clippy with warnings
+denied, and diff checks passed. Cargo jobs ran sequentially. No Cordial CLI or
+full-program workload ran. The next boundary is the agreed matched `elicit_doc`
+measurement review; these fixtures establish behavior and local allocation
+traffic changes, not a new whole-program RSS result.
 
 ## Phase 1 — Restore upstream use and finish measurement infrastructure
 
