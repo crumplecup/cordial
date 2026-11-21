@@ -104,8 +104,36 @@ the removed payload copy's allocation traffic, not a measured whole-program RSS
 or peak reduction. All-features/all-targets Clippy with warnings denied,
 formatting and diff checks passed. No Cordial or full-program workload ran.
 
-Optional instrumentation checkpoints 1B–1D and phases 2 and 4 onward remain as
-described below. There is no new full-program measurement authorization.
+Optional instrumentation checkpoints 1B–1D and phase 2 remain as described
+below. There is no new full-program measurement authorization.
+
+## Checkpoint evidence — shared packed attributes
+
+Phase 4 step 1 is complete. Memoized node weights and their graph clones share
+immutable packed bytes through `Arc<[u8]>`. A clone starts with an empty,
+independent decoded cache, even when the source cache is warm. Replacement and
+append continue to change only the destination node. No database, cfg-context
+identity or persistence schema is shared or changed by this step.
+
+The same published-Hotpath cumulative fixture ran before and after the change:
+
+| Payload and clone count | Before | After |
+| --- | ---: | ---: |
+| 16 KiB, four cold clones | 64.8 KB | 804 B |
+| 256 KiB, four cold clones | 1.0 MB | 804 B |
+| 256 KiB, sixteen cold clones | 4.0 MB | 3.1 KB |
+| 256 KiB, sixteen clones of a warm source | 8.0 MB | 3.1 KB |
+
+These are upstream-formatted allocation-traffic values, not whole-process peak
+RAM. Node containers and attribute keys still allocate per clone; initial packing
+and each consumer's actual decoding still allocate. The fixture checks growth
+with payload size, clone count and cache warmth without a custom allocator.
+
+All 27 focused fixtures passed: attribute packing/sharing, IR persistence,
+semantic backend/callees/recording, cfg-context isolation/invalidation and apply
+snapshot consumption. All-features/all-targets Clippy with warnings denied,
+formatting and diff checks passed. No Cordial workload ran. Phase 4 steps 2–3
+and phases 5 onward remain planned.
 
 ## Phase 1 — Restore upstream use and finish measurement infrastructure
 

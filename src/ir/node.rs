@@ -153,6 +153,7 @@ pub struct NodeWeight {
 /// The attributes that are bulk: a function's semantic facts, of which a graph holds one or two for
 /// every function. They are kept encoded (a fraction of the memory of the JSON value) and decoded when
 /// something reads them; [`NodeWeight::drop_decoded`] puts them back to bytes.
+/// Cloned nodes share the immutable encoding and start with independent, empty decoded caches.
 const PACKED_KEYS: [&str; 2] = [
     super::semantic::ATTR_SEMANTIC_FUNCTION,
     super::semantic_context::ATTR_SEMANTIC_CONTEXT_FUNCTIONS,
@@ -165,10 +166,18 @@ enum Attr {
     Packed(Packed),
 }
 
-#[derive(Clone)]
 struct Packed {
-    bytes: Box<[u8]>,
+    bytes: std::sync::Arc<[u8]>,
     decoded: std::sync::OnceLock<serde_json::Value>,
+}
+
+impl Clone for Packed {
+    fn clone(&self) -> Self {
+        Self {
+            bytes: std::sync::Arc::clone(&self.bytes),
+            decoded: std::sync::OnceLock::new(),
+        }
+    }
 }
 
 /// An attribute prints as its value, not as how it is held: whether it was decoded yet is not
@@ -201,7 +210,7 @@ impl Attr {
             && let Ok(bytes) = rmp_serde::to_vec(&value)
         {
             return Self::Packed(Packed {
-                bytes: bytes.into_boxed_slice(),
+                bytes: bytes.into(),
                 decoded: std::sync::OnceLock::new(),
             });
         }
