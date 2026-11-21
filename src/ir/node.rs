@@ -154,9 +154,9 @@ pub struct NodeWeight {
     attrs: Vec<(String, Attr)>,
 }
 
-/// The attributes that are bulk: a function's semantic facts, of which a graph holds one or two for
-/// every function. They are kept encoded (a fraction of the memory of the JSON value) and decoded when
-/// something reads them; [`NodeWeight::drop_decoded`] puts them back to bytes.
+/// Per-function semantic evidence kept encoded until a consumer reads it.
+/// Whole-crate policy inventories also use this storage when their features are enabled.
+/// [`NodeWeight::drop_decoded`] releases expanded JSON produced by raw readers.
 /// Cloned nodes share the immutable encoding and start with independent, empty decoded caches.
 const PACKED_KEYS: [&str; 2] = [
     super::semantic::ATTR_SEMANTIC_FUNCTION,
@@ -210,9 +210,21 @@ impl Eq for Attr {}
 impl Attr {
     /// `value` for `key`, packed when the key is a bulk one and the value encodes.
     fn of(key: &str, value: serde_json::Value) -> Self {
-        if PACKED_KEYS.contains(&key)
-            && let Ok(bytes) = rmp_serde::to_vec(&value)
-        {
+        let bulk = PACKED_KEYS.contains(&key);
+        #[cfg(any(
+            feature = "allows",
+            feature = "cfg_hygiene",
+            feature = "cfg_scatter",
+            feature = "glob_imports",
+            feature = "inline_tests",
+            feature = "modularity",
+            feature = "pageantry",
+            feature = "derives",
+            feature = "visibility",
+            feature = "cli_layout"
+        ))]
+        let bulk = bulk || key == super::source_policy::ATTR_SOURCE_POLICY_INVENTORY;
+        if bulk && let Ok(bytes) = rmp_serde::to_vec(&value) {
             return Self::Packed(Packed {
                 bytes: bytes.into(),
                 decoded: std::sync::OnceLock::new(),

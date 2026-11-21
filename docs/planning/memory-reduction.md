@@ -196,6 +196,38 @@ remaining field-only/context copies. In particular, source-call identity lookup
 still uses the raw JSON accessor when cfg-only functions require resolution.
 Phases 5 onward remain planned. No full-program measurement is authorized.
 
+## Checkpoint evidence — packed policy inventories
+
+Phase 4 step 3 now also routes the loader's whole-crate policy inventory through
+the existing packed attribute storage. Graph clones share its immutable bytes;
+typed policy reads leave the expanded JSON cache cold. This adds no typed cache
+or alternative collection path. Raw reads and persistence preserve unknown
+fields, including nested fields, and malformed typed reads retain their JSON
+error cause. The ten policy consumers still decode separate temporary typed
+inventories; that repeated work remains open.
+
+The same 256 KiB inventory fixture ran before and after through unchanged
+published Hotpath:
+
+| Operation | Before | After |
+| --- | ---: | ---: |
+| Four graph clones | 1.4 MB | 2.8 KB |
+| Ten policy reads | 2.5 MB | 2.5 MB |
+| Inventory construction plus ten reads | 2.5 MB | 3.3 MB |
+
+These are rounded cumulative allocation-traffic values, not retained heap or
+whole-program RSS. Packing adds one-time construction traffic in exchange for
+removing expanded inventory copies from graph clones. It does not reduce the
+ten consumers' typed-result allocations. Unknown-field/wire preservation,
+clone/cache and mutation isolation, repeated-key lookup, malformed evidence and
+feature combinations are checked with small fixtures.
+
+Validation: 39 focused all-features checks and two allows-only checks passed,
+covering packing/sharing, typed evidence, persistence, semantic invalidation,
+apply consumption, policy findings, inactive sources and target identity.
+All-features/all-targets Clippy with warnings denied, formatting and diff checks
+passed. No Cordial CLI or full-program workload ran.
+
 ## Phase 1 — Restore upstream use and finish measurement infrastructure
 
 Checkpoint 1A restores a usable integration. Complete it before application
