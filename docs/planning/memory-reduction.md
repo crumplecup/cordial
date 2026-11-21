@@ -1,6 +1,6 @@
 # Memory measurement and reduction using upstream Hotpath
 
-Status: **Upstream restoration and phases 3–4 complete; phase 5 buffered restore measured and validated, phase 6 last-use audit next, 2026-11-21.**
+Status: **Upstream restoration and phases 3–4 complete; phase 5 buffered restore and phase 6 loader release validated, deeper semantic memo lifetimes still under review, 2026-11-21.**
 The immediate checkpoints restored published Hotpath with focused consumer
 tests and removed the graph-sized serialization copy. Existing measurement
 gaps are accepted and documented; they do not block application improvements.
@@ -417,6 +417,42 @@ All 38 tests in `saved_state_allocation`, `saved_state`, `saved_contexts` and
 `context_parses` passed through Nextest. They cover corrupt/truncated/missing
 state fallback, stable identities, edits and invalidation, unchanged-query
 reuse, context isolation, inactive files and restoration scaling. Formatting,
+all-feature/all-target Clippy with warnings denied, and diff checks passed.
+Cargo jobs ran sequentially. No Cordial CLI or full-program workload ran.
+
+## Checkpoint — Release loader bundles after enrichment
+
+The last-use audit found a lifetime boundary in the normal pipeline that does
+not require evicting reusable queries or reordering hooks. Workspace source
+facts and the call graph are collected before the enrichment/probe loop. Each
+crate's enrichers are the remaining consumers of that crate's loader outputs;
+snapshots and probes consume IR. Remove those outputs immediately after the
+crate's final enricher, while keeping later crates' views available.
+
+For source loading this releases the `SourceFile` strings read by
+`SourceLoadView::for_target`; their facts are already projected into the shared
+IR. For rustdoc it releases the owned inventory after graph population and
+structure enrichment. Custom loaders follow the same borrowed-view contract.
+The on-demand crate loader already scopes its local views to enrichment and
+needs no change. There is no new cache or source scan.
+
+The shared source database is still held by `ParsedSourceSession` until the
+normal load-and-probe scope ends. Later targets and enrichers can still request
+native syntax and semantic queries, so this checkpoint does not drop that
+database or its parse/expansion/inference memos early. Pressure eviction,
+saved-state semantics and hook ordering remain unchanged. Further semantic
+scaffolding release needs evidence of its last consumers and recomputation
+cost; allocation traffic alone cannot establish either.
+
+A two-crate dependency fixture with two payload-bearing loaders first failed
+at the first probe because its completed crate's payload remained alive. It
+checks that all inputs survive every enricher, completed crates' payloads are
+gone before probing, later crates' payloads remain available, and derived IR
+facts and hook order hold on cold and cached runs. Weak references observe
+actual object lifetime; no RSS reduction or allocation-traffic saving is claimed
+from this fixture. All 12 focused Nextest cases passed across loader lifetime,
+decoded-policy lifetime, gated semantic demand, crate attributes and apply
+snapshot consumption. The Cordial self-analysis test was excluded. Formatting,
 all-feature/all-target Clippy with warnings denied, and diff checks passed.
 Cargo jobs ran sequentially. No Cordial CLI or full-program workload ran.
 

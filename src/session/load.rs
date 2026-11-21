@@ -309,6 +309,12 @@ pub(super) fn load_and_probe(
             progress.inc(1);
         }
 
+        // Workspace facts are already collected, and probes read only IR. Later
+        // crates still need their views; this crate has no remaining consumer.
+        for loader in loaders {
+            load_views.remove(&format!("{}:{}", target.crate_name(), loader.id()));
+        }
+
         if let Some(ir) = workspace.crate_ir_mut(target.crate_name()) {
             ir.drop_decoded_root_attrs();
         }
