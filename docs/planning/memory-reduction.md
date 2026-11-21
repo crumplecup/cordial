@@ -1,6 +1,6 @@
 # Memory measurement and reduction using upstream Hotpath
 
-Status: **Upstream restoration, phases 3–4, narrow phase 5–6 reductions and phase 7 cold measurement review complete; next application targets identified, 2026-11-21.**
+Status: **Upstream restoration, phases 3–4, narrow phase 5–6 reductions, phase 7 cold measurement review and getter scope reduction complete; cfg-context lifetime and stable IR identity are next, 2026-11-21.**
 The immediate checkpoints restored published Hotpath with focused consumer
 tests and removed the graph-sized serialization copy. Existing measurement
 gaps are accepted and documented; they do not block application improvements.
@@ -734,16 +734,13 @@ the evidence for graph wire format, apply and invalidation behavior.
    let initializer order, closures, nested items, local types, macros, aliases,
    cfg behavior and apply round trips. Use a controlled many-bindings and
    many-expressions allocation fixture to verify the scaling improvement.
-2. **Reduce repeated semantic/identity work.** Investigate definition-map and
-   body-call query reuse with canonical context identity, dependency closure,
-   inference, macro expansion and edit invalidation preserved. Source text is
-   already Arc-backed; inspect actual repeated validation/digest/identity work
-   rather than assuming a text copy. Check semantic backend/workspace/callees,
-   macro calls/expansion and cold/reused query counts before accepting a change.
-3. **Reduce context discovery and shared collector preparation.** Reuse only
-   context-invariant inputs through the existing loader/IR; preserve cfg,
-   edition, macro provenance and context-specific function identity. Add query
-   checks for the observed context increase alongside context and apply tests.
+2. **Bound cfg-context lifetime.** This is the primary architectural target:
+   Cordial's individually gated etiquettes need many contexts, so the small
+   context increment in `elicit_doc` does not represent Cordial's workload.
+   Follow the ordered context work below before unrelated collector work.
+3. **Separate stable IR identity from context-local RA identity, then share
+   invariant facts.** Follow the identity and reuse checks below. Equal source
+   text or equal declaration identity alone does not imply equal semantic facts.
 4. **Evaluate remaining persistence metadata copies.** Retain borrowed IR
    encoding and buffered Salsa output. Use high-fanout, diamond, shared-set,
    lazy/spill and invalidation fixtures. Broader Salsa dependency representation
@@ -755,6 +752,112 @@ sufficient to pursue these application wins; no additional profiling system
 or instrumentation completeness effort is a prerequisite. Gate and commit
 each implementation checkpoint under the existing contract. Discuss a later
 full-program run separately.
+
+### Getter scope checkpoint
+
+Getter collection now saves its binding/function maps only at scope boundaries,
+instead of cloning them for every syntax node. An unchanged-upstream Hotpath
+fixture varies visible bindings and expression count independently and checks
+the resulting receiver facts. Before the change, increasing expressions from
+16 to 256 added about sixteen times as much allocation traffic with 128
+bindings as with eight. After the change, that growth is approximately equal.
+The 128-binding, 256-expression case fell from upstream's **49.4 MB** to
+**632.9 KB** of exclusive collector allocation traffic. These are formatted
+allocation totals, not retained-memory measurements.
+
+The lexical-scope fixture checks nested blocks, shadowing, a let initializer,
+closures, nested functions, impl receivers and local types. Existing getter
+and apply round-trip fixtures remain the broader semantic regression checks.
+All 22 focused Nextest tests passed across the two new targets and
+`internal_error_chain_apply_getters_{consumers,conditional,aliases,tuples}` and
+`internal_error_chain_apply_cross_file_round_trip`, with `hotpath-alloc`
+enabled. Formatting, `cargo clippy --offline --all-features --all-targets --
+-D warnings` and `git diff --check` passed. No Cordial self-execution ran.
+
+### Ordered cfg-context work
+
+**Current implementation, verified 2026-11-21.** `add_context_crates` appends
+copied crate/file registrations and keeps every context in `context_crates`.
+Unchanged files may alias ordinary files; copied files share their original's
+text allocation. Each copied crate still has separate definition maps and
+context-dependent query results. The existing eviction hook is conditional,
+does not retire a context, and runs before observability and planning have
+finished reading it. Removing a `ContextCrates` handle alone would not free
+Salsa's memo values, dependency records or interned identities.
+
+The target working set is shared workspace/dependency state plus **one active
+context**, with completed facts retained in the IR or existing persistence
+store. Context summaries and distinct output facts may legitimately grow with
+coverage; completed RA semantic working sets must not accumulate with them.
+
+1. **Establish the last-consumer boundary.** Finish harvesting, observability
+   merging and follow-up gate discovery before eviction. Include library and
+   leaf passes, rejected merged contexts, partial failures and resumable stage
+   boundaries. Correct the stale module description that already claims only
+   one variant is resident. Check `cfg_contexts`, `context_crates`,
+   `context_reuse`, `context_parses`, `saved_contexts` and tracing context
+   fixtures before committing the lifecycle change.
+2. **Prove selective retirement on a controlled context family.** Use 1, 4 and
+   16 mutually exclusive cfg variants with shared dependency work. Inspect the
+   existing Salsa memo counters to distinguish context-only results from
+   shared results. Check that the previous context's regenerable values are
+   released after its final consumer, shared results remain reusable, rejected
+   contexts are released, and re-entry computes the same answers. Existing
+   Salsa eviction selects query kinds, not context keys; establish how to
+   select the context's memos before changing storage. Do not describe a global
+   cache flush, removing a handle, or unregistering a root as selective
+   retirement. Any required Salsa API/dependency representation change gets a
+   concrete design review before implementation.
+3. **Make identity independent of transient RA handles.** Inventory every
+   semantic identity crossing into the IR, external targets, leaf facts and
+   saved progress. Extend the existing source-description identity path rather
+   than adding a second resolver. Today `ItemKey` interns descriptions in
+   Salsa; canonicalization joins a copy to its ordinary declaration only when
+   that declaration resolves there. Cfg-only declarations retain copy-specific
+   descriptions. Separate a declaration's stable IR identity from the active
+   context's RA lookup identity, including cfg-only declarations. Never use a
+   dead context's `Function`, `ModuleDef`, `FileId` or macro-expansion handle to
+   answer a later context. Verify context-order independence, discard/re-entry,
+   save/restore, edits, same-named mutually exclusive declarations, crate and
+   edition distinctions, and generated items with different macro provenance.
+4. **Complete bounded context storage and share proven invariant facts.**
+   Retire or reuse copied inputs and query storage without invalidating
+   unrelated ordinary/dependency state. Handle public owned `ContextCrates`
+   values explicitly so stale handles cannot silently refer to a reused slot.
+   Persist compact facts with stable identity before releasing their RA
+   context. Reuse a semantic result only with its cfg, dependency and macro
+   validity evidence; share declaration identity independently of body facts.
+   The many-context fixture must show bounded completed-context semantic memo
+   residency, correct distinct call edges/types and unchanged ordinary facts.
+   Check cold, reused, restored, edited and resumed paths, including leaves.
+   Use Hotpath for traffic and existing OS readings for the process envelope;
+   neither query counts nor traffic are retained-byte ownership estimates.
+
+Each step has its own focused Nextest, formatting, all-feature/all-target Clippy
+and diff gate, followed by a commit. No Cordial self-run or further full-program
+measurement is part of these steps. Remaining conversion-collector and generic
+semantic/persistence optimizations stay behind this context work.
+
+**Selective-eviction design to review in step 2.** Prefer extending the existing
+Salsa eviction operation with a dependency-based selection: seeds are the
+completed context's copied crate inputs, source-root inputs and copied file
+inputs; select regenerable memos whose recorded input dependencies reach those
+seeds. Include transitive reads and cycles, without executing queries to
+classify them. Determine the selection before dropping values. Leave inputs,
+interned identities, dependency records and persisted evidence intact in this
+first change, so existing handles remain valid and a dropped value can be
+recomputed. Exercise shared work first computed inside a context as well as
+shared work warmed beforehand; creation time is not ownership. A persisted
+value must remain available or use the existing spill path, never disappear
+from the next saved state. Compare classification cost as context count grows;
+do not introduce a second dependency graph or per-context copy of shared sets.
+
+This would release the large semantic values without yet bounding input,
+interning or memo-header storage. Report that remaining growth separately.
+If recorded dependencies cannot distinguish context-only work from shared work
+reliably and cheaply, review explicit context ownership or database replacement
+with its recomputation cost before choosing an implementation. Do not silently
+fall back to flushing every query or mutating ordinary cfg inputs.
 
 ## Historical evidence
 

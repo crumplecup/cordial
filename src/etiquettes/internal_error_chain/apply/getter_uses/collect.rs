@@ -66,16 +66,19 @@ impl Collector<'_, '_> {
             }
             return;
         }
-        let saved = self.scope.clone();
-        let scoped = if let Some(item) = ast::Module::cast(node.clone()) {
+        // Only boundaries restore a scope. Cloning at every expression would
+        // multiply traversal allocations by the number of visible bindings.
+        let saved = if let Some(item) = ast::Module::cast(node.clone()) {
+            let saved = self.scope.clone();
             self.scope.local_types |= item.item_list().is_some();
-            true
+            Some(saved)
         } else if let Some(item) = ast::Impl::cast(node.clone()) {
+            let saved = self.scope.clone();
             self.scope.owner = item
                 .self_ty()
                 .map_or(ReceiverRecipe::Unknown, |ty| self.ty(&ty));
             self.scope.local_types |= type_parameters(&item);
-            true
+            Some(saved)
         } else if let Some(function) = ast::Fn::cast(node.clone()).filter(|function| {
             !function
                 .syntax()
@@ -84,6 +87,7 @@ impl Collector<'_, '_> {
                 .is_some_and(|parent| ast::Trait::can_cast(parent.kind()))
         }) {
             if let Some(body) = function.body() {
+                let saved = self.scope.clone();
                 let associated = function
                     .syntax()
                     .parent()
@@ -114,8 +118,9 @@ impl Collector<'_, '_> {
                 self.scope = saved;
                 return;
             }
-            false
+            None
         } else if let Some(block) = ast::StmtList::cast(node.clone()) {
+            let saved = self.scope.clone();
             self.scope.local_types |= block.statements().any(|stmt| match stmt {
                 ast::Stmt::Item(item) => matches!(
                     item,
@@ -147,8 +152,9 @@ impl Collector<'_, '_> {
                         .or_insert(value);
                 }
             }
-            true
+            Some(saved)
         } else if let Some(closure) = ast::ClosureExpr::cast(node.clone()) {
+            let saved = self.scope.clone();
             if let Some(list) = closure.param_list() {
                 for param in list.params() {
                     if let Some(pat) = param.pat() {
@@ -156,9 +162,9 @@ impl Collector<'_, '_> {
                     }
                 }
             }
-            true
+            Some(saved)
         } else {
-            false
+            None
         };
         if let Some(local) = ast::LetStmt::cast(node.clone()) {
             let value = if let Some(ty) = local.ty() {
@@ -187,7 +193,7 @@ impl Collector<'_, '_> {
         for child in node.children() {
             self.visit(&child, offset);
         }
-        if scoped {
+        if let Some(saved) = saved {
             self.scope = saved;
         }
     }
