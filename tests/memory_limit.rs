@@ -635,3 +635,12 @@ fn parsimony_is_a_name_or_a_share_with_a_default_in_the_middle() {
         "a setting that is not understood leaves the default"
     );
 }
+
+#[test]
+fn the_operational_meter_uses_resident_memory_in_every_build() {
+    for rss in [0, 512, 1024 * 1024, u64::MAX] {
+        assert_eq!(cordial::meter_of(rss), rss);
+    }
+    assert!(!cordial::over_budget(cordial::meter_of(4096), 4096, 0));
+    assert!(cordial::over_budget(cordial::meter_of(4096), 4096, 1024));
+}

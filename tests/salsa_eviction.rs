@@ -25,6 +25,9 @@ struct Db {
 #[salsa::db]
 impl Database for Db {}
 
+// Counter assertions must not observe another fixture running concurrently.
+static FIXTURE: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 static DESCRIBED: AtomicUsize = AtomicUsize::new(0);
 static PLAIN: AtomicUsize = AtomicUsize::new(0);
 static DECODED: AtomicUsize = AtomicUsize::new(0);
@@ -91,6 +94,9 @@ fn count(found: &[(&str, u64)], query: &str) -> u64 {
 /// Inspecting cache contents drops nothing.
 #[test]
 fn what_is_held_is_counted_by_query() {
+    let _fixture = FIXTURE
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let mut db = Db::default();
     Source::new(&db, 1);
     read(&db);
@@ -104,6 +110,9 @@ fn what_is_held_is_counted_by_query() {
 /// Dropping one query's values leaves the others, and the dropped are computed again on a read.
 #[test]
 fn one_query_is_dropped_at_a_time_and_computed_again_when_read() {
+    let _fixture = FIXTURE
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let mut db = Db::default();
     Source::new(&db, 1);
     read(&db);
@@ -139,6 +148,9 @@ fn one_query_is_dropped_at_a_time_and_computed_again_when_read() {
 /// computes nothing, since the bytes are still held.
 #[test]
 fn a_restored_memo_decodes_again_after_a_drop_and_computes_nothing() {
+    let _fixture = FIXTURE
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let mut db = Db::default();
     Source::new(&db, 1);
     read(&db);
@@ -189,6 +201,9 @@ fn a_restored_memo_decodes_again_after_a_drop_and_computes_nothing() {
 /// not hold: a persisted memo with no value would be missing from the state the run saves.
 #[test]
 fn the_regenerable_values_are_dropped_and_the_persisted_ones_are_kept_for_the_saved_state() {
+    let _fixture = FIXTURE
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let mut db = Db::default();
     Source::new(&db, 1);
     read(&db);

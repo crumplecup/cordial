@@ -48,7 +48,7 @@ all, and an apply can fix the common one.
 | Area | Required in the codebase | Where hotpath reads it |
 | --- | --- | --- |
 | Timing and call counts | `#[hotpath::measure]` on every operation (a function instrumented at `debug` or `info`) | `functions_timing` |
-| Heap allocation | One always-on `hotpath::CountingAllocator`; detailed recording remains optional | Exact `allocation` schema, function/thread traffic, retained origins and live/peak heap |
+| Heap allocation | One upstream `hotpath::CountingAllocator` behind `hotpath-alloc` | `functions_alloc` and thread traffic; formatted values may be approximate, retained ownership unavailable |
 | Threads | Every spawned thread is a named `thread::Builder` | `threads` |
 | Locks | `Mutex` and `RwLock` come from one module that re-exports hotpath's | `mutexes`, `rw_locks` |
 | Channels | `mpsc` comes from the same module | `channels` |

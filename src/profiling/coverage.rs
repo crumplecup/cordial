@@ -15,16 +15,16 @@ pub struct Boundary {
 /// The inventory travels with every producer, so downstream readers cannot hide gaps.
 pub fn boundaries() -> Vec<Boundary> {
     [
-        ("entry and setup", "lifecycle fixture: process/test entry through teardown", "pre-entry work uses a lifetime heap baseline; legacy init_tracing starts late"),
+        ("entry and setup", "lifecycle fixture: process/test entry through teardown", "pre-entry work has no operation attribution; legacy init_tracing starts late"),
         ("pipeline", "shared IR inventories every non-const function, closures and async blocks", "full pipeline cache-hit/recomputation coverage awaits target review"),
-        ("dependency work", "named Salsa verification and worker-item scopes", "opaque dependency origins remain at their caller boundary; full query coverage unverified"),
-        ("concurrent work", "controlled short-lived/exited threads, cross-thread frees and registry overflow", "no supported cross-spawn parent linkage; attribution requires zero overflow"),
-        ("async work", "poll-aware async scope fixtures: yield, migration and cancellation", "escaping closures/async blocks require separate scopes; no synchronous guard may span await"),
+        ("dependency work", "named Salsa verification and worker-item scopes", "opaque dependency traffic remains at its measured caller boundary on that execution thread; full query coverage unverified"),
+        ("concurrent work", "controlled worker-item execution scopes on named threads", "no cross-spawn parent attribution or retained ownership; cross-thread frees do not identify allocation origins"),
+        ("async work", "shared IR records async declarations and escaping blocks", "upstream poll/migration/cancellation behavior remains unverified here; escaping bodies require separate scopes and synchronous guards must not span await"),
         ("eviction and shutdown", "ordinary/error/unwind teardown captured before finish", "runtime workers, background drops and TLS destructors after finish remain unverified; controlled exits bypass stack teardown"),
         ("isolation", "resumed, missing, crashed and spawn-error child fixtures", "uncatchable exits retain incomplete manifests, not a fabricated partial report"),
         ("other subprocesses", "expected workflow children retain state/repeat and identity", "Cargo, rustc, proc-macro and external helpers have separate heaps; OS child envelope unavailable"),
         ("test processes", "early explicit owner and legacy late owner; missing expected tests visible", "test harness allocation outside test_entry is not attributed to that test"),
-        ("recorder and native memory", "Hotpath exposes recorder/unscoped/TLS/overflow traffic and retained origins", "native allocations bypassing the allocator, mmap, stacks, shared pages and allocator retention require a separate OS envelope; heap subtraction is not an exact partition"),
+        ("recorder and native memory", "upstream function/thread traffic and RSS are preserved separately", "recorder/unscoped ownership and simultaneous heap composition are unavailable; native allocations, mmap, stacks and allocator retention cannot be partitioned by heap subtraction"),
     ].into_iter().map(|(region,evidence,unverified)| Boundary {region:region.into(),evidence:evidence.into(),unverified:unverified.into()}).collect()
 }
 

@@ -295,11 +295,11 @@ pub use memory_limit::{
     ROOM_LEAST_BYTES, ROOM_PERCENT, WORKER_KIB, available_memory, be_parsimonious_at, budget_of,
     budget_with_room, checkpoint_due, checkpoint_line_bytes, checkpoint_requested, enforce,
     exceeds, feel_pressure, feel_pressure_at, footprint_of, functions_within, judge, judge_level,
-    log_footprint, nearing, no_room, no_room_exit, over_budget, parse_limit, parse_meminfo,
-    parse_parsimony, parse_size, pressure, pressured, release_scaffolding_every_kib, relieved,
-    resolve as resolve_memory_limit, resolve_parsimony, resolve_target as resolve_memory_target,
-    resolve_with as resolve_memory_limit_with, scaffolding_due, scaffolding_step_kib,
-    scaffolding_to_go, workers_at, workers_within,
+    log_footprint, meter_of, nearing, no_room, no_room_exit, over_budget, parse_limit,
+    parse_meminfo, parse_parsimony, parse_size, pressure, pressured, release_scaffolding_every_kib,
+    relieved, resolve as resolve_memory_limit, resolve_parsimony,
+    resolve_target as resolve_memory_target, resolve_with as resolve_memory_limit_with,
+    scaffolding_due, scaffolding_step_kib, scaffolding_to_go, workers_at, workers_within,
 };
 #[cfg(all(feature = "rustdoc", feature = "impl_coverage"))]
 pub use plugin::classify_elicit_complete_gap;
@@ -423,7 +423,6 @@ pub use objects::{
     NodeAnchor, Rule, SourceSpan, TextArtifact,
 };
 pub use process_memory::{MemorySample, sample as memory_sample};
-pub use profiling::live_bytes;
 pub use progress::{LineProgress, ProgressSink, ProgressTask, noop_progress};
 /// The rust-analyzer syntax crate at the version cordial links, for plugins
 /// reading [`SourceSyntax`] trees.

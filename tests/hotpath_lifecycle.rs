@@ -165,8 +165,8 @@ fn launch(mode: &str, root: &Path) -> Result {
         .env_remove("CORDIAL_PROFILE_TICKET")
         .env_remove("CORDIAL_RESUMABLE")
         .env_remove("CORDIAL_PERF_PROFILE_DIR")
-        .env("HOTPATH_OUTPUT_PATH", root.join("must-not-overwrite.json"))
-        .env("HOTPATH_OUTPUT_FORMAT", "table")
+        .env_remove("HOTPATH_OUTPUT_PATH")
+        .env_remove("HOTPATH_OUTPUT_FORMAT")
         .env("HOTPATH_METRICS_SERVER_OFF", "1");
     if mode.starts_with("test_") {
         command
@@ -228,7 +228,11 @@ fn capture_includes_setup_and_teardown_and_finishes_once() -> Result {
                 std::fs::read(manifest.export.ok_or("export")?)?
             );
             if !cfg!(feature = "hotpath-alloc") {
-                assert_eq!(report["allocation"]["functions_status"], "disabled");
+                assert!(
+                    report
+                        .get("functions_alloc")
+                        .is_none_or(serde_json::Value::is_null)
+                );
             }
         }
     }

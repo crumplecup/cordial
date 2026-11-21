@@ -1,15 +1,13 @@
 # Memory profiling infrastructure
 
-Hotpath is the allocation measurement authority. Cordial owns capture lifetimes,
-expected process/test identities, storage and presentation. The implementation
-is validated with controlled unit fixtures. The maintainer has authorized the
-first full-program measurement on `elicit_doc`, without a memory budget.
+Cordial uses published Hotpath 0.31.2 unchanged for allocation measurement.
+Cordial owns labels, capture lifetimes, expected identities, storage and
+presentation. Controlled unit fixtures validate the integration.
 
-The global `hotpath::CountingAllocator` provides the live requested-byte meter
-used by budget control in every build. Detailed recording is optional:
-`hotpath` enables timing and `hotpath-alloc` additionally enables allocation
-traffic, retained origins and exact allocation JSON. The JSON data types are
-available to import existing reports even in a build without recording.
+`hotpath` enables timing. `hotpath-alloc` also enables upstream allocation traffic
+and declares `hotpath::CountingAllocator` once in `src/profiling.rs`. Disabled and
+timing-only builds need no allocation meter. Operational pressure uses process
+RSS in every build; freed objects can leave resident allocator pages.
 
 ## Ownership and capture
 
@@ -40,89 +38,53 @@ Raw reports and manifests live under the configured store's `perf/raw/profiles`
 area, with unique invocation/process directories. Library workflows without a
 driver owner retain their inventory beneath the workflow work directory,
 in a distinct project-derived directory outside the disposable project store.
-`RunRecord::memory` stores imported Hotpath allocation DTOs and provenance while
+`RunRecord::memory` stores upstream report sections and provenance while
 retaining the raw report path.
 Existing records without these fields remain readable and explicitly lack a
 capture inventory.
 
-## Tracking a real workload
+## Workload history
 
-Use the project's stable default store and the existing perf workflow collector:
+Use the existing project store and perf workflow collector. Working state is
+reused under `perf/work`; immutable records under `perf/records` link to raw
+reports. Do not create a new store for each manual run. Use `perf list`,
+`perf compare` and explicit `perf baseline` selection for history.
 
-```sh
-cordial --project /home/erik/repos/elicit_doc --memory-limit 0 --memory-target 0 \
-  perf workflow elicit-doc-memory --cold-only --repeat 1
-```
-
-`--cold-only` records one cold analysis without warm runs or source edits. The
-working cache is reused under `perf/work`; only its disposable project state is
-reset. Records remain immutable JSON files under `perf/records`, with raw Hotpath
-captures linked from each record. There is no separate store home per run.
-The CLI passes its resolved memory limit and pressure target to measured children
-and records both settings in the run's notes, including explicit zero values.
-The target revision belongs to the record identity. Each producer manifest
-preserves its own source revision and dirty status observed at build time, actual
-features, lifecycle and coverage. Older manifests leave build provenance unknown.
-
-Use `perf list`, `perf compare` and `perf baseline` for history. A measurement
-does not advance the baseline automatically. Individual capture identities keep
-raw files distinct; that is evidence storage within the shared history, not a
-new project store for each run. RSS remains separate OS-envelope evidence and
-does not establish allocation ownership.
+The previous unlimited-budget `elicit_doc` capture used the rejected fork; its
+retained metrics are not an upstream baseline. Discuss readiness before another
+full-program run, with both memory controls zero and fixed target/configuration.
 
 ## Quantities and limits
 
-| Quantity | Meaning and interval |
+| Quantity | Evidence and limits |
 | --- | --- |
-| Function bytes/count | Exact allocation traffic in the report collection window; count and bytes are distinct. Exclusive and inclusive modes cannot be mixed. Inclusive rows cannot be summed. |
-| Thread traffic | Allocated and freed requested bytes with capture-local thread id, including exited threads. The freeing thread does not establish retained ownership. |
-| Retained origin | Ending requested bytes and live allocation count charged to the allocation origin, even after its scope exits or another thread frees it. |
-| Heap live/peak | Requested bytes and allocator-lifetime peak, with zero lifetime baseline and a separate capture-start snapshot. Individual process/origin peaks and ending live values are never summed. |
-| Simultaneous peak composition | Versioned exclusive origin bytes/blocks at the first attainment of the global requested-heap peak. These components sum to that peak, including reserved buckets. Event sequence is allocator order, not a timestamp. Older captures explicitly lack this composition. |
-| Coverage | Allocator-lifetime overflow, unscoped, TLS, thread/depth and other loss counters. These are not interchangeable with the function collection interval. |
-| OS envelope | Unavailable in the perf allocation capture. Existing OS pressure telemetry remains a separate budget backstop. Native allocations, mmap, stacks, shared pages, allocator overhead/retention and private headers are outside requested sizes. RSS minus heap is not an ownership partition. |
+| Function traffic | `functions_alloc.data`, with `alloc-bytes` or `alloc-count`. Exclusive accounting is the default; cumulative rows overlap. Formatted byte strings retain upstream precision and may be approximate. |
+| Thread traffic | Upstream allocated/freed totals. Frees belong to the freeing thread and do not identify object ownership. |
+| Process RAM | Upstream RSS and OS high-water fields, plus existing OS pressure observations. These are separate from allocation traffic. |
+| Retained ownership and simultaneous heap composition | Unavailable through the inspected public upstream API. Traffic and per-call maxima do not establish them. |
+| Coverage | Instrumented Cordial boundaries and their fixture evidence. Opaque dependency interiors, unscoped work, other execution threads, native allocations, mmap, stacks and profiler overhead remain limits. |
 
-`read_memory` imports workflows and test captures using the same lifecycle
-reader. `profiled_from` attaches both timing summaries and that complete process
-inventory. Zero, disabled, unsupported, missing, malformed, truncated and
-incomplete data remain distinct. An exact section forbids fallback to rounded
-legacy strings. Original exact integers, thread ids, origin ids, capture times,
-completion reasons and feature/accounting metadata survive record storage.
+Missing, disabled, unsupported, malformed, truncated and incomplete data never
+become zero. Display limits do not alter stored raw evidence. Comparisons require
+compatible producer/configuration metadata and operation inventories; incompatible
+or truncated captures withhold traffic deltas. Traffic reductions do not prove a
+lower process peak. Historical fork payloads remain readable with provenance,
+excluded from upstream traffic comparisons.
 
-Reports display every producer's status and coverage gaps, plus all ten regions
-of the boundary inventory. The `top` display limit never truncates stored exact
-data. Repeats and states remain separate; exact data is not merged by thread or
-function display name. Comparison requires matching producer versions,
-features, state/repeat/restart, completion, interval boundary and accounting
-mode, with matching operation inventories. Missing, lossy or incompatible
-captures withhold byte deltas. Memory completeness is independent of the timing
-verdict; unverified boundaries always prevent a full attribution claim.
-
-The current inventory explicitly leaves full-pipeline cache behavior, opaque
-dependency internals, cross-spawn linkage, delayed worker/TLS destruction,
-external helper heaps and native memory unverified. Controlled fixtures prove
-the infrastructure's measured boundaries, not complete program coverage.
+Upstream environment settings override guard output paths, formats and limits.
+Manifests record overrides; redirected or non-JSON output can leave the expected
+capture unavailable. Cordial does not patch Hotpath to suppress these settings.
 
 ## Controlled validation
 
-`tests/hotpath_alloc_contract.rs` exercises nested/retained allocations,
-cross-thread frees, reallocations, failure, registry overflow and async polling.
-`tests/hotpath_lifecycle.rs` covers ordinary/error/unwind/controlled/uncatchable
-exits, resume and missing children. `tests/hotpath_coverage.rs` reads a small
-shared-loader IR fixture; `tests/hotpath_workers.rs` verifies named worker
-origins. `tests/perf_memory.rs` proves actual allocation capture through import,
-record storage and display, exact integers above 2^53, mode validation, missing
-and malformed inventories, and compatibility/loss handling in comparison.
-Workflow programs in these tests are shell stand-ins or the unit-test executable.
+`hotpath_lifecycle` covers setup/teardown, exits, resume and child failures.
+`hotpath_workers` proves execution-thread scopes. `hotpath_coverage` uses a small
+shared-loader fixture. `perf_memory`, `perf_usage` and `hotpath_json` exercise
+actual upstream output, legacy evidence, precision, modes, storage and comparison.
+Unit subprocesses execute fixtures, never Cordial on itself.
 
-The phase gate is `cargo clippy --all-features --all-targets -- -D warnings`.
-Do not execute Cordial or a real-program benchmark as part of this infrastructure
-validation. The ordered plan and checkpoint evidence are in
-[the memory measurement plan](planning/memory-measurement.md).
-
-The first unlimited-budget `elicit_doc` capture is complete. It predates
-simultaneous peak composition and cannot supply that breakdown. The follow-on
-[memory reduction plan](planning/memory-reduction.md) specifies additional
-measurement first, then recorder, IR, persistence and cache-lifetime changes.
-Only the peak-composition addition is implemented so far; other additions remain
-planned. The capture contract above describes the current infrastructure.
+Gate each checkpoint with focused tests, `cargo fmt --check`,
+`cargo clippy --all-features --all-targets -- -D warnings` and `git diff --check`,
+then commit. No Cordial self-execution is authorized for this work. See the
+[current plan](planning/memory-reduction.md) and
+[consumer contract](planning/hotpath-allocation-contract.md).

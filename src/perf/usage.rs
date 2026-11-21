@@ -82,8 +82,8 @@ pub struct ChannelUsage {
 /// Everything in one profile, or the sum of several, besides function timing.
 #[derive(Debug, Clone, Default, PartialEq, Eq, derive_getters::Getters)]
 pub struct ProfileUsage {
-    /// Exact Hotpath data retained separately; heap snapshots/peaks are never summed.
-    exact: Vec<hotpath::json::AllocationReport>,
+    /// Historical fork payloads retained separately; heap snapshots/peaks are never summed.
+    exact: Vec<serde_json::Value>,
     allocations: Vec<FunctionAllocation>,
     threads: Vec<ThreadUsage>,
     locks: Vec<LockUsage>,
@@ -97,7 +97,13 @@ pub struct ProfileUsage {
 #[instrument(level = "trace")]
 pub fn parse_bytes(text: &str) -> Option<u64> {
     let (number, unit) = text.trim().split_once(' ')?;
+    if unit == "B" {
+        return number.parse().ok();
+    }
     let value: f64 = number.parse().ok()?;
+    if !value.is_finite() || value < 0.0 {
+        return None;
+    }
     let scale = match unit {
         "B" => 1.0,
         "KB" => 1024.0,
@@ -203,40 +209,41 @@ impl ProfileUsage {
                 Some((row["expression"].as_str()?.to_owned(), value.round() as u64))
             })
             .collect();
-        let exact: Vec<hotpath::json::AllocationReport> = report
+        // Retain rejected-fork payloads only as historical evidence. Upstream
+        // captures use the function/thread sections above.
+        let exact: Vec<serde_json::Value> = report
             .get("allocation")
+            .filter(|value| !value.is_null())
             .cloned()
-            .and_then(|value| serde_json::from_value(value).ok())
             .into_iter()
             .collect();
-        // The presence of an exact section forbids silently falling back to rounded strings,
-        // including a malformed, disabled or unsupported exact producer.
-        if report.get("allocation").is_some() {
-            allocations = exact
-                .iter()
-                .filter(|data| data.schema_version == 1)
-                .flat_map(|data| data.functions.iter().flatten())
+        if let Some(data) = exact.first().filter(|data| data["schema_version"] == 1) {
+            allocations = data["functions"]
+                .as_array()
+                .into_iter()
+                .flatten()
                 .filter_map(|row| {
                     Some(FunctionAllocation::new(
-                        row.name.clone(),
-                        row.calls,
-                        row.bytes?,
+                        row["name"].as_str()?.to_owned(),
+                        row["calls"].as_u64()?,
+                        row["bytes"].as_u64()?,
                     ))
                 })
                 .collect();
-            threads = exact
-                .iter()
-                .filter(|data| data.schema_version == 1)
-                .flat_map(|data| data.threads.iter().flatten())
-                .map(|row| {
-                    ThreadUsage::new(
-                        row.name
-                            .clone()
-                            .unwrap_or_else(|| format!("tid={}", row.tid)),
+            threads = data["threads"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|row| {
+                    Some(ThreadUsage::new(
+                        row["name"]
+                            .as_str()
+                            .map(str::to_owned)
+                            .unwrap_or_else(|| format!("tid={}", row["tid"])),
                         0,
-                        row.allocated_bytes,
-                        row.freed_bytes,
-                    )
+                        row["allocated_bytes"].as_u64()?,
+                        row["freed_bytes"].as_u64()?,
+                    ))
                 })
                 .collect();
         } else if report["functions_alloc"]["profiling_mode"].as_str() != Some("alloc-bytes") {

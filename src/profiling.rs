@@ -6,20 +6,10 @@
 //! declare its own (a second would not link). CLI, child and test owners all
 //! build the report guard here and publish through the same capture lifecycle.
 
-/// The program's one allocator. Hotpath's always-on live meter supplies the
-/// budget reading in every build, including recorder allocations and work
-/// outside measured scopes. `hotpath-alloc` additionally enables detailed
-/// function/thread traffic and retained allocation origins. Requested live bytes
-/// exclude allocator overhead and retention; OS readings remain a separate
-/// envelope/backstop.
+/// Hotpath's upstream allocator records traffic in allocation-enabled builds.
+#[cfg(feature = "hotpath-alloc")]
 #[global_allocator]
 static ALLOCATOR: hotpath::CountingAllocator = hotpath::CountingAllocator::new();
-
-/// The bytes the program holds now, as the allocator counts them.
-#[must_use]
-pub fn live_bytes() -> Option<u64> {
-    u64::try_from(ALLOCATOR.live_bytes()).ok()
-}
 
 /// The guard that records a profile and writes it to `path` when it drops. Without
 /// the `hotpath` feature it records nothing and writes nothing.
@@ -28,7 +18,8 @@ pub fn live_bytes() -> Option<u64> {
 /// the same sections. No section is limited: functions, threads, locks, channels,
 /// I/O and values all list every row they have, because a profile exists to be
 /// read back by `cordial perf`, not skimmed. Which sections appear is hotpath's own
-/// rule: those the program fed, plus functions and threads always.
+/// rule: those the program fed, plus functions and threads always. Upstream
+/// HOTPATH environment overrides take precedence; the manifest records them.
 #[tracing::instrument(level = "debug", skip(path))]
 #[hotpath::measure]
 pub(crate) fn guard(caller: &'static str, path: std::path::PathBuf) -> hotpath::HotpathGuard {
@@ -41,11 +32,7 @@ pub(crate) fn guard(caller: &'static str, path: std::path::PathBuf) -> hotpath::
         .rw_locks_limit(0)
         .io_limit(0)
         .threads_limit(0);
-    #[cfg(feature = "hotpath-alloc")]
-    let builder = builder.heap_provider(|| ALLOCATOR.heap_snapshot());
-    let mut guard = builder.build();
-    guard.pin_output(path, hotpath::Format::JsonPretty);
-    guard
+    builder.build()
 }
 
 pub(crate) mod capture;

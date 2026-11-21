@@ -1,368 +1,290 @@
-# Memory reduction after the first elicit_doc measurement
+# Memory measurement and reduction using upstream Hotpath
 
-Status: **Implementation in progress, 2026-11-20.** Phase 1A is implemented;
-its checkpoint evidence is below. Phases 1B–1E remain before optimization.
-Phase 1 adds all currently identified measurement gaps before optimization
-starts. The original [measurement infrastructure plan](memory-measurement.md)
-is complete; this plan continues that work.
+Status: **Implementation resumed, 2026-11-20.**
+The immediate checkpoints are restoring published Hotpath with focused consumer
+tests, then removing the graph-sized serialization copy. Existing measurement
+gaps are accepted and documented; they do not block application improvements.
+Later instrumentation items remain optional follow-ups where they answer a
+specific optimization question. No further full-program run is authorized here.
 
-## Evidence and boundaries
+## Contract
 
-The first successful cold measurement used Cordial `65cbde11` against
-`elicit_doc` `8d2968a7`, with both memory controls set to zero. It completed in
-168.49 seconds. The [analysis and linked raw evidence](/home/erik/.cordial/elicit_doc/perf/1795226257-8d2968a7-memory-analysis.md)
-are retained in the existing project perf store. No named baseline was promoted.
-
-The exact pipeline RSS high-water reading was 3,366,715,392 bytes (3.14 GiB).
-The later Hotpath RSS maximum was rounded to approximately 3.2 GiB. Requested
-heap peaked at 2,535,814,534 bytes (2.36 GiB); allocation traffic was
-20,365,878,282 bytes (18.97 GiB). These are different quantities.
-
-| Measured allocation origin | Individual peak, MiB | Design opportunity |
-| --- | ---: | --- |
-| Definition-map construction | 707.06 | Identify disposable dependency caches and their last consumers. |
-| Hotpath recorder | 676.08 | Remove large fixed histogram/log capacity from exact-summary capture. |
-| IR snapshot | 463.01 | Serialize the graph without a deep ownership copy. |
-| Semantic body traversal | 384.69 | Separate expansion, resolution, inference and summary storage. |
-| SavedState::save | 213.89 | Avoid simultaneous flattened and serialized dependency representations. |
-| Projection::populate | 205.58 | Share immutable facts between memoized items and the graph. |
-| SourceDatabase::project_attached | 141.14 | Measure policy/context copying before changing ownership. |
-| workspace::load_database | 128.78 | Identify retained inputs and transient workspace state. |
-| Unscoped | 128.51 | Add useful operation boundaries and preserve residual counters. |
-| items::resolve_flows | 127.89 | Remove JSON clones and typed/JSON round trips. |
-| Optional evidence decoding | 71.22 | Reuse borrowed or shared facts across consumers. |
-| Copy-context function discovery | 48.52 | Share context-invariant facts without duplicating existing memoization. |
-
-These peaks occurred independently and **must not be added**. The existing
-capture cannot partition ownership at its global heap peak. Recorder histogram
-arrays are estimated from the code at about 618.22 MiB across 1,084 rows; this
-is a hypothesis to quantify in phase 1, not another measured heap category.
-
-## Execution contract
-
-- Hotpath remains the sole allocation counter and attribution authority. Extend
-  it where necessary; do not add a second ledger, allocator, pointer registry,
-  span-delta collector, or shell measurement program.
-- Use existing `PerfStore` records, linked raw captures and reusable work state.
-  Do not create another storage root, manual run directory, or baseline scheme.
-  Preserve the first capture and record explicit baseline selection.
-- Develop against small controlled tests under `tests/`. Do not execute Cordial
-  against itself, including `open`, `submit`, or `quality`. The maintainer's
-  instruction overrides the usual self-analysis commit gate for this effort.
-- At every implementation checkpoint, run focused tests, `cargo fmt --check`,
+- Depend on the published Hotpath crate unchanged. Remove `vendor/hotpath`,
+  its patch/provenance machinery, and the Cargo override. No local copy, fork,
+  patched dependency, custom allocator implementation, retained-pointer registry,
+  allocation ledger, or span-delta profiler.
+- Cordial owns operation labels, process lifecycle, coverage descriptions, and
+  import/storage/presentation. Hotpath owns allocation collection. Existing OS
+  readings remain the process envelope and operational pressure input; they
+  never become an attribution system.
+- Complete measurement infrastructure and controlled tests before application
+  optimization. No Cordial self-execution, including `open`, `submit`, `quality`,
+  or benchmarks. Discuss readiness before another full-program measurement.
+- Use the existing `PerfStore`, linked raw reports and reusable workflow state.
+  No new measurement root, per-manual-run directory scheme, shell measurement
+  program, or second baseline system. Preserve historical captures unchanged;
+  baseline selection is explicit.
+- Each implementation checkpoint requires focused tests under `tests/`,
+  `cargo fmt --check`,
   `cargo clippy --all-features --all-targets -- -D warnings`, and
-  `git diff --check`; then commit the completed checkpoint. A failed gate blocks
-  that commit. Update this plan with evidence and the commit id.
-- Use allocation bytes from Hotpath for memory regression assertions. Isolate
-  allocator-sensitive tests in subprocess fixtures; use bounded inputs and
-  relative growth checks rather than timing benchmarks or exact RSS assertions.
-  Existing JSON-size estimates are not substitutes for measured heap bytes.
-- Preserve results, cfg/macro completeness, graph identities, apply behavior,
-  persistence, cache invalidation and budget enforcement. Query counts and
-  encoded output sizes complement allocation data; neither measures heap.
-- A phase is complete only when its acceptance checks pass. Conditional work
-  must receive a recorded evidence-based disposition, rather than disappear.
-  Do not claim a reduction in whole-program peak from an individual origin.
+  `git diff --check`, followed by a commit. A failed gate blocks the commit.
+  The maintainer's no-self-execution instruction replaces the usual Cordial
+  submit gate for this work.
+- Preserve semantic results, cfg/macros, graph identity, apply behavior,
+  persistence/invalidation, worker reuse and resumable execution. Do not change
+  cache algorithms while repairing the measurement integration.
 
-## Phase 1 — Close the current measurement gaps
+## Verified capabilities and limits
 
-Complete every checkpoint in this phase before changing application storage or
-cache algorithms. Instrument the existing dependency paths rather than building
-another reconstruction of source facts.
+The published `hotpath-0.31.2` archive, rather than the modified local copy, was
+inspected for this revision. Use that published version for the migration to
+avoid combining removal with an unrelated version upgrade. Record the actual
+resolved crate version and features in every capture.
 
-### 1A. Simultaneous ownership at the global requested-heap peak
+Upstream supports `hotpath-alloc`, `CountingAllocator`,
+`#[hotpath::measure]`, `hotpath::measure_block!`, `HotpathGuardBuilder`, JSON
+reports, thread allocation/deallocation totals and process RSS reporting.
+See upstream [function profiling](https://hotpath.rs/functions),
+[guard/report lifecycle](https://hotpath.rs/profiling_modes),
+[configuration](https://hotpath.rs/configuration), and
+[thread metrics](https://hotpath.rs/threads).
 
-1. Extend `vendor/hotpath/src/retained.rs` to retain origin live bytes and block
-   counts at the allocator-lifetime global peak. Include reserved origins,
-   accounting interval, baseline, event sequence and tie policy. Keep capture-end
-   ownership and individual origin peaks as separate fields.
-2. Update the peak composition inside the registry's existing critical section,
-   so its components and total describe the same linearized allocator event.
-   Use bounded preallocated metadata and changed-origin tracking; avoid copying
-   the full origin table on every new high-water event. No allocator calls,
-   formatting, TLS callbacks or user callbacks inside the registry lock.
-3. Export exact integers through Hotpath JSON, the existing importer, run record,
-   renderer and comparator. Describe allocation origin, not logical ownership.
-   Keep the cheap non-retained live meter free of this registry work.
-
-Acceptance: extend `hotpath_retained`, `hotpath_alloc_contract` and `perf_memory`
-with disjoint allocation waves whose individual peaks cannot be summed,
-concurrent frees/reallocations, failure, ties and overflow. At a complete peak,
-all origin components sum to its exact total; unavailable composition never
-falls back to ending ownership. Round-trip integers above 2^53. Verify bounded
-metadata and changed-origin update work on a small many-origin fixture.
-
-### 1B. Exact OS envelope and interval alignment
-
-1. Export exact bytes from Hotpath's existing RSS observation rather than its
-   formatted string. Import the existing `src/process_memory.rs` phase samples
-   and final high-water observation through the same perf record.
-2. Record process identity, observation time/phase, platform, units and whether
-   each value is current RSS, sampled maximum, or OS lifetime high-water.
-   Collect available anonymous/file/shared envelope details through the existing
-   OS sampler; unsupported platforms or unavailable reads remain explicit.
-3. Align these observations with capture and pipeline boundaries. An OS lifetime
-   maximum has no inferred timestamp, and an RSS sample is not a heap snapshot.
-   At existing major phase boundaries, persist Hotpath's current live-origin
-   snapshot with the phase identity. This reveals retention across phases in
-   addition to the composition at the single global heap peak; it does not
-   assign ownership from before/after subtraction.
-
-Acceptance: parser/import fixtures cover exact large values, unavailable reads,
-rounded legacy input and different intervals. Never derive native ownership by
-subtracting requested heap from RSS. No exact RSS assertion in a unit fixture.
-
-### 1C. Attribute dependency, copying and recorder work
-
-Add Hotpath scopes at the following actual allocation boundaries, maintaining
-an inventory of the label, source location, lifetime and fixture that proves it:
-
-| Area | Required distinction |
+| Question | Supported evidence and limits |
 | --- | --- |
-| Hotpath recorder | Function registration/histogram capacity, recent logs, queued work, report aggregation and export copies. |
-| Definition maps/body queries | Parsing, expansion, definition-map construction, resolution/inference, compact result construction and cache retention. |
-| Salsa persistence | Dependency flattening, shared-set construction, origin conversion, memo serialization and encoding buffers. |
-| IR persistence/projection | Snapshot creation, attribute clone/decode, population, encoding, policy attachment and context overlay copying. |
-| Flow/evidence/context discovery | Typed fact construction, JSON conversion, call resolution, evidence decoding and context-invariant versus cfg-dependent work. |
-| Workspace/process lifetime | Workspace load, worker startup, background writes, completion, teardown and unscoped work. |
+| Which operations allocate heavily? | Instrumented function/block allocation traffic. Default exclusive attribution; cumulative results overlap and are unsuitable for accounting, especially recursion. |
+| Which threads allocate/free? | Upstream thread totals. Frees belong to the freeing thread; a thread difference does not identify an object's allocation origin or owner. |
+| How much process RAM was observed? | Upstream RSS/thread reports and existing OS observations. Distinguish sampled current RSS from OS lifetime high-water, with their actual intervals and platform support. |
+| What remains live by operation, and what composes the simultaneous heap peak? | Not supplied by the inspected public upstream API. Remove our implementation and mark these fields unavailable for upstream captures. Allocation traffic and per-call maxima are not retained heap. |
+| Are values exact? | Ordinary JSON contains formatted strings for several allocation and RSS fields. Preserve the original values and precision; rounded values stay approximate. Do not manufacture exact integers. |
+| Is every boundary covered? | Prove instrumented paths with fixtures; list opaque dependency interiors, unscoped work, native allocations, mmap, stacks, profiler internals, startup/shutdown and missing child reports explicitly. No claim of complete retained-heap accounting. |
 
-Use dependency-local scopes where enclosing Cordial labels are too coarse.
-Route instrumentation of the recorder through its reserved recorder origin;
-avoid recursively recording its own recording activity. Preserve separate
-exclusive/inclusive accounting. Use existing query counters to expose cache
-hits, recomputation and the effect of later eviction changes.
+Do not add an upstream feature solely to obtain a richer export without first
+checking its local output, overhead and transport behavior. No cloud upload is
+needed. A missing capability becomes a documented limitation and, if useful,
+an upstream proposal for discussion. It is not permission to implement a fork.
 
-Acceptance: extend `hotpath_coverage`, `hotpath_workers`, `hotpath_queries` and
-small dependency fixtures to exercise every new boundary. Explain remaining
-unscoped and hidden/pre-thread traffic in the coverage inventory; retain exact
-residual counters rather than relabeling all unknown work as measured.
+## Checkpoint evidence — upstream restoration
 
-### 1D. Process, worker and teardown coverage
+Checkpoint 1A is complete. Cargo resolves the unchanged registry release 0.31.2;
+the local Hotpath source and patch are removed. Consumers preserve upstream
+formatted traffic/RSS and historical raw evidence, withholding incompatible
+comparisons. Budget pressure uses RSS, including allocator-retained pages.
 
-1. Audit existing manifest expectations against every actual spawn/resume and
-   external-helper path. Preserve parent/child identity, start/exit status,
-   missing reports and PID reuse distinctions. Use existing process sampling
-   for an external child's envelope where observable.
-2. Verify workers, async polls, background cache writes and recorder drain/join
-   finish before the final relevant snapshot. Identify allocations/frees after
-   capture closure, TLS destructor limitations and uncatchable exits explicitly.
-3. Update the existing ten-region coverage inventory with tested evidence.
-   Native allocations, mmap, stacks, allocator retention and uninstrumented
-   helper heaps remain explicitly outside requested-heap ownership. Short-lived
-   children can escape sampling; sums of sampled RSS are not unique physical
-   memory or an exact process-tree peak.
+Validation passed: allocation-enabled lifecycle/worker/coverage/import/precision
+fixtures; disabled lifecycle/import fixtures; timing-only JSON; no-default library
+check; perf record/comparison tests; 25 injected pressure tests and four Salsa
+eviction/persistence fixtures. The eviction fixtures now serialize access to
+their shared counters after concurrent execution exposed interference.
+All-features/all-targets Clippy with warnings denied, formatting and diff checks
+passed. Three memory-limit CLI workload tests were deliberately excluded; no
+Cordial workload or full-program measurement was executed. Unsupported async,
+retained ownership and dependency-interior coverage remains explicit.
 
-Acceptance: extend `hotpath_lifecycle`, `hotpath_workers` and
-`perf_workflow_partial` using controlled children and delayed worker/drop cases.
-Tests distinguish complete, unsupported, missing, malformed and truncated data.
-Do not mark an opaque or native boundary complete merely because a caller has
-a scope. Record what would require separate native/dependency instrumentation
-and discussion instead of introducing another measurement system.
+## Phase 1 — Restore upstream use and finish measurement infrastructure
 
-### 1E. Measurement checkpoint and comparison contract
+Checkpoint 1A restores a usable integration. Complete it before application
+changes; pursue 1B–1D only when a concrete optimization needs their evidence.
 
-Version new producer fields, modes and accounting metadata; update the vendored
-patch/provenance alongside source changes. Extend `perf_record`, `perf_compare`
-and `perf_memory` for older captures, partial evidence and incompatible modes.
-Render a simultaneous peak table and separate OS envelope/coverage table.
+### 1A. Remove the fork and its dependencies
 
-Phase exit: all additions above are unit-proven and gated/committed. Then make
-an unlimited cold `elicit_doc` capture through the existing workflow. Use it to
-resolve recorder components and candidate cache lifetimes before optimization.
-Keep the original capture: if schemas/accounting differ, establish a new
-compatible comparison baseline and explain the bridge. Do not fabricate exact
-deltas against legacy evidence or silently promote a baseline.
+1. Inventory all custom features, APIs, schemas and tests against the published
+   archive. Include committed extensions and the uncommitted phase-1B work;
+   deleting the vendor directory alone is insufficient.
+2. Remove the Hotpath Cargo patch, local source and patch/provenance artifacts.
+   Map Cordial's allocation feature to upstream `hotpath/hotpath-alloc`; remove
+   `hotpath-live`, `hotpath-retained`, heap providers/snapshots, retained origins,
+   peak composition and custom output-pinning hooks. Retain useful standard
+   macros and the existing integration/lifecycle structure.
+3. Use upstream `CountingAllocator` only for allocation-enabled builds, with one
+   allocator declaration per executable. Timing-only and disabled builds must
+   work without the fork's always-on heap meter.
+4. Remove the budget dependency on custom `live_bytes()`. The proposed replacement
+   is the existing RSS pressure path, explicitly named and tested as RSS. This
+   changes the held-heap signal: freed objects may leave resident pages behind.
+   Review that behavior before accepting this checkpoint; do not silently turn
+   budgets off, use traffic totals as live memory, or add another counter.
+5. Replace fork-only tests with consumer integration tests. Keep legacy capture
+   reading where needed, labeled with producer provenance; do not translate old
+   retained fields into upstream metrics. Correct active docs that claim the
+   fork's capabilities belong to upstream.
 
-## Phase 2 — Reduce the memory cost of measuring memory
+Checks: Cargo metadata/lockfile resolve the registry crate with no Hotpath path
+or git override; no custom API references remain. Controlled fixtures build and
+run with profiling disabled, timing-only, and allocation-enabled. Test zero and
+bounded pressure decisions with injected OS observations and verify eviction,
+spill and resume behavior without executing Cordial on its own repository.
+Gate and commit this migration separately.
 
-1. In `vendor/hotpath/src/lib_on/functions/alloc/state.rs`, add an explicit
-   exact-summary capture mode without percentile histograms or recent-call
-   storage. Preserve exact totals, timing totals, retained origins, peak
-   composition and coverage. Report unavailable percentiles as unavailable.
-2. For the percentile mode, lazily allocate histogram ranges and grow them with
-   observations instead of eagerly reserving the maximum range per function.
-   Preserve precision, clamping and aggregation semantics. Keep mode selection
-   explicit in raw evidence and comparisons.
-3. Use phase-1 evidence to remove expensive recorder/export clones and bound
-   queued temporary state if those contribute materially. Drain/backpressure
-   must preserve events; do not solve recorder overhead with lossy sampling.
+### 1B. Instrument actual operations through upstream macros
 
-Acceptance: controlled many-function fixtures compare exact counters/origins
-across modes and check percentile behavior, zero observations, late registration
-and range growth. Check summary storage scales with compact rows rather than
-three maximum-sized histograms per row; add a conservative measured per-row
-allocation bound. Prove export does not duplicate histogram-sized state where
-that change is needed. Gate and commit summary and histogram changes separately.
+Maintain an inventory of label, source boundary, allocating thread/task,
+measurement scope and proving fixture. Prefer stable operation-sized labels;
+avoid a new row for every input or tiny helper.
+
+| Area | Cordial boundaries to distinguish |
+| --- | --- |
+| Semantic work | Workspace loading, dependency/definition-map requests, body queries, expansion/resolution requests and compact fact construction. |
+| Persistence | IR snapshot/serialization, Salsa save/flatten calls, encoding and background write completion. |
+| Facts and projection | Attribute clone/decode, projection population, typed fact construction, JSON conversion and flow resolution. |
+| Consumers and contexts | Evidence decoding, policy attachment, context overlay copying and copy-context discovery. |
+| Lifetime | Worker entry, asynchronous work, child/resumed process entry, completion and teardown within the capture lifetime. |
+
+Place scopes in Cordial-controlled code. A caller around a dependency measures
+that call's traffic on the measured execution path; it does not reveal internal
+suboperations or allocations performed on other threads. Instrument worker
+bodies independently. Do not alter dependencies to obtain finer labels under
+this plan. Keep opaque interiors visible in the inventory.
+
+Checks: nested exclusive scopes, recursion, cross-thread allocation/free,
+worker execution, asynchronous polls/migration and background writes in small
+subprocess fixtures. Establish upstream behavior rather than asserting old
+fork semantics. Use known payloads and relative growth assertions at multiple
+input sizes; report precision limits in tolerances. Query counts explain work
+and recomputation, not heap ownership. Gate and commit by operation family.
+
+### 1C. Use the supported report lifecycle and existing perf pipeline
+
+1. Keep one upstream guard per process. Start before measured work and close
+   after joined workers/background writes and relevant teardown. Use supported
+   builder options for JSON, explicit sections and unlimited function/thread
+   rows; account for upstream environment overrides rather than patching them.
+2. Preserve parent/child identity and expected-report manifests. Every process
+   needs its own report; missing, failed or truncated output is explicit. An
+   opaque external helper does not acquire allocation attribution from its
+   parent's scope.
+3. Import upstream function metrics, thread totals, RSS and completeness metadata
+   into the existing perf records. Record version, features, metric, attribution
+   mode, effective limits, workload and capture interval. Distinguish unavailable,
+   unsupported, approximate and zero. Do not require fork-only fields.
+4. Preserve raw JSON. Compare only compatible modes, workloads and precision.
+   Render traffic by operation separately from OS RAM and coverage limits. Show
+   unreported rows or unknown coverage; do not calculate a retained-heap residual
+   by subtraction or sum independent process/thread maxima.
+
+Checks: actual upstream JSON fixture import, legacy provenance, rounded strings,
+missing sections, configured truncation, environment overrides, malformed output,
+child failures and incompatible comparisons. Existing `perf_memory`,
+`perf_record`, `perf_compare`, lifecycle and partial-workflow suites should be
+adapted to these contracts. Gate and commit.
+
+### 1D. Infrastructure acceptance before another target run
+
+Demonstrate an end-to-end controlled fixture exercising semantic-like work,
+copying, persistence, workers and a child process through the existing store.
+Review the coverage inventory, including all remaining unsupported questions.
+Test disabled/timing/alloc feature combinations and run the common gates.
+
+Exit: upstream resolution, operation reports, lifecycle, import, comparisons and
+limitations are reviewable and committed. Then discuss readiness for a new cold
+`elicit_doc` capture with both memory controls zero. Do not begin that run merely
+because unit tests passed. Keep the target revision and capture configuration
+fixed; preserve the old capture without pretending its fork-only peak/origin
+metrics are comparable.
+
+## Phase 2 — Establish a usable upstream measurement baseline
+
+After the infrastructure review, measure `elicit_doc` through the existing perf
+workflow. Produce an operation traffic ranking, OS RAM envelope, coverage table
+and evidence-backed optimization order. Separate allocation churn from retained
+storage hypotheses; traffic reductions alone do not prove a lower RAM peak.
+
+Use controlled fixtures to assess instrumentation/report cost as operation row
+counts grow. Use only documented upstream configuration. Report limits and
+empty percentile displays are not evidence that recorder storage was reduced.
+Remove the former local summary-mode, histogram and recorder-rewrite proposals.
+If upstream overhead prevents useful measurement, stop at that concrete issue
+and discuss an upstream request or supported configuration; do not fork again.
+Gate and commit any consumer configuration changes independently of application
+optimizations, and use a matching baseline after configuration changes.
 
 ## Phase 3 — Remove the graph-sized IR persistence copy
 
-1. Introduce a borrowed serializable view of `CrateIr` in `src/ir/graph.rs`, using
-   the current node/edge/index wire shape. Route cache/stage serialization through
-   it instead of `snapshot()` deep-cloning the graph.
-2. Change `src/run_cache/store.rs` to write while borrowing the graph. Initially
-   accept synchronous cache writing to remove the second representation; record
-   the throughput tradeoff. Keep owned snapshots where ownership is actually
-   required, with a common wire implementation.
-3. Preserve buffered compression, partial-file cleanup, atomic rename, error
-   reporting and completion semantics. Encoding already streams; adding another
-   streaming buffer alone does not remove this copy.
+Introduce a borrowed serializable view of `CrateIr` in `src/ir/graph.rs`, retaining
+the node/edge/index wire shape. Route `src/run_cache/store.rs` through that view
+instead of deep-cloning with `snapshot()`. Initially accept synchronous writing
+if borrowing requires it; measure the throughput tradeoff. Keep owned snapshots
+where ownership is required, using a common wire implementation.
 
-Acceptance: compare decoded old/new wire data, node/edge/index identities and
-cache round trips; exercise failed/interrupted writes and absence of committed
-partial caches. A controlled graph with large attributes must serialize without
-a graph-sized allocation increase. Gate and commit before changing attributes.
+Checks: decoded old/new wire equality, graph identity and cache round trips;
+failed/interrupted writes, partial-file cleanup and atomic publication. A large
+attribute fixture should remove the extra payload-sized allocation traffic.
+Inspect lifetimes to establish the removed overlapping representation; validate
+whole-process RAM separately. Gate and commit.
 
-## Phase 4 — Share facts and eliminate representation round trips
+## Phase 4 — Share immutable facts and eliminate conversion copies
 
-### 4A. Immutable attribute storage
+1. Share immutable packed attribute bytes in `src/ir/node.rs` across memoized
+   items and graph nodes. Clones start with empty decoded caches. Preserve
+   mutation isolation, repeated-key/latest lookup and wire data.
+2. In `src/loader/database/items.rs`, borrow JSON values and target syntax, then
+   carry typed facts through flow resolution and encode once at the IR boundary.
+   Reuse facts during projection population. All consumers use the shared loader
+   and `IrView`; no side scan or parallel fact cache.
+3. Reuse borrowed/shared evidence across consumers and remove unnecessary
+   policy/context copies. Preserve distinct context-dependent results.
 
-`src/ir/node.rs` already packs bulk function attributes. Share immutable packed
-bytes instead of cloning their allocation between memoized `FileItems`, graph
-nodes and snapshots. Give clones an empty decoded cache rather than copying a
-populated `OnceLock`; keep decoded-cache lifetimes independently reclaimable.
-Preserve mutation isolation through replacement or copy-on-write semantics.
+Checks: `ir_attribute_packing`, semantic recording/callees/backend, flow/context
+and apply fixtures. Test clone/mutate/drop semantics and increasing consumer
+counts; Hotpath should show reduced payload copying/conversion traffic.
+Gate and commit each of the three steps separately.
 
-Acceptance: extend `ir_attribute_packing` and allocation fixtures for unread,
-decoded, cloned, mutated and dropped attributes. Preserve repeated-key/latest
-lookup behavior and JSON wire data. Cloning an unchanged bulk payload must not
-allocate another payload-sized buffer; dropping decoded caches must reclaim them.
+## Phase 5 — Reduce persistence temporary representations
 
-### 4B. Typed collection through flow resolution
+First measure Cordial's Salsa save boundary and inspect overlapping flattened,
+pending and serialized dependency representations. Prefer borrowing/consuming
+edges and serialization adapters over a second full representation. Preserve
+shared-set deduplication, streaming, wire compatibility or explicit invalidation.
+Salsa dependency changes require a separately reviewed scope; permission to use
+upstream Hotpath grants no permission to extend another dependency for profiling.
 
-First remove intermediate JSON clones in `src/loader/database/items.rs` by
-deserializing from borrowed values and borrowing target syntax where possible.
-Then carry typed facts through collection and flow resolution, encoding once at
-the IR boundary. Adapt `populate.rs` to reuse immutable facts rather than clone
-every item/module payload. Keep one authoritative fact path through the shared
-loader and `IrView`; do not add a parallel source scan or unbounded side cache.
+Checks: flatten/save/reload, high-fanout and diamond dependencies, shared sets,
+tracked identity, lazy/spill behavior, cfg contexts and direct/transitive edits.
+Results and invalidation must match fresh execution. Increasing edge counts
+should demonstrate less copying via upstream allocation metrics. Gate and
+commit independently justified changes.
 
-### 4C. Evidence and projection consumers
+## Phase 6 — Release semantic working sets at proven last use
 
-The optional evidence reader already deserializes from borrowed JSON, but its
-results are owned. Add scoped borrowing or immutable typed access where repeated
-consumers allocate the same facts. Address policy/context projection copies
-identified in phase 1 by borrowing inputs and releasing finalized accumulators.
-Retain independent context-dependent results where required.
+Use operation profiles, query counters and code lifetime analysis to identify
+disposable parse, expansion and inference scaffolding. Record producers, last
+consumers, persisted representations and recomputation costs; do not invent a
+per-cache retained-byte table from traffic totals. Preserve compact semantic
+results, necessary definition maps, dependency order and needed-crate closure.
 
-Acceptance for 4B/4C: semantic and flow graph equality, context overlays,
-source-call trust and apply/evidence behavior remain unchanged. Controlled
-multi-consumer fixtures show one retained bulk representation and reduced
-conversion traffic as consumer count grows. Existing `semantic_recording`,
-`semantic_callees`, `semantic_backend` and context fixtures provide correctness
-coverage. Gate and commit 4A, 4B and 4C separately.
+Release intermediates after their last consumer even with unlimited budgets.
+Share only context-invariant inputs after checking source/cfg/edition/macro and
+dependency identity. Reuse existing memoization rather than adding another
+cache. Threshold tuning or omitted semantic work is not an algorithmic win.
 
-## Phase 5 — Bound Salsa persistence temporaries
+Checks: semantic workspace/backend/demand, cfg/context reuse/parsing/crates,
+saved contexts, macro changes and transitive invalidation. Compare cold/warm
+results and recomputation; exercise zero and bounded RSS budgets under the
+explicitly accepted pressure contract. Gate and commit each cache/lifetime win.
 
-1. In `vendor/salsa/src/function.rs`, consume or borrow owned edges during
-   conversion from flattened dependencies to serialized origins. Remove the
-   overlap of cloned origin edges with the retained pending/flattened list.
-2. Use a serialization adapter or bounded two-pass traversal to avoid retaining
-   both full origin representations. Preserve existing shared dependency sets;
-   do not expand deduplicated sets back into repeated edge vectors.
-3. Bound pending keys and encoding temporaries where phase-1 evidence supports
-   it. `SavedState::save` already streams the main database; its sub-MiB side
-   files are not a major RAM target. Avoid a separate persistence implementation.
-4. Preserve the wire format where feasible; otherwise version and test explicit
-   cache invalidation. Synchronize vendor patch/provenance changes.
+## Phase 7 — Verify combined RAM reduction
 
-Acceptance: `salsa_flatten`, `saved_state`, `saved_contexts`, `saved_generated`,
-`saved_proc_macros`, `salsa_tracked_identity`, `salsa_lazy` and `salsa_spill`.
-Add diamond/high-fanout dependency fixtures, shared sets and direct/transitive
-edits across cfg contexts. Saved/reloaded results and invalidation must agree
-with fresh execution. Hotpath must show reduced temporary bytes with increasing
-edge count, without retaining a second complete origin representation.
-Gate and commit the edge-copy removal before a larger serialization change.
+Run the combined focused checks and common gates. With measurement readiness
+accepted, repeat the matched cold unlimited-budget `elicit_doc` workflow in the
+existing store. Compare supported allocation metrics, OS RSS high-water,
+elapsed time, query counts, persisted size and output equivalence. Keep profiler
+configuration fixed and distinguish application savings from profiler changes.
 
-## Phase 6 — Make semantic working sets follow useful lifetimes
+Publish the operation-by-operation findings, shipped/disproved design wins and
+remaining coverage gaps in the existing perf record. No sum of local peaks,
+exact ownership claim, promised 1.5 GB target, or Cordial self-run. Discuss any
+return to self-analysis separately after the results justify it.
 
-### 6A. Definition-map, expansion and inference caches
+## Historical evidence
 
-1. Use phase-1 scopes and query counters to make a table of cache classes, bytes,
-   producers, ordinary/cfg/observability/apply/persistence consumers, last-use
-   barriers and reload costs. Select actual disposable classes from this table.
-2. Retain compact semantic results and reusable definition maps while releasing
-   temporary parse/expansion/inference scaffolding after its last consumer,
-   including unlimited-budget runs. Preserve the existing needed-crate closure
-   and dependency order; workspace prefill is already disabled.
-3. Make release compatible with persistence/spill and later readers. A pressure
-   threshold change alone is not an algorithmic win. Do not omit functions,
-   macros, cfg contexts or evidence to make a smaller report.
+The first cold capture used Cordial `65cbde11` against `elicit_doc` `8d2968a7`,
+with both controls zero: 168.49 seconds and pipeline OS high-water
+3,366,715,392 bytes. Its [analysis and raw links](/home/erik/.cordial/elicit_doc/perf/1795226257-8d2968a7-memory-analysis.md)
+remain immutable in the existing store; no baseline was promoted.
 
-### 6B. Context-invariant discovery and workspace inputs
-
-Copy-context discovery is already a persisted query returning borrowed memoized
-results. Identify repeated identity/input facts and share only those invariant
-under source, cfg, edition, macros and dependencies. Keep context-sensitive
-resolution separate. Release completed context/workspace intermediates at a
-proven last-use boundary; avoid another memoization layer or an immortal pool.
-
-Acceptance: `semantic_workspace`, `semantic_backend`, `gated_semantics_demand`,
-`cfg_contexts`, `context_reuse`, `context_parses`, `context_crates` and
-`saved_contexts`, with transitive dependencies and macro/config changes.
-Compare results with fresh computation under zero and bounded budgets. Assert
-unchanged warm requests do not cause extra recomputation, necessary edits still
-invalidate, and retained temporary state follows the active working set rather
-than all completed contexts. Document any cache that cannot safely be released.
-Gate and commit each independently justified cache/context change.
-
-## Phase 7 — Verify the combined result and close the plan
-
-1. Run the focused suites for the combined changes and the common all-features
-   Clippy gate. Include disabled profiling, timing-only and alloc-enabled
-   lifecycle/import checks so normal budget behavior remains available.
-2. Measure `elicit_doc` cold with both controls zero, through the same existing
-   workflow/store and release feature set. Keep the target revision fixed or
-   explain why a fresh matched baseline is necessary. Record repeated captures
-   when needed to distinguish timing/RSS variation; no Cordial self-benchmark.
-3. Compare compatible captures for exact heap peak/composition, OS high-water,
-   recorder overhead, traffic, saved-state size, query counts and elapsed time.
-   Verify semantic output equivalence and that work/coverage did not disappear.
-   Separate application improvement from profiler-mode changes.
-4. Publish the operation-by-operation breakdown and residual coverage limits in
-   the existing perf store, linked here. Record which proposed wins shipped,
-   which were disproved, and remaining costly cache classes. Keep historical
-   captures immutable and baseline changes explicit.
-
-Completion means demonstrated reductions and preserved behavior, not an assumed
-sum of local savings or a promised 1.5 GB target. Any decision to restore a
-budget or begin Cordial self-analysis requires a separate discussion after
-these results are available.
-
-## Implementation checkpoints
-
-### Phase 1A — Simultaneous global heap peak composition
-
-Hotpath now retains exclusive origin bytes and block counts at the first
-attainment of its allocator-lifetime requested-heap peak. The existing registry
-lock linearizes the total, composition and successful-event sequence. Fixed
-metadata and a dirty-origin list bound copying work by successful allocator
-events; the non-retained meter keeps its two existing atomic counters.
-
-The exact peak survives JSON, import and immutable perf-record storage. The
-renderer separates it from ending origins and individual origin peaks. Missing
-legacy composition remains unavailable; inconsistent or unsupported composition
-is retained as raw evidence and withheld from exact breakdowns/comparisons.
-The producer identifies the extension as `0.31.2+cordial-retained-peak-v1`.
-
-Controlled evidence:
-
-- All-features tests: `hotpath_alloc_contract` (2), `hotpath_heap` (6),
-  `hotpath_retained` (11), `perf_compare` (6), `perf_memory` (12),
-  `perf_record` (9), `hotpath_json` (1), `hotpath_lifecycle` (7): 54 passed.
-- Disabled profiling: `cargo test --locked --offline --no-default-features
-  --test hotpath_heap`: 6 passed. Timing-only: add `--features hotpath` and
-  `--test hotpath_json --test hotpath_lifecycle`: 15 passed.
-- Fixtures cover disjoint waves, equal byte peaks with different block counts,
-  intervening frees, realloc/failure, concurrent churn, reserved/overflow
-  origins, a pre-capture peak, integers above 2^53, legacy reports and malformed
-  or unsupported evidence. Metadata stays fixed, and origin-copy counts remain
-  bounded by successful events.
-- The synchronized vendored patch reconstructs all 108 source files exactly
-  from the pinned published archive. Provenance and the contract were updated.
-
-Gate: `cargo clippy --locked --offline --all-features --all-targets -- -D
-warnings`, `cargo fmt --check`, the vendored-source `rustfmt --check`, and
-`git diff --check` passed. This evidence is committed with the checkpoint;
-its commit id can be resolved with `git log -- docs/planning/memory-reduction.md`.
-Phase 1B is next; no application memory optimization or further target
-measurement has started.
+Its allocation-origin and requested-heap numbers came from the rejected fork.
+They identify hypotheses behind the candidate optimizations, but do not define
+upstream Hotpath capabilities or a compatible upstream baseline. The committed
+phase-1A extension (`ea7cc38e`) and uncommitted phase-1B additions are work to
+remove in phase 1A above, not accepted completed checkpoints. The earlier
+[measurement plan](memory-measurement.md) is historical wherever it requires
+those extensions.

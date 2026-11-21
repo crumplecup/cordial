@@ -501,11 +501,11 @@ pub fn over_budget(held_kib: u64, resident_kib: u64, limit_bytes: u64) -> bool {
     exceeds(held_kib, limit_bytes) || exceeds(resident_kib, limit_bytes)
 }
 
-/// The memory the limit is judged by, in kibibytes: what the program holds, as the allocator counts
-/// it, which freeing lowers at once; the resident memory when nothing counts it.
+/// The memory the limit is judged by, in kibibytes: resident process memory.
+/// Freed objects may leave resident pages in the allocator until it releases them.
 #[must_use]
 pub fn meter_of(resident_kib: u64) -> u64 {
-    crate::profiling::live_bytes().map_or(resident_kib, |bytes| bytes / 1024)
+    resident_kib
 }
 
 /// [`meter_of`] for the process as it is now.

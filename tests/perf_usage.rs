@@ -224,3 +224,11 @@ fn a_comparison_gates_on_counts_and_shows_the_bytes_that_moved() -> Result<()> {
     assert!(text.contains("storage.store.cache.bytes"), "{text}");
     Ok(())
 }
+
+#[test]
+fn byte_strings_keep_integer_precision_and_reject_invalid_values() {
+    assert_eq!(parse_bytes("9007199254740993 B"), Some(9007199254740993));
+    assert_eq!(parse_bytes("-1 KB"), None);
+    assert_eq!(parse_bytes("NaN KB"), None);
+    assert_eq!(parse_bytes("inf GB"), None);
+}

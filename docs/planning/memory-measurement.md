@@ -1,14 +1,16 @@
 # Memory measurement through Hotpath allocation profiling
 
-Status: **Infrastructure complete; first target measurement recorded, 2026-11-20.**
-Phases 1–5 are implemented and gated. Phase 5 unifies import, storage,
-rendering and comparison through the existing perf path.
-Hotpath supplies the always-on live/peak meter, retained allocation origins,
-exact JSON and explicit coverage counters; `cap` and the parallel diagnostics
-are removed. The first unlimited-budget cold `elicit_doc` measurement completed
-successfully. The remaining full-program boundaries are explicit in every
-report. The follow-on [memory reduction plan](memory-reduction.md) starts with
-additional measurement before implementing the identified design wins.
+Status: **Historical implementation record; superseded, 2026-11-20.**
+The implementation below incorrectly fulfilled missing capabilities by vendoring
+and extending Hotpath. That architecture is rejected. Its claims of an upstream
+live/peak meter, retained origins and custom exact JSON are not upstream API
+claims and are not accepted infrastructure completion.
+
+The active [revised plan](memory-reduction.md) requires the published Hotpath
+crate unchanged, removal of the fork and its consumers, controlled tests before
+optimization, and explicit unsupported measurement gaps. Do not implement the
+dependency-extension instructions preserved below. Historical target captures
+remain unchanged and labeled with their actual producer provenance.
 
 ## Objective and decisions
 

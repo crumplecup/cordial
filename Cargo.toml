@@ -50,7 +50,7 @@ quote = { version = "1", optional = true }
 clap = { version = "4", features = ["derive", "env"], optional = true }
 miette = { version = "7", features = ["fancy"], optional = true }
 indicatif = { version = "0.18", optional = true }
-hotpath = { version = "0.31", features = ["hotpath-live", "json"] }
+hotpath = { version = "=0.31.2", features = ["json"] }
 derive-new = "0.7.0"
 derive-getters = "0.5.0"
 derive_builder = "0.20"
@@ -78,9 +78,8 @@ tokio = { version = "1.54.1", default-features = false, features = ["process", "
 default = ["full", "quick"]
 # Opt-in profiling. The dependency's macros are no-ops without this feature.
 hotpath = ["hotpath/hotpath"]
-# Detailed allocation traffic, exact coverage and retained allocation origins. The
-# Hotpath live-byte budget meter is enabled independently in every build.
-hotpath-alloc = ["hotpath", "hotpath/hotpath-retained"]
+# Allocation traffic through the published Hotpath allocator and measured scopes.
+hotpath-alloc = ["hotpath", "hotpath/hotpath-alloc"]
 # Private features (leading `_`): never enabled by a user, only by other
 # features. `cordial`'s feature_warnings etiquette excludes them from the
 # powerset on its own; `just check-features` lists them in its exclusions.
@@ -676,8 +675,6 @@ redundant_field_names = "allow"
 # nine `#[salsa::input]` structs marked `persist`, serde on the data they hold, an empty
 # `RootDatabase` constructor, and compare-before-set in the file setters.
 [patch.crates-io]
-# Allocation capability extension; see vendor/hotpath/PROVENANCE.md.
-hotpath = { path = "vendor/hotpath" }
 ra_ap_base_db = { path = "vendor/ra_ap_base_db" }
 ra_ap_hir_def = { path = "vendor/ra_ap_hir_def" }
 ra_ap_hir_expand = { path = "vendor/ra_ap_hir_expand" }

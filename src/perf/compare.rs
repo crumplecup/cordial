@@ -419,7 +419,7 @@ fn memory_traffic(before: &RunRecord, after: &RunRecord) -> (Traffic, Traffic, V
     for (key, a) in earlier {
         let b = &later[&key];
         if !a.attribution_complete() || !b.attribution_complete() {
-            issues.push(format!("{key}: attribution incomplete; unverified boundaries and collection losses remain in each record"));
+            issues.push(format!("{key}: retained attribution unavailable; allocation traffic is approximate and covers instrumented boundaries only"));
         }
         if a.status != super::MemoryStatus::Available
             || b.status != super::MemoryStatus::Available
@@ -434,15 +434,6 @@ fn memory_traffic(before: &RunRecord, after: &RunRecord) -> (Traffic, Traffic, V
         let (Some(am), Some(bm)) = (&a.capture.manifest, &b.capture.manifest) else {
             continue;
         };
-        let peak_contract = |item: &super::MemoryCapture| {
-            item.allocation
-                .as_ref()?
-                .heap
-                .as_ref()?
-                .peak
-                .as_ref()
-                .map(|peak| (peak.schema_version, peak.interval, peak.tie_policy))
-        };
         if am.hotpath_version != bm.hotpath_version
             || am.features != bm.features
             || am.accounting != bm.accounting
@@ -450,18 +441,21 @@ fn memory_traffic(before: &RunRecord, after: &RunRecord) -> (Traffic, Traffic, V
             || am.identity.boundary != bm.identity.boundary
             || am.completion != bm.completion
             || am.boundaries != bm.boundaries
+            || am.overrides != bm.overrides
             || am.traffic_metric != "bytes"
-            || peak_contract(a) != peak_contract(b)
         {
             issues.push(format!("{key}: incompatible producer, accounting, metric or interval boundary; traffic comparison withheld"));
             continue;
         }
         let rows = |item: &super::MemoryCapture| -> Option<Traffic> {
-            let rows = item.allocation.as_ref()?.functions.as_ref()?;
+            let rows = item.functions.as_ref()?["data"].as_array()?;
             let values: Traffic = rows
                 .iter()
                 .filter_map(|row| {
-                    Some((format!("{key}::{}", row.name), Spread::single(row.bytes?)))
+                    Some((
+                        format!("{key}::{}", row["name"].as_str()?),
+                        Spread::single(super::parse_bytes(row["total"].as_str()?)?),
+                    ))
                 })
                 .collect();
             (values.len() == rows.len()).then_some(values)

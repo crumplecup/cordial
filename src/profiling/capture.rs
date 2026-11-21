@@ -108,7 +108,7 @@ pub struct Manifest {
     pub identity: Identity,
     /// Actual Cargo feature flags, as normalized by Cargo's build environment.
     pub features: Vec<String>,
-    /// The locally extended dependency, not a claim about an upstream release.
+    /// Published Hotpath dependency version.
     pub hotpath_version: String,
     /// Whether timing capture was compiled into this producer.
     pub timing_enabled: bool,
@@ -116,7 +116,7 @@ pub struct Manifest {
     pub allocation_enabled: bool,
     /// Exclusive/inclusive function accounting, or disabled.
     pub accounting: String,
-    /// Display metric selected in Hotpath; exact byte/count fields stay separate.
+    /// Allocation metric selected in Hotpath.
     pub traffic_metric: String,
     /// Time capture began, in nanoseconds since Unix epoch.
     pub started_ns: u128,
@@ -236,7 +236,9 @@ impl Capture {
                             || key.contains("SAMPLING")
                             || key == "HOTPATH_REPORT"
                             || key == "HOTPATH_FOCUS"
-                            || key == "HOTPATH_THREADS_HIDE_INTERNAL")
+                            || key == "HOTPATH_SHOW_INTERNAL_THREADS"
+                            || key == "HOTPATH_OUTPUT_PATH"
+                            || key == "HOTPATH_OUTPUT_FORMAT")
                 })
                 .collect(),
             run_id,
@@ -253,7 +255,7 @@ impl Capture {
                 .filter(|s| !s.is_empty())
                 .map(str::to_owned)
                 .collect(),
-            hotpath_version: "0.31.2+cordial-retained-peak-v1".to_owned(),
+            hotpath_version: "0.31.2".to_owned(),
             timing_enabled: cfg!(feature = "hotpath"),
             allocation_enabled: cfg!(feature = "hotpath-alloc"),
             accounting: if !cfg!(feature = "hotpath-alloc") {

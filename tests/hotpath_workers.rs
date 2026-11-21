@@ -18,7 +18,7 @@ fn worker_origins_are_named_on_the_executing_thread() -> Result {
     let manifest = captures[0].manifest.as_ref().ok_or("missing manifest")?;
     let report: serde_json::Value =
         serde_json::from_reader(std::fs::File::open(&manifest.report)?)?;
-    let functions = report["allocation"]["functions"]
+    let functions = report["functions_alloc"]["data"]
         .as_array()
         .ok_or("missing functions")?;
     let row = functions
@@ -30,7 +30,10 @@ fn worker_origins_are_named_on_the_executing_thread() -> Result {
         })
         .ok_or("missing worker origin")?;
     assert_eq!(row["calls"], 3);
-    assert_eq!(row["bytes"], 3 * 4097);
+    assert!(
+        cordial::perf::parse_bytes(row["total"].as_str().ok_or("bytes")?)
+            .is_some_and(|bytes| bytes.abs_diff(3 * 4097) < 1024)
+    );
     assert!(functions.iter().any(|row| {
         row["name"]
             .as_str()
