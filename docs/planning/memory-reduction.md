@@ -1,6 +1,6 @@
 # Memory measurement and reduction using upstream Hotpath
 
-Status: **Upstream restoration, persistence-copy removal and phase 4 steps 1–2 complete; step 3 in progress, 2026-11-21.**
+Status: **Upstream restoration and phases 3–4 complete, 2026-11-21.**
 The immediate checkpoints restored published Hotpath with focused consumer
 tests and removed the graph-sized serialization copy. Existing measurement
 gaps are accepted and documented; they do not block application improvements.
@@ -283,6 +283,43 @@ snapshot consumption. Saved-context cases are checked with Nextest so each
 test reads only its own process-global notes.
 All-features/all-targets Clippy with warnings denied, formatting and diff checks
 passed. No Cordial CLI or full-program workload ran.
+
+## Checkpoint evidence — share policy reads and release decoded inventories
+
+Phase 4 step 3 is complete. All ten policy enrichers read the same validated
+`Arc<SourcePolicyInventory>` through `IrView`. The cache lives with the existing
+packed attribute; graph clones still share only immutable bytes and start with
+cold, independent decoded caches. Original wire data, unknown fields, latest-key
+lookup and full typed validation are preserved. Concurrent cold readers may
+temporarily decode more than once, but receive the same canonical handle.
+
+Normal and on-demand loading release decoded root attributes after enrichment.
+The release scans only the root, leaves encoded evidence available to later
+readers, and preserves handles a consumer has explicitly retained. A fixture
+observing only a weak handle confirms that normal loading releases the inventory
+before probes. The on-demand release is covered by code inspection rather than
+a separate runtime fixture.
+
+The same 256 KiB policy fixture ran through unchanged upstream Hotpath:
+
+| Operation | Before | After |
+| --- | ---: | ---: |
+| Ten sequential policy consumers | 2.5 MB | 260.2 KB |
+| Construction and ten consumers | 3.3 MB | 1.0 MB |
+| Four graph clones | 2.8 KB | 2.9 KB |
+
+These rounded cumulative allocation-traffic values overlap and must not be
+added. They demonstrate avoided repeated decoding, with a small cache-container
+cost per graph clone; retained heap, process RSS and whole-program throughput
+remain unmeasured.
+
+Validation includes shared-handle identity, concurrent reads, cache/mutation
+isolation, unknown wire fields, malformed inventory fields, round trips and
+release before probes. Allows-only fixtures and the no-default library check
+passed. All-features Nextest, Clippy with warnings denied, formatting and diff
+checks passed. The saved-context query test permits only the one source-root
+membership query needed by copy selection; it still rejects other analysis in
+that step. No Cordial CLI or full-program workload ran.
 
 ## Phase 1 — Restore upstream use and finish measurement infrastructure
 

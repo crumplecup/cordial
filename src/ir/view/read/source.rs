@@ -22,6 +22,31 @@ macro_rules! readers {
             evidence::optional(self, self.root()?, crate::ir::ATTR_SOURCE_POLICY_INVENTORY)
         }
 
+        /// Share the fully validated policy inventory during enrichment.
+        /// Decoded-attribute release drops the graph's handle; wire data stays intact.
+        #[cfg(any(
+            feature = "allows",
+            feature = "cfg_hygiene",
+            feature = "cfg_scatter",
+            feature = "glob_imports",
+            feature = "inline_tests",
+            feature = "modularity",
+            feature = "pageantry",
+            feature = "derives",
+            feature = "visibility",
+            feature = "cli_layout"
+        ))]
+        #[instrument(level = "trace", skip(self), err(level = "warn"))]
+        #[hotpath::measure]
+        fn shared_source_policy_inventory(
+            &self,
+        ) -> CordialResult<Option<std::sync::Arc<crate::ir::SourcePolicyInventory>>> {
+            match self.node(self.root()?) {
+                Some(root) => Ok(root.weight().shared_policy_inventory()?),
+                None => Ok(None),
+            }
+        }
+
         /// Read file attribute evidence collected by the source loader.
         #[instrument(level = "trace", skip(self), err(level = "warn"))]
         fn source_file_attributes(

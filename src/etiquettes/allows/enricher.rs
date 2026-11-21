@@ -24,7 +24,7 @@ impl SourceEnricher for AllowInventoryEnricher {
     fn enrich_source(&self, view: SourceEnrichView<'_>) -> CordialResult<()> {
         let (ir, _source, _session) = view.into_parts();
         let inventory = ir
-            .source_policy_inventory()?
+            .shared_source_policy_inventory()?
             .ok_or_else(|| crate::CordialError::not_found("source policy inventory".into()))?;
 
         let crate_root = inventory.crate_root();

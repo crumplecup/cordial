@@ -87,6 +87,10 @@ pub fn load_crate_ir_if_missing(
         enricher.enrich(EnrichView::new(&mut view, load, session))?;
     }
 
+    if let Some(ir) = workspace.crate_ir_mut(crate_name) {
+        ir.drop_decoded_root_attrs();
+    }
+
     Ok(())
 }
 

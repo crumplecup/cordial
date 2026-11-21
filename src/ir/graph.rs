@@ -214,6 +214,14 @@ impl CrateIr {
             .sum()
     }
 
+    /// Release whole-crate evidence decoded by enrichers before probes and persistence.
+    #[instrument(level = "debug", skip(self))]
+    pub(crate) fn drop_decoded_root_attrs(&mut self) -> usize {
+        self.graph
+            .node_weight_mut(self.root.to_index())
+            .map_or(0, NodeWeight::drop_decoded)
+    }
+
     /// Set a JSON attribute on a node.
     #[instrument(level = "trace", skip(self, node, value), err(level = "warn"))]
     pub fn set_attr(

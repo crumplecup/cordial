@@ -309,6 +309,9 @@ pub(super) fn load_and_probe(
             progress.inc(1);
         }
 
+        if let Some(ir) = workspace.crate_ir_mut(target.crate_name()) {
+            ir.drop_decoded_root_attrs();
+        }
         session.checkpoint("enrich")?;
 
         if session.ir_snapshot() {

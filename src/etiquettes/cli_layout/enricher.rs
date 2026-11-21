@@ -27,7 +27,7 @@ impl SourceEnricher for CliLayoutInventoryEnricher {
         let (ir, _source, _session) = view.into_parts();
 
         let inventory = ir
-            .source_policy_inventory()?
+            .shared_source_policy_inventory()?
             .ok_or_else(|| CordialError::not_found("CLI layout inventory".into()))?;
         let crate_root = inventory.crate_root();
         let records = select_records(inventory.cli_layout(), ir.crate_name())?;

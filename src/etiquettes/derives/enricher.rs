@@ -27,7 +27,7 @@ impl SourceEnricher for DeriveInventoryEnricher {
         let (ir, _source, session) = view.into_parts();
 
         let inventory = ir
-            .source_policy_inventory()?
+            .shared_source_policy_inventory()?
             .ok_or_else(|| crate::CordialError::not_found("source policy inventory".into()))?;
         let crate_root = inventory.crate_root();
         let thresholds = *crate::config::load_session_config(session).derives();

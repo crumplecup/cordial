@@ -3,6 +3,9 @@
 use crate::FileSnapshot;
 use serde::{Deserialize, Serialize};
 
+mod cache;
+pub(crate) use cache::Cache;
+
 #[cfg(feature = "cli_layout")]
 mod cli_layout;
 #[cfg(feature = "cli_layout")]

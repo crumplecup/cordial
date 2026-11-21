@@ -110,10 +110,138 @@ fn policy_clones_keep_cache_and_mutation_isolation_and_latest_error_behavior() -
     Ok(())
 }
 
+#[test]
+fn shared_consumers_reuse_one_inventory_and_release_it_without_losing_wire_data() -> Result {
+    use std::sync::Arc;
+    let mut value = payload()?;
+    value["future"] = json!({"nested": [1, 2, 3]});
+    let mut ir = fixture(value.clone())?;
+    let first = ir.shared_source_policy_inventory()?.ok_or("first")?;
+    for _ in 0..10 {
+        let next = ir.shared_source_policy_inventory()?.ok_or("next")?;
+        assert!(Arc::ptr_eq(&first, &next));
+    }
+    assert_eq!(ir.node_weight(ir.root()).ok_or("root")?.packed(), (1, 1));
+    let restored = CrateIr::from_stage_bytes(&ir.to_stage_bytes()?)?;
+    assert_eq!(
+        restored
+            .node_weight(restored.root())
+            .ok_or("restored")?
+            .packed(),
+        (1, 0)
+    );
+    assert_eq!(
+        *restored
+            .shared_source_policy_inventory()?
+            .ok_or("restored inventory")?,
+        *first
+    );
+    let old = Arc::downgrade(&first);
+    assert_eq!(ir.drop_decoded_attrs(), 1);
+    assert_eq!(first.snapshots().len(), 64);
+    assert_eq!(ir.node_weight(ir.root()).ok_or("root")?.packed(), (1, 0));
+    let second = ir.shared_source_policy_inventory()?.ok_or("second")?;
+    assert_eq!(*second, *first);
+    assert!(!Arc::ptr_eq(&first, &second));
+    drop(first);
+    assert!(old.upgrade().is_none());
+    assert_eq!(
+        ir.node_weight(ir.root())
+            .ok_or("root")?
+            .attr(ATTR_SOURCE_POLICY_INVENTORY),
+        Some(&value)
+    );
+    let weak = Arc::downgrade(&second);
+    drop(second);
+    assert_eq!(ir.drop_decoded_attrs(), 1); // Both representations count as one attribute.
+    assert!(weak.upgrade().is_none());
+    assert_eq!(ir.drop_decoded_attrs(), 0);
+    Ok(())
+}
+
+#[test]
+fn shared_policy_clones_start_cold_and_latest_malformed_values_cannot_reuse_old_facts() -> Result {
+    use std::sync::Arc;
+    let mut ir = fixture(payload()?)?;
+    let first = ir.shared_source_policy_inventory()?.ok_or("first")?;
+    let clone = ir.clone();
+    assert_eq!(
+        clone.node_weight(clone.root()).ok_or("clone")?.packed(),
+        (1, 0)
+    );
+    let cloned = clone.shared_source_policy_inventory()?.ok_or("cloned")?;
+    assert_eq!(*first, *cloned);
+    assert!(!Arc::ptr_eq(&first, &cloned));
+    for field in ["snapshots", "allows"] {
+        let mut malformed = payload()?;
+        malformed[field] = json!("bad");
+        let expected = serde_json::from_value::<SourcePolicyInventory>(malformed.clone())
+            .err()
+            .ok_or("expected error")?;
+        ir.set_attr(ir.root(), ATTR_SOURCE_POLICY_INVENTORY, malformed)?;
+        let actual = ir
+            .shared_source_policy_inventory()
+            .err()
+            .ok_or("read should fail")?;
+        let mut cause: &(dyn std::error::Error + 'static) = &actual;
+        while let Some(source) = cause.source() {
+            cause = source;
+        }
+        assert_eq!(
+            cause
+                .downcast_ref::<serde_json::Error>()
+                .ok_or("JSON cause")?
+                .to_string(),
+            expected.to_string()
+        );
+    }
+    ir.set_attr(
+        ir.root(),
+        ATTR_SOURCE_POLICY_INVENTORY,
+        serde_json::to_value(SourcePolicyInventory::default())?,
+    )?;
+    assert!(
+        ir.shared_source_policy_inventory()?
+            .ok_or("latest")?
+            .snapshots()
+            .is_empty()
+    );
+    assert_eq!(first.snapshots().len(), 64);
+    assert!(
+        CrateIr::new("missing")
+            .shared_source_policy_inventory()?
+            .is_none()
+    );
+    Ok(())
+}
+
+#[test]
+fn concurrent_shared_readers_observe_the_same_validated_inventory() -> Result {
+    let ir = fixture(payload()?)?;
+    std::thread::scope(|scope| -> Result {
+        let threads: Vec<_> = (0..4)
+            .map(|_| scope.spawn(|| ir.shared_source_policy_inventory()))
+            .collect();
+        let mut inventories = Vec::new();
+        for thread in threads {
+            inventories.push(
+                thread
+                    .join()
+                    .map_err(|_| "thread panicked")??
+                    .ok_or("inventory")?,
+            );
+        }
+        for inventory in &inventories {
+            assert!(std::sync::Arc::ptr_eq(&inventories[0], inventory));
+        }
+        Ok(())
+    })
+}
+
 #[cfg(feature = "hotpath-alloc")]
 fn read_ten(ir: &CrateIr) -> cordial::CordialResult<()> {
     for _ in 0..10 {
-        let inventory = ir.source_policy_inventory()?;
+        let inventory = ir.shared_source_policy_inventory()?;
         std::hint::black_box(inventory);
     }
     Ok(())
@@ -152,7 +280,7 @@ fn allocation_fixture() -> Result {
         cordial::profiling::Identity::default(),
     )?;
     consumer_reads(&ir)?;
-    assert_eq!(ir.node_weight(ir.root()).ok_or("root")?.packed(), (1, 0));
+    assert_eq!(ir.node_weight(ir.root()).ok_or("root")?.packed(), (1, 1));
     let built = construction_and_reads(value)?;
     let clones = graph_clones(&ir);
     std::hint::black_box(&clones);
@@ -202,11 +330,14 @@ fn upstream_hotpath_measures_policy_construction_and_consumers() -> Result {
             .ok_or("row")?;
         assert_eq!(row["calls"], 1);
         eprintln!("{name}: {}", row["total"]);
-        if name == "graph_clones" {
-            let bytes =
-                cordial::perf::parse_bytes(row["total"].as_str().ok_or("total")?).ok_or("bytes")?;
-            assert!(bytes < 32 * 1024, "clones allocated {bytes} bytes");
-        }
+        let bytes =
+            cordial::perf::parse_bytes(row["total"].as_str().ok_or("total")?).ok_or("bytes")?;
+        let limit = match name {
+            "graph_clones" => 32 * 1024,
+            "consumer_reads" => 300 * 1024,
+            _ => 1200 * 1024,
+        };
+        assert!(bytes < limit, "{name} allocated {bytes} bytes");
     }
     Ok(())
 }

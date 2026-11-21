@@ -156,7 +156,7 @@ pub struct NodeWeight {
 
 /// Per-function semantic evidence kept encoded until a consumer reads it.
 /// Whole-crate policy inventories also use this storage when their features are enabled.
-/// [`NodeWeight::drop_decoded`] releases expanded JSON produced by raw readers.
+/// [`NodeWeight::drop_decoded`] releases expanded JSON and shared policy inventories.
 /// Cloned nodes share the immutable encoding and start with independent, empty decoded caches.
 const PACKED_KEYS: [&str; 2] = [
     super::semantic::ATTR_SEMANTIC_FUNCTION,
@@ -173,6 +173,41 @@ enum Attr {
 struct Packed {
     bytes: std::sync::Arc<[u8]>,
     decoded: std::sync::OnceLock<serde_json::Value>,
+    #[cfg(any(
+        feature = "allows",
+        feature = "cfg_hygiene",
+        feature = "cfg_scatter",
+        feature = "glob_imports",
+        feature = "inline_tests",
+        feature = "modularity",
+        feature = "pageantry",
+        feature = "derives",
+        feature = "visibility",
+        feature = "cli_layout"
+    ))]
+    policy: Option<Box<super::source_policy::Cache>>,
+}
+
+impl Packed {
+    fn new(bytes: Vec<u8>, _key: &str) -> Self {
+        Self {
+            bytes: bytes.into(),
+            decoded: std::sync::OnceLock::new(),
+            #[cfg(any(
+                feature = "allows",
+                feature = "cfg_hygiene",
+                feature = "cfg_scatter",
+                feature = "glob_imports",
+                feature = "inline_tests",
+                feature = "modularity",
+                feature = "pageantry",
+                feature = "derives",
+                feature = "visibility",
+                feature = "cli_layout"
+            ))]
+            policy: (_key == super::source_policy::ATTR_SOURCE_POLICY_INVENTORY).then(Box::default),
+        }
+    }
 }
 
 impl Clone for Packed {
@@ -180,6 +215,19 @@ impl Clone for Packed {
         Self {
             bytes: std::sync::Arc::clone(&self.bytes),
             decoded: std::sync::OnceLock::new(),
+            #[cfg(any(
+                feature = "allows",
+                feature = "cfg_hygiene",
+                feature = "cfg_scatter",
+                feature = "glob_imports",
+                feature = "inline_tests",
+                feature = "modularity",
+                feature = "pageantry",
+                feature = "derives",
+                feature = "visibility",
+                feature = "cli_layout"
+            ))]
+            policy: self.policy.clone(),
         }
     }
 }
@@ -225,10 +273,7 @@ impl Attr {
         ))]
         let bulk = bulk || key == super::source_policy::ATTR_SOURCE_POLICY_INVENTORY;
         if bulk && let Ok(bytes) = rmp_serde::to_vec(&value) {
-            return Self::Packed(Packed {
-                bytes: bytes.into(),
-                decoded: std::sync::OnceLock::new(),
-            });
+            return Self::Packed(Packed::new(bytes, key));
         }
         Self::Value(value)
     }
@@ -383,6 +428,44 @@ impl NodeWeight {
             .transpose()
     }
 
+    /// Share a fully validated policy inventory until decoded attributes are released.
+    #[cfg(any(
+        feature = "allows",
+        feature = "cfg_hygiene",
+        feature = "cfg_scatter",
+        feature = "glob_imports",
+        feature = "inline_tests",
+        feature = "modularity",
+        feature = "pageantry",
+        feature = "derives",
+        feature = "visibility",
+        feature = "cli_layout"
+    ))]
+    #[instrument(level = "trace", skip(self))]
+    pub(crate) fn shared_policy_inventory(
+        &self,
+    ) -> serde_json::Result<Option<std::sync::Arc<super::SourcePolicyInventory>>> {
+        let Some((_, attr)) = self
+            .attrs
+            .iter()
+            .rev()
+            .find(|(name, _)| name == super::ATTR_SOURCE_POLICY_INVENTORY)
+        else {
+            return Ok(None);
+        };
+        let cache = match attr {
+            Attr::Packed(packed) => packed.policy.as_deref(),
+            Attr::Value(_) => None,
+        };
+        if let Some(inventory) = cache.and_then(super::source_policy::Cache::get) {
+            return Ok(Some(inventory));
+        }
+        Ok(attr.read().transpose()?.map(|inventory| match cache {
+            Some(cache) => cache.insert(inventory),
+            None => std::sync::Arc::new(inventory),
+        }))
+    }
+
     /// Every attribute as the JSON value it is, in the order they were set (a copy: bulk attributes
     /// are held encoded).
     #[instrument(level = "trace", skip(self))]
@@ -394,15 +477,32 @@ impl NodeWeight {
     }
 
     /// Put the bulk attributes that were read back to the bytes they are held as, so that what a
-    /// stage read does not stay in memory as JSON until the node is dropped. Returns how many.
+    /// stage read does not stay in memory until the node is dropped. Releases shared policy
+    /// inventory caches as well as JSON. Existing handles remain valid. Returns how many attributes.
     #[instrument(level = "trace", skip(self))]
     pub fn drop_decoded(&mut self) -> usize {
         let mut dropped = 0;
         for (_, attr) in &mut self.attrs {
-            if let Attr::Packed(packed) = attr
-                && packed.decoded.take().is_some()
-            {
-                dropped += 1;
+            if let Attr::Packed(packed) = attr {
+                let json = packed.decoded.take().is_some();
+                #[cfg(any(
+                    feature = "allows",
+                    feature = "cfg_hygiene",
+                    feature = "cfg_scatter",
+                    feature = "glob_imports",
+                    feature = "inline_tests",
+                    feature = "modularity",
+                    feature = "pageantry",
+                    feature = "derives",
+                    feature = "visibility",
+                    feature = "cli_layout"
+                ))]
+                let json = packed
+                    .policy
+                    .as_deref_mut()
+                    .is_some_and(super::source_policy::Cache::clear)
+                    || json;
+                dropped += usize::from(json);
             }
         }
         dropped
@@ -416,7 +516,25 @@ impl NodeWeight {
         for (_, attr) in &self.attrs {
             if let Attr::Packed(held) = attr {
                 packed += 1;
-                decoded += usize::from(held.decoded.get().is_some());
+                let expanded = held.decoded.get().is_some();
+                #[cfg(any(
+                    feature = "allows",
+                    feature = "cfg_hygiene",
+                    feature = "cfg_scatter",
+                    feature = "glob_imports",
+                    feature = "inline_tests",
+                    feature = "modularity",
+                    feature = "pageantry",
+                    feature = "derives",
+                    feature = "visibility",
+                    feature = "cli_layout"
+                ))]
+                let expanded = held
+                    .policy
+                    .as_deref()
+                    .is_some_and(super::source_policy::Cache::is_decoded)
+                    || expanded;
+                decoded += usize::from(expanded);
             }
         }
         (packed, decoded)
