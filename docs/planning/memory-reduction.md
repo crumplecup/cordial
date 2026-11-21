@@ -1,11 +1,12 @@
 # Memory measurement and reduction using upstream Hotpath
 
-Status: **Upstream restoration and phases 3–4 complete; phase 5 buffered restore and phase 6 loader release validated; combined fixtures passed, matched measurement review next, 2026-11-21.**
+Status: **Upstream restoration, phases 3–4, narrow phase 5–6 reductions and phase 7 cold measurement review complete; next application targets identified, 2026-11-21.**
 The immediate checkpoints restored published Hotpath with focused consumer
 tests and removed the graph-sized serialization copy. Existing measurement
 gaps are accepted and documented; they do not block application improvements.
 Later instrumentation items remain optional follow-ups where they answer a
-specific optimization question. No further full-program run is authorized here.
+specific optimization question. The authorized unlimited cold `elicit_doc` run
+has completed; continue with focused fixtures before discussing another run.
 
 ## Contract
 
@@ -108,7 +109,7 @@ or peak reduction. All-features/all-targets Clippy with warnings denied,
 formatting and diff checks passed. No Cordial or full-program workload ran.
 
 Optional instrumentation checkpoints 1B–1D and phase 2 remain as described
-below. There is no new full-program measurement authorization.
+below. The later phase-7 checkpoint records the authorized full-program run.
 
 ## Checkpoint evidence — shared packed attributes
 
@@ -684,6 +685,76 @@ Publish the operation-by-operation findings, shipped/disproved design wins and
 remaining coverage gaps in the existing perf record. No sum of local peaks,
 exact ownership claim, promised 1.5 GB target, or Cordial self-run. Discuss any
 return to self-analysis separately after the results justify it.
+
+## Checkpoint evidence — combined cold measurement review
+
+The authorized single cold unlimited-budget `elicit_doc` workflow completed at
+producer `eb2e9a6f`, using unchanged published Hotpath 0.31.2. Target `8d2968a7`
+was clean and unchanged. Both memory controls were zero; the workflow reused
+the existing PerfStore and `perf/work`, preserving historical captures and
+baseline selection. No Cordial self-analysis ran.
+
+The [analysis, raw capture and record links](/home/erik/.cordial/elicit_doc/perf/1795286265-8d2968a7-memory-analysis.md)
+record **91.397 seconds** and a pipeline OS RSS high-water of
+**2,815,610,880 bytes (2.622 GiB)**. All 1,088 upstream function rows were
+imported without issues. The largest exclusive allocation-traffic rows were
+definition-map construction (5.2 GB), semantic body walking (4.6 GB), Salsa save
+(1.5 GB) and config-copy function discovery (803.8 MB), preserving upstream's
+formatted units. They identify allocation-heavy work, not retained RAM owners.
+
+RSS grew about 782 MiB between workspace loading and projection entry, then
+another 1,269 MiB during ordinary projection. Config-context analysis ended
+about 25 MiB above ordinary projection's endpoint; later work reached another
+320 MiB above that context checkpoint. Phase samples cannot attribute that
+later peak to a particular save, cache or diagnostic call. Storage diagnostics
+themselves allocated 186.1 MB of traffic; that is not a retained-byte estimate.
+
+Compared with the historical fork capture, observed high-water was 525.57 MiB
+lower (16.37%) and elapsed time about 77.10 seconds lower. Profiler and
+application changes occurred together, and OS cache state was uncontrolled;
+these observations do not isolate application savings. Fork retained-heap
+metrics are incompatible with upstream. This capture supplies an upstream
+reference without automatically promoting the baseline.
+
+All 2,528 findings' scoring keys and per-rule counts match. Quality and summary
+reports are byte-identical, with hashes in the analysis. Hook counters match.
+Executed queries increased by 545 (0.092%): workspace -7, config context +552;
+context query kinds increased from 86 to 89. Encoded Salsa size increased from
+303,524,197 to 303,642,268 bytes. These small differences remain explicit;
+output equivalence does not prove identical query behavior. The cold run does
+not measure buffered restore's benefit. Earlier checkpoint fixtures remain
+the evidence for graph wire format, apply and invalidation behavior.
+
+### Next focused implementation order
+
+1. **Remove unnecessary collector scope copies.** Getter collection clones
+   binding/function maps at every syntax node, before establishing whether a
+   scope boundary needs restoration. Save only at actual boundaries first;
+   review conversion collector context copying separately. Exercise shadowing,
+   let initializer order, closures, nested items, local types, macros, aliases,
+   cfg behavior and apply round trips. Use a controlled many-bindings and
+   many-expressions allocation fixture to verify the scaling improvement.
+2. **Reduce repeated semantic/identity work.** Investigate definition-map and
+   body-call query reuse with canonical context identity, dependency closure,
+   inference, macro expansion and edit invalidation preserved. Source text is
+   already Arc-backed; inspect actual repeated validation/digest/identity work
+   rather than assuming a text copy. Check semantic backend/workspace/callees,
+   macro calls/expansion and cold/reused query counts before accepting a change.
+3. **Reduce context discovery and shared collector preparation.** Reuse only
+   context-invariant inputs through the existing loader/IR; preserve cfg,
+   edition, macro provenance and context-specific function identity. Add query
+   checks for the observed context increase alongside context and apply tests.
+4. **Evaluate remaining persistence metadata copies.** Retain borrowed IR
+   encoding and buffered Salsa output. Use high-fanout, diamond, shared-set,
+   lazy/spill and invalidation fixtures. Broader Salsa dependency representation
+   changes require a separate design review; no such redesign follows from
+   this measurement alone.
+
+Keep diagnostic overhead visible through existing APIs. The measurement is
+sufficient to pursue these application wins; no additional profiling system
+or instrumentation completeness effort is a prerequisite. Gate and commit
+each implementation checkpoint under the existing contract. Discuss a later
+full-program run separately.
 
 ## Historical evidence
 
