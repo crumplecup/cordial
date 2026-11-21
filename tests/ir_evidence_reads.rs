@@ -100,6 +100,84 @@ fn context_reads_keep_contexts_distinct_and_repeated_keys_use_the_latest_value()
     Ok(())
 }
 
+fn context_fixture(bytes: usize) -> Result<(CrateIr, NodeId)> {
+    let mut ir = CrateIr::new("context_reads");
+    let node = ir.insert_node(NodeWeight::new(NodeKind::Module));
+    ir.set_attr(
+        node,
+        cordial::ATTR_SEMANTIC_CONTEXT_FUNCTIONS,
+        json!([
+            {"context": {"enabled": ["kani"], "disabled": []}, "function": function(bytes)},
+            {"context": {"enabled": ["test"], "disabled": []}, "function": function(32)}
+        ]),
+    )?;
+    Ok((ir, node))
+}
+
+#[test]
+fn context_fallback_preserves_order_ordinary_precedence_and_cache_isolation() -> Result {
+    let (mut ir, node) = context_fixture(1024)?;
+    let expected: SemanticFunction = serde_json::from_value(function(1024))?;
+    assert_eq!(
+        ir.semantic_function_or_first_context(node)?,
+        Some(expected.clone())
+    );
+    assert_eq!(ir.node_weight(node).ok_or("node")?.packed(), (1, 0));
+    let restored = CrateIr::from_stage_bytes(&ir.to_stage_bytes()?)?;
+    assert_eq!(
+        restored.semantic_function_or_first_context(node)?,
+        Some(expected)
+    );
+    assert!(
+        ir.node(node)
+            .ok_or("node")?
+            .attr(cordial::ATTR_SEMANTIC_CONTEXT_FUNCTIONS)
+            .is_some()
+    );
+    assert_eq!(
+        ir.semantic_function_or_first_context(node)?
+            .ok_or("facts")?
+            .label()
+            .len(),
+        1024
+    );
+    assert_eq!(ir.node_weight(node).ok_or("node")?.packed(), (1, 1));
+    ir.set_attr(node, ATTR_SEMANTIC_FUNCTION, function(16))?;
+    ir.set_attr(
+        node,
+        cordial::ATTR_SEMANTIC_CONTEXT_FUNCTIONS,
+        json!("ignored because ordinary"),
+    )?;
+    assert_eq!(
+        ir.semantic_function_or_first_context(node)?
+            .ok_or("ordinary")?
+            .label()
+            .len(),
+        16
+    );
+    assert!(ir.semantic_function_or_first_context(ir.root())?.is_none());
+    Ok(())
+}
+
+#[test]
+fn context_fallback_validates_all_entries_and_does_not_hide_malformed_ordinary_facts() -> Result {
+    let (mut ir, node) = context_fixture(16)?;
+    ir.set_attr(
+        node,
+        cordial::ATTR_SEMANTIC_CONTEXT_FUNCTIONS,
+        json!([
+            {"context": {"enabled": ["kani"], "disabled": []}, "function": function(16)},
+            {"context": {"enabled": ["test"], "disabled": []}, "function": {}}
+        ]),
+    )?;
+    assert!(ir.semantic_function_or_first_context(node).is_err());
+    ir.set_attr(node, cordial::ATTR_SEMANTIC_CONTEXT_FUNCTIONS, json!([]))?;
+    assert!(ir.semantic_function_or_first_context(node)?.is_none());
+    ir.set_attr(node, ATTR_SEMANTIC_FUNCTION, json!(null))?;
+    assert!(ir.semantic_function_or_first_context(node).is_err());
+    Ok(())
+}
+
 #[test]
 fn malformed_evidence_preserves_the_json_validation_error() -> Result {
     for value in [
@@ -150,6 +228,15 @@ fn consumer_stages(ir: &mut CrateIr, node: NodeId) -> cordial::CordialResult<()>
 }
 
 #[cfg(feature = "hotpath-alloc")]
+#[hotpath::measure]
+fn context_consumer(
+    ir: &CrateIr,
+    node: NodeId,
+) -> cordial::CordialResult<Option<SemanticFunction>> {
+    ir.semantic_function_or_first_context(node)
+}
+
+#[cfg(feature = "hotpath-alloc")]
 #[test]
 fn allocation_fixture() -> Result {
     let Some(root) = std::env::var_os("CORDIAL_EVIDENCE_READS_FIXTURE") else {
@@ -157,15 +244,25 @@ fn allocation_fixture() -> Result {
     };
     let (ir, node) = fixture(256 * 1024);
     let (mut stages, stage_node) = fixture(256 * 1024);
+    let (contexts, context_node) = context_fixture(256 * 1024)?;
     let mut capture = cordial::profiling::Capture::start(
         std::path::Path::new(&root),
         cordial::profiling::Identity::default(),
     )?;
     let result = typed_consumer(&ir, node)?.ok_or("function")?;
     consumer_stages(&mut stages, stage_node)?;
+    let context_result = context_consumer(&contexts, context_node)?.ok_or("context facts")?;
     capture.finish(cordial::profiling::FinishReason::Normal)?;
     assert_eq!(result.label().len(), 256 * 1024);
     assert_eq!(result.calls().len(), 1);
+    assert_eq!(context_result.label().len(), 256 * 1024);
+    assert_eq!(
+        contexts
+            .node_weight(context_node)
+            .ok_or("context node")?
+            .packed(),
+        (1, 0)
+    );
     assert_eq!(ir.node_weight(node).ok_or("node")?.packed(), (1, 0));
     Ok(())
 }
@@ -193,7 +290,7 @@ fn upstream_hotpath_measures_typed_evidence_reads() -> Result {
     let manifest = captures[0].manifest.as_ref().ok_or("manifest")?;
     let report: Value = serde_json::from_slice(&std::fs::read(&manifest.report)?)?;
     let rows = report["functions_alloc"]["data"].as_array().ok_or("rows")?;
-    for name in ["typed_consumer", "consumer_stages"] {
+    for name in ["typed_consumer", "consumer_stages", "context_consumer"] {
         let row = rows
             .iter()
             .find(|row| {

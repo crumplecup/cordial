@@ -202,12 +202,8 @@ impl SourceDatabase {
                         let (_, source) = self.declaration_source(&sema, path)?;
                         let mut semantics = std::collections::HashMap::new();
                         for (range, node) in &ranges {
-                            let facts = match crate::IrView::semantic_function(graph, *node)? {
-                                Some(facts) => Some(facts),
-                                None => crate::IrView::semantic_context_functions(graph, *node)?
-                                    .first()
-                                    .map(|entry| entry.function().clone()),
-                            };
+                            let facts =
+                                crate::IrView::semantic_function_or_first_context(graph, *node)?;
                             if let Some(facts) = facts {
                                 semantics.insert(*range, facts);
                             }

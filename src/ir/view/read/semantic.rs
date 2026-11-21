@@ -33,6 +33,25 @@ macro_rules! readers {
             )
         }
 
+        /// Ordinary function facts, or the first recorded context's facts when
+        /// the function exists only under cfg. This preserves recorded order;
+        /// it does not merge contexts or establish agreement between them.
+        #[instrument(level = "trace", skip(self), err(level = "warn"))]
+        #[hotpath::measure]
+        fn semantic_function_or_first_context(
+            &self,
+            id: NodeId,
+        ) -> CordialResult<Option<crate::ir::SemanticFunction>> {
+            if let Some(facts) = self.semantic_function(id)? {
+                return Ok(Some(facts));
+            }
+            Ok(self
+                .semantic_context_functions(id)?
+                .into_iter()
+                .next()
+                .map(crate::ir::SemanticContextFunction::into_function))
+        }
+
         /// The functions of leaf crates (integration-test binaries), by location.
         #[instrument(level = "trace", skip(self), err(level = "warn"))]
         fn leaf_functions(&self) -> CordialResult<Vec<crate::ir::LeafFunction>> {

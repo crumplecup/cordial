@@ -24,10 +24,13 @@ specific optimization question. No further full-program run is authorized here.
   No new measurement root, per-manual-run directory scheme, shell measurement
   program, or second baseline system. Preserve historical captures unchanged;
   baseline selection is explicit.
-- Each implementation checkpoint requires focused tests under `tests/`,
+- Each implementation checkpoint requires focused tests under `tests/` run
+  through Nextest for process isolation and parallel scheduling,
   `cargo fmt --check`,
   `cargo clippy --all-features --all-targets -- -D warnings`, and
   `git diff --check`, followed by a commit. A failed gate blocks the commit.
+  Run Cargo invocations sequentially; use Nextest to schedule parallel tests
+  rather than stacking commands that contend for Cargo's locks.
   The maintainer's no-self-execution instruction replaces the usual Cordial
   submit gate for this work.
 - Preserve semantic results, cfg/macros, graph identity, apply behavior,
@@ -259,6 +262,27 @@ consumption. The cfg-only caller retains its context-specific target edge and
 its opaque-namespace transformation refusal. All-features/all-targets Clippy
 with warnings denied, formatting and diff checks passed. No Cordial CLI or
 full-program workload ran.
+
+## Checkpoint evidence — move context fallback facts
+
+Phase 4 step 3 removes the selected context function's deep clone from source
+call resolution and tracing projection. Both consumers use one `IrView` reader
+that moves the selected function out of the decoded context vector. Ordinary
+facts retain precedence, recorded context order stays unchanged, and the full
+vector is still validated, including entries after the selected context.
+
+The same two-context fixture, with a 256 KiB selected function, reported
+**513.1 KB before versus 256.9 KB after** through published Hotpath. These are
+rounded cumulative allocation-traffic values, not retained heap or RSS. Other
+context facts are still decoded when required for validation; contexts and
+their rust-analyzer databases are not merged or borrowed across boundaries.
+
+Validation covers cold/warm reads, wire round trips, ordinary precedence,
+malformed later entries, context isolation, call resolution, tracing and apply
+snapshot consumption. Saved-context cases are checked with Nextest so each
+test reads only its own process-global notes.
+All-features/all-targets Clippy with warnings denied, formatting and diff checks
+passed. No Cordial CLI or full-program workload ran.
 
 ## Phase 1 — Restore upstream use and finish measurement infrastructure
 

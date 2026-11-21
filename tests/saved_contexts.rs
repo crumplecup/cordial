@@ -511,6 +511,13 @@ fn a_restored_run_executes_few_rust_analyzer_queries() -> Result<()> {
 
     let mut by_step = std::collections::BTreeMap::<&str, usize>::new();
     for (name, count) in &restored {
+        // Copy selection checks whether an ordinary file has a module before
+        // reusing its facts in a cfg context. Restore rebuilds this input-derived
+        // source-root index once; it must not run other analysis under this step.
+        if name == "files_to_copy > source_root_crates" {
+            assert!(*count <= 1, "source-root membership rebuilt {count} times");
+            continue;
+        }
         *by_step
             .entry(name.split(" > ").next().unwrap_or_default())
             .or_default() += count;

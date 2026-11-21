@@ -18,8 +18,8 @@ use crate::hooks::{EnrichView, IrEnricher};
 use crate::ir::{
     ATTR_FUNCTION_CALL_FLOW, ATTR_FUNCTION_SOURCE_SYNTAX, ATTR_SEMANTIC_FUNCTION,
     ATTR_SOURCE_MODULE_SCOPE, BasicQuery, EdgeKind, FunctionCallFlow, FunctionSourceSyntax, IrMut,
-    IrView, ItemKind, NodeId, NodeKind, Resolved, ResolvedFunctionCall, SemanticFunction,
-    SemanticItemId, SourceCallResolution, TargetFacts, resolve_call,
+    IrView, ItemKind, NodeId, NodeKind, Resolved, ResolvedFunctionCall, SemanticItemId,
+    SourceCallResolution, TargetFacts, resolve_call,
 };
 
 /// Adds source declaration identities and caller edges without another parse.
@@ -102,19 +102,6 @@ fn definition_of(ir: &dyn IrView, function: NodeId) -> CordialResult<Option<Sema
         .map(|entry| *entry.function().definition()))
 }
 
-/// A function's semantic facts: the ordinary build's, or those of the first cfg
-/// context that resolved it when it exists only there.
-#[tracing::instrument(level = "trace", skip(ir, function), err(level = "warn"))]
-fn semantic_facts(ir: &dyn IrView, function: NodeId) -> CordialResult<Option<SemanticFunction>> {
-    if let Some(facts) = ir.semantic_function(function)? {
-        return Ok(Some(facts));
-    }
-    Ok(ir
-        .semantic_context_functions(function)?
-        .first()
-        .map(|entry| entry.function().clone()))
-}
-
 #[tracing::instrument(
     level = "trace",
     skip(ir, function, facts, definitions),
@@ -134,7 +121,7 @@ fn enrich_function(
         .transpose()?
         .flatten();
     let namespace_trusted = !extern_crates && scope.is_some_and(|scope| !scope.opaque());
-    let semantic = semantic_facts(ir, function)?;
+    let semantic = ir.semantic_function_or_first_context(function)?;
     let mut calls = Vec::new();
     for call in facts.calls() {
         let resolution = {

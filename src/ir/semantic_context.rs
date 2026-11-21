@@ -115,6 +115,12 @@ pub struct SemanticContextFunction {
 }
 
 impl SemanticContextFunction {
+    /// Move the already decoded function facts out of this context record.
+    #[tracing::instrument(level = "trace", skip(self))]
+    pub(crate) fn into_function(self) -> super::SemanticFunction {
+        self.function
+    }
+
     /// These facts with every identity in them replaced by `map`'s answer.
     #[tracing::instrument(level = "trace", skip(self, map))]
     pub(crate) fn map_identities(
