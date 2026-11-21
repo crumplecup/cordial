@@ -1,6 +1,6 @@
 # Memory measurement and reduction using upstream Hotpath
 
-Status: **Upstream restoration and phases 3–4 complete, 2026-11-21.**
+Status: **Upstream restoration and phases 3–4 complete; phase 5 measured, streaming restore needs dependency review, 2026-11-21.**
 The immediate checkpoints restored published Hotpath with focused consumer
 tests and removed the graph-sized serialization copy. Existing measurement
 gaps are accepted and documented; they do not block application improvements.
@@ -320,6 +320,45 @@ passed. All-features Nextest, Clippy with warnings denied, formatting and diff
 checks passed. The saved-context query test permits only the one source-root
 membership query needed by copy selection; it still rejects other analysis in
 that step. No Cordial CLI or full-program workload ran.
+
+## Checkpoint evidence — measure database persistence before changing it
+
+`saved_state_allocation` measures the real save/restore boundary on the existing
+three-file identity fixture with two macro-generated functions. Cold workspace
+loading happens before capture; capture spans cold projection/save, database
+teardown and restored loading/projection. The fixture checks callee and result
+type identities after restore. It uses upstream Hotpath and the existing capture
+pipeline in a disposable test store, with no full-program workload.
+
+| Fixture boundary | Cumulative allocation traffic |
+| --- | ---: |
+| `SavedState::save` | 108.5 MB |
+| `SavedState::restore` | 340.8 MB |
+| `SavedState::read_part` (five parts) | 97.2 MB |
+| `SavedState::decode_salsa` | 242.1 MB |
+
+Units and rounding are preserved from Hotpath. Rows overlap and must not be
+summed; these are allocation traffic, not retained heap or RSS. The encoded
+Salsa file is 101,391,215 bytes; the other four parts total 488,343 bytes. Restore
+holds that entire encoding while rebuilding the database. Save already streams
+its encoding to a file; metadata buffers are much smaller in this fixture.
+
+A buffered-reader restore experiment compiled, but the warm-load assertion
+failed: `invalid type: string "universe", expected a borrowed string`.
+`vendor/salsa/src/function.rs` requests map keys with `next_key::<&str>()`.
+The unsuccessful Cordial change was removed. There is no claimed RAM saving
+from this checkpoint, and no dependency code was changed.
+
+The next reviewable option is to allow owned or borrowed map keys in Salsa's
+ingredient decoder, then retry buffered restore and compare this same fixture.
+That dependency change requires separate scope review under phase 5. Do not
+work around it with a second decoder, unsafe buffer lifetimes, or a new fork.
+Truncated and missing Salsa-file fixtures also check cold fallback after a
+partially restored database is discarded. All nine tests in `saved_state` and
+`saved_state_allocation` passed through Nextest. Formatting, all-feature,
+all-target Clippy with warnings denied, and diff checks passed. Each Cargo
+command ran only after the previous one exited. No Cordial CLI or full-program
+workload ran.
 
 ## Phase 1 — Restore upstream use and finish measurement infrastructure
 

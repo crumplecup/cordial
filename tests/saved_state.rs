@@ -96,6 +96,30 @@ fn a_state_that_cannot_be_used_is_ignored_and_the_run_goes_on_cold() -> Result<(
         "and the run still works"
     );
 
+    // A partial encoding can fail after many memos have already been restored.
+    let salsa = saved.directory().join("salsa");
+    let length = std::fs::metadata(&salsa).into_diagnostic()?.len();
+    std::fs::OpenOptions::new()
+        .write(true)
+        .open(&salsa)
+        .into_diagnostic()?
+        .set_len(length / 2)
+        .into_diagnostic()?;
+    let (restored, targets, types) = run(root.path(), &saved)?;
+    assert!(!restored, "a truncated state is discarded");
+    assert_eq!(targets.len(), first_targets.len());
+    assert_eq!(
+        types.len(),
+        2,
+        "the cold fallback resolves both result types"
+    );
+
+    // The Salsa file may be missing while the metadata and key are still there.
+    std::fs::remove_file(&salsa).into_diagnostic()?;
+    let (restored, targets, _) = run(root.path(), &saved)?;
+    assert!(!restored, "a missing Salsa file is discarded");
+    assert_eq!(targets.len(), first_targets.len());
+
     // Damaged.
     let (_, _, _) = run(root.path(), &saved)?; // saves a good state again
     std::fs::write(saved.directory().join("salsa"), b"not a database").into_diagnostic()?;
