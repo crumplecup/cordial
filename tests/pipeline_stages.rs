@@ -69,7 +69,7 @@ fn a_run_stops_after_the_stage_it_is_asked_to_and_says_what_it_reused() -> Resul
     assert!(
         metrics
             .values()
-            .get("definition_maps.chosen.crates")
+            .get("definition_maps.chosen_first.crates")
             .is_some_and(|chosen| *chosen > 0),
         "the load's own numbers are kept: {:?}",
         metrics.values().keys().collect::<Vec<_>>()

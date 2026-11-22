@@ -54,7 +54,25 @@ impl TraitItems {
         let _p = tracing::info_span!("trait_items_with_diagnostics_query").entered();
         let ItemLoc { container: module_id, id: ast_id } = *tr.lookup(db);
         let ast_id_map = ast_id.file_id.ast_id_map(db);
-        let source = ast_id.with_value(ast_id_map.get(ast_id.value)).to_node(db);
+        // An id a saved state holds can name a trait an edit has since removed, and the save's
+        // verification asks about every persisted memo: it has no items.
+        let node = match ast_id_map.try_get(ast_id.value) {
+            Ok(node) => node,
+            Err(stale) => {
+                tracing::debug!(
+                    target: "cordial::nameres",
+                    item = "trait",
+                    file = ?ast_id.file_id,
+                    error = %stale,
+                    "a saved id names an item that is not in its file"
+                );
+                return (
+                    TraitItems { macro_calls: ThinVec::new(), items: Box::default() },
+                    DefDiagnostics::new(vec![]),
+                );
+            }
+        };
+        let source = ast_id.with_value(node).to_node(db);
         if source.eq_token().is_some() {
             // FIXME(trait-alias) probably needs special handling here
             return (
@@ -119,10 +137,28 @@ impl ImplItems {
     pub fn of(db: &dyn SourceDatabase, id: ImplId) -> (ImplItems, DefDiagnostics) {
         let _p = tracing::info_span!("impl_items_with_diagnostics_query").entered();
         let ItemLoc { container: module_id, id: ast_id } = *id.lookup(db);
+        // An id a saved state holds can name an impl an edit has since removed, and the save's
+        // verification asks about every persisted memo: it has no items.
+        let node = match ast_id.file_id.ast_id_map(db).try_get(ast_id.value) {
+            Ok(node) => node,
+            Err(stale) => {
+                tracing::debug!(
+                    target: "cordial::nameres",
+                    item = "impl",
+                    file = ?ast_id.file_id,
+                    error = %stale,
+                    "a saved id names an item that is not in its file"
+                );
+                return (
+                    ImplItems { items: Box::default(), macro_calls: ThinVec::new() },
+                    DefDiagnostics::new(vec![]),
+                );
+            }
+        };
 
         let collector =
             AssocItemCollector::new(db, module_id, ItemContainerId::ImplId(id), ast_id.file_id);
-        let source = ast_id.with_value(collector.ast_id_map.get(ast_id.value)).to_node(db);
+        let source = ast_id.with_value(node).to_node(db);
         let (items, macro_calls, diagnostics) = collector.collect(source.assoc_item_list());
 
         (ImplItems { items, macro_calls }, DefDiagnostics::new(diagnostics))

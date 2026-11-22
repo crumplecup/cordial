@@ -64,12 +64,13 @@ fn run(root: &Path, saved: &SavedState) -> Result<bool> {
 }
 
 /// What a restored run must not compute: the per-file queries the projection runs.
-const PER_FILE: [&str; 6] = [
+///
+/// The collectors of a file run inside one fused extraction, so that is the family that says they ran;
+/// the per-collector queries read its result and say nothing of their own.
+const PER_FILE: [&str; 4] = [
     "file_facts:",
     "file_items:",
-    "visibility_file:",
-    "policy_file:",
-    "error_sites_file:",
+    "extract_file:",
     "antipattern_facts_file:",
 ];
 

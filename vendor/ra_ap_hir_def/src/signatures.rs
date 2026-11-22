@@ -1069,6 +1069,18 @@ impl EnumVariants {
     ) -> (EnumVariants, ThinVec<InactiveEnumVariantCode>) {
         let _p = tracing::info_span!("enum_variants_query").entered();
         let loc = e.lookup(db);
+        // An id a saved state holds can name an enum an edit has since removed, and the save's
+        // verification asks about every persisted memo: it has no variants.
+        if let Err(stale) = loc.id.file_id.ast_id_map(db).try_get(loc.id.value) {
+            tracing::debug!(
+                target: "cordial::nameres",
+                item = "enum",
+                file = ?loc.id.file_id,
+                error = %stale,
+                "a saved id names an item that is not in its file"
+            );
+            return (EnumVariants { variants: FxIndexMap::default() }, ThinVec::new());
+        }
         let source = loc.source(db);
         let ast_id_map = source.file_id.ast_id_map(db);
 

@@ -838,6 +838,23 @@ impl AstIdMap {
         Some(self.arena[idx].1)
     }
 
+    /// The node `id` names, or why there is none. An id that a saved database holds can name a node
+    /// that an edit has since removed, or the wrong kind of node, and what asks about it (the
+    /// save's verification asks about every persisted memo) must be able to say so and go on.
+    pub fn try_get<N: AstNode>(&self, id: FileAstId<N>) -> Result<AstPtr<N>, StaleAstId> {
+        let hash = hash_ast_id(&id.raw);
+        let expected = std::any::type_name::<N>().rsplit("::").next().unwrap_or_default();
+        let Some(&idx) = self.id_map.find(hash, |&idx| self.arena[idx].1 == id.raw) else {
+            return Err(StaleAstId::Missing { id: id.raw, expected, nodes: self.arena.len() });
+        };
+        let ptr = self.arena[idx].0;
+        AstPtr::try_from_raw(ptr).ok_or(StaleAstId::WrongKind {
+            id: id.raw,
+            expected,
+            found: ptr.kind(),
+        })
+    }
+
     // Don't bound on `AstIdNode` here, because `BlockExpr`s are also valid here (`ast::BlockExpr`
     // doesn't always have a matching `FileAstId`, but a `FileAstId<ast::BlockExpr>` always has
     // a matching node).
@@ -866,6 +883,33 @@ impl AstIdMap {
         }
     }
 }
+
+/// An id that names no usable node of its file: see [`AstIdMap::try_get`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StaleAstId {
+    /// The file has no node with this id any longer: the id, the kind of node asked for, and how many
+    /// nodes the file has ids for now.
+    Missing { id: ErasedFileAstId, expected: &'static str, nodes: usize },
+    /// The file has a node with this id, but not of the kind the id was made for.
+    WrongKind { id: ErasedFileAstId, expected: &'static str, found: syntax::SyntaxKind },
+}
+
+impl std::fmt::Display for StaleAstId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Missing { id, expected, nodes } => write!(
+                f,
+                "the file has no `{expected}` with ast id {id:?} among its {nodes} nodes with ids"
+            ),
+            Self::WrongKind { id, expected, found } => write!(
+                f,
+                "the node with ast id {id:?} is a {found:?}, and not the `{expected}` it was asked for"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for StaleAstId {}
 
 #[cfg(not(no_salsa_async_drops))]
 impl Drop for AstIdMap {
