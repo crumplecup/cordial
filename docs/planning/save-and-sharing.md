@@ -114,6 +114,16 @@ manifest and the segments in the same order as today. Done when every existing s
 test passes unchanged and a save followed by a restore followed by a save writes the same bytes, which A1 makes
 true.
 
+*Done (2026-11-22).* The Salsa state is a directory: `header` (stamp format and runtime), `manifest` (each
+ingredient's index, name and length, in restore order) and `<index>.seg` per ingredient, written one at a time
+straight to the file. Salsa gained `save_segments`, `restore_segment` and `finish_segments` beside the single-
+stream API. A restore checks each file's length against the manifest before decoding it. A save now reports
+every ingredient's bytes under `salsa::state_size` (so the metrics have them on every run), which replaces the
+`CORDIAL_STATE_SIZES` switch and its second full encode. Tests: `salsa_segments` (restore reuses, same bytes
+after a restore, a change after a restore is found), `saved_state` (a run that changes nothing saves identical
+files; truncated, undecodable, missing and damaged states are discarded). Segments are whole ingredients, so
+the large ones are still one file each: A4 splits them.
+
 **A3. File texts by reference.** For library and sysroot roots, `FileText` is saved as its length, a content
 hash and its path; on restore it is a non-resident `FileContents` that reads the path when asked (the type
 already has a re-read source for this: `drop_library_texts`). On the first read the hash is checked, and a

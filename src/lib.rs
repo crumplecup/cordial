@@ -333,9 +333,9 @@ pub use plugins::{
     quality_only_plugins, quality_plugins,
 };
 pub use run_metrics::{
-    MetricsLayer, QUERY_STEPS_VARIABLE, RunMetrics, STATE_SIZES_VARIABLE,
-    keep_at as keep_run_metrics_at, metrics_filter, metrics_filter_with, read as read_run_metrics,
-    write as write_run_metrics, write_ended as write_ended_run_metrics,
+    MetricsLayer, QUERY_STEPS_VARIABLE, RunMetrics, keep_at as keep_run_metrics_at, metrics_filter,
+    metrics_filter_with, read as read_run_metrics, write as write_run_metrics,
+    write_ended as write_ended_run_metrics,
 };
 pub use tracing_init::{
     LOG_SPANS_VARIABLE, TestProfileGuard, init_cli_tracing, init_tracing, profile_test,

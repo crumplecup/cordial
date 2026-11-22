@@ -58,6 +58,52 @@ fn a_saved_database_is_restored_and_gives_every_definition_the_same_id() -> Resu
     Ok(())
 }
 
+/// Every file of the saved Salsa state with its bytes, by name.
+fn segments_of(saved: &SavedState) -> Result<std::collections::BTreeMap<String, Vec<u8>>> {
+    let mut files = std::collections::BTreeMap::new();
+    for entry in std::fs::read_dir(saved.directory().join("salsa")).into_diagnostic()? {
+        let path = entry.into_diagnostic()?.path();
+        let name = path
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .into_owned();
+        files.insert(name, std::fs::read(&path).into_diagnostic()?);
+    }
+    Ok(files)
+}
+
+/// A run that restores a state and changes nothing saves the state it restored: each ingredient's
+/// file is the same bytes, so a save can tell what a run changed from what it only passed through.
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn a_run_that_changes_nothing_saves_the_same_segments() -> Result<()> {
+    cordial::init_tracing();
+    let root = specimen()?;
+    let state = tempfile::tempdir().into_diagnostic()?;
+    let saved = SavedState::at(state.path().join("analysis-state"));
+    run(root.path(), &saved)?;
+    run(root.path(), &saved)?;
+    let before = segments_of(&saved)?;
+    assert!(before.len() > 3, "a manifest, a header and the ingredients");
+
+    let (restored, _, _) = run(root.path(), &saved)?;
+    assert!(restored);
+    let after = segments_of(&saved)?;
+    assert_eq!(
+        before.keys().collect::<Vec<_>>(),
+        after.keys().collect::<Vec<_>>(),
+        "the same files"
+    );
+    let changed: Vec<_> = before
+        .iter()
+        .filter(|(name, bytes)| after.get(*name) != Some(bytes))
+        .map(|(name, _)| name)
+        .collect();
+    assert!(changed.is_empty(), "files that differ: {changed:?}");
+    Ok(())
+}
+
 #[test]
 #[tracing::instrument(level = "debug", err(level = "warn"))]
 fn an_edit_between_runs_keeps_the_ids_of_what_it_left_alone() -> Result<()> {
@@ -75,6 +121,23 @@ fn an_edit_between_runs_keeps_the_ids_of_what_it_left_alone() -> Result<()> {
     assert_eq!(targets, first_targets, "the callees did not move");
     assert_eq!(paths(root.path()).len(), 3);
     Ok(())
+}
+
+/// The largest ingredient's file of a saved Salsa state.
+fn largest_segment(salsa: &std::path::Path) -> Result<std::path::PathBuf> {
+    let mut files = Vec::new();
+    for entry in std::fs::read_dir(salsa).into_diagnostic()? {
+        let path = entry.into_diagnostic()?.path();
+        if path.extension().is_some_and(|extension| extension == "seg") {
+            let length = std::fs::metadata(&path).into_diagnostic()?.len();
+            files.push((length, path));
+        }
+    }
+    files
+        .into_iter()
+        .max()
+        .map(|(_, path)| path)
+        .ok_or_else(|| miette::miette!("a saved state has segments"))
 }
 
 #[test]
@@ -96,12 +159,14 @@ fn a_state_that_cannot_be_used_is_ignored_and_the_run_goes_on_cold() -> Result<(
         "and the run still works"
     );
 
-    // A partial encoding can fail after many memos have already been restored.
+    // The Salsa state is a directory with a file for each ingredient. A file cut short is found out
+    // from the manifest, before anything of it is decoded.
     let salsa = saved.directory().join("salsa");
-    let length = std::fs::metadata(&salsa).into_diagnostic()?.len();
+    let largest = largest_segment(&salsa)?;
+    let length = std::fs::metadata(&largest).into_diagnostic()?.len();
     std::fs::OpenOptions::new()
         .write(true)
-        .open(&salsa)
+        .open(&largest)
         .into_diagnostic()?
         .set_len(length / 2)
         .into_diagnostic()?;
@@ -114,15 +179,29 @@ fn a_state_that_cannot_be_used_is_ignored_and_the_run_goes_on_cold() -> Result<(
         "the cold fallback resolves both result types"
     );
 
-    // The Salsa file may be missing while the metadata and key are still there.
-    std::fs::remove_file(&salsa).into_diagnostic()?;
+    // The Salsa state may be missing while the metadata and key are still there.
+    std::fs::remove_dir_all(&salsa).into_diagnostic()?;
     let (restored, targets, _) = run(root.path(), &saved)?;
-    assert!(!restored, "a missing Salsa file is discarded");
+    assert!(!restored, "a missing Salsa state is discarded");
+    assert_eq!(targets.len(), first_targets.len());
+
+    // A file of the right length that does not decode fails after the ingredients before it have been
+    // restored.
+    let (_, _, _) = run(root.path(), &saved)?; // saves a good state again
+    let largest = largest_segment(&salsa)?;
+    let length = std::fs::metadata(&largest).into_diagnostic()?.len();
+    std::fs::write(
+        &largest,
+        vec![0xc1; usize::try_from(length).into_diagnostic()?],
+    )
+    .into_diagnostic()?;
+    let (restored, targets, _) = run(root.path(), &saved)?;
+    assert!(!restored, "a segment that does not decode is not used");
     assert_eq!(targets.len(), first_targets.len());
 
     // Damaged.
     let (_, _, _) = run(root.path(), &saved)?; // saves a good state again
-    std::fs::write(saved.directory().join("salsa"), b"not a database").into_diagnostic()?;
+    std::fs::write(salsa.join("manifest"), b"not a manifest").into_diagnostic()?;
     let (restored, targets, _) = run(root.path(), &saved)?;
     assert!(!restored, "a damaged state is not used");
     assert_eq!(targets.len(), first_targets.len());

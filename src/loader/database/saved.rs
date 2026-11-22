@@ -23,7 +23,10 @@ use tracing::instrument;
 use crate::{CordialError, CordialResult};
 
 const KEY: &str = "key";
+/// The directory of the Salsa state: a header, a manifest and a file for each ingredient.
 const SALSA: &str = "salsa";
+const SALSA_HEADER: &str = "header";
+const SALSA_MANIFEST: &str = "manifest";
 const FILES: &str = "files";
 const CRATES: &str = "crates";
 const PATHS: &str = "paths";
@@ -34,6 +37,23 @@ const WRITE_BUFFER_BYTES: usize = 1 << 20;
 
 /// How much of the saved Salsa state is buffered while its memos are restored.
 const READ_BUFFER_BYTES: usize = 64 * 1024;
+
+/// An ingredient of the Salsa state as the manifest names it. The manifest lists them in the order a
+/// restore has to read them, and says how long each is so that a file cut short is found out before
+/// it is decoded.
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+struct SegmentEntry {
+    index: u32,
+    name: String,
+    bytes: u64,
+}
+
+impl SegmentEntry {
+    /// The file the ingredient is in, within the Salsa directory.
+    fn file(&self) -> String {
+        format!("{}.seg", self.index)
+    }
+}
 
 /// What a saved state restores to: the database, and the paths of the VFS it was saved with,
 /// in id order. Salsa's inputs are keyed by file id, so the next load must hand out the same
@@ -107,29 +127,43 @@ impl SavedState {
         // Straight to the file: the encoded state held in memory first, and grown as it is written,
         // is a copy or two of the state on top of what the run holds, at the moment a run that is
         // saving because its memory is near the budget can least afford it.
-        let mut out = std::io::BufWriter::with_capacity(
-            WRITE_BUFFER_BYTES,
-            std::fs::File::create(writing.join(SALSA))?,
-        );
-        rmp_serde::encode::write(&mut out, &database.as_serialize())
-            .map_err(|error| self.encoding(&error))?;
-        std::io::Write::flush(&mut out)?;
-        drop(out);
-        let salsa_len =
-            usize::try_from(std::fs::metadata(writing.join(SALSA))?.len()).unwrap_or(usize::MAX);
-        if std::env::var_os(crate::STATE_SIZES_VARIABLE).is_some() {
-            // Where the size is, by ingredient: the whole database is encoded once more.
-            for (ingredient, bytes) in database.ingredient_sizes(&|part| {
-                rmp_serde::to_vec(part).map_or(0, |encoded| encoded.len())
-            }) {
+        let salsa_dir = writing.join(SALSA);
+        std::fs::create_dir_all(&salsa_dir)?;
+        let mut manifest = Vec::new();
+        let mut header_len = 0_usize;
+        database.save_segments(
+            |header| {
+                header_len = self.write_encoded(&salsa_dir.join(SALSA_HEADER), header)?;
+                Ok::<(), CordialError>(())
+            },
+            |segment, part| {
+                let entry = SegmentEntry {
+                    index: segment.index,
+                    name: segment.name.to_owned(),
+                    bytes: 0,
+                };
+                let bytes = self.write_encoded(&salsa_dir.join(entry.file()), part)?;
                 tracing::debug!(
                     target: "salsa::state_size",
-                    ingredient,
+                    ingredient = segment.name,
+                    index = segment.index,
                     bytes,
                     "an ingredient's share of the saved state"
                 );
-            }
-        }
+                manifest.push(SegmentEntry {
+                    bytes: u64::try_from(bytes).unwrap_or(u64::MAX),
+                    ..entry
+                });
+                Ok(())
+            },
+        )?;
+        let manifest_len = self.write_encoded(&salsa_dir.join(SALSA_MANIFEST), &manifest)?;
+        let salsa_len = header_len
+            + manifest_len
+            + manifest
+                .iter()
+                .map(|entry| usize::try_from(entry.bytes).unwrap_or(usize::MAX))
+                .sum::<usize>();
         tracing::debug!(
             target: "cordial::cache",
             step = "encoded",
@@ -167,9 +201,7 @@ impl SavedState {
         if key != crate::run_cache::executable_fingerprint() {
             return Err("saved by another build of cordial".to_owned());
         }
-        let (salsa, files, crates, paths, contexts) = (
-            std::fs::File::open(self.dir.join(SALSA))
-                .map_err(|error| format!("{SALSA} unreadable ({error})"))?,
+        let (files, crates, paths, contexts) = (
             self.read_part(FILES)?,
             self.read_part(CRATES)?,
             self.read_part(PATHS)?,
@@ -179,7 +211,7 @@ impl SavedState {
         // goes on without it.
         catch_unwind(AssertUnwindSafe(|| {
             let mut database = RootDatabase::empty();
-            Self::decode_salsa(&mut database, salsa)?;
+            self.decode_salsa(&mut database)?;
             database.files().restore(
                 rmp_serde::from_slice(&files)
                     .map_err(|error| format!("files unreadable ({error})"))?,
@@ -215,6 +247,21 @@ impl SavedState {
         .unwrap_or_else(|_| Err("restoring it panicked".to_owned()))
     }
 
+    /// Encode `part` straight to `path`, and say how many bytes that was.
+    #[instrument(level = "trace", skip(self, part))]
+    fn write_encoded<T: serde::Serialize + ?Sized>(
+        &self,
+        path: &Path,
+        part: &T,
+    ) -> CordialResult<usize> {
+        let mut out =
+            std::io::BufWriter::with_capacity(WRITE_BUFFER_BYTES, std::fs::File::create(path)?);
+        rmp_serde::encode::write(&mut out, part).map_err(|error| self.encoding(&error))?;
+        std::io::Write::flush(&mut out)?;
+        drop(out);
+        Ok(usize::try_from(std::fs::metadata(path)?.len()).unwrap_or(usize::MAX))
+    }
+
     /// One part of the saved state, as bytes. The event says how fast the disk gave it up.
     #[instrument(level = "debug", skip(self))]
     #[hotpath::measure(impl_type = "SavedState")]
@@ -232,25 +279,53 @@ impl SavedState {
         Ok(bytes)
     }
 
-    /// Rebuild the Salsa memos from their saved bytes. The event gives the bytes and the time,
-    /// so the rate shows whether decoding or something else is what a restore waits for.
+    /// Rebuild the Salsa memos from their saved segments, in the order the manifest gives. The events
+    /// give each ingredient's bytes and time and then the whole, so the rate shows whether decoding or
+    /// something else is what a restore waits for.
     #[instrument(level = "debug", skip_all)]
     #[hotpath::measure(impl_type = "SavedState")]
-    fn decode_salsa(database: &mut RootDatabase, salsa: std::fs::File) -> Result<(), String> {
+    fn decode_salsa(&self, database: &mut RootDatabase) -> Result<(), String> {
         let started = std::time::Instant::now();
-        let bytes = salsa
-            .metadata()
-            .map_err(|error| format!("salsa state unreadable ({error})"))?
-            .len();
-        let reader = std::io::BufReader::with_capacity(READ_BUFFER_BYTES, salsa);
+        let dir = self.dir.join(SALSA);
+        let read = |name: &str| {
+            std::fs::read(dir.join(name))
+                .map_err(|error| format!("salsa {name} unreadable ({error})"))
+        };
+        let manifest: Vec<SegmentEntry> = rmp_serde::from_slice(&read(SALSA_MANIFEST)?)
+            .map_err(|error| format!("salsa {SALSA_MANIFEST} unreadable ({error})"))?;
+        let header: salsa::SegmentHeader = rmp_serde::from_slice(&read(SALSA_HEADER)?)
+            .map_err(|error| format!("salsa {SALSA_HEADER} unreadable ({error})"))?;
         let expanded_before = salsa::edges_expanded();
         let target: &mut dyn salsa::Database = database;
-        target
-            .deserialize(&mut rmp_serde::Deserializer::new(reader))
-            .map_err(|error| format!("salsa state unreadable ({error})"))?;
+        let mut bytes = 0_u64;
+        for entry in &manifest {
+            let file = std::fs::File::open(dir.join(entry.file()))
+                .map_err(|error| format!("salsa {} unreadable ({error})", entry.name))?;
+            let length = file
+                .metadata()
+                .map_err(|error| format!("salsa {} unreadable ({error})", entry.name))?
+                .len();
+            if length != entry.bytes {
+                return Err(format!(
+                    "salsa {} is {length} bytes where the manifest says {}",
+                    entry.name, entry.bytes
+                ));
+            }
+            let reader = std::io::BufReader::with_capacity(READ_BUFFER_BYTES, file);
+            target
+                .restore_segment(
+                    &header,
+                    entry.index,
+                    &mut rmp_serde::Deserializer::new(reader),
+                )
+                .map_err(|error| format!("salsa {} unreadable ({error})", entry.name))?;
+            bytes += length;
+        }
+        target.finish_segments(header);
         tracing::debug!(
             target: "cordial::cache",
             bytes,
+            segments = manifest.len(),
             edges = salsa::edges_expanded() - expanded_before,
             micros = u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX),
             "decoded the saved Salsa memos"

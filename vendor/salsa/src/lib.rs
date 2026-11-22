@@ -335,6 +335,8 @@ pub use self::cancelled::Cancelled;
 
 pub use self::cycle::Cycle;
 pub use self::database::Database;
+#[cfg(feature = "persistence")]
+pub use self::database::{Segment, SegmentHeader};
 pub use self::database_impl::DatabaseImpl;
 pub use self::durability::Durability;
 pub use self::event::{Event, EventKind};

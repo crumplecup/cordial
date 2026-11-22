@@ -22,10 +22,6 @@ use tracing_subscriber::layer::{Context, Layer};
 
 use crate::{CordialResult, StoreLayout};
 
-/// The environment variable that asks a save for the size of each ingredient in it, which encodes
-/// the saved state a second time.
-pub const STATE_SIZES_VARIABLE: &str = "CORDIAL_STATE_SIZES";
-
 /// The environment variable that asks a run for the queries Salsa executed, by the step of cordial
 /// that asked: it turns on cordial's own spans, which costs what a profile does.
 pub const QUERY_STEPS_VARIABLE: &str = "CORDIAL_QUERY_STEPS";

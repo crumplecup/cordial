@@ -387,6 +387,85 @@ mod persistence {
                 .collect()
         }
 
+        /// Save the database as a header and then one serialization per ingredient, in the order a
+        /// restore has to read them, so that each can be written (and later reused or read) by
+        /// itself and only one is encoded at a time. `header` is given what [`SegmentHeader`]
+        /// deserializes; `segment` is given each ingredient with what names it.
+        ///
+        /// Cancels other workers and waits for their database handles to be dropped.
+        pub fn save_segments<E>(
+            &mut self,
+            header: impl FnOnce(&dyn erased_serde::Serialize) -> Result<(), E>,
+            mut segment: impl FnMut(Segment, &dyn erased_serde::Serialize) -> Result<(), E>,
+        ) -> Result<(), E> {
+            let zalsa = self.zalsa_mut();
+            let zalsa: &Zalsa = zalsa;
+            let canonical = zalsa
+                .ingredients()
+                .filter(|ingredient| ingredient.should_serialize(zalsa))
+                .all(|ingredient| ingredient.all_verified_now(zalsa));
+            header(&SerializeHeader {
+                format: if canonical {
+                    FormatVersion::Canonical
+                } else {
+                    FormatVersion::Stamped
+                },
+                runtime: zalsa.runtime(),
+            })?;
+            let _canonical = crate::stamps::Canonical::enter(canonical);
+            let mut ingredients = zalsa
+                .ingredients()
+                .filter(|ingredient| ingredient.should_serialize(zalsa))
+                .collect::<Vec<_>>();
+            // Structs before the tracked functions whose memos refer to them.
+            ingredients.sort_by_key(|ingredient| ingredient.jar_kind());
+            for ingredient in ingredients {
+                let named = Segment {
+                    index: ingredient.ingredient_index().as_u32(),
+                    name: ingredient.debug_name(),
+                };
+                segment(named, &SerializeIngredient(ingredient, zalsa))?;
+            }
+            Ok(())
+        }
+
+        /// Restore one ingredient that [`Self::save_segments`] wrote, from `deserializer`. Segments
+        /// are restored in the order they were written, and [`Self::finish_segments`] follows the last.
+        pub fn restore_segment<'db, D>(
+            &mut self,
+            header: &SegmentHeader,
+            index: u32,
+            deserializer: D,
+        ) -> Result<(), D::Error>
+        where
+            D: serde::Deserializer<'db>,
+        {
+            let _restoring = crate::stamps::Restoring::enter(
+                (header.format == FormatVersion::Canonical)
+                    .then(|| header.runtime.current_revision()),
+            );
+            let zalsa = self.zalsa_mut();
+            let index = IngredientIndex::new(index);
+            let mut ingredient = zalsa.take_ingredient(index);
+            let started = std::time::Instant::now();
+            let result = DeserializeIngredient(&mut *ingredient, zalsa).deserialize(deserializer);
+            crate::tracing::event!(
+                DEBUG,
+                ingredient = ingredient.debug_name(),
+                micros = u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX),
+                "deserialized an ingredient"
+            );
+            zalsa.replace_ingredient(index, ingredient);
+            result
+        }
+
+        /// Take the runtime's state from the header, once every segment is restored.
+        pub fn finish_segments(&mut self, mut header: SegmentHeader) {
+            self.zalsa_mut()
+                .runtime_mut()
+                .deserialize_from(&mut header.runtime);
+        }
+
         /// Deserialize the database using a [`serde::Deserializer`].
         ///
         /// This method will modify the database in-place based on the serialized data.
@@ -427,6 +506,29 @@ mod persistence {
                 _ => Err(de::Error::custom("unsupported Salsa ownership format")),
             }
         }
+    }
+
+    /// Names an ingredient written by [`Database::save_segments`]: its index in the database, which
+    /// a restore needs, and its name, which says what it is.
+    #[derive(Clone, Copy, Debug)]
+    pub struct Segment {
+        pub index: u32,
+        pub name: &'static str,
+    }
+
+    /// What a segmented state says before its ingredients: how its stamps are written and the
+    /// runtime's state. It is serialized by [`Database::save_segments`] and read back by the
+    /// restore.
+    #[derive(serde::Deserialize)]
+    pub struct SegmentHeader {
+        format: FormatVersion,
+        runtime: Runtime,
+    }
+
+    #[derive(serde::Serialize)]
+    struct SerializeHeader<'db> {
+        format: FormatVersion,
+        runtime: &'db Runtime,
     }
 
     #[derive(serde::Serialize)]
@@ -696,6 +798,9 @@ mod persistence {
         }
     }
 }
+
+#[cfg(feature = "persistence")]
+pub use persistence::{Segment, SegmentHeader};
 
 #[cfg(feature = "salsa_unstable")]
 pub use memory_usage::{IngredientInfo, PageInfo};
