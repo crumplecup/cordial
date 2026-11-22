@@ -3,11 +3,15 @@
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, Weak};
 
 use ra_ap_cfg::CfgOptions;
-use ra_ap_hir_def::nameres::{crate_def_map, stable::def_map_fingerprint};
+use ra_ap_hir_def::nameres::{
+    crate_declared_query_keys, crate_def_map, stable::def_map_fingerprint,
+};
 use ra_ap_hir_def::resolver::HasResolver;
+use ra_ap_hir_def::{FunctionId, ModuleDefId};
+use ra_ap_hir_expand::intern::Symbol;
 use ra_ap_ide_db::RootDatabase;
 use ra_ap_ide_db::base_db::{
     AbsPathBuf, Crate, CrateBuilderId, CrateGraphBuilder, CrateName, CrateOrigin,
@@ -52,25 +56,56 @@ fn native_module_payload(
     vec![u8::from(module.containing_module_inside_def_map(db).is_some()); 4096]
 }
 
+#[derive(Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, salsa::SalsaValue)]
+struct ItemPayload {
+    bytes: Vec<u8>,
+    #[serde(skip)]
+    alive: Arc<()>,
+}
+
+/// An interned location key can own a payload without reading any input fields.
+#[salsa::tracked(persist, returns(ref))]
+fn native_item_payload(_db: &dyn SourceDatabase, function: FunctionId) -> ItemPayload {
+    ItemPayload {
+        bytes: vec![function.as_id().as_bits() as u8; 4096],
+        alive: Arc::default(),
+    }
+}
+
 struct Fixture {
     db: RootDatabase,
     graph: CrateGraphBuilder,
     main: CrateBuilderId,
     dependency: CrateBuilderId,
     krate: Crate,
+    contexts: Vec<Crate>,
 }
 
 impl Fixture {
     fn new() -> Self {
+        Self::build("pub mod nested { pub fn original() {} }", 0)
+    }
+
+    fn build(main_text: &str, contexts: usize) -> Self {
         let mut db = RootDatabase::default();
         let mut graph = CrateGraphBuilder::default();
         let mut files = FileSet::default();
         let mut change = FileChange::default();
         let mut roots = Vec::new();
-        for (id, text) in [
-            (0, "pub mod nested { pub fn original() {} }"),
-            (1, "pub struct Dependency;"),
-        ] {
+        for id in 0..contexts + 2 {
+            let text = if id == 1 {
+                "pub struct Dependency; pub fn shared() {}"
+            } else {
+                main_text
+            };
+            let mut cfg = CfgOptions::default();
+            if id >= 2 {
+                cfg.insert_key_value(
+                    Symbol::intern("variant"),
+                    Symbol::intern(&(id - 2).to_string()),
+                );
+            }
+            let id = u32::try_from(id).unwrap();
             let file = FileId::from_raw(id);
             files.insert(file, VfsPath::new_virtual_path(format!("/{id}/lib.rs")));
             change.change_file(file, Some(text.to_owned()));
@@ -79,7 +114,7 @@ impl Fixture {
                 Edition::CURRENT,
                 None,
                 None,
-                CfgOptions::default(),
+                cfg,
                 None,
                 Env::default(),
                 CrateOrigin::Local {
@@ -99,12 +134,14 @@ impl Fixture {
         change.set_crate_graph(graph.clone());
         let crates = change.apply(&mut db).unwrap();
         let krate = crates[&roots[0]];
+        let contexts = roots[2..].iter().map(|id| crates[id]).collect();
         Self {
             db,
             graph,
             main: roots[0],
             dependency: roots[1],
             krate,
+            contexts,
         }
     }
 
@@ -128,12 +165,19 @@ impl Fixture {
     }
 
     fn add_dependency(&mut self) {
-        self.graph
-            .add_dep(
-                self.main,
-                DependencyBuilder::new(CrateName::new("unused").unwrap(), self.dependency),
-            )
-            .unwrap();
+        let crates: Vec<_> = self
+            .graph
+            .iter()
+            .filter(|id| *id != self.dependency)
+            .collect();
+        for krate in crates {
+            self.graph
+                .add_dep(
+                    krate,
+                    DependencyBuilder::new(CrateName::new("unused").unwrap(), self.dependency),
+                )
+                .unwrap();
+        }
         let crates = self.graph.clone().set_in_db(&mut self.db);
         assert_eq!(crates[&self.main], self.krate);
     }
@@ -194,6 +238,234 @@ impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for MapExecutions {
         if attrs.metadata().name() == "crate_def_map_query" {
             self.0.fetch_add(1, Ordering::SeqCst);
         }
+    }
+}
+
+fn declared_functions(db: &RootDatabase, krate: Crate) -> Vec<FunctionId> {
+    let mut functions: Vec<_> = crate_def_map(db, krate)
+        .modules()
+        .flat_map(|(_, module)| module.scope.declarations())
+        .filter_map(|def| match def {
+            ModuleDefId::FunctionId(id) => Some(id),
+            _ => None,
+        })
+        .collect();
+    functions.sort_unstable_by_key(|id| id.as_id().as_bits());
+    functions
+}
+
+fn warm_items(db: &RootDatabase, functions: &[FunctionId]) -> Vec<Weak<()>> {
+    functions
+        .iter()
+        .map(|&function| {
+            ra_ap_hir_def::expr_store::body::Body::with_source_map(db, function.into());
+            Arc::downgrade(&native_item_payload(db, function).alive)
+        })
+        .collect()
+}
+
+fn declared_context_keys(db: &mut RootDatabase, krate: Crate) -> Vec<salsa::Id> {
+    let mut seeds = vec![krate.as_id()];
+    seeds.extend(crate_declared_query_keys(db, krate));
+    db.tracked_output_keys(&seeds)
+}
+
+fn held_item_values(db: &mut RootDatabase, functions: &[FunctionId]) -> u64 {
+    let keys: Vec<_> = functions.iter().map(AsId::as_id).collect();
+    let mut held = 0;
+    db.values_in_memory_for_inputs(
+        &keys,
+        false,
+        true,
+        &["native_item_payload", "Body::with_source_map_"],
+        &mut |_, count| held += count,
+    );
+    held
+}
+
+#[test]
+fn declared_locations_retire_cfg_item_values_without_retiring_imported_work() {
+    let _fixture = FIXTURE.lock().unwrap();
+    let _reset = ResetStore;
+    for count in [1, 4, 16] {
+        let mut source = String::from(
+            "extern crate unused; pub use unused::Dependency; use unused::shared;\n\
+             macro_rules! make { () => { pub fn generated() {} } } make!();\n\
+             pub mod nested { pub fn inside() {} }\n\
+             pub fn always() {}\n",
+        );
+        for variant in 0..count {
+            source.push_str(&format!(
+                "#[cfg(variant = \"{variant}\")] pub fn selected() {{ let _ = {variant}; }}\n"
+            ));
+        }
+        for restored in [false, true] {
+            salsa::set_spill_store(Some(Arc::new(Store::default())));
+            let executions = MapExecutions::default();
+            let subscriber = tracing_subscriber::registry().with(executions.clone());
+            tracing::subscriber::with_default(subscriber, || {
+                let mut fixture = Fixture::build(&source, count);
+                fixture.add_dependency();
+                let dependency = ra_ap_ide_db::base_db::all_crates(&fixture.db)
+                    .iter()
+                    .copied()
+                    .find(|krate| *krate != fixture.krate && !fixture.contexts.contains(krate))
+                    .unwrap();
+                let ordinary = declared_functions(&fixture.db, fixture.krate);
+                assert_eq!(ordinary.len(), 3, "ordinary cfg excludes selected()");
+                let functions: Vec<_> = fixture
+                    .contexts
+                    .iter()
+                    .map(|&krate| declared_functions(&fixture.db, krate))
+                    .collect();
+                assert!(functions.iter().all(|items| items.len() == 4));
+                // Shared payloads are first warmed while processing the first cfg copy.
+                for items in &functions {
+                    warm_items(&fixture.db, items);
+                    warm_items(&fixture.db, &declared_functions(&fixture.db, dependency));
+                }
+                warm_items(&fixture.db, &ordinary);
+                if restored {
+                    fixture.restore();
+                }
+                let shared = declared_functions(&fixture.db, dependency);
+                assert_eq!(shared.len(), 1);
+                let shared_markers = warm_items(&fixture.db, &shared);
+                let ordinary_markers = warm_items(&fixture.db, &ordinary);
+                let markers: Vec<_> = functions
+                    .iter()
+                    .map(|items| warm_items(&fixture.db, items))
+                    .collect();
+                let map_count = count + 2;
+                assert_eq!(executions.0.load(Ordering::SeqCst), map_count);
+                for (index, &krate) in fixture.contexts.iter().enumerate() {
+                    assert_eq!(declared_functions(&fixture.db, krate), functions[index]);
+                    assert!(
+                        crate_def_map(&fixture.db, krate)
+                            .modules()
+                            .any(|(_, module)| {
+                                module
+                                    .scope
+                                    .values()
+                                    .any(|(_, item)| item.def == ModuleDefId::FunctionId(shared[0]))
+                            }),
+                        "the fixture must actually import shared()"
+                    );
+                    let keys = declared_context_keys(&mut fixture.db, krate);
+                    assert!(functions[index].iter().all(|id| keys.contains(&id.as_id())));
+                    assert!(
+                        ordinary
+                            .iter()
+                            .chain(&shared)
+                            .all(|id| !keys.contains(&id.as_id()))
+                    );
+                    for _ in 0..2 {
+                        fixture.db.values_in_memory_for_inputs(
+                            &keys,
+                            true,
+                            false,
+                            &[],
+                            &mut |_, _| {},
+                        );
+                        fixture.db.spill_persisted_for_inputs(&keys);
+                        assert_eq!(held_item_values(&mut fixture.db, &functions[index]), 0);
+                    }
+                    for (other, markers) in markers.iter().enumerate() {
+                        assert!(
+                            markers
+                                .iter()
+                                .all(|marker| { (marker.strong_count() > 0) == (other > index) }),
+                            "only completed cfg copies should release original payloads"
+                        );
+                    }
+                    assert!(
+                        ordinary_markers
+                            .iter()
+                            .chain(&shared_markers)
+                            .all(|marker| marker.strong_count() > 0)
+                    );
+                    assert_eq!(
+                        held_item_values(&mut fixture.db, &ordinary),
+                        2 * ordinary.len() as u64
+                    );
+                    assert_eq!(held_item_values(&mut fixture.db, &shared), 2);
+                }
+                for (index, &krate) in fixture.contexts.iter().enumerate() {
+                    assert_eq!(declared_functions(&fixture.db, krate), functions[index]);
+                    for &function in &functions[index] {
+                        assert_eq!(
+                            native_item_payload(&fixture.db, function).bytes,
+                            vec![function.as_id().as_bits() as u8; 4096]
+                        );
+                        ra_ap_hir_def::expr_store::body::Body::with_source_map(
+                            &fixture.db,
+                            function.into(),
+                        );
+                    }
+                    assert_eq!(held_item_values(&mut fixture.db, &functions[index]), 8);
+                }
+                assert_eq!(
+                    executions.0.load(Ordering::SeqCst),
+                    map_count,
+                    "re-entry decodes maps without collecting them"
+                );
+            });
+        }
+    }
+}
+
+#[test]
+fn declared_location_selection_follows_the_current_map_after_an_edit() {
+    let _fixture = FIXTURE.lock().unwrap();
+    let _reset = ResetStore;
+    for restored in [false, true] {
+        salsa::set_spill_store(Some(Arc::new(Store::default())));
+        let mut fixture = Fixture::build(
+            "extern crate unused; use unused::shared; pub fn original() {}",
+            1,
+        );
+        fixture.add_dependency();
+        let context = fixture.contexts[0];
+        let previous = declared_functions(&fixture.db, context);
+        assert_eq!(previous.len(), 1);
+        warm_items(&fixture.db, &previous);
+        if restored {
+            fixture.restore();
+        }
+        let ordinary = declared_functions(&fixture.db, fixture.krate);
+        let ordinary_markers = warm_items(&fixture.db, &ordinary);
+        let mut change = FileChange::default();
+        change.change_file(
+            FileId::from_raw(2),
+            Some("extern crate unused; use unused::shared; pub fn replacement() {}".into()),
+        );
+        change.apply(&mut fixture.db);
+        let current = declared_functions(&fixture.db, context);
+        assert_eq!(current.len(), 1);
+        assert_ne!(current, previous);
+        let markers = warm_items(&fixture.db, &current);
+        let keys = declared_context_keys(&mut fixture.db, context);
+        assert!(current.iter().all(|id| keys.contains(&id.as_id())));
+        assert!(
+            previous
+                .iter()
+                .chain(&ordinary)
+                .all(|id| !keys.contains(&id.as_id()))
+        );
+        fixture
+            .db
+            .values_in_memory_for_inputs(&keys, true, false, &[], &mut |_, _| {});
+        fixture.db.spill_persisted_for_inputs(&keys);
+        assert_eq!(held_item_values(&mut fixture.db, &current), 0);
+        assert!(markers.iter().all(|marker| marker.strong_count() == 0));
+        assert!(
+            ordinary_markers
+                .iter()
+                .all(|marker| marker.strong_count() > 0)
+        );
+        assert_eq!(declared_functions(&fixture.db, context), current);
+        warm_items(&fixture.db, &current);
+        assert_eq!(held_item_values(&mut fixture.db, &current), 2);
     }
 }
 

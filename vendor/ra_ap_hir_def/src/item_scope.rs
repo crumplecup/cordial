@@ -10,6 +10,7 @@ use indexmap::map::Entry;
 use itertools::Itertools;
 use la_arena::Idx;
 use rustc_hash::{FxHashMap, FxHashSet};
+use salsa::plumbing::AsId;
 use smallvec::SmallVec;
 use span::Edition;
 use stdx::{format_to, impl_from};
@@ -293,6 +294,31 @@ impl ItemScope {
 
     pub fn declarations(&self) -> impl Iterator<Item = ModuleDefId> + '_ {
         self.declarations.iter().copied()
+    }
+
+    /// Keys recorded as declarations in this scope, excluding imported or inherited names.
+    /// This reads stored declaration facts without resolving names or running queries.
+    pub(crate) fn declared_query_keys(&self) -> impl Iterator<Item = salsa::Id> + '_ {
+        self.declarations()
+            .filter_map(|def| match def {
+                ModuleDefId::ModuleId(id) => Some(id.as_id()),
+                ModuleDefId::FunctionId(id) => Some(id.as_id()),
+                ModuleDefId::AdtId(id) => Some(id.as_id()),
+                ModuleDefId::EnumVariantId(id) => Some(id.as_id()),
+                ModuleDefId::ConstId(id) => Some(id.as_id()),
+                ModuleDefId::StaticId(id) => Some(id.as_id()),
+                ModuleDefId::TraitId(id) => Some(id.as_id()),
+                ModuleDefId::TypeAliasId(id) => Some(id.as_id()),
+                ModuleDefId::MacroId(id) => Some(id.as_id()),
+                ModuleDefId::BuiltinType(_) => None,
+            })
+            .chain(self.impls().map(|id| id.as_id()))
+            .chain(self.builtin_derive_impls().map(|id| id.as_id()))
+            .chain(self.unnamed_consts().map(|id| id.as_id()))
+            .chain(self.extern_blocks().map(|id| id.as_id()))
+            .chain(self.extern_crate_decls().map(|id| id.as_id()))
+            .chain(self.use_decls().map(|id| id.as_id()))
+            .chain(self.all_macro_calls().map(|id| id.as_id()))
     }
 
     pub fn extern_crate_decls(&self) -> impl ExactSizeIterator<Item = ExternCrateId> + '_ {

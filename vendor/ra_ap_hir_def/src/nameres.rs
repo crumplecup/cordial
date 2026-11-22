@@ -70,6 +70,7 @@ use hir_expand::{
 use intern::{Symbol, sym};
 use itertools::Itertools;
 use rustc_hash::FxHashMap;
+use salsa::plumbing::AsId;
 use span::{Edition, FileAstId, FileId, ROOT_ERASED_FILE_AST_ID};
 use stdx::format_to;
 use syntax::{AstNode, SmolStr, SyntaxNode, ToSmolStr, ast};
@@ -410,6 +411,18 @@ pub fn crate_def_map(db: &dyn SourceDatabase, crate_id: Crate) -> &DefMap {
     external_def_map(db, crate_id)
 }
 
+/// Keys declared in a crate's module scopes, for retiring completed semantic values.
+///
+/// Read the persisted owner directly so restoring a context does not recreate the
+/// external-map projection just to enumerate these keys. The owner may decode or
+/// recompute on this read; the iterator itself only visits stored facts.
+pub fn crate_declared_query_keys(
+    db: &dyn SourceDatabase,
+    crate_id: Crate,
+) -> impl Iterator<Item = salsa::Id> + '_ {
+    crate_local_def_map(db, crate_id).def_map.declared_query_keys()
+}
+
 // Keep the large payloads in the query memo so spilling that memo can release them.
 // Tracked module/block identities are still created by the same owner query.
 #[derive(Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -581,6 +594,18 @@ impl DefMap {
 
     pub fn modules(&self) -> impl Iterator<Item = (ModuleId, &ModuleData)> + '_ {
         self.modules.iter()
+    }
+
+    /// Query keys declared in this map's modules, excluding imports and inherited names.
+    ///
+    /// Used to retire module-level semantic values without scanning interned locations.
+    /// The iterator reads existing facts only; keys may repeat. Associated items, enum
+    /// variants, non-exported legacy macro definitions and declarations in body-local
+    /// block maps are not enumerated here.
+    fn declared_query_keys(&self) -> impl Iterator<Item = salsa::Id> + '_ {
+        self.modules().flat_map(|(id, module)| {
+            std::iter::once(id.as_id()).chain(module.scope.declared_query_keys())
+        })
     }
 
     /// Returns all inline modules (mod name { ... }) in the crate that are associated with the given macro expansion.

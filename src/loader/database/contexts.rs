@@ -7,10 +7,10 @@
 //! and syntax trees. Context-specific semantic results are copied into the IR.
 //!
 //! Harvesting, observability and follow-up gate discovery must finish before
-//! the pass retires values keyed by copied crates and tracked outputs of their
-//! queries, including definition maps and module-keyed values. Other eviction
-//! follows the run's pressure policy; interned/composite keys and copied inputs
-//! can still accumulate.
+//! the pass retires values keyed by copied crates, their module-level declarations
+//! and tracked outputs of queries on those keys. Other eviction follows the run's
+//! pressure policy; associated items, body-local declarations, composite keys and
+//! copied inputs can still accumulate.
 
 mod copy_functions;
 mod flips;
@@ -45,11 +45,16 @@ impl super::SourceDatabase {
                 }
             });
         }
-        let inputs: Vec<_> = context
-            .shadows()
-            .map(|krate| salsa::plumbing::AsId::as_id(&krate))
-            .collect();
-        self.retire_context_values(&inputs, after);
+        let mut keys = Vec::new();
+        for krate in context.shadows() {
+            keys.push(salsa::plumbing::AsId::as_id(&krate));
+            // Collect stored local declarations before dropping their map. Visible namespace
+            // entries also contain imports and must not seed retirement of shared work.
+            keys.extend(ra_ap_hir_def::nameres::crate_declared_query_keys(
+                &self.db, krate,
+            ));
+        }
+        self.retire_context_values(&keys, after);
         self.evict_regenerable(after);
     }
 }
