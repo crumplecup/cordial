@@ -32,8 +32,10 @@ impl<C: Configuration> DeletedEntries<C> {
     }
 
     /// Free all deleted memos, keeping the list available for reuse.
-    pub(super) fn clear(&mut self) {
+    pub(super) fn clear(&mut self) -> usize {
+        let count = self.memos.count();
         self.memos.clear();
+        count
     }
 }
 

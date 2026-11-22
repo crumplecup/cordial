@@ -333,6 +333,9 @@ where
             old_header.seed_active_query(zalsa, &active_query);
         }
 
+        let ownership = zalsa.resolve_ownership(db.into(), active_query.database_key_index);
+        active_query.set_ownership(ownership);
+
         // Query was not previously executed, or value is potentially
         // stale, or value is absent. Let's execute!
         Self::execute_timed(db, zalsa, active_query, opt_old_header.is_some())

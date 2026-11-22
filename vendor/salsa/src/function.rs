@@ -664,6 +664,74 @@ where
         held
     }
 
+    fn drain_deferred_memos(&mut self) -> usize {
+        self.deleted_entries.clear()
+    }
+
+    unsafe fn retire_owned_value(
+        &self,
+        zalsa: &Zalsa,
+        id: Id,
+        store: Option<&dyn crate::spill::SpillStore>,
+        counters: &crate::spill::SpillCounters,
+        report: &mut crate::OwnerRetirementReport,
+    ) {
+        // SAFETY: The caller grants exclusive storage access. Unlike public interner
+        // iteration, this exact memo-table access cannot refresh a retired key.
+        let table = unsafe { zalsa.table().dyn_memos_unchecked(id) };
+        let memo_index = self.memo_ingredient_index(zalsa, id);
+        let Some(mut memo) = table.get::<Memo<C>>(memo_index) else {
+            return;
+        };
+        // SAFETY: The exclusive boundary prevents any outstanding memo references.
+        let memo = unsafe { memo.as_mut() };
+        let Some(ownership) = memo.header.revisions.ownership() else {
+            return;
+        };
+        if !ownership.eligible(&zalsa.owner_index, report) {
+            report.protected += 1;
+            return;
+        }
+        if !memo.has_ram_payload() {
+            ownership.detach();
+            return;
+        }
+        if !memo.header.can_evict_value() || memo.header.may_be_provisional() {
+            report.retained += 1;
+            report.refused += 1;
+            return;
+        }
+        if C::PERSIST {
+            if store.is_none() {
+                report.spill_unavailable += 1;
+            }
+            #[cfg(feature = "persistence")]
+            if let Some(store) = store {
+                memo.spill(
+                    crate::spill::SpillKey {
+                        storage: zalsa.spill_storage(),
+                        ingredient: self.index.as_u32(),
+                        id: id.as_bits(),
+                    },
+                    store,
+                    counters,
+                );
+            }
+            #[cfg(not(feature = "persistence"))]
+            let _ = (store, counters);
+        } else {
+            memo.drop_in_memory_value();
+        }
+        if memo.has_ram_payload() {
+            report.retained += 1;
+            if C::PERSIST && store.is_some() {
+                report.spill_failed += 1;
+            }
+        } else {
+            report.released += 1;
+        }
+    }
+
     unsafe fn spill_persisted(
         &self,
         zalsa: &Zalsa,
@@ -1356,11 +1424,21 @@ mod persistence {
                 // before its memos, but its saved revision may differ from the current runtime.
                 let memo_table = unsafe { zalsa.table().dyn_memos_unchecked(id) };
 
-                memo_table.insert(
+                if memo.has_ram_payload() {
+                    if let Some(ownership) = memo.header.revisions.ownership() {
+                        ownership.attach(&zalsa.owner_index, ingredient.database_key_index(id));
+                    }
+                }
+                if let Some(old) = memo_table.insert(
                     memo_ingredient_index,
                     // FIXME: Use `Box::into_non_null` once stable.
                     NonNull::from(Box::leak(Box::new(memo))),
-                );
+                ) {
+                    // SAFETY: Restoration owns the storage exclusively, including old memos.
+                    unsafe {
+                        drop(Box::from_raw(old.as_ptr()));
+                    }
+                }
             }
 
             Ok(())

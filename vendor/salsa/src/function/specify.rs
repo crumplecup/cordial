@@ -23,6 +23,8 @@ where
     {
         let (zalsa, zalsa_local) = db.zalsas();
 
+        // Classification reads belong to the assigning frame's normal dependencies.
+        let ownership = zalsa.resolve_ownership(db.into(), self.database_key_index(key));
         let (active_query_key, current_deps, cycle_heads) =
             match zalsa_local.active_query_with_cycle_heads() {
                 Some(v) => v,
@@ -119,6 +121,7 @@ where
             },
             stale_tracked_structs: Vec::new(),
         };
+        completed_query.revisions.set_ownership(ownership);
         if is_provisional {
             // Assigned memos aren't cycle heads, so only their inherited head stamps matter.
             completed_query

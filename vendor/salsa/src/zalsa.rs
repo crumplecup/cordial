@@ -185,6 +185,9 @@ pub struct Zalsa {
 
     event_callback: Option<Box<dyn Fn(crate::Event) + Send + Sync>>,
 
+    pub(crate) owner_index: std::sync::Arc<crate::ownership::OwnerIndex>,
+    pub(crate) ownership_resolvers: crate::ownership::Resolvers,
+
     /// The queries whose value has a saved fingerprint, with the query that is the fingerprint: a
     /// memo that read the first is saved as depending on the second instead of on everything the
     /// first read (see `flatten::cutoff_edge`).
@@ -213,6 +216,8 @@ impl Zalsa {
             runtime: Runtime::default(),
             memo_ingredient_indices: Default::default(),
             event_callback,
+            owner_index: Default::default(),
+            ownership_resolvers: Default::default(),
             cutoffs: std::sync::RwLock::new(Vec::new()),
             #[cfg(not(feature = "inventory"))]
             nonce: NONCE.nonce(),
@@ -332,6 +337,13 @@ impl Zalsa {
         self.ingredients_vec
             .iter()
             .map(|ingredient| ingredient.as_ref())
+    }
+
+    pub(crate) fn drain_deferred_memos(&mut self) -> usize {
+        self.ingredients_vec
+            .iter_mut()
+            .map(|ingredient| ingredient.drain_deferred_memos())
+            .sum()
     }
 
     /// Starts unwinding the stack if the current revision is cancelled.

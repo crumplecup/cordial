@@ -526,6 +526,19 @@ pub(crate) struct QueryRevisions {
 }
 
 impl QueryRevisions {
+    pub(crate) fn set_ownership(
+        &mut self,
+        ownership: Option<Box<crate::ownership::MemoOwnership>>,
+    ) {
+        if ownership.is_some() {
+            self.origin_and_extra.get_or_insert_extra().ownership = ownership;
+        }
+    }
+
+    pub(crate) fn ownership(&self) -> Option<&crate::ownership::MemoOwnership> {
+        self.extra()?.ownership.as_deref()
+    }
+
     /// Returns the semantic origin of this query.
     #[inline]
     pub(crate) const fn origin(&self) -> QueryOriginRef<'_> {
@@ -586,6 +599,17 @@ impl QueryRevisions {
 pub(crate) struct QueryRevisionsExtra(Option<QueryRevisionsExtraInner>);
 
 impl QueryRevisionsExtra {
+    pub(crate) fn set_ownership(
+        &mut self,
+        ownership: Option<Box<crate::ownership::MemoOwnership>>,
+    ) {
+        if ownership.is_some() {
+            self.0
+                .get_or_insert_with(QueryRevisionsExtraInner::empty)
+                .ownership = ownership;
+        }
+    }
+
     pub fn new(
         #[cfg(feature = "accumulator")] accumulated: AccumulatedMap,
         mut tracked_struct_ids: ThinVec<(Identity, Id)>,
@@ -611,6 +635,7 @@ impl QueryRevisionsExtra {
             tracked_struct_ids.shrink_to_fit();
 
             Some(QueryRevisionsExtraInner {
+                ownership: None,
                 #[cfg(feature = "accumulator")]
                 accumulated,
                 cycle_heads,
@@ -626,6 +651,7 @@ impl QueryRevisionsExtra {
 
 #[cfg_attr(feature = "persistence", derive(serde::Serialize, serde::Deserialize))]
 struct QueryRevisionsExtraInner {
+    ownership: Option<Box<crate::ownership::MemoOwnership>>,
     #[cfg(feature = "accumulator")]
     #[cfg_attr(feature = "persistence", serde(skip))] // TODO: Support serializing accumulators
     accumulated: AccumulatedMap,
@@ -675,6 +701,7 @@ struct QueryRevisionsExtraInner {
 impl QueryRevisionsExtraInner {
     fn empty() -> Self {
         QueryRevisionsExtraInner {
+            ownership: None,
             #[cfg(feature = "accumulator")]
             accumulated: AccumulatedMap::default(),
             tracked_struct_ids: ThinVec::default(),
@@ -687,6 +714,7 @@ impl QueryRevisionsExtraInner {
     #[cfg(feature = "salsa_unstable")]
     fn allocation_size(&self) -> usize {
         let QueryRevisionsExtraInner {
+            ownership,
             #[cfg(feature = "accumulator")]
             accumulated,
             tracked_struct_ids,
@@ -699,7 +727,11 @@ impl QueryRevisionsExtraInner {
         let b = accumulated.allocation_size();
         #[cfg(not(feature = "accumulator"))]
         let b = 0;
-        b + cycle_heads.allocation_size() + std::mem::size_of_val(tracked_struct_ids.as_slice())
+        b + cycle_heads.allocation_size()
+            + std::mem::size_of_val(tracked_struct_ids.as_slice())
+            + ownership
+                .as_ref()
+                .map_or(0, |ownership| ownership.allocation_size())
     }
 }
 
@@ -748,7 +780,7 @@ const _: [(); std::mem::size_of::<QueryRevisions>()] = [(); std::mem::size_of::<
 #[cfg(not(feature = "shuttle"))]
 #[cfg(target_pointer_width = "64")]
 const _: [(); std::mem::size_of::<QueryRevisionsExtraInner>()] =
-    [(); std::mem::size_of::<[usize; if cfg!(feature = "accumulator") { 7 } else { 3 }]>()];
+    [(); std::mem::size_of::<[usize; if cfg!(feature = "accumulator") { 8 } else { 4 }]>()];
 
 impl QueryRevisions {
     pub(crate) fn fixpoint_initial(query: DatabaseKeyIndex, iteration: IterationStamp) -> Self {
@@ -1963,6 +1995,17 @@ pub(crate) struct ActiveQueryGuard<'me> {
 }
 
 impl<'me> ActiveQueryGuard<'me> {
+    pub(crate) fn set_ownership(&self, ownership: Option<Box<crate::ownership::MemoOwnership>>) {
+        // SAFETY: The resolver has returned; this does not access the stack reentrantly.
+        unsafe {
+            self.local_state.with_query_stack_unchecked_mut(|stack| {
+                let frame = stack.last_mut().unwrap();
+                assert_eq!(frame.database_key_index, self.database_key_index);
+                frame.ownership = ownership;
+            })
+        }
+    }
+
     /// Initialize the tracked struct ids with the values from the prior execution.
     pub(crate) fn seed_tracked_struct_ids(&self, tracked_struct_ids: &[(Identity, Id)]) {
         // SAFETY: We do not access the query stack reentrantly.
@@ -2555,5 +2598,28 @@ mod tests {
         let id = unsafe { Id::from_index(index) }.with_generation(generation);
 
         DatabaseKeyIndex::new(IngredientIndex::new(ingredient), id)
+    }
+}
+
+impl ZalsaLocal {
+    pub(crate) fn copy_query_ownership(
+        &self,
+        key: DatabaseKeyIndex,
+    ) -> Option<Box<crate::ownership::MemoOwnership>> {
+        // SAFETY: This copies metadata without callbacks or reentrant stack access.
+        unsafe {
+            self.with_query_stack_unchecked(|stack| {
+                stack
+                    .iter()
+                    .rev()
+                    .find(|frame| frame.database_key_index == key)
+                    .and_then(|frame| {
+                        frame
+                            .ownership
+                            .as_ref()
+                            .map(|ownership| ownership.copy_declaration())
+                    })
+            })
+        }
     }
 }

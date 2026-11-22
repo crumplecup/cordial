@@ -20,6 +20,8 @@ use crate::{durability::Durability, tracked_struct::Identity};
 
 #[derive(Debug)]
 pub(crate) struct ActiveQuery {
+    pub(crate) ownership: Option<Box<crate::ownership::MemoOwnership>>,
+
     /// What query is executing
     pub(crate) database_key_index: DatabaseKeyIndex,
 
@@ -199,6 +201,7 @@ impl ActiveQuery {
 impl ActiveQuery {
     fn new(database_key_index: DatabaseKeyIndex) -> Self {
         ActiveQuery {
+            ownership: None,
             database_key_index,
             durability: Durability::MAX,
             changed_at: Revision::start(),
@@ -220,6 +223,7 @@ impl ActiveQuery {
         force_extra: bool,
     ) -> QueryCompletion {
         let &mut Self {
+            ref mut ownership,
             database_key_index: _,
             durability,
             changed_at,
@@ -241,7 +245,7 @@ impl ActiveQuery {
         let verified_final = cycle_heads.is_empty();
         let (active_tracked_structs, stale_tracked_structs) = tracked_struct_ids.drain();
 
-        let extra = QueryRevisionsExtra::new(
+        let mut extra = QueryRevisionsExtra::new(
             #[cfg(feature = "accumulator")]
             mem::take(accumulated),
             active_tracked_structs,
@@ -249,6 +253,7 @@ impl ActiveQuery {
             iteration,
             force_extra,
         );
+        extra.set_ownership(ownership.take());
         QueryCompletion {
             changed_at,
             durability,
@@ -263,6 +268,7 @@ impl ActiveQuery {
 
     fn clear(&mut self) {
         let Self {
+            ownership,
             database_key_index: _,
             durability: _,
             changed_at: _,
@@ -276,6 +282,7 @@ impl ActiveQuery {
             #[cfg(feature = "accumulator")]
                 accumulated_inputs: _,
         } = self;
+        *ownership = None;
         input_outputs.clear();
         disambiguator_map.clear();
         tracked_struct_ids.clear();
@@ -286,6 +293,7 @@ impl ActiveQuery {
 
     fn reset_for(&mut self, new_database_key_index: DatabaseKeyIndex) {
         let Self {
+            ownership,
             database_key_index,
             durability,
             changed_at,
@@ -299,6 +307,7 @@ impl ActiveQuery {
             #[cfg(feature = "accumulator")]
             accumulated_inputs,
         } = self;
+        *ownership = None;
         *database_key_index = new_database_key_index;
         *durability = Durability::MAX;
         *changed_at = Revision::start();

@@ -24,9 +24,24 @@ impl<C: Configuration> IngredientImpl<C> {
         memo: NonNull<Memo<C>>,
         memo_ingredient_index: MemoIngredientIndex,
     ) -> Option<NonNull<Memo<C>>> {
-        zalsa
+        // SAFETY: The caller owns the allocation being published. Claims serialize
+        // publication for this exact function/key, including provisional replacements.
+        let new = unsafe { memo.as_ref() };
+        let old = zalsa
             .memo_table_for::<C::SalsaStruct<'_>>(id)
-            .insert(memo_ingredient_index, memo)
+            .insert(memo_ingredient_index, memo);
+        if let Some(old) = old {
+            // SAFETY: Replaced memos stay alive in DeletedEntries until exclusive access.
+            if let Some(ownership) = unsafe { old.as_ref() }.header.revisions.ownership() {
+                ownership.supersede();
+            }
+        }
+        if new.has_ram_payload() {
+            if let Some(ownership) = new.header.revisions.ownership() {
+                ownership.attach(&zalsa.owner_index, self.database_key_index(id));
+            }
+        }
+        old
     }
 
     /// Loads the current memo for `key_index`. This does not hold any sort of
@@ -61,7 +76,6 @@ impl<C: Configuration> IngredientImpl<C> {
         }
     }
 
-
     /// Evicts the existing memo for the given key, replacing it
     /// with an equivalent memo that has no value. If the memo is untracked
     /// or has values assigned as output of another query, this has no effect.
@@ -71,7 +85,7 @@ impl<C: Configuration> IngredientImpl<C> {
     ) -> Eviction {
         let mut outcome = Eviction::Refused;
         let map = |memo: &mut Memo<C>| {
-            if memo.header.can_evict_value() {
+            if memo.header.can_evict_value() && !memo.header.may_be_provisional() {
                 // Set the memo value to `None`.
                 let spilled = memo.spilled.take().is_some();
                 outcome = if memo.value.take().is_some() || spilled {
@@ -80,6 +94,7 @@ impl<C: Configuration> IngredientImpl<C> {
                     Eviction::NoValue
                 };
             }
+            memo.detach_if_no_ram_payload();
         };
 
         table.map_memo(memo_ingredient_index, map);
@@ -274,7 +289,7 @@ impl MemoHeader {
         self.verified_at.store(zalsa.current_revision());
     }
 
-    fn can_evict_value(&self) -> bool {
+    pub(super) fn can_evict_value(&self) -> bool {
         // Careful: Cannot evict memos whose values were
         // assigned as output of another query
         // or those with untracked inputs
@@ -407,6 +422,14 @@ impl<C: Configuration> Memo<C> {
         Some(unsafe { std::mem::transmute::<&C::Output<'static>, &C::Output<'_>>(value) })
     }
 
+    pub(super) fn has_ram_payload(&self) -> bool {
+        self.in_memory()
+            || self
+                .spilled
+                .as_ref()
+                .is_some_and(|spilled| matches!(spilled.at, SpilledAt::Held(_)))
+    }
+
     /// Whether a value is in memory as a value, as computed or decoded.
     pub(super) fn in_memory(&self) -> bool {
         self.value.is_some()
@@ -424,6 +447,15 @@ impl<C: Configuration> Memo<C> {
             spilled.restored.take();
         } else if self.header.can_evict_value() && !self.header.may_be_provisional() {
             self.value = None;
+        }
+        self.detach_if_no_ram_payload();
+    }
+
+    pub(super) fn detach_if_no_ram_payload(&self) {
+        if !self.has_ram_payload() {
+            if let Some(ownership) = self.header.revisions.ownership() {
+                ownership.detach();
+            }
         }
     }
 
@@ -457,19 +489,16 @@ impl<C: Configuration> Memo<C> {
         if !C::PERSIST || !self.header.can_evict_value() || self.header.may_be_provisional() {
             return;
         }
-        if let Some(value) = self.value.take() {
+        if let Some(value) = self.value.as_ref() {
             let mut bytes = Vec::new();
-            let written = C::serialize(
-                &value,
-                &mut rmp_serde::Serializer::new(&mut bytes),
-            );
+            let written = C::serialize(&value, &mut rmp_serde::Serializer::new(&mut bytes));
             if written.is_err() {
                 // A value that cannot be encoded stays where it is.
-                self.value = Some(value);
                 return;
             }
             store.put(key, &bytes);
             counters.wrote(C::DEBUG_NAME, bytes.len() as u64);
+            self.value = None;
             self.spilled = Some(Box::new(Spilled {
                 at: SpilledAt::Stored(key),
                 restored: std::sync::OnceLock::new(),
@@ -485,6 +514,7 @@ impl<C: Configuration> Memo<C> {
                 counters.dropped_again.fetch_add(1, Relaxed);
             }
         }
+        self.detach_if_no_ram_payload();
     }
 
     /// The value as bytes when it is not in memory as a value: what a saved state had it as, or

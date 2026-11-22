@@ -213,6 +213,25 @@ pub trait Ingredient: Any + fmt::Debug + Send + Sync {
         0
     }
 
+    /// Free superseded allocations at an exclusive boundary without a revision or LRU pass.
+    fn drain_deferred_memos(&mut self) -> usize {
+        0
+    }
+
+    /// Retire exactly one indexed function/input pair; never enumerate or refresh inputs.
+    ///
+    /// # Safety
+    /// The caller holds exclusive access to this ingredient's storage.
+    unsafe fn retire_owned_value(
+        &self,
+        _zalsa: &Zalsa,
+        _id: Id,
+        _store: Option<&dyn crate::spill::SpillStore>,
+        _counters: &crate::spill::SpillCounters,
+        _report: &mut crate::OwnerRetirementReport,
+    ) {
+    }
+
     /// Write the values of this ingredient's persisted memos to `store` and drop them from memory
     /// (see [`crate::spill`]).
     /// If `inputs` is present, visit only memos keyed directly by those IDs.

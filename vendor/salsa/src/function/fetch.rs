@@ -30,6 +30,11 @@ where
 
         // SAFETY: We just refreshed the memo so it is guaranteed to contain a value now.
         let memo_value = unsafe { memo.value().unwrap_unchecked() };
+        // Attach after successful decoding, before exposing a borrowed value. Exclusive
+        // retirement cannot overlap fetch, and an unwinding decoder must not leave a link.
+        if let Some(ownership) = memo.header.revisions.ownership() {
+            ownership.attach(&zalsa.owner_index, database_key_index);
+        }
 
         self.eviction.record_use(id);
 
@@ -239,7 +244,8 @@ where
                         }
                     })
                     .unwrap_or_else(|| IterationStamp::initial(cancellation_count));
-                let revisions = QueryRevisions::fixpoint_initial(database_key_index, iteration);
+                let mut revisions = QueryRevisions::fixpoint_initial(database_key_index, iteration);
+                revisions.set_ownership(zalsa_local.copy_query_ownership(database_key_index));
 
                 let initial_value = C::cycle_initial(db, id, C::id_to_input(zalsa, id));
                 self.insert_memo(

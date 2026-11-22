@@ -1520,28 +1520,267 @@ Naming these keys alone does not make their existing combinations enumerable
 from local definition maps. Tracked producer records do not own interned
 argument combinations, and read dependencies are not ownership edges. Guessing
 combinations would rerun analysis and still miss variants. Following all reads
-would retire shared dependency work. A second reverse ownership table would
-duplicate state and introduce another lifetime problem.
+would retire shared dependency work. An index retains metadata, but that alone
+does not justify rejecting it: compare its cost with repeated classification,
+retirement work and the payload memory it enables us to release.
 
-The next design review should decide how Salsa exposes *existing argument
-combinations* for these families. A constrained extension of its existing memo
-inspection path is preferable to another ownership table: inspect registered
-query argument records without executing queries, decoding results or marking
-interned slots current, then let RA classify their existing arguments. Restrict
-inspection to named query families and report visited slots in controlled
-fixtures. This still introduces enumeration cost; it must be weighed against
-native owner-index support before implementing it. Ordinary public interner
-`entries()` is unsuitable here because it marks enumerated slots current,
-changing identity retention during an eviction operation. The earlier direct-key
-design also rules out silently replacing exact selection with a global scan.
+The proposed direction is a Salsa-native owner index, detailed below. It
+supersedes the earlier preference for enumerating argument records at every
+retirement. Ordinary public interner `entries()` is unsuitable even as a
+production fallback because it marks enumerated slots current. Composite-key
+retirement remains **incomplete** until ownership, lifecycle and coverage checks
+below pass.
 
-For either approach, define ownership for nested type/substitution/environment
-references as well as outer owners, and distinguish context-dependent memos
-from source-site-only shared memos. Prove multiple instantiations per owner,
-shared generic owners with local arguments, direct calls outside tracked
-producers, cold/restore/edit/re-entry and missing/stale owners. Keep the 1/4/16
-families and shared/uncompleted residency assertions. Composite-key retirement
-is **not complete** until that selection contract and its fixtures are implemented.
+### Salsa-native owner index
+
+**Status: runtime checkpoints 1 and 2 implemented; RA integration remains.**
+The design started from `af18e87f`. This extends the existing patched Salsa
+runtime and RA crates; it does not change or vendor Hotpath, add another
+profiler, or authorize a full-program measurement.
+
+#### Ownership contract
+
+RA declares semantic ownership; Salsa stores and indexes it. Ownership means
+the context lifetimes that justify retaining a memo, not the caller that last
+read it, the query's read graph, or every declaration reachable from its owner.
+
+- Use context root identities associated with copied crates, retaining full
+  Salsa ID generations. A context can retire several copied-crate roots in one
+  operation. Register roots before their queries can run; unfinished contexts
+  remain live, including ones whose harvesting has not started.
+- A query's owner set contains context roots found in its arguments: the outer
+  declaration where relevant, evaluation environment, substitutions, nested
+  types, constants, closures and relevant parameter-environment contents.
+  Ordinary workspace/dependency definitions are not themselves context roots.
+- A shared generic definition instantiated with a local type belongs to the
+  local context. A shared definition with wholly shared arguments remains
+  shared. Merely reading shared definitions does not make a local instantiation
+  permanently retained.
+- Distinguish `Shared`, `Owned(nonempty roots)` and `Unclassified` for opted-in
+  queries. Absence of a completed classifier must not masquerade as `Shared`.
+  Unclassified values remain resident and are reported; acceptance fixtures
+  require none in the supported families. Queries outside the opt-in set keep
+  their existing behavior.
+- For a memo associated with multiple context roots, retire it only after all
+  those roots are complete. This deliberately preserves reuse for unfinished
+  contexts. A completed root can still have indexed memberships while another
+  live root protects the same memo.
+- Re-entry explicitly reactivates roots before querying them. Owner lifecycle
+  changes govern retention only; they must not fabricate semantic input edits
+  or invalidate otherwise valid results.
+
+This is an opt-in retention policy, not an assertion that Salsa can infer
+ownership for arbitrary queries. The initial scope is the nine families above.
+
+#### Registration and representation
+
+Use named composite keys where needed to expose existing arguments, with one
+canonical key and one memo per argument combination. Preserve forwarding APIs,
+query behavior and debug labels; do not introduce wrapper tracked queries.
+
+Provide a Salsa runtime registration API for an ownership resolver attached to
+an exact generated query-jar identity, using the existing jar identity support
+rather than matching debug-name strings. RA registers its resolvers during
+database setup and after restoration, before those queries execute. The runtime
+adapts the database view and key for the resolver; RA interprets the arguments.
+Prototype that typed registration boundary before broad query conversion.
+Do not vendor another macro package to obtain an annotation.
+
+Resolve ownership inside the query execution frame before publishing any value,
+including early errors and cycle fallback results. The resolver may read the
+argument records and definition-location facts; it must not invoke inference,
+MIR construction, layout calculation or another analysis to discover owners.
+Necessary tracked ownership reads participate in normal validation. Cache hits
+reuse stored ownership, rather than walking types again. Re-execution replaces
+the old ownership alongside the memo; cycle iterations must not accumulate
+obsolete memberships.
+
+Store the canonical ownership declaration in optional memo metadata, preferably
+through the existing optional revisions representation. Evaluate the actual
+layout before choosing the encoding. The unconfigured common case must not
+allocate ownership storage; record any change to common memo/header size.
+
+The reverse index belongs to Salsa storage. Its logical mapping is:
+
+```text
+context root -> exact function ingredient + full generational input ID
+memo         -> canonical ownership + handles for its current index memberships
+```
+
+The reverse links are intentional indexing metadata. They contain compact IDs
+and removal handles, not copies of substitutions, type trees, bodies or results.
+Use a representation with direct removal, such as per-owner entry slabs with
+reusable slots and memo-held removal handles; avoid searching every owner bucket
+when one memo disappears. Replacement must not let delayed destruction of the
+old memo remove the new memo's memberships. Do not use raw memo pointers as
+durable identities.
+
+#### What the index tracks
+
+Index currently published opted-in context-owned memos that hold RAM payloads: computed values,
+decoded spill values, or encoded bytes held in RAM after restore. A memo whose
+only payload is in the spill file does not need reverse memberships. Its small
+canonical ownership metadata remains available for re-entry.
+
+This refines the earlier suggestion of indexing only decoded resident values:
+encoded restore buffers consume RAM too, and dropping a decoded value can leave
+those buffers behind. Retirement must account for both.
+
+Replaced memos have another lifetime: Salsa retains their allocations in
+`DeletedEntries` while borrowed references may still exist. Detaching the old
+memo's index memberships does not free that allocation. At the exclusive
+retirement boundary, drain these deferred-deletion queues before reporting
+resident results, using a dedicated operation that does not advance the semantic
+revision or run LRU as a side effect. Report deferred releases separately from
+current-memo selection. The index describes current memos; the existing Salsa
+queues continue to own replaced allocations until they are safe to destroy.
+Test that the boundary really releases those payloads and does not merely
+remove their accounting. Queue backing capacity is a separate retained cost.
+
+| Event | Required action |
+| --- | --- |
+| Publish or replace a memo | Install the declaration and memberships for its actual RAM payload; detach replaced memberships safely. |
+| Cache hit on a disk-only memo | Reattach from canonical owner IDs before exposing a decoded value; do not rerun classification. |
+| Restore a memo with held encoded bytes | Restore ownership metadata and attach memberships without decoding its result. |
+| Drop, LRU eviction or successful spill | Remove memberships only when no RAM payload remains; keep them if another resident representation remains. |
+| Refused eviction or failed spill | Retain the value and its memberships; report the outcome. |
+| Cancellation, panic or provisional cycle replacement | Leave no orphan memberships; never release a protected provisional value. |
+| Delete a memo or reclaim/reuse its key slot | Detach all memberships before reuse; check full generations. |
+
+Cover the central publication path, persistence's direct memo insertion path,
+`fetch` before exposing a successfully decoded value, and the existing explicit
+drop, spill and LRU paths. A failed decoder must not attach a disk-only memo.
+Ownership must survive memo revision compaction and dependency-edge discard.
+Runtime index links are never serialized. Persist canonical declarations using
+the cache's existing identity-mapping rules, and rebuild links while each memo
+is restored. Register runtime resolvers separately; do not serialize callbacks.
+Version the affected cache format and invalidate incompatible older caches
+explicitly, rather than default missing declarations to shared ownership.
+
+Index updates may occur during parallel queries and use Salsa's synchronization
+rules. Hold no owner-index lock across query execution, user callbacks, value
+destruction, serialization or store I/O. Retirement uses the existing exclusive
+storage/cancellation boundary, so it never mutates values behind live borrows.
+Inspection follows the existing read-only inspection contract.
+
+#### Retirement operation
+
+Add an owner-based operation that targets exact function/key pairs. Do not
+flatten them into an untyped input list that selects unrelated compatible
+queries. Keep existing spill and eviction eligibility rules.
+
+1. At the existing `finish_context` boundary, finish IR harvesting, gate
+   discovery and required persistence/fingerprint work first.
+2. Drain safely deferred replaced memos, then mark the completing roots retired
+   together and visit their index buckets.
+   Deduplicate memos present in more than one bucket. Check every candidate's
+   owner set; preserve it if an unfinished root still protects it.
+3. Drop eligible regenerable payloads. Spill eligible persisted payloads using
+   the existing store, including held encoded bytes. If the store is unavailable
+   or a value cannot be released, retain its memberships and report it.
+4. Remove memberships after successful release, remove empty buckets, and
+   release their backing allocations. Later publication or fetch can reattach
+   memberships using the canonical declaration.
+5. Return visited, selected, protected, released, refused and still-resident
+   counts, plus the existing spill results. Repeated retirement is idempotent
+   and can retry a previously failed release.
+
+Use this alongside the existing exact crate/declaration/tracked-output path
+initially. It fills composite-selection gaps without discarding proven direct
+selection. Retirement must not execute or decode queries, walk types, refresh
+interned identities, or scan unrelated query/key populations.
+
+Expected retirement work is proportional to bucket memberships visited plus
+their owner-set checks, not all historical argument combinations. Include those
+checks in the reported work; do not claim constant-time retirement.
+
+#### Ordered implementation checkpoints
+
+Each checkpoint ends with focused Nextest fixtures, formatting, all-features/
+all-targets Clippy with warnings denied, diff checks and a commit. Run Cargo
+commands sequentially and propagate offline mode to fixture subprocesses. No
+Cordial self-execution or full-program measurement is part of these steps.
+
+1. **Runtime ownership and index core.** Establish typed resolver registration,
+   canonical declarations, exact memo identities, owner state and direct-removal
+   memberships. Start with small synthetic owned/shared queries. Check multiple
+   argument combinations, two query ingredients on one input, owner deduplication,
+   multi-owner protection, explicit reactivation, replacement and idempotence.
+   Verify the common unconfigured memo layout and allocation behavior.
+2. **Complete lifecycle coverage.** Wire publication, fallback/cycles, LRU,
+   explicit drops, lazy fetch, persistence insertion, spill and slot reclamation.
+   Add format versioning. Check cold/restore, encoded-only RAM, disk-only fetch,
+   edits, cancellation, panic, parallel publication, old-memo delayed destruction
+   and release at a revision-preserving exclusive boundary,
+   slot generations, refused eviction and failed/unavailable spilling. Establish
+   invariant checks comparing resident owned memos with reverse memberships.
+3. **RA ownership and one end-to-end pilot.** Add reusable argument walkers and
+   named keys for `monomorphized_mir_body_query`. Classify nested generic/type/
+   environment arguments, not just the body. Integrate owner retirement at the
+   existing loader completion boundary. Prove a shared generic body with local
+   arguments retires, wholly shared instantiations stay, multiple substitutions
+   are selected and re-entry returns equivalent MIR. Include direct query calls
+   outside tracked producers. Do not move on with unresolved ownership cases.
+4. **Finish the remaining families in small commits.** Extend the pilot to
+   closure MIR; constant and anonymous-constant evaluation; type and ADT layout;
+   associated shorthand and specialization. Give each family its own ownership
+   cases, including nested local references and early errors. Audit
+   `proc_macro_span` separately: shared definition-site spans must remain shared;
+   only actual context-specific source identities justify context ownership.
+   An explicit proven shared classification closes a family without inventing
+   an artificial context owner.
+5. **Scaling, combined verification and plan closure.** Extend the existing
+   1/4/16-context fixtures with independent variation in shared entries and
+   completed historical keys. Verify exact selection and resident payload/index
+   membership counts, including encoded bytes. Retiring one fixed-size context
+   must not visit a growing unrelated population. Successful single-owner
+   retirement must leave no memberships or allocated empty buckets for that
+   owner. Validate combined semantic output, restore/edit/re-entry and existing
+   shared/unfinished-context residency guarantees. Close the inventory only
+   when every family has an explicit tested policy.
+
+Runtime checkpoint evidence: `salsa_owner_index` and `salsa_owner_lifecycle`
+cover exact function selection, tracked ownership edits, unregistered roots,
+multiple owners, real generational slot reuse, parallel publication, cancellation
+at retirement, immediate and fixpoint cycles, assigned/untracked refusals,
+failed and panicking stores, decoder panic, lazy restore and actual payload
+destruction. Together with the existing cached-key, context-retention, spill,
+eviction, lazy, tracked-identity and flattening fixtures, **62 tests pass**.
+All-features/all-targets Clippy with warnings denied and formatting also pass.
+No Cordial self-run or full-program measurement was performed.
+
+Canonical ownership uses the existing optional revisions allocation. The common
+memo header and query revisions remain four and three machine words respectively;
+the optional extra gains one pointer (four words, eight with accumulators).
+Unconfigured queries allocate no ownership record. Memberships use exact keys
+and publication tokens in per-root hash maps; replacing a memo detaches its old
+links before deferred destruction, and empty bucket allocations are released.
+Retirement reads the unclassified count directly rather than computing index
+statistics over historical roots. Runtime callbacks and membership handles are
+excluded from persistence; incompatible cache versions are rejected explicitly.
+RA argument classification, production root registration and loader retirement
+are the next checkpoint, followed by family coverage and scaling/Hotpath checks.
+
+Use test-only independent expected sets or a bounded reference scan to check
+the index. Do not retain a second production ownership registry or enumeration
+fallback. Structural diagnostics may report bucket/member counts, allocation
+capacities and visited entries; upstream Hotpath remains the allocator profiler.
+Measure the actual metadata representation and classifier allocation traffic in
+fixtures instead of guessing a per-entry byte cost. Do not assert a constant
+RSS bound from value counts or allocator traffic.
+
+#### Limits and subsequent decision
+
+This index releases the targeted payload working sets efficiently. It does not
+by itself reclaim argument identities, input/file/crate slots, memo headers,
+dependency records, disk-only memo ownership metadata or allocator-retained
+pages. Owner-state records also require cleanup when their root identities are
+actually removed. Account for all of these separately; bounded identity/input
+storage and stable IR identities remain subsequent work.
+
+After the fixture checkpoints, report payload release, index overhead,
+classification cost and remaining retained structures. Discuss readiness before
+another `elicit_doc` measurement; do not substitute a Cordial self-run.
 
 ## Historical evidence
 

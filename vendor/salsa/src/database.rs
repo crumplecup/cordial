@@ -398,9 +398,30 @@ mod persistence {
         }
     }
 
+    // Ownership declarations change the memo encoding. Reject snapshots that cannot
+    // distinguish absent policy from a proved shared declaration before loading memos.
+    struct FormatVersion;
+
+    impl serde::Serialize for FormatVersion {
+        fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+            serializer.serialize_u32(1)
+        }
+    }
+
+    impl<'de> serde::Deserialize<'de> for FormatVersion {
+        fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+            let version = <u32 as serde::Deserialize>::deserialize(deserializer)?;
+            if version != 1 {
+                return Err(de::Error::custom("unsupported Salsa ownership format"));
+            }
+            Ok(Self)
+        }
+    }
+
     #[derive(serde::Serialize)]
     #[serde(rename = "Database")]
     pub struct SerializeDatabase<'db> {
+        format: FormatVersion,
         runtime: &'db Runtime,
         ingredients: SerializeIngredients<'db>,
     }
@@ -410,6 +431,7 @@ mod persistence {
         fn new(db: &'db mut dyn Database) -> Self {
             let zalsa = db.zalsa_mut();
             Self {
+                format: FormatVersion,
                 runtime: zalsa.runtime(),
                 ingredients: SerializeIngredients(zalsa),
             }
@@ -475,6 +497,7 @@ mod persistence {
     #[derive(serde::Deserialize)]
     #[serde(field_identifier, rename_all = "lowercase")]
     enum DatabaseField {
+        Format,
         Runtime,
         Ingredients,
     }
@@ -490,7 +513,7 @@ mod persistence {
         {
             // Note that we have to deserialize using a manual visitor here because the
             // `Deserialize` derive does not support fields that use `DeserializeSeed`.
-            deserializer.deserialize_struct("Database", &["runtime", "ingredients"], self)
+            deserializer.deserialize_struct("Database", &["format", "runtime", "ingredients"], self)
         }
     }
 
@@ -505,12 +528,15 @@ mod persistence {
         where
             V: SeqAccess<'de>,
         {
-            let mut runtime = seq
+            let _: FormatVersion = seq
                 .next_element()?
                 .ok_or_else(|| de::Error::invalid_length(0, &self))?;
+            let mut runtime = seq
+                .next_element()?
+                .ok_or_else(|| de::Error::invalid_length(1, &self))?;
             let () = seq
                 .next_element_seed(DeserializeIngredients(self.0))?
-                .ok_or_else(|| de::Error::invalid_length(1, &self))?;
+                .ok_or_else(|| de::Error::invalid_length(2, &self))?;
 
             self.0.runtime_mut().deserialize_from(&mut runtime);
             Ok(())
@@ -520,11 +546,18 @@ mod persistence {
         where
             V: serde::de::MapAccess<'de>,
         {
+            let mut format = None;
             let mut runtime = None;
             let mut ingredients = None;
 
             while let Some(key) = map.next_key()? {
                 match key {
+                    DatabaseField::Format => {
+                        if format.is_some() {
+                            return Err(de::Error::duplicate_field("format"));
+                        }
+                        format = Some(map.next_value::<FormatVersion>()?);
+                    }
                     DatabaseField::Runtime => {
                         if runtime.is_some() {
                             return Err(serde::de::Error::duplicate_field("runtime"));
@@ -533,6 +566,9 @@ mod persistence {
                         runtime = Some(map.next_value()?);
                     }
                     DatabaseField::Ingredients => {
+                        if format.is_none() {
+                            return Err(de::Error::missing_field("format before ingredients"));
+                        }
                         if ingredients.is_some() {
                             return Err(serde::de::Error::duplicate_field("ingredients"));
                         }
@@ -542,6 +578,7 @@ mod persistence {
                 }
             }
 
+            let _ = format.ok_or_else(|| de::Error::missing_field("format"))?;
             let mut runtime = runtime.ok_or_else(|| serde::de::Error::missing_field("runtime"))?;
             let () = ingredients.ok_or_else(|| serde::de::Error::missing_field("ingredients"))?;
 

@@ -276,6 +276,7 @@ mod input;
 mod interned;
 mod key;
 mod memo_ingredient_indices;
+mod ownership;
 mod return_mode;
 mod revision;
 mod runtime;
@@ -338,6 +339,10 @@ pub use self::event::{Event, EventKind};
 pub use self::id::Id;
 pub use self::input::setter::Setter;
 pub use self::key::DatabaseKeyIndex;
+pub use self::ownership::{
+    OwnerIndexStats, OwnerRetirementReport, QueryOwnership, activate_owner_roots, is_owner_root,
+    owner_index_stats, register_query_ownership, retire_owned_values,
+};
 pub use self::return_mode::SalsaAsDeref;
 pub use self::return_mode::SalsaAsRef;
 pub use self::revision::Revision;
