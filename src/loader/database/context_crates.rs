@@ -133,6 +133,12 @@ impl ContextCrates {
         })
     }
 
+    /// How many crates this context copied: each is a definition map to build under its cfg.
+    #[instrument(level = "trace", skip(self))]
+    pub fn crate_count(&self) -> usize {
+        self.crates.len()
+    }
+
     /// The crates this context added, as a set.
     #[instrument(level = "trace", skip(self))]
     pub(super) fn crate_set(&self) -> BTreeSet<InputCrate> {
@@ -219,7 +225,7 @@ impl SourceDatabase {
         index: usize,
         previous: Option<&ContextCrates>,
     ) -> CordialResult<ContextCrates> {
-        let ordinary = LocalCfgs::capture_excluding(&self.db, &self.shadow_crates());
+        let ordinary = LocalCfgs::capture(&self.db, &self.analysed_crates());
         let pairs = ordinary.pairs(context);
         let (files, aliased) =
             self.copy_local_files(index, previous.map(|kept| &kept.files), &pairs)?;
@@ -323,12 +329,12 @@ impl SourceDatabase {
         pairs: &[(ra_ap_cfg::CfgOptions, ra_ap_cfg::CfgOptions)],
     ) -> CordialResult<(HashMap<FileId, FileId>, std::collections::HashSet<FileId>)> {
         let root_id = SourceRootId(FIRST_COPY_ROOT + u32::try_from(index).unwrap_or(u32::MAX >> 2));
+        let analysed = self.analysed_crates();
         let (roots, crate_roots): (BTreeSet<SourceRootId>, BTreeSet<FileId>) =
             attach_db(&self.db, || {
                 let locals: Vec<_> = Crate::all(&self.db)
                     .into_iter()
-                    .filter(|krate| krate.origin(&self.db).is_local())
-                    .filter(|krate| !self.shadow_crates().contains(&krate.base()))
+                    .filter(|krate| analysed.contains(&krate.base()))
                     .collect();
                 let roots = locals
                     .iter()
@@ -493,6 +499,55 @@ impl SourceDatabase {
                 .filter(|krate| krate.origin(&self.db).is_local())
                 .map(|krate| krate.base())
                 .filter(|krate| !shadows.contains(krate))
+                .collect()
+        })
+    }
+
+    /// The crates cfg contexts are about: the ordinary build's local crates that belong to a
+    /// workspace member. A path dependency is local to rust-analyzer (it has no registry source)
+    /// but nothing of it is analysed, so a gate in its files asks for no context and a context
+    /// does not copy it: each copy is a definition map to build under the context's cfg, and the
+    /// copies of a project's dependencies are the larger share of a context's cost.
+    ///
+    /// A crate belongs to the package whose directory is the deepest one holding its root file.
+    /// With no workspace, or a crate in no package, every local crate counts.
+    #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure(impl_type = "SourceDatabase")]
+    pub(super) fn analysed_crates(&self) -> BTreeSet<InputCrate> {
+        let local = self.ordinary_crates();
+        let Some(workspace) = self.workspace.as_ref() else {
+            return local;
+        };
+        let packages: Vec<(&std::path::Path, bool)> = workspace
+            .packages()
+            .iter()
+            .map(|package| (package.root().as_path(), true))
+            .chain(
+                self.external_packages
+                    .iter()
+                    .map(|package| (package.root().as_path(), false)),
+            )
+            .collect();
+        attach_db(&self.db, || {
+            local
+                .into_iter()
+                .filter(|base| {
+                    let krate = Crate::from(*base);
+                    let Some(root) =
+                        super::item_key::vfs_path_of(&self.db, krate.root_file(&self.db))
+                    else {
+                        return true;
+                    };
+                    let Some(root) = root.as_path() else {
+                        return true;
+                    };
+                    let root: &std::path::Path = root.as_ref();
+                    packages
+                        .iter()
+                        .filter(|(directory, _)| root.starts_with(directory))
+                        .max_by_key(|(directory, _)| directory.components().count())
+                        .is_none_or(|(_, member)| *member)
+                })
                 .collect()
         })
     }

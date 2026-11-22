@@ -107,18 +107,18 @@ pub(super) struct LocalCfgs {
 }
 
 impl LocalCfgs {
-    /// Record the ordinary cfg set of every local crate, leaving out the crates a
-    /// context added: they hold their own cfg and are never toggled.
-    #[instrument(level = "debug", skip(db, excluded))]
+    /// Record the ordinary cfg set of the `analysed` crates: those a context copies. The crates
+    /// a context added are not among them, as they hold their own cfg and are never toggled.
+    #[instrument(level = "debug", skip(db, analysed))]
     #[hotpath::measure(impl_type = "LocalCfgs")]
-    pub(super) fn capture_excluding(
+    pub(super) fn capture(
         db: &RootDatabase,
-        excluded: &std::collections::BTreeSet<InputCrate>,
+        analysed: &std::collections::BTreeSet<InputCrate>,
     ) -> Self {
         let ordinary = attach_db(db, || {
             Crate::all(db)
                 .into_iter()
-                .filter(|krate| krate.origin(db).is_local() && !excluded.contains(&krate.base()))
+                .filter(|krate| analysed.contains(&krate.base()))
                 .map(|krate| (krate.base(), krate.cfg(db).clone()))
                 .collect()
         });

@@ -1995,6 +1995,49 @@ Hotpath binaries pass; formatting, all-features/all-targets Clippy with warnings
 denied and the diff check pass; the library also checks with no features and
 with each of nine single features.
 
+### Context scope checkpoint, 2026-11-22
+
+The last Cordial self-run on this repository (`~/.cordial/cordial/metrics.json`,
+2026-11-21 22:59, before the owner-index work) was stopped by the 75% memory limit
+(19.6 GiB) while saving. Its per-phase peaks survive a stopped run and say where
+the memory is:
+
+| Phase | Peak RSS |
+| --- | ---: |
+| Loading the workspace into rust-analyzer | 7.4 GiB |
+| Planning contexts | 7.4 GiB |
+| Most cfg contexts | 7.4 to 9.8 GiB |
+| One merged context (`test`, `windows`, a `target_arch`, feature `persistence`) | 18.1 GiB |
+
+Retirement of completed contexts cannot lower either the base or a single live
+context's working set, and glibc keeps freed pages, so what is allocated at each
+stage is what sets the peak.
+
+The contexts were the problem. Cordial is one workspace member, but
+rust-analyzer's `is_local` means "a package with no registry source", so the 18
+vendored path crates were local too. Planning read gates from their files, and
+every context copied all 284 local crates (the package's lib, bin, examples and
+about 265 test binaries, plus the vendored ones). The atoms `windows`, `miri`,
+`shuttle`, `in-rust-tree`, `accumulator`, `detailed-trace`, `compact_str`,
+`ordermap` and `target_pointer_width` occur in no file of the package and in 1 to
+11 vendored files each, yet each had a context, and the planner merged them with
+`test` and others into the 18.1 GiB one.
+
+Contexts now cover only the crates of workspace members. `analysed_crates` keeps
+a local crate when the deepest package directory holding its root file is a
+member's (with no workspace, or a crate in no package, every local crate counts).
+Planning's first scan, the cfg capture and the file copy use it, so a gate that
+only a path dependency has asks for no context and a context copies none of its
+crates. `tests/context_scope.rs` pins both: before the change the plan was one
+merged context `[kani, miri, only_in_the_dependency, windows]` and the context
+copied 2 crates; now it is `[kani]` and 1.
+
+Not measured: the effect on a real run. The contexts that no longer exist are
+the ones that flipped nothing in the package, and the merged one can shrink to
+the package's own atoms, but no self-run was made. Projecting a dependency
+package as a target still works; it gets the ordinary analysis and no contexts
+of its own.
+
 ## Historical evidence
 
 The first cold capture used Cordial `65cbde11` against `elicit_doc` `8d2968a7`,

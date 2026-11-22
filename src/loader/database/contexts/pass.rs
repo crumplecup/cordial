@@ -182,7 +182,7 @@ impl SourceDatabase {
         nodes: &FunctionNodes,
         graph: &mut CrateIr,
     ) -> CordialResult<()> {
-        let cfgs = LocalCfgs::capture_excluding(&self.db, &self.shadow_crates());
+        let cfgs = LocalCfgs::capture(&self.db, &self.analysed_crates());
         let mut analysed = Vec::new();
         // A process that takes up a run an earlier one began goes on from the contexts it analysed.
         let resume = self.resume_contexts.take();
@@ -256,7 +256,7 @@ impl SourceDatabase {
                 &ordinary,
                 &mut covered,
                 None,
-                &self.ordinary_crates(),
+                &self.analysed_crates(),
                 &HashMap::new(),
             ));
             crate::process_memory::log("planning scan done");
