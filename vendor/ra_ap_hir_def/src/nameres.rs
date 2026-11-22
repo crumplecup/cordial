@@ -81,7 +81,7 @@ use crate::{
     AstId, BlockId, BlockIdLt, BuiltinDeriveImplId, ExternCrateId, FunctionId, FxIndexMap, Lookup,
     MacroCallStyles, MacroExpander, MacroId, ModuleId, ModuleIdLt, ProcMacroId, UseId,
     item_scope::{BuiltinShadowMode, ItemScope},
-    item_tree::TreeId,
+    item_tree::{FileItemTreeKey, TreeId},
     nameres::{diagnostics::DefDiagnostic, path_resolution::ResolveMode},
     per_ns::PerNs,
     unstable_features::UnstableFeatures,
@@ -422,6 +422,7 @@ pub fn crate_def_map(db: &dyn SourceDatabase, crate_id: Crate) -> &DefMap {
 /// executed just to retire their values. Missing producer records add no keys.
 /// Local declarative expanders are selected from interned macro locations,
 /// without compiling them; builtins, procedural and imported macros are excluded.
+/// Item trees use explicit file/block-and-crate keys from the same local owners.
 pub fn crate_declared_query_keys(
     db: &mut dyn SourceDatabase,
     crate_id: Crate,
@@ -459,6 +460,8 @@ fn def_map_declared_query_keys(
         Either::Right(block) => block_def_map(db, block),
     };
     let mut keys: Vec<_> = map.declared_query_keys().collect();
+    keys.extend(map.item_tree_query_keys(db));
+    let krate = map.krate;
     keys.extend(map.macro_def_to_macro_id.values().filter_map(|&mac| {
         mac.declarative_expander_key(db).map(|key| key.as_id())
     }));
@@ -508,6 +511,9 @@ fn def_map_declared_query_keys(
         };
         keys.extend(items.iter().map(|(_, id)| id.as_id()));
         keys.extend(calls.iter().map(|(_, id)| id.as_id()));
+        keys.extend(calls.iter().map(|(_, id)| {
+            FileItemTreeKey::new(db, HirFileId::from(*id), krate).as_id()
+        }));
     }
     for id in enums {
         if cached.contains(&id.as_id()) {
@@ -702,6 +708,33 @@ impl DefMap {
         self.modules().flat_map(|(id, module)| {
             std::iter::once(id.as_id()).chain(module.scope.declared_query_keys())
         }).chain(self.macro_def_to_macro_id.values().map(|id| id.as_id()))
+    }
+
+    /// Enumerate local tree locations already recorded by collection. Empty macro
+    /// expansions still have call records; imported namespaces are not tree owners.
+    fn item_tree_query_keys(&self, db: &dyn SourceDatabase) -> Vec<salsa::Id> {
+        let mut keys = Vec::new();
+        for (_, module) in self.modules() {
+            match module.origin {
+                ModuleOrigin::CrateRoot { definition } => {
+                    keys.push(FileItemTreeKey::new(db, HirFileId::from(definition), self.krate).as_id());
+                }
+                ModuleOrigin::File { definition, declaration_tree_id, .. } => {
+                    keys.push(FileItemTreeKey::new(db, HirFileId::from(definition), self.krate).as_id());
+                    keys.push(declaration_tree_id.query_key(db, self.krate));
+                }
+                ModuleOrigin::Inline { definition_tree_id, .. } => {
+                    keys.push(definition_tree_id.query_key(db, self.krate));
+                }
+                ModuleOrigin::BlockExpr { id, block } => {
+                    keys.push(TreeId::new(block.file_id, Some(id)).query_key(db, self.krate));
+                }
+            }
+            keys.extend(module.scope.all_macro_calls().map(|id| {
+                FileItemTreeKey::new(db, HirFileId::from(id), self.krate).as_id()
+            }));
+        }
+        keys
     }
 
     /// Returns all inline modules (mod name { ... }) in the crate that are associated with the given macro expansion.

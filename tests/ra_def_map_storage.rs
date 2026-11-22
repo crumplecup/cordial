@@ -7,14 +7,17 @@ use std::sync::{Arc, Mutex, Weak};
 
 use ra_ap_cfg::CfgOptions;
 use ra_ap_hir_def::expr_store::body::Body;
+use ra_ap_hir_def::item_tree::{BlockItemTreeKey, FileItemTreeKey, file_item_tree};
 use ra_ap_hir_def::nameres::{
-    crate_declared_query_keys, crate_def_map, stable::def_map_fingerprint,
+    ModuleOrigin, block_def_map, crate_declared_query_keys, crate_def_map,
+    stable::def_map_fingerprint,
 };
 use ra_ap_hir_def::resolver::HasResolver;
 use ra_ap_hir_def::signatures::VariantFields;
 use ra_ap_hir_def::{
     AdtId, AssocItemId, BlockId, DefWithBodyId, EnumVariantId, FunctionId, MacroId, ModuleDefId,
 };
+use ra_ap_hir_expand::HirFileId;
 use ra_ap_hir_expand::intern::Symbol;
 use ra_ap_ide_db::RootDatabase;
 use ra_ap_ide_db::base_db::{
@@ -1551,6 +1554,313 @@ fn modern_macro_expanders_preserve_expansion_after_retirement_and_edits() {
         assert_eq!(declared_functions(&fixture.db, context), after);
         assert_eq!(declared_functions(&fixture.db, fixture.krate).len(), 1);
     }
+}
+
+/// Capture actual tree locations before restore; warming uses the normal RA queries.
+#[derive(Debug)]
+struct TreeLocations {
+    files: Vec<HirFileId>,
+    blocks: Vec<BlockId>,
+}
+
+impl TreeLocations {
+    fn collect(db: &RootDatabase, krate: Crate, bodies: &LocalBodies) -> Self {
+        let mut files = Vec::new();
+        let maps = std::iter::once(crate_def_map(db, krate))
+            .chain(bodies.blocks.iter().map(|&block| block_def_map(db, block)));
+        for map in maps {
+            for (_, module) in map.modules() {
+                match module.origin {
+                    ModuleOrigin::CrateRoot { definition }
+                    | ModuleOrigin::File { definition, .. } => files.push(definition.into()),
+                    ModuleOrigin::Inline {
+                        definition_tree_id, ..
+                    } => {
+                        files.push(definition_tree_id.file_id());
+                    }
+                    ModuleOrigin::BlockExpr { .. } => {}
+                }
+                files.extend(module.scope.all_macro_calls().map(HirFileId::from));
+                for declaration in module.scope.declarations() {
+                    if let ModuleDefId::TraitId(id) = declaration {
+                        files.extend(
+                            id.trait_items(db)
+                                .macro_calls
+                                .iter()
+                                .map(|(_, id)| HirFileId::from(*id)),
+                        );
+                    }
+                }
+                for id in module.scope.impls() {
+                    files.extend(
+                        id.impl_items(db)
+                            .macro_calls
+                            .iter()
+                            .map(|(_, id)| HirFileId::from(*id)),
+                    );
+                }
+            }
+        }
+        files.sort_unstable_by_key(|file| file.as_id().as_bits());
+        files.dedup();
+        Self {
+            files,
+            blocks: bodies.blocks.clone(),
+        }
+    }
+
+    fn keys(&self, db: &RootDatabase, krate: Crate) -> Vec<salsa::Id> {
+        self.files
+            .iter()
+            .map(|&file| FileItemTreeKey::new(db, file, krate).as_id())
+            .chain(
+                self.blocks
+                    .iter()
+                    .map(|&block| BlockItemTreeKey::new(db, block, krate).as_id()),
+            )
+            .collect()
+    }
+
+    fn warm(&self, db: &RootDatabase, krate: Crate) -> Vec<String> {
+        self.files
+            .iter()
+            .map(|&file| file_item_tree(db, file, krate).pretty_print(db, Edition::CURRENT))
+            .chain(self.blocks.iter().map(|&block| {
+                BlockItemTreeKey::new(db, block, krate)
+                    .item_tree(db)
+                    .pretty_print(db, Edition::CURRENT)
+            }))
+            .collect()
+    }
+}
+
+fn held_trees(db: &mut RootDatabase, keys: &[salsa::Id]) -> u64 {
+    let mut held = 0;
+    db.values_in_memory_for_inputs(
+        keys,
+        false,
+        true,
+        &["file_item_tree_query", "block_item_tree_query"],
+        &mut |_, count| held += count,
+    );
+    held
+}
+
+fn all_held_trees(db: &mut RootDatabase) -> u64 {
+    let mut held = 0;
+    db.values_in_memory(
+        false,
+        true,
+        &["file_item_tree_query", "block_item_tree_query"],
+        &mut |_, count| held += count,
+    );
+    held
+}
+
+#[derive(Clone, Default)]
+struct TreeExecutions(Arc<AtomicUsize>);
+
+impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for TreeExecutions {
+    fn on_new_span(
+        &self,
+        attrs: &tracing::span::Attributes<'_>,
+        _: &tracing::Id,
+        _: tracing_subscriber::layer::Context<'_, S>,
+    ) {
+        if matches!(
+            attrs.metadata().name(),
+            "file_item_tree_query" | "block_item_tree_query"
+        ) {
+            self.0.fetch_add(1, Ordering::SeqCst);
+        }
+    }
+}
+
+#[test]
+fn composite_item_trees_retire_without_lowering_and_preserve_shared_files() {
+    let _fixture = FIXTURE.lock().unwrap();
+    let _reset = ResetStore;
+    for count in [1, 4, 16] {
+        for restored in [false, true] {
+            salsa::set_spill_store(Some(Arc::new(Store::default())));
+            let executions = TreeExecutions::default();
+            let subscriber = tracing_subscriber::registry().with(executions.clone());
+            tracing::subscriber::with_default(subscriber, || {
+                let mut fixture = Fixture::build_with_dependency(
+                    "extern crate unused; use unused::shared;\n\
+                     #[path = \"../1/lib.rs\"] mod file_module;\n\
+                     pub mod inline { pub fn inside() {} }\n\
+                     macro_rules! empty { () => {} } empty!();\n\
+                     macro_rules! make { () => { pub fn generated() {} empty!(); } } make!();\n\
+                     macro_rules! associated { () => { fn method() {} } }\n\
+                     pub trait Local { associated!(); empty!(); }\n\
+                     pub struct LocalType; impl LocalType { associated!(); empty!(); }\n\
+                     pub fn outer() { fn inner() {} { fn nested() {} }\n\
+                         macro_rules! local { () => { fn generated_local() {} } } local!(); }",
+                    count,
+                    "pub fn shared() {} #[cfg(variant = \"0\")] pub fn selected() {}",
+                );
+                fixture.add_dependency();
+                let dependency = ra_ap_ide_db::base_db::all_crates(&fixture.db)
+                    .iter()
+                    .copied()
+                    .find(|krate| *krate != fixture.krate && !fixture.contexts.contains(krate))
+                    .unwrap();
+                let crates: Vec<_> = [fixture.krate, dependency]
+                    .into_iter()
+                    .chain(fixture.contexts.iter().copied())
+                    .collect();
+                let bodies: Vec<_> = crates
+                    .iter()
+                    .map(|&krate| LocalBodies::collect(&fixture.db, krate))
+                    .collect();
+                let trees: Vec<_> = crates
+                    .iter()
+                    .zip(&bodies)
+                    .map(|(&krate, body)| TreeLocations::collect(&fixture.db, krate, body))
+                    .collect();
+                let expected: Vec<_> = crates
+                    .iter()
+                    .zip(&trees)
+                    .map(|(&krate, tree)| tree.warm(&fixture.db, krate))
+                    .collect();
+                assert!(
+                    trees[2].files.len() >= 5,
+                    "root, shared file, generated and empty expansions"
+                );
+                assert!(
+                    trees[2].blocks.len() >= 2,
+                    "body-local and nested block trees"
+                );
+                if restored {
+                    fixture.restore();
+                    for ((&krate, body), tree) in crates.iter().zip(&bodies).zip(&trees) {
+                        assert_eq!(LocalBodies::collect(&fixture.db, krate), *body);
+                        tree.warm(&fixture.db, krate);
+                    }
+                }
+                let keys: Vec<_> = crates
+                    .iter()
+                    .zip(&trees)
+                    .map(|(&krate, tree)| tree.keys(&fixture.db, krate))
+                    .collect();
+                for ids in &keys {
+                    assert_eq!(held_trees(&mut fixture.db, ids), ids.len() as u64);
+                }
+                assert_eq!(
+                    all_held_trees(&mut fixture.db),
+                    keys.iter().map(|ids| ids.len() as u64).sum::<u64>(),
+                    "every resident item tree in the fixture has an enumerated owner"
+                );
+                let before = executions.0.load(Ordering::SeqCst);
+                for index in 2..crates.len() {
+                    for _ in 0..2 {
+                        let selected = declared_context_keys(&mut fixture.db, crates[index]);
+                        assert!(
+                            keys[index].iter().all(|key| selected.contains(key)),
+                            "missing tree keys: count={count} restored={restored} index={index}"
+                        );
+                        for (other, ids) in keys.iter().enumerate() {
+                            if other != index {
+                                assert!(ids.iter().all(|key| !selected.contains(key)));
+                            }
+                        }
+                        fixture.db.values_in_memory_for_inputs(
+                            &selected,
+                            true,
+                            false,
+                            &[],
+                            &mut |_, _| {},
+                        );
+                        fixture.db.spill_persisted_for_inputs(&selected);
+                        assert_eq!(held_trees(&mut fixture.db, &keys[index]), 0);
+                        assert_eq!(
+                            executions.0.load(Ordering::SeqCst),
+                            before,
+                            "selection and repeated retirement must not lower trees"
+                        );
+                    }
+                    for (other, ids) in keys.iter().enumerate() {
+                        let retained = other < 2 || other > index;
+                        assert_eq!(
+                            held_trees(&mut fixture.db, ids),
+                            if retained { ids.len() as u64 } else { 0 }
+                        );
+                    }
+                    let remaining: u64 = keys
+                        .iter()
+                        .enumerate()
+                        .filter(|(other, _)| *other < 2 || *other > index)
+                        .map(|(_, ids)| ids.len() as u64)
+                        .sum();
+                    assert_eq!(all_held_trees(&mut fixture.db), remaining);
+                }
+                for (index, (&krate, tree)) in crates.iter().zip(&trees).enumerate() {
+                    assert_eq!(tree.warm(&fixture.db, krate), expected[index]);
+                    assert_eq!(
+                        held_trees(&mut fixture.db, &keys[index]),
+                        keys[index].len() as u64
+                    );
+                }
+            });
+        }
+    }
+}
+
+#[test]
+fn restored_item_tree_selection_does_not_lower_missing_values() {
+    let _fixture = FIXTURE.lock().unwrap();
+    let _reset = ResetStore;
+    salsa::set_spill_store(Some(Arc::new(Store::default())));
+    let mut fixture = Fixture::build(
+        "macro_rules! empty { () => {} } empty!(); pub mod inline { pub fn inside() {} }",
+        1,
+    );
+    let context = fixture.contexts[0];
+    let bodies = LocalBodies::collect(&fixture.db, context);
+    let trees = TreeLocations::collect(&fixture.db, context, &bodies);
+    assert!(trees.files.len() >= 2);
+    trees.warm(&fixture.db, context);
+    fixture.restore();
+    let executions = TreeExecutions::default();
+    let subscriber = tracing_subscriber::registry().with(executions.clone());
+    tracing::subscriber::with_default(subscriber, || {
+        for _ in 0..2 {
+            let selected = declared_context_keys(&mut fixture.db, context);
+            let keys = trees.keys(&fixture.db, context);
+            assert!(keys.iter().all(|key| selected.contains(key)));
+            assert_eq!(held_trees(&mut fixture.db, &keys), 0);
+            assert_eq!(executions.0.load(Ordering::SeqCst), 0);
+        }
+        let before = trees.warm(&fixture.db, context);
+        let selected = declared_context_keys(&mut fixture.db, context);
+        fixture
+            .db
+            .values_in_memory_for_inputs(&selected, true, false, &[], &mut |_, _| {});
+        assert_eq!(trees.warm(&fixture.db, context), before);
+    });
+    let file = context.root_file_id(&fixture.db);
+    let mut change = FileChange::default();
+    change.change_file(
+        file.file_id(&fixture.db),
+        Some("pub fn replacement() {}".into()),
+    );
+    change.apply(&mut fixture.db);
+    let current = file_item_tree(&fixture.db, file.into(), context)
+        .pretty_print(&fixture.db, Edition::CURRENT);
+    assert!(current.contains("replacement"));
+    let selected = declared_context_keys(&mut fixture.db, context);
+    let root_key = FileItemTreeKey::new(&fixture.db, HirFileId::from(file), context).as_id();
+    assert!(selected.contains(&root_key));
+    fixture
+        .db
+        .values_in_memory_for_inputs(&selected, true, false, &[], &mut |_, _| {});
+    assert_eq!(held_trees(&mut fixture.db, &[root_key]), 0);
+    assert_eq!(
+        file_item_tree(&fixture.db, file.into(), context)
+            .pretty_print(&fixture.db, Edition::CURRENT),
+        current
+    );
 }
 
 #[test]

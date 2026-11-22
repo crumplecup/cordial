@@ -286,7 +286,7 @@ impl SourceDatabase {
         }
     }
 
-    /// Retire values keyed by completed context crates, declarations, expanders and tracked outputs.
+    /// Retire values keyed by completed context crates, declarations, expanders, trees and tracked outputs.
     /// Other composite keys and locations without current owner records still need selection rules.
     #[instrument(level = "debug", skip(self, seeds))]
     #[hotpath::measure(impl_type = "SourceDatabase")]

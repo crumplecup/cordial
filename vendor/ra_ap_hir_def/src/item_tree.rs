@@ -4,10 +4,10 @@
 //! algorithm, as well as to the queries defined in `adt.rs`, `data.rs`, and most things in
 //! `attr.rs`.
 //!
-//! `ItemTree`s are built per `HirFileId`, from the syntax tree of the parsed file. This means that
-//! they are crate-independent: they don't know which `#[cfg]`s are active or which module they
-//! belong to, since those concepts don't exist at this level (a single `ItemTree` might be part of
-//! multiple crates, or might be included into the same crate twice via `#[path]`).
+//! `ItemTree`s are built from a file or block's syntax for a particular crate. Attribute
+//! lowering uses that crate's cfg options, so even a shared source file has separate item
+//! trees for different crate contexts. A tree can be included in the same crate twice via
+//! `#[path]`.
 //!
 //! One important purpose of this layer is to provide an "invalidation barrier" for incremental
 //! computations: when typing inside an item body, the `ItemTree` of the modified file is typically
@@ -122,7 +122,7 @@ fn lower_extra_crate_attrs<'a>(
 
 /// Computes an [`ItemTree`] for the given file or macro expansion.
 pub fn file_item_tree(db: &dyn SourceDatabase, file_id: HirFileId, krate: Crate) -> &ItemTree {
-    match file_item_tree_query(db, file_id, krate) {
+    match file_item_tree_query(db, FileItemTreeKey::new(db, file_id, krate)) {
         Some(item_tree) => item_tree,
         None => {
             static EMPTY: OnceLock<ItemTree> = OnceLock::new();
@@ -137,12 +137,38 @@ pub fn file_item_tree(db: &dyn SourceDatabase, file_id: HirFileId, krate: Crate)
     }
 }
 
+/// Explicit argument key; definition-map owners can select the memo without lowering syntax.
+/// Replaces the query's implicit interner without changing its slot reuse policy.
+#[salsa::interned(debug)]
+pub struct FileItemTreeKey {
+    #[returns(copy)]
+    pub file_id: HirFileId,
+    #[returns(copy)]
+    pub krate: Crate,
+}
+
+#[salsa::interned(debug)]
+pub struct BlockItemTreeKey {
+    #[returns(copy)]
+    pub block: BlockId,
+    #[returns(copy)]
+    pub krate: Crate,
+}
+
+impl BlockItemTreeKey<'_> {
+    /// Fetch the block tree for this exact block-and-crate pair.
+    pub fn item_tree(self, db: &dyn SourceDatabase) -> &ItemTree {
+        block_item_tree_query(db, self)
+    }
+}
+
 #[salsa::tracked(returns(ref))]
 fn file_item_tree_query(
     db: &dyn SourceDatabase,
-    file_id: HirFileId,
-    krate: Crate,
+    key: FileItemTreeKey<'_>,
 ) -> Option<Box<ItemTree>> {
+    let file_id = key.file_id(db);
+    let krate = key.krate(db);
     let _p = tracing::info_span!("file_item_tree_query", ?file_id).entered();
 
     let mut ctx = lower::Ctx::new(db, file_id, krate);
@@ -188,12 +214,21 @@ fn file_item_tree_query(
     }
 }
 
-#[salsa::tracked(returns(ref))]
-pub(crate) fn block_item_tree_query(
+fn block_item_tree(
     db: &dyn SourceDatabase,
     block: BlockId,
     krate: Crate,
+) -> &ItemTree {
+    block_item_tree_query(db, BlockItemTreeKey::new(db, block, krate))
+}
+
+#[salsa::tracked(returns(ref))]
+fn block_item_tree_query(
+    db: &dyn SourceDatabase,
+    key: BlockItemTreeKey<'_>,
 ) -> ItemTree {
+    let block = key.block(db);
+    let krate = key.krate(db);
     let _p = tracing::info_span!("block_item_tree_query", ?block).entered();
     let ast_id = block.ast_id(db);
     let block = ast_id.to_node(db);
@@ -356,7 +391,7 @@ impl TreeId {
         krate: Crate,
     ) -> &'db ItemTree {
         match self.block {
-            Some(block) => block_item_tree_query(db, block, krate),
+            Some(block) => block_item_tree(db, block, krate),
             None => file_item_tree(db, self.file, krate),
         }
     }
@@ -368,6 +403,14 @@ impl TreeId {
 
     pub(crate) fn is_block(self) -> bool {
         self.block.is_some()
+    }
+
+    pub(crate) fn query_key(self, db: &dyn SourceDatabase, krate: Crate) -> salsa::Id {
+        use salsa::plumbing::AsId;
+        match self.block {
+            Some(block) => BlockItemTreeKey::new(db, block, krate).as_id(),
+            None => FileItemTreeKey::new(db, self.file, krate).as_id(),
+        }
     }
 }
 

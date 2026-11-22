@@ -1,6 +1,6 @@
 # Memory measurement and reduction using upstream Hotpath
 
-Status: **Upstream restoration, phases 3–4, narrow phase 5–6 reductions, phase 7 cold measurement review, getter scope reduction, query-owned RA definition maps and crate/tracked-output/module-declaration retirement complete; other location/composite keys, bounded input/identity storage and stable IR identity remain, 2026-11-21.**
+Status: **Upstream restoration, phases 3–4, narrow phase 5–6 reductions, phase 7 cold measurement review, getter scope reduction, query-owned RA definition maps and crate/tracked-output/module-declaration/item-tree retirement complete; other location/composite keys, bounded input/identity storage and stable IR identity remain, 2026-11-21.**
 The immediate checkpoints restored published Hotpath with focused consumer
 tests and removed the graph-sized serialization copy. Existing measurement
 gaps are accepted and documented; they do not block application improvements.
@@ -787,7 +787,9 @@ locally defined macro keys recorded in the definition map, members and variants
 recorded in already-current trait/impl/enum query results, body-local declarations
 in current block maps reached through producer records, and tracked identities
 created by queries on those keys, transitively. Local declarative macro
-definitions also select their explicit expander keys. Selected
+definitions also select their explicit expander keys. File and block item trees
+select explicit location-and-crate keys from module origins and local macro
+calls, including cached associated-item calls. Selected
 non-persisted values are dropped, and persisted values spill when a run cache
 is available, even without memory pressure. Other composite arguments are not yet
 selected through their owners. Selection reads the current map and skips absent,
@@ -1459,6 +1461,87 @@ Step 2 remains partial for other composite keys, absent/stale/provisional owner
 results, removed declarations, missing producer records and copied
 input/identity/header storage. This checkpoint establishes expander memo
 residency in fixtures, not retained bytes or process RSS.
+
+**Item-tree composite key design, 2026-11-21.** Replace the implicit argument
+interners for `file_item_tree_query(HirFileId, Crate)` and
+`block_item_tree_query(BlockId, Crate)` with named interned keys containing
+the same arguments. Preserve the query names, forwarding APIs, one memo per
+argument combination and the default interner revision/reuse policy. No wrapper
+memo, ownership index or Salsa API change is required.
+
+Select keys from existing module origins, block maps and local macro-call
+records, including empty expansions and macro calls in already-current
+trait/impl item lists. A physical source file shared by two crates has distinct
+keys: attribute lowering uses the requesting crate's cfg options. Imported
+names do not authorize retirement of the dependency's tree. After restore,
+selection may recreate a missing small key identity; it must not parse or lower
+a tree to discover its key. Missing/stale block or associated-item owners retain
+the previously documented skip behavior.
+
+**Item-tree retirement checkpoint, 2026-11-21.** Implemented both named keys
+and selection above. Cold/restored 1/4/16 families exercise a physical source
+file shared with a dependency, inline and file modules, generated and empty
+macro expansions, trait/impl macro calls and nested body-local block trees.
+The fixture counts every resident item-tree memo, not just its selected keys.
+After retirement, only ordinary, dependency and uncompleted-context tree
+values remain. Repeated selection and retirement lower no trees. Re-entry
+produces the original tree contents, and a separate restore/edit fixture proves
+that selecting missing values does not lower them and edited source remains
+visible after retirement.
+
+All 96 distinct focused Nextest tests passed across 13 binaries with
+`hotpath-alloc`. The first broad invocation passed 89; its seven apply fixtures
+failed when their Cargo metadata subprocesses attempted a registry refresh.
+Rerunning those seven with `CARGO_NET_OFFLINE=true` passed. Propagate that
+environment setting to future fixture runs; a top-level `--offline` alone does
+not configure subprocesses. No full-program measurement or Cordial
+self-execution ran. Formatting, all-features/all-targets Clippy with warnings
+denied and diff checks passed. These checks establish query residency and semantic reuse,
+not retained bytes or RSS. The remaining composite families are listed below;
+this checkpoint does not close them or the input/identity-storage work.
+
+**Remaining composite-query inventory and design boundary, 2026-11-21.**
+The source inventory of tracked queries in the patched RA crates and Cordial's
+loader leaves these nine multi-argument queries after expanders and item trees:
+
+| Query | Arguments beyond the database | Ownership issue |
+| --- | --- | --- |
+| `const_eval_query` | constant, substitutions, optional environment/crate | A local constant does not enumerate the substitutions already queried. |
+| `anon_const_eval_query` | anonymous constant, substitutions, optional environment/crate | The same issue applies to generated anonymous constants. |
+| `layout_of_ty_query` | type, environment/crate | There may be no local declaration at the outer type; nested types can reference local declarations. |
+| `layout_of_adt_query` | ADT, substitutions, environment/crate | A dependency ADT can be instantiated with context-local arguments. |
+| `monomorphized_mir_body_query` | body, substitutions, environment/crate | Body identity alone does not identify its instantiated memos. |
+| `monomorphized_mir_body_for_closure_query` | closure, substitutions, environment/crate | Closure identity alone does not identify its instantiated memos. |
+| `resolve_type_param_assoc_type_shorthand` | generic owner, parameter, associated name | Existing local owners do not enumerate the names already queried. |
+| `specializes_query` | specializing impl, parent impl | Either impl can determine context ownership; imported parents must remain reusable. |
+| `proc_macro_span` | definition-site AST ID, unit marker | This source-location query has no requesting crate; shared definition sites must remain reusable. |
+
+Naming these keys alone does not make their existing combinations enumerable
+from local definition maps. Tracked producer records do not own interned
+argument combinations, and read dependencies are not ownership edges. Guessing
+combinations would rerun analysis and still miss variants. Following all reads
+would retire shared dependency work. A second reverse ownership table would
+duplicate state and introduce another lifetime problem.
+
+The next design review should decide how Salsa exposes *existing argument
+combinations* for these families. A constrained extension of its existing memo
+inspection path is preferable to another ownership table: inspect registered
+query argument records without executing queries, decoding results or marking
+interned slots current, then let RA classify their existing arguments. Restrict
+inspection to named query families and report visited slots in controlled
+fixtures. This still introduces enumeration cost; it must be weighed against
+native owner-index support before implementing it. Ordinary public interner
+`entries()` is unsuitable here because it marks enumerated slots current,
+changing identity retention during an eviction operation. The earlier direct-key
+design also rules out silently replacing exact selection with a global scan.
+
+For either approach, define ownership for nested type/substitution/environment
+references as well as outer owners, and distinguish context-dependent memos
+from source-site-only shared memos. Prove multiple instantiations per owner,
+shared generic owners with local arguments, direct calls outside tracked
+producers, cold/restore/edit/re-entry and missing/stale owners. Keep the 1/4/16
+families and shared/uncompleted residency assertions. Composite-key retirement
+is **not complete** until that selection contract and its fixtures are implemented.
 
 ## Historical evidence
 
