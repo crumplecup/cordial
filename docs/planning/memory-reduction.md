@@ -1533,7 +1533,7 @@ below pass.
 
 ### Salsa-native owner index
 
-**Status: runtime checkpoints 1 and 2 implemented; RA integration remains.**
+**Status: runtime checkpoints 1 and 2 and the checkpoint 3 MIR pilot implemented; remaining families and scaling checks remain.**
 The design started from `af18e87f`. This extends the existing patched Salsa
 runtime and RA crates; it does not change or vendor Hotpath, add another
 profiler, or authorize a full-program measurement.
@@ -1796,3 +1796,26 @@ phase-1A extension (`ea7cc38e`) and uncommitted phase-1B additions are work to
 remove in phase 1A above, not accepted completed checkpoints. The earlier
 [measurement plan](memory-measurement.md) is historical wherever it requires
 those extensions.
+
+#### MIR pilot checkpoint
+
+The first RA policy registers the exact monomorphized body MIR query. Its named
+key retains the original definition, substitutions and parameter environment.
+The argument visitor follows nested types, constants, regions, predicates,
+binders and definition locations without running analysis. Inference variables
+fail closed as unclassified. Shared definitions with local substitutions are
+owned by the local roots; wholly shared arguments remain shared.
+
+Loader context creation and re-entry activate every copied-crate root. Restore
+registers the resolver and roots before use; finishing a context retires owned
+payloads after fingerprints and persistence have consumed the context. Existing
+direct-key retirement remains in place. Structural retirement outcomes are
+reported through the existing eviction tracing target.
+
+Validation: 46 Nextest tests passed across `ra_def_map_storage`, `context_parses`,
+`salsa_owner_index` and `salsa_owner_lifecycle`. Pilot fixtures cover multiple
+substitutions, nested types, shared work, two-owner protection, a local trait
+found only through environment clauses, early errors, restore, edits and
+reactivation without an input revision. Formatting, all-features/all-targets
+Clippy with warnings denied and diff checks pass. No full-program measurement
+was run.

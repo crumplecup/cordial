@@ -197,6 +197,13 @@ impl SavedState {
                 .map(|context| super::ContextCrates::from_saved(context, &order))
                 .collect::<Option<Vec<_>>>()
                 .ok_or_else(|| "a saved context names a crate that is not there".to_owned())?;
+            ra_ap_hir_ty::query_ownership::register(&mut database);
+            let roots: Vec<_> = contexts
+                .iter()
+                .flat_map(super::ContextCrates::shadows)
+                .map(|krate| salsa::plumbing::AsId::as_id(&krate))
+                .collect();
+            salsa::activate_owner_roots(&mut database, &roots);
             Ok(Restored {
                 database,
                 paths,

@@ -185,22 +185,28 @@ impl SourceDatabase {
             .context_crates
             .iter()
             .position(|added| added.context() == context);
-        match position {
+        let added = match position {
             Some(position) if !self.context_crates[position].kept => {
-                Ok(self.context_crates[position].clone())
+                self.context_crates[position].clone()
             }
             Some(position) => {
                 let previous = self.context_crates[position].clone();
                 let added = self.build_context(context, position, Some(&previous))?;
                 self.context_crates[position] = added.clone();
-                Ok(added)
+                added
             }
             None => {
                 let added = self.build_context(context, self.context_crates.len(), None)?;
                 self.context_crates.push(added.clone());
-                Ok(added)
+                added
             }
-        }
+        };
+        let roots: Vec<_> = added
+            .shadows()
+            .map(|krate| salsa::plumbing::AsId::as_id(&krate))
+            .collect();
+        salsa::activate_owner_roots(&mut self.db, &roots);
+        Ok(added)
     }
 
     /// Make context number `index`, or bring `previous` (the same context, as the last

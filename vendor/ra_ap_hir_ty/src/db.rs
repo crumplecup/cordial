@@ -76,7 +76,11 @@ pub trait HirDatabase: SourceDatabase + 'static {
         env: StoredParamEnvAndCrate,
     ) -> Result<&'db MirBody<'db>, MirLowerError<'db>> {
         let db = self.as_dyn();
-        crate::mir::monomorphized_mir_body_query(db, def, subst, env).map_err(|err| err.clone())
+        crate::mir::monomorphized_mir_body_query(
+            db,
+            crate::mir::MonomorphizedMirBodyKey::new(db, def, subst, env),
+        )
+        .map_err(|err| err.clone())
     }
 
     fn monomorphized_mir_body_for_closure<'db>(

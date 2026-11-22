@@ -181,6 +181,9 @@ impl Fixture {
         let source: &dyn SourceDatabase = &restored;
         let _ = SourceDatabase::zalsa_register_downcaster(source);
         <dyn Database>::init_view_casters(&restored);
+        ra_ap_hir_ty::query_ownership::register(&mut restored);
+        let roots: Vec<_> = self.contexts.iter().map(AsId::as_id).collect();
+        salsa::activate_owner_roots(&mut restored, &roots);
         self.db = restored;
     }
 
@@ -2483,4 +2486,278 @@ fn restored_cutoffs_reuse_body_edits_and_invalidate_public_edits() {
         fingerprint
     );
     assert_eq!(fixture.modules(), modules);
+}
+
+/// Build the real composite MIR query directly, outside any tracked producer.
+fn instantiated_mir(
+    db: &RootDatabase,
+    function: FunctionId,
+    types: &[ra_ap_hir_ty::next_solver::StoredTy],
+    environment_crate: Crate,
+) -> String {
+    use ra_ap_hir_ty::db::HirDatabase;
+    use ra_ap_hir_ty::display::DisplayTarget;
+    use ra_ap_hir_ty::next_solver::{GenericArg, GenericArgs, ParamEnv};
+    let args = GenericArgs::new_from_iter(types.iter().map(|ty| GenericArg::from(ty.as_ref())));
+    let environment = ra_ap_hir_ty::ParamEnvAndCrate {
+        param_env: ParamEnv::empty(),
+        krate: environment_crate,
+    };
+    db.monomorphized_mir_body(function.into(), args.store(), environment.store())
+        .unwrap()
+        .pretty_print(db, DisplayTarget::from_crate(db, environment_crate))
+}
+
+fn fixture_adt(db: &RootDatabase, krate: Crate) -> ra_ap_hir_ty::next_solver::StoredTy {
+    use ra_ap_hir_ty::next_solver::{DbInterner, GenericArgs, Ty};
+    let adt = crate_def_map(db, krate)
+        .modules()
+        .flat_map(|(_, module)| module.scope.declarations())
+        .find_map(|def| match def {
+            ModuleDefId::AdtId(id) => Some(id),
+            _ => None,
+        })
+        .unwrap();
+    Ty::new_adt(DbInterner::new_no_crate(db), adt, GenericArgs::empty()).store()
+}
+
+#[test]
+fn shared_generic_mir_with_local_arguments_retires_and_reenters_equivalently() {
+    let _fixture = FIXTURE.lock().unwrap();
+    let mut fixture = Fixture::build_with_dependency(
+        "pub struct Local;",
+        2,
+        "pub struct Shared; pub fn identity<T>(value: T) -> T { value }",
+    );
+    let shared = fixture.graph.clone().set_in_db(&mut fixture.db)[&fixture.dependency];
+    let function = declared_functions(&fixture.db, shared)[0];
+    let [left, right] = fixture.contexts.as_slice() else {
+        panic!("two roots")
+    };
+    let (left, right) = (*left, *right);
+    salsa::activate_owner_roots(&mut fixture.db, &[left.as_id(), right.as_id()]);
+    let local_type = fixture_adt(&fixture.db, left);
+    let other_type = fixture_adt(&fixture.db, right);
+    let shared_type = fixture_adt(&fixture.db, shared);
+    let expected = instantiated_mir(
+        &fixture.db,
+        function,
+        std::slice::from_ref(&local_type),
+        shared,
+    );
+    // A second substitution, with a repeated nested local identity in the DAG.
+    let nested = {
+        use ra_ap_hir_ty::next_solver::{DbInterner, Ty, TyKind, Tys};
+        Ty::new(
+            DbInterner::new_no_crate(&fixture.db),
+            TyKind::Tuple(Tys::new_from_slice(&[
+                local_type.as_ref(),
+                local_type.as_ref(),
+            ])),
+        )
+        .store()
+    };
+    instantiated_mir(&fixture.db, function, &[nested], shared);
+    instantiated_mir(&fixture.db, function, &[other_type], shared);
+    let shared_mir = instantiated_mir(
+        &fixture.db,
+        function,
+        std::slice::from_ref(&shared_type),
+        shared,
+    );
+    let stats = salsa::owner_index_stats(&mut fixture.db);
+    assert_eq!(
+        (stats.memberships, stats.shared, stats.unclassified),
+        (3, 1, 0)
+    );
+    // Cache hits do not create memberships.
+    assert_eq!(
+        instantiated_mir(
+            &fixture.db,
+            function,
+            std::slice::from_ref(&local_type),
+            shared
+        ),
+        expected
+    );
+    assert_eq!(salsa::owner_index_stats(&mut fixture.db), stats);
+    let revision = salsa::plumbing::ZalsaDatabase::zalsa(&fixture.db).current_revision();
+    let report = salsa::retire_owned_values(&mut fixture.db, &[left.as_id()]);
+    assert_eq!(
+        (
+            report.visited,
+            report.selected,
+            report.released,
+            report.unclassified
+        ),
+        (2, 2, 2, 0)
+    );
+    assert_eq!(salsa::owner_index_stats(&mut fixture.db).memberships, 1);
+    assert_eq!(
+        instantiated_mir(&fixture.db, function, &[shared_type], shared),
+        shared_mir
+    );
+    salsa::activate_owner_roots(&mut fixture.db, &[left.as_id()]);
+    assert_eq!(
+        salsa::plumbing::ZalsaDatabase::zalsa(&fixture.db).current_revision(),
+        revision
+    );
+    assert_eq!(
+        instantiated_mir(&fixture.db, function, &[local_type], shared),
+        expected
+    );
+    assert_eq!(
+        salsa::retire_owned_values(&mut fixture.db, &[left.as_id()]).released,
+        1
+    );
+    assert_eq!(
+        salsa::retire_owned_values(&mut fixture.db, &[right.as_id()]).released,
+        1
+    );
+    let stats = salsa::owner_index_stats(&mut fixture.db);
+    assert_eq!(
+        (
+            stats.buckets,
+            stats.capacity,
+            stats.memberships,
+            stats.shared
+        ),
+        (0, 0, 0, 1)
+    );
+}
+
+#[test]
+fn mir_environment_and_substitution_protect_both_contexts() {
+    let _fixture = FIXTURE.lock().unwrap();
+    let mut fixture = Fixture::build_with_dependency(
+        "pub struct Local;",
+        2,
+        "pub fn identity<T>(value: T) -> T { value }",
+    );
+    let shared = fixture.graph.clone().set_in_db(&mut fixture.db)[&fixture.dependency];
+    let function = declared_functions(&fixture.db, shared)[0];
+    let (left, right) = (fixture.contexts[0], fixture.contexts[1]);
+    salsa::activate_owner_roots(&mut fixture.db, &[left.as_id(), right.as_id()]);
+    let local = fixture_adt(&fixture.db, left);
+    instantiated_mir(&fixture.db, function, &[local], right);
+    assert_eq!(salsa::owner_index_stats(&mut fixture.db).memberships, 2);
+    let report = salsa::retire_owned_values(&mut fixture.db, &[left.as_id()]);
+    assert_eq!(
+        (report.selected, report.protected, report.released),
+        (1, 1, 0)
+    );
+    let report = salsa::retire_owned_values(&mut fixture.db, &[right.as_id()]);
+    assert_eq!(
+        (report.selected, report.protected, report.released),
+        (1, 0, 1)
+    );
+    assert_eq!(salsa::owner_index_stats(&mut fixture.db).capacity, 0);
+}
+
+#[test]
+fn mir_parameter_environment_walks_local_trait_identity_with_shared_types() {
+    use ra_ap_hir_ty::db::HirDatabase;
+    use ra_ap_hir_ty::next_solver::{GenericArg, GenericArgs};
+    let _fixture = FIXTURE.lock().unwrap();
+    let mut fixture = Fixture::build_with_dependency(
+        "pub trait LocalTrait {} impl LocalTrait for unused::Shared {} pub fn bounds() where unused::Shared: LocalTrait {}",
+        1,
+        "pub struct Shared; pub fn identity<T>(value: T) -> T { value }",
+    );
+    fixture.add_dependency();
+    let shared = fixture.graph.clone().set_in_db(&mut fixture.db)[&fixture.dependency];
+    let function = declared_functions(&fixture.db, shared)[0];
+    let root = fixture.contexts[0];
+    salsa::activate_owner_roots(&mut fixture.db, &[root.as_id()]);
+    let shared_type = fixture_adt(&fixture.db, shared);
+    let bounds = declared_functions(&fixture.db, root)[0];
+    let environment = ra_ap_hir_ty::ParamEnvAndCrate {
+        param_env: fixture.db.trait_environment(bounds.into()),
+        krate: shared,
+    };
+    assert!(!environment.param_env.clauses().is_empty());
+    let args = GenericArgs::new_from_slice(&[GenericArg::from(shared_type.as_ref())]);
+    assert!(
+        fixture
+            .db
+            .monomorphized_mir_body(function.into(), args.store(), environment.store())
+            .is_ok()
+    );
+    let stats = salsa::owner_index_stats(&mut fixture.db);
+    assert_eq!((stats.memberships, stats.unclassified), (1, 0));
+    assert_eq!(
+        salsa::retire_owned_values(&mut fixture.db, &[root.as_id()]).released,
+        1
+    );
+}
+
+#[test]
+fn mir_owner_policy_survives_restore_edit_and_reentry() {
+    let _fixture = FIXTURE.lock().unwrap();
+    let mut fixture = Fixture::build_with_dependency(
+        "pub struct Local;",
+        1,
+        "pub fn identity<T>(value: T) -> T { value }",
+    );
+    let shared = fixture.graph.clone().set_in_db(&mut fixture.db)[&fixture.dependency];
+    let function = declared_functions(&fixture.db, shared)[0];
+    let root = fixture.contexts[0];
+    salsa::activate_owner_roots(&mut fixture.db, &[root.as_id()]);
+    let local = fixture_adt(&fixture.db, root);
+    let original = instantiated_mir(&fixture.db, function, std::slice::from_ref(&local), shared);
+    assert_eq!(
+        salsa::retire_owned_values(&mut fixture.db, &[root.as_id()]).released,
+        1
+    );
+    fixture.restore();
+    assert_eq!(
+        instantiated_mir(&fixture.db, function, std::slice::from_ref(&local), shared),
+        original
+    );
+    assert_eq!(salsa::owner_index_stats(&mut fixture.db).memberships, 1);
+    let mut change = FileChange::default();
+    change.change_file(
+        FileId::from_raw(1),
+        Some("pub fn identity<T>(value: T) -> T { loop {} }".to_owned()),
+    );
+    change.apply(&mut fixture.db);
+    let edited = instantiated_mir(&fixture.db, function, std::slice::from_ref(&local), shared);
+    assert_ne!(edited, original);
+    assert_eq!(salsa::owner_index_stats(&mut fixture.db).memberships, 1);
+    assert_eq!(
+        salsa::retire_owned_values(&mut fixture.db, &[root.as_id()]).released,
+        1
+    );
+    salsa::activate_owner_roots(&mut fixture.db, &[root.as_id()]);
+    assert_eq!(
+        instantiated_mir(&fixture.db, function, &[local], shared),
+        edited
+    );
+}
+
+#[test]
+fn early_mir_errors_have_the_same_argument_ownership_policy() {
+    use ra_ap_hir_ty::db::HirDatabase;
+    use ra_ap_hir_ty::next_solver::{GenericArgs, ParamEnv};
+    let _fixture = FIXTURE.lock().unwrap();
+    let mut fixture = Fixture::build("pub fn missing();", 1);
+    let root = fixture.contexts[0];
+    salsa::activate_owner_roots(&mut fixture.db, &[root.as_id()]);
+    let function = declared_functions(&fixture.db, root)[0];
+    let env = ra_ap_hir_ty::ParamEnvAndCrate {
+        param_env: ParamEnv::empty(),
+        krate: root,
+    };
+    assert!(
+        fixture
+            .db
+            .monomorphized_mir_body(function.into(), GenericArgs::empty().store(), env.store())
+            .is_err()
+    );
+    let stats = salsa::owner_index_stats(&mut fixture.db);
+    assert_eq!((stats.memberships, stats.unclassified), (1, 0));
+    assert_eq!(
+        salsa::retire_owned_values(&mut fixture.db, &[root.as_id()]).released,
+        1
+    );
 }

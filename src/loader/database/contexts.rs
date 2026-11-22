@@ -10,7 +10,8 @@
 //! the pass retires values keyed by copied crates, their local declarations,
 //! declarative macro expanders, file/block item trees, cached trait/impl members, enum variants,
 //! declarations in current block maps and tracked outputs of queries on those
-//! keys. Other eviction follows the run's pressure policy; uncached owners,
+//! keys, plus composite body MIR payloads indexed by their semantic argument owners.
+//! Other eviction follows the run's pressure policy; uncached owners,
 //! missing producer records, other composite keys and copied inputs can still
 //! accumulate.
 
@@ -58,6 +59,20 @@ impl super::SourceDatabase {
             ));
         }
         self.retire_context_values(&keys, after);
+        let roots: Vec<_> = context
+            .shadows()
+            .map(|krate| salsa::plumbing::AsId::as_id(&krate))
+            .collect();
+        let owned = salsa::retire_owned_values(&mut self.db, &roots);
+        tracing::info!(
+            target: "cordial::eviction", step = after,
+            roots = roots.len(), visited = owned.visited, selected = owned.selected,
+            owner_checks = owned.owner_checks, protected = owned.protected,
+            released = owned.released, retained = owned.retained, refused = owned.refused,
+            spill_unavailable = owned.spill_unavailable, spill_failed = owned.spill_failed,
+            unclassified = owned.unclassified, deferred_released = owned.deferred_released,
+            "retired composite query payloads owned by completed contexts"
+        );
         self.evict_regenerable(after);
     }
 }

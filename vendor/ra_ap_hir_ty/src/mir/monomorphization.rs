@@ -235,13 +235,23 @@ impl<'db> Filler<'db> {
     }
 }
 
+/// The existing MIR arguments, named so retention can inspect the exact key.
+#[salsa::interned(debug)]
+pub struct MonomorphizedMirBodyKey {
+    #[returns(copy)]
+    pub owner: InferBodyId<'db>,
+    pub subst: StoredGenericArgs,
+    pub trait_env: StoredParamEnvAndCrate,
+}
+
 #[salsa::tracked(returns(as_ref), cycle_result = monomorphized_mir_body_cycle_result)]
 pub fn monomorphized_mir_body_query<'db>(
     db: &'db dyn HirDatabase,
-    owner: InferBodyId<'db>,
-    subst: StoredGenericArgs,
-    trait_env: StoredParamEnvAndCrate,
+    key: MonomorphizedMirBodyKey<'db>,
 ) -> Result<MirBody<'db>, MirLowerError<'db>> {
+    let owner = key.owner(db);
+    let subst = key.subst(db);
+    let trait_env = key.trait_env(db);
     let mut filler = Filler::new(db, trait_env.as_ref(db), subst.as_ref());
     let body = db.mir_body(owner)?;
     let mut body = (*body).clone();
@@ -252,9 +262,7 @@ pub fn monomorphized_mir_body_query<'db>(
 fn monomorphized_mir_body_cycle_result<'db>(
     _db: &'db dyn HirDatabase,
     _: salsa::Id,
-    _: InferBodyId<'db>,
-    _: StoredGenericArgs,
-    _: StoredParamEnvAndCrate,
+    _: MonomorphizedMirBodyKey<'db>,
 ) -> Result<MirBody<'db>, MirLowerError<'db>> {
     Err(MirLowerError::Loop)
 }

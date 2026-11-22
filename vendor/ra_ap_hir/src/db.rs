@@ -5,3 +5,5 @@
 //! But we need this for at least LRU caching at the query level.
 pub use hir_def::{file_item_tree, set_expand_proc_attr_macros};
 pub use hir_ty::db::HirDatabase;
+
+pub use hir_ty::query_ownership::register as register_query_ownership;

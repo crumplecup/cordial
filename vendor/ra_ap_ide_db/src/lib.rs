@@ -231,6 +231,7 @@ impl RootDatabase {
             .new(&db);
         hir::db::set_expand_proc_attr_macros(&mut db, false);
         db.update_base_query_lru_capacities(lru_capacity);
+        hir::db::register_query_ownership(&mut db);
         db
     }
 
