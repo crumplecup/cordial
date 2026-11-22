@@ -52,10 +52,33 @@ impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for Writes {
 }
 
 fn module(index: usize, contexts: usize) -> String {
+    // Constructs the per-file queries look at: types, a trait and its impl, derives, an error type,
+    // panics and printing, a macro, a closure, a test module, a constant.
     let mut text = format!(
-        "pub struct Widget{index} {{ pub size: u32 }}\n\
+        "use std::fmt;\n\
+         #[derive(Debug, Clone, PartialEq)]\n\
+         pub struct Widget{index} {{ pub size: u32 }}\n\
+         #[derive(Debug)]\n\
+         pub enum Failure{index} {{ Missing, Broken(String) }}\n\
+         impl fmt::Display for Failure{index} {{\n\
+             fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {{ write!(f, \"failure\") }}\n\
+         }}\n\
+         impl std::error::Error for Failure{index} {{}}\n\
+         pub trait Shape{index} {{ fn area(&self) -> u32; fn describe(&self) -> String {{ format!(\"{{}}\", self.area()) }} }}\n\
+         impl Shape{index} for Widget{index} {{ fn area(&self) -> u32 {{ self.size * 2 }} }}\n\
          impl Widget{index} {{ pub fn new() -> Self {{ Self {{ size: 0 }} }} }}\n\
-         pub fn helper{index}() -> Widget{index} {{ Widget{index}::new() }}\n"
+         macro_rules! twice{index} {{ ($e:expr) => {{ $e + $e }}; }}\n\
+         pub const LIMIT{index}: u32 = 10;\n\
+         pub fn helper{index}() -> Widget{index} {{ Widget{index}::new() }}\n\
+         pub fn risky{index}(value: Option<u32>) -> Result<u32, Failure{index}> {{\n\
+             let doubled = value.map(|v| twice{index}!(v));\n\
+             println!(\"{{:?}}\", doubled);\n\
+             if doubled.is_none() {{ return Err(Failure{index}::Missing); }}\n\
+             Ok(doubled.unwrap())\n\
+         }}\n\
+         pub fn fails{index}(text: &str) -> u32 {{ text.parse::<u32>().expect(\"a number\") }}\n\
+         #[cfg(test)]\n\
+         mod tests{index} {{ #[test] fn adds() {{ assert_eq!(1 + 1, 2); }} }}\n"
     );
     for context in 0..contexts {
         text.push_str(&format!(
@@ -85,12 +108,22 @@ fn fixture(contexts: usize) -> Result<tempfile::TempDir> {
     Ok(root)
 }
 
+/// What the verification before the save did, and what there was to verify.
+struct Verified {
+    memos: u64,
+    queries: u64,
+    top: String,
+    analysed: u64,
+    /// The persisted queries that have memos.
+    kinds: std::collections::BTreeSet<String>,
+}
+
 /// Project the fixture with a place to save, and say what the verification before the save did.
-fn verification(contexts: usize) -> Result<(u64, u64, u64, String, u64)> {
+fn verification(contexts: usize) -> Result<Verified> {
     verification_seen(contexts, &Writes::default())
 }
 
-fn verification_seen(contexts: usize, writes: &Writes) -> Result<(u64, u64, u64, String, u64)> {
+fn verification_seen(contexts: usize, writes: &Writes) -> Result<Verified> {
     let root = fixture(contexts)?;
     let keys = (0..contexts)
         .map(|context| SemanticContextKey::enabling([format!("c{context}")]))
@@ -124,28 +157,62 @@ fn verification_seen(contexts: usize, writes: &Writes) -> Result<(u64, u64, u64,
     cordial::write_run_metrics(&store).into_diagnostic()?;
     let metrics = cordial::read_run_metrics(&store);
     let value = |name: &str| metrics.values().get(name).copied().unwrap_or(0);
+    let kinds = metrics
+        .values()
+        .iter()
+        .filter(|(_, memos)| **memos > 0)
+        .filter_map(|(name, _)| {
+            name.strip_prefix("persistence.")?
+                .strip_suffix(".memos")
+                .map(str::to_owned)
+        })
+        .collect();
     let top = metrics
         .notes()
         .get("cache.verified.top")
         .cloned()
         .unwrap_or_default();
-    Ok((
-        value("cache.verified.memos"),
-        value("cache.verified.edges"),
-        value("cache.verified.queries"),
+    Ok(Verified {
+        memos: value("cache.verified.memos"),
+        queries: value("cache.verified.queries"),
         top,
-        value("milestones.cfg_context_entered.events"),
-    ))
+        analysed: value("milestones.cfg_context_entered.events"),
+        kinds,
+    })
 }
 
 #[test]
 fn verifying_with_no_context_has_nothing_to_run_again() -> Result<()> {
     cordial::init_tracing();
-    let (memos, _, queries, top, analysed) = verification(0)?;
-    assert_eq!(analysed, 0);
-    assert_eq!((memos, queries), (0, 0), "[{top}]");
+    let verified = verification(0)?;
+    assert_eq!(verified.analysed, 0);
+    assert_eq!(
+        (verified.memos, verified.queries),
+        (0, 0),
+        "[{}]",
+        verified.top
+    );
     Ok(())
 }
+
+/// The contexts a session goes through before it saves. Each one's input writes advance the
+/// revision, so what an earlier context's per-file queries were made with must outlive them all.
+const CONTEXTS: usize = 12;
+
+/// The persisted queries this audits: the files' collectors, the definition maps, and the
+/// per-function and per-crate facts. A fixture that stopped making their memos would stop
+/// auditing them.
+const AUDITED: &[&str] = &[
+    "antipattern_facts_file",
+    "architecture_file",
+    "crate_local_def_map",
+    "error_sites_file",
+    "observability_file",
+    "panic_scan_file",
+    "persisted_evidence",
+    "policy_file",
+    "verus_file",
+];
 
 /// Each context's input writes advance the revision. What the earlier contexts' per-file queries
 /// were keyed by must outlive that, or the memos that read the keys go out of date and the save's
@@ -155,13 +222,21 @@ fn verifying_with_no_context_has_nothing_to_run_again() -> Result<()> {
 fn verifying_after_several_contexts_runs_nothing_again() -> Result<()> {
     cordial::init_tracing();
     let writes = Writes::default();
-    let (memos, _, queries, top, analysed) = verification_seen(8, &writes)?;
-    assert_eq!(analysed, 8);
-    assert!(memos > 0, "something was there to verify");
+    let verified = verification_seen(CONTEXTS, &writes)?;
+    assert_eq!(verified.analysed, CONTEXTS as u64);
+    assert!(verified.memos > 0, "something was there to verify");
+    for kind in AUDITED {
+        assert!(
+            verified.kinds.contains(*kind),
+            "{kind} has no memos, so nothing audits it: {:?}",
+            verified.kinds
+        );
+    }
     assert_eq!(
-        queries,
+        verified.queries,
         0,
-        "verifying ran these again: [{top}]; out of date: {:?}",
+        "verifying ran these again: [{}]; out of date: {:?}",
+        verified.top,
         writes.0.lock().expect("a lock")
     );
     // And no memo is found out of date: the contexts changed nothing a memo of an earlier one read.

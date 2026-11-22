@@ -2090,12 +2090,22 @@ long-lived queries read is `revisions = usize::MAX`. Five keys of the patched cr
 proc-macro span and declarative-expander keys) and `ExtractKey` were not; they are
 now. The test is green at 8 contexts with no re-run and no memo out of date.
 
+Audit of the other interned keys. Only a type that gains new values with every context
+can have its old values expire (a slot is reused when new values need one), which is
+what `ExtractKey`, the item-tree and expander keys and the file and root ids do. Cordial's
+other keys (`ScanKey`, `FileKey`, `HeldKey`, `ItemsKey`, `LayoutKey`, `ModuleTreeKey`,
+`CrateKey`, `WalkKey`, `ContractKey`, `PackageFileKey`, `NamedCrateKey`) are interned at
+call sites that run every pass, or for ordinary files only, so they are touched again or
+never churn, and keep the default expiry. The test makes memos for the files' collectors,
+the definition maps and the per-function facts (it asserts it does) and passes with no re-run
+and no stale memo at 12 contexts, and at 16 when tried. An expired `ScanKey` of an earlier
+context costs that context's memo when it is entered again, which is a loss of reuse and not
+a re-run, and belongs to the bounded identity work.
+
 Not measured: the effect on a real run. The fix removes the cause the fixture shows;
 how much of amenable's 174K re-executions and Cordial's 519 s it was is unknown until
 a run, which the plan keeps for after the remaining design items. Remaining design
-items, from the evidence: the other cordial-owned interned keys keep the default
-expiry (`ScanKey`, `FileKey`, `HeldKey`, `ItemsKey`, `LayoutKey`, `ModuleTreeKey` and
-the rest) and should be audited by the same test over more query kinds; `start_of` and
+items, from the evidence: `start_of` and
 `persisted_evidence` walks are 13.5 s and 12 s of the verification and may be
 deeper dependencies than needed; `context.finish` builds definition maps outside the
 ordered loop; the leaf step is 34 s of 125 s on amenable; the forced closure builds
