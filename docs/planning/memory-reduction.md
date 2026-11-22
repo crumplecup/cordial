@@ -2102,6 +2102,23 @@ and no stale memo at 12 contexts, and at 16 when tried. An expired `ScanKey` of 
 context costs that context's memo when it is entered again, which is a loss of reuse and not
 a re-run, and belongs to the bounded identity work.
 
+A measured run with the first fix (amenable, cold): peak 4.83 to 3.94 GiB and the
+verification's growth 1.48 to 0.58 GiB, but 158K of the 174K queries still ran, named
+`ast_id_map_`, `parse_macro_expansion_`, `AttrFlags::query_` and the signature queries.
+The unit test was then ratcheted until it reproduced them: nothing re-ran with a derive
+from a procedural macro crate (it asserts a proc-macro expansion executed), nor with a
+second package; adding an integration test binary, so the leaf pass enters contexts of its
+own, did. Two causes, both found from Salsa's own `salsa::stale` and `salsa::explain`
+events: `PlacedFile`, the key of `places_in`, gains a value per copied file and expired
+(`direct_facts`, `resolve`, `crate_functions` and `generated_in` went out of date, so the
+function evidence under them would run again, which is what the macro and AST queries in
+the real run are); and `crate_of` scanned every crate the database holds to find a crate by
+its root path, so the `crate_files` memos of context copies read the tool's roots, which
+every later context changes. It now looks in the graph's crates for an ordinary scope and in
+the one source root of the copy's context for a copy. `PlacedFile` is immortal. Five tests
+(none, plain, derive, leaf, and all three with a second package) re-run nothing at 12
+contexts. The measured run predates this second fix.
+
 Not measured: the effect on a real run. The fix removes the cause the fixture shows;
 how much of amenable's 174K re-executions and Cordial's 519 s it was is unknown until
 a run, which the plan keeps for after the remaining design items. Remaining design

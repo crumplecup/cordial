@@ -222,7 +222,23 @@ pub(super) fn canonical_id(db: &RootDatabase, id: SemanticItemId) -> SemanticIte
 #[hotpath::measure]
 pub(super) fn crate_of(db: &RootDatabase, scope: &str) -> Option<ra_ap_hir::Crate> {
     let wanted = scope.strip_prefix("crate|")?;
-    ra_ap_hir::Crate::all(db)
+    // A context's copy is a crate the tool added, in the source root of its context, and any other
+    // crate is of the graph the loader built, which does not change. Each is looked for where it
+    // can be: scanning every crate the database holds would make the answer depend on every
+    // context added (each adds crates and changes what the tool added), so a memo that read it
+    // would be out of date, and run again at the save, whatever it was asked about.
+    let candidates: Vec<ra_ap_hir::Crate> =
+        match super::context_crates::copy_root_of(&VfsPath::new_virtual_path(wanted.to_owned())) {
+            Some(root) => ra_ap_ide_db::base_db::source_root_crates(db, root)
+                .iter()
+                .map(|krate| ra_ap_hir::Crate::from(*krate))
+                .collect(),
+            None => ra_ap_ide_db::base_db::graph_crates(db)
+                .iter()
+                .map(|krate| ra_ap_hir::Crate::from(*krate))
+                .collect(),
+        };
+    candidates
         .into_iter()
         .find(|krate| path_of(db, krate.root_file(db)).is_some_and(|path| path.text == wanted))
 }
@@ -855,7 +871,11 @@ impl PlaceIndex {
 }
 
 /// A file, as the argument of the query that indexes its places.
-#[salsa::interned(debug)]
+///
+/// Immortal: a context's copy of every file is a new value, and the queries of the earlier contexts
+/// read the keys of their files, so a key that expired would put them out of date and the save
+/// would run them again.
+#[salsa::interned(debug, revisions = usize::MAX)]
 struct PlacedFile<'db> {
     index: u32,
 }
