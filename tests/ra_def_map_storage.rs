@@ -287,9 +287,42 @@ fn warm_macros(db: &RootDatabase, macros: &[MacroId]) -> Vec<Weak<()>> {
         .map(|&mac| {
             mac.definition(db);
             ra_ap_hir_def::attrs::AttrFlags::query(db, mac.into());
+            if let Some(key) = mac.declarative_expander_key(db) {
+                key.expander(db);
+            }
             Arc::downgrade(&native_macro_payload(db, mac).alive)
         })
         .collect()
+}
+
+fn expander_keys(db: &RootDatabase, macros: &[MacroId]) -> Vec<salsa::Id> {
+    macros
+        .iter()
+        .filter_map(|&mac| mac.declarative_expander_key(db).map(|key| key.as_id()))
+        .collect()
+}
+
+fn held_expanders(db: &mut RootDatabase, macros: &[MacroId]) -> u64 {
+    let keys = expander_keys(db, macros);
+    let mut held = 0;
+    db.values_in_memory_for_inputs(&keys, false, true, &[], &mut |_, count| held += count);
+    held
+}
+
+#[derive(Clone, Default)]
+struct MacroExecutions(Arc<AtomicUsize>);
+
+impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for MacroExecutions {
+    fn on_new_span(
+        &self,
+        attrs: &tracing::span::Attributes<'_>,
+        _: &tracing::Id,
+        _: tracing_subscriber::layer::Context<'_, S>,
+    ) {
+        if attrs.metadata().name() == "decl_macro_expander_query" {
+            self.0.fetch_add(1, Ordering::SeqCst);
+        }
+    }
 }
 
 fn held_macro_values(db: &mut RootDatabase, macros: &[MacroId]) -> u64 {
@@ -1140,7 +1173,10 @@ fn local_legacy_macros_retire_without_selecting_inherited_dependency_work() {
         for restored in [false, true] {
             salsa::set_spill_store(Some(Arc::new(Store::default())));
             let executions = MapExecutions::default();
-            let subscriber = tracing_subscriber::registry().with(executions.clone());
+            let compiled = MacroExecutions::default();
+            let subscriber = tracing_subscriber::registry()
+                .with(executions.clone())
+                .with(compiled.clone());
             tracing::subscriber::with_default(subscriber, || {
                 let mut fixture = Fixture::build_with_dependency(
                     &source,
@@ -1179,7 +1215,13 @@ fn local_legacy_macros_retire_without_selecting_inherited_dependency_work() {
                     .map(|items| warm_macros(&fixture.db, items))
                     .collect();
                 let collected = executions.0.load(Ordering::SeqCst);
+                let compiled_before = compiled.0.load(Ordering::SeqCst);
                 assert_eq!(collected, count + 2);
+                assert_eq!(held_expanders(&mut fixture.db, &ordinary), 8);
+                assert_eq!(held_expanders(&mut fixture.db, &shared), 2);
+                for items in &macros {
+                    assert_eq!(held_expanders(&mut fixture.db, items), 9);
+                }
                 for (index, &krate) in fixture.contexts.iter().enumerate() {
                     let map = crate_def_map(&fixture.db, krate);
                     let visible_legacy = map
@@ -1197,6 +1239,17 @@ fn local_legacy_macros_retire_without_selecting_inherited_dependency_work() {
                     let keys = declared_context_keys(&mut fixture.db, krate);
                     assert!(macros[index].iter().all(|id| keys.contains(&id.as_id())));
                     assert!(
+                        expander_keys(&fixture.db, &macros[index])
+                            .iter()
+                            .all(|key| keys.contains(key))
+                    );
+                    assert!(
+                        expander_keys(&fixture.db, &ordinary)
+                            .iter()
+                            .chain(&expander_keys(&fixture.db, &shared))
+                            .all(|key| !keys.contains(key))
+                    );
+                    assert!(
                         ordinary
                             .iter()
                             .chain(&shared)
@@ -1212,6 +1265,7 @@ fn local_legacy_macros_retire_without_selecting_inherited_dependency_work() {
                         );
                         fixture.db.spill_persisted_for_inputs(&keys);
                         assert_eq!(held_macro_values(&mut fixture.db, &macros[index]), 0);
+                        assert_eq!(held_expanders(&mut fixture.db, &macros[index]), 0);
                     }
                     for (other, markers) in markers.iter().enumerate() {
                         assert!(
@@ -1223,6 +1277,10 @@ fn local_legacy_macros_retire_without_selecting_inherited_dependency_work() {
                             held_macro_values(&mut fixture.db, &macros[other]),
                             if other > index { 27 } else { 0 }
                         );
+                        assert_eq!(
+                            held_expanders(&mut fixture.db, &macros[other]),
+                            if other > index { 9 } else { 0 }
+                        );
                     }
                     assert!(
                         ordinary_markers
@@ -1232,6 +1290,13 @@ fn local_legacy_macros_retire_without_selecting_inherited_dependency_work() {
                     );
                     assert_eq!(held_macro_values(&mut fixture.db, &ordinary), 24);
                     assert_eq!(held_macro_values(&mut fixture.db, &shared), 6);
+                    assert_eq!(held_expanders(&mut fixture.db, &ordinary), 8);
+                    assert_eq!(held_expanders(&mut fixture.db, &shared), 2);
+                    assert_eq!(
+                        compiled.0.load(Ordering::SeqCst),
+                        compiled_before,
+                        "selection and retirement must not compile macros"
+                    );
                 }
                 for (index, &krate) in fixture.contexts.iter().enumerate() {
                     assert_eq!(declared_macros(&fixture.db, krate), macros[index]);
@@ -1243,6 +1308,12 @@ fn local_legacy_macros_retire_without_selecting_inherited_dependency_work() {
                     }
                     warm_macros(&fixture.db, &macros[index]);
                     assert_eq!(held_macro_values(&mut fixture.db, &macros[index]), 27);
+                    assert_eq!(held_expanders(&mut fixture.db, &macros[index]), 9);
+                    assert_eq!(
+                        compiled.0.load(Ordering::SeqCst),
+                        compiled_before + (index + 1) * 9,
+                        "re-entry compiles only this context's retired definitions"
+                    );
                 }
                 assert_eq!(executions.0.load(Ordering::SeqCst), collected);
             });
@@ -1277,6 +1348,18 @@ fn legacy_macro_selection_follows_the_current_map_after_an_edit() {
         assert_ne!(current, previous);
         let markers = warm_macros(&fixture.db, &current);
         let keys = declared_context_keys(&mut fixture.db, context);
+        let current_expanders = expander_keys(&fixture.db, &current);
+        assert!(current_expanders.iter().all(|key| keys.contains(key)));
+        assert!(
+            expander_keys(&fixture.db, &previous)
+                .iter()
+                .all(|key| !keys.contains(key))
+        );
+        assert!(
+            expander_keys(&fixture.db, &ordinary)
+                .iter()
+                .all(|key| !keys.contains(key))
+        );
         assert!(current.iter().all(|id| keys.contains(&id.as_id())));
         assert!(
             previous
@@ -1289,6 +1372,8 @@ fn legacy_macro_selection_follows_the_current_map_after_an_edit() {
             .values_in_memory_for_inputs(&keys, true, false, &[], &mut |_, _| {});
         fixture.db.spill_persisted_for_inputs(&keys);
         assert_eq!(held_macro_values(&mut fixture.db, &current), 0);
+        assert_eq!(held_expanders(&mut fixture.db, &current), 0);
+        assert_eq!(held_expanders(&mut fixture.db, &ordinary), 1);
         assert!(markers.iter().all(|marker| marker.strong_count() == 0));
         assert!(
             ordinary_markers
@@ -1298,6 +1383,173 @@ fn legacy_macro_selection_follows_the_current_map_after_an_edit() {
         assert_eq!(declared_macros(&fixture.db, context), current);
         warm_macros(&fixture.db, &current);
         assert_eq!(held_macro_values(&mut fixture.db, &current), 3);
+        assert_eq!(held_expanders(&mut fixture.db, &current), 1);
+    }
+}
+
+#[test]
+fn restored_macro_selection_does_not_compile_missing_expanders() {
+    let _fixture = FIXTURE.lock().unwrap();
+    let _reset = ResetStore;
+    salsa::set_spill_store(Some(Arc::new(Store::default())));
+    let compiled = MacroExecutions::default();
+    let subscriber = tracing_subscriber::registry().with(compiled.clone());
+    tracing::subscriber::with_default(subscriber, || {
+        let mut fixture = Fixture::build("macro_rules! local { () => {} }", 1);
+        let context = fixture.contexts[0];
+        let macros = declared_macros(&fixture.db, context);
+        assert_eq!(held_expanders(&mut fixture.db, &macros), 1);
+        let before = compiled.0.load(Ordering::SeqCst);
+        assert_eq!(before, 1);
+        fixture.restore();
+        for _ in 0..2 {
+            let keys = declared_context_keys(&mut fixture.db, context);
+            assert!(
+                expander_keys(&fixture.db, &macros)
+                    .iter()
+                    .all(|key| keys.contains(key))
+            );
+            assert_eq!(held_expanders(&mut fixture.db, &macros), 0);
+            fixture
+                .db
+                .values_in_memory_for_inputs(&keys, true, false, &[], &mut |_, _| {});
+            fixture.db.spill_persisted_for_inputs(&keys);
+            assert_eq!(
+                compiled.0.load(Ordering::SeqCst),
+                before,
+                "selection must not compile non-persisted rules after restore"
+            );
+        }
+        warm_macros(&fixture.db, &macros);
+        assert_eq!(held_expanders(&mut fixture.db, &macros), 1);
+        assert_eq!(compiled.0.load(Ordering::SeqCst), before + 1);
+    });
+}
+
+#[test]
+fn declarative_expander_keys_preserve_the_defining_crate_cfg() {
+    let _fixture = FIXTURE.lock().unwrap();
+    let mut fixture = Fixture::build(
+        "#[cfg_attr(variant = \"0\", rustc_macro_transparency = \"opaque\")]\n\
+         macro_rules! local { () => {} }",
+        1,
+    );
+    let mac = declared_macros(&fixture.db, fixture.krate)[0];
+    let ordinary = mac.declarative_expander_key(&fixture.db).unwrap();
+    let context = ra_ap_hir_expand::declarative::DeclarativeMacroKey::new(
+        &fixture.db,
+        ordinary.ast_id(&fixture.db),
+        fixture.contexts[0],
+    );
+    assert_ne!(
+        ordinary, context,
+        "one site in two cfg sets needs distinct memos"
+    );
+    assert_eq!(
+        ordinary.expander(&fixture.db).transparency,
+        ra_ap_hir_expand::hygiene::Transparency::SemiOpaque
+    );
+    assert_eq!(
+        context.expander(&fixture.db).transparency,
+        ra_ap_hir_expand::hygiene::Transparency::Opaque
+    );
+    let ordinary_key = ordinary.as_id();
+    let context_key = context.as_id();
+    fixture
+        .db
+        .values_in_memory_for_inputs(&[context_key], true, false, &[], &mut |_, _| {});
+    let mut remaining = 0;
+    fixture
+        .db
+        .values_in_memory_for_inputs(&[ordinary_key], false, true, &[], &mut |_, n| {
+            remaining += n
+        });
+    assert_eq!(remaining, 1);
+}
+
+#[test]
+fn modern_macro_expanders_preserve_expansion_after_retirement_and_edits() {
+    let _fixture = FIXTURE.lock().unwrap();
+    let _reset = ResetStore;
+    for restored in [false, true] {
+        salsa::set_spill_store(Some(Arc::new(Store::default())));
+        let mut fixture = Fixture::build(
+            "pub macro make() { pub fn before() {} } make!();\n\
+             #[rustc_builtin_macro] macro_rules! line { () => {} }",
+            1,
+        );
+        let context = fixture.contexts[0];
+        let macros = declared_macros(&fixture.db, context);
+        assert_eq!(macros.len(), 2);
+        assert!(macros.iter().any(|mac| matches!(mac, MacroId::Macro2Id(_))));
+        assert_eq!(
+            expander_keys(&fixture.db, &macros).len(),
+            1,
+            "builtins must not allocate a declarative expander key"
+        );
+        let ordinary = declared_macros(&fixture.db, fixture.krate);
+        warm_macros(&fixture.db, &macros);
+        warm_macros(&fixture.db, &ordinary);
+        let before = declared_functions(&fixture.db, context);
+        assert_eq!(before.len(), 1);
+        if restored {
+            fixture.restore();
+            warm_macros(&fixture.db, &macros);
+            warm_macros(&fixture.db, &ordinary);
+        }
+        let keys = declared_context_keys(&mut fixture.db, context);
+        assert!(
+            expander_keys(&fixture.db, &macros)
+                .iter()
+                .all(|key| keys.contains(key))
+        );
+        assert!(
+            expander_keys(&fixture.db, &ordinary)
+                .iter()
+                .all(|key| !keys.contains(key))
+        );
+        fixture
+            .db
+            .values_in_memory_for_inputs(&keys, true, false, &[], &mut |_, _| {});
+        fixture.db.spill_persisted_for_inputs(&keys);
+        assert_eq!(held_expanders(&mut fixture.db, &macros), 0);
+        assert_eq!(held_expanders(&mut fixture.db, &ordinary), 1);
+        assert_eq!(declared_functions(&fixture.db, context), before);
+        warm_macros(&fixture.db, &macros);
+        assert_eq!(held_expanders(&mut fixture.db, &macros), 1);
+
+        let mut change = FileChange::default();
+        change.change_file(
+            FileId::from_raw(2),
+            Some(
+                "pub macro make() { pub fn after() {} pub fn added() {} } make!();\n\
+             #[rustc_builtin_macro] macro_rules! line { () => {} }"
+                    .into(),
+            ),
+        );
+        change.apply(&mut fixture.db);
+        let current = declared_macros(&fixture.db, context);
+        warm_macros(&fixture.db, &current);
+        let after = declared_functions(&fixture.db, context);
+        let mut names: Vec<_> = after
+            .iter()
+            .map(|&id| {
+                ra_ap_hir_def::signatures::FunctionSignature::of(&fixture.db, id)
+                    .name
+                    .display(&fixture.db, Edition::CURRENT)
+                    .to_string()
+            })
+            .collect();
+        names.sort();
+        assert_eq!(names, ["added", "after"]);
+        let keys = declared_context_keys(&mut fixture.db, context);
+        fixture
+            .db
+            .values_in_memory_for_inputs(&keys, true, false, &[], &mut |_, _| {});
+        fixture.db.spill_persisted_for_inputs(&keys);
+        assert_eq!(held_expanders(&mut fixture.db, &current), 0);
+        assert_eq!(declared_functions(&fixture.db, context), after);
+        assert_eq!(declared_functions(&fixture.db, fixture.krate).len(), 1);
     }
 }
 
@@ -1360,6 +1612,11 @@ fn body_local_declarations_retire_real_bodies_through_current_block_maps() {
                 let ordinary_values = ordinary.warm(&fixture.db);
                 let shared_values = shared.warm(&fixture.db);
                 let values: Vec<_> = locals.iter().map(|facts| facts.warm(&fixture.db)).collect();
+                warm_macros(&fixture.db, &ordinary.macros);
+                for facts in &locals {
+                    warm_macros(&fixture.db, &facts.macros);
+                    assert_eq!(held_expanders(&mut fixture.db, &facts.macros), 1);
+                }
                 for (index, facts) in locals.iter().enumerate() {
                     let blocks: Vec<_> = facts.blocks.iter().map(AsId::as_id).collect();
                     fixture.db.spill_persisted_for_inputs(&blocks);
@@ -1406,6 +1663,16 @@ fn body_local_declarations_retire_real_bodies_through_current_block_maps() {
                                 .all(|id| keys.contains(&id.as_id()))
                         );
                         assert!(
+                            expander_keys(&fixture.db, &locals[index].macros)
+                                .iter()
+                                .all(|key| keys.contains(key))
+                        );
+                        assert!(
+                            expander_keys(&fixture.db, &ordinary.macros)
+                                .iter()
+                                .all(|key| !keys.contains(key))
+                        );
+                        assert!(
                             ordinary
                                 .bodies
                                 .iter()
@@ -1421,6 +1688,8 @@ fn body_local_declarations_retire_real_bodies_through_current_block_maps() {
                         );
                         fixture.db.spill_persisted_for_inputs(&keys);
                         assert_eq!(locals[index].held(&mut fixture.db), 0);
+                        assert_eq!(held_expanders(&mut fixture.db, &locals[index].macros), 0);
+                        assert_eq!(held_expanders(&mut fixture.db, &ordinary.macros), 1);
                         let mut held_blocks = 0;
                         fixture.db.values_in_memory_for_inputs(
                             &keys,
@@ -1441,6 +1710,10 @@ fn body_local_declarations_retire_real_bodies_through_current_block_maps() {
                             locals[other].held(&mut fixture.db),
                             if other > index { 34 } else { 0 }
                         );
+                        assert_eq!(
+                            held_expanders(&mut fixture.db, &locals[other].macros),
+                            u64::from(other > index)
+                        );
                     }
                     assert!(
                         ordinary_values
@@ -1455,6 +1728,8 @@ fn body_local_declarations_retire_real_bodies_through_current_block_maps() {
                     assert_eq!(LocalBodies::collect(&fixture.db, krate), locals[index]);
                     locals[index].warm(&fixture.db);
                     assert_eq!(locals[index].held(&mut fixture.db), 34);
+                    warm_macros(&fixture.db, &locals[index].macros);
+                    assert_eq!(held_expanders(&mut fixture.db, &locals[index].macros), 1);
                 }
                 assert_eq!(executions.blocks.load(Ordering::SeqCst), collected_blocks);
             });

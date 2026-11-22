@@ -420,6 +420,8 @@ pub fn crate_def_map(db: &dyn SourceDatabase, crate_id: Crate) -> &DefMap {
 /// Follow existing tracked-output links to already-current block maps and repeat
 /// declaration selection there. Absent or stale member/block queries are not
 /// executed just to retire their values. Missing producer records add no keys.
+/// Local declarative expanders are selected from interned macro locations,
+/// without compiling them; builtins, procedural and imported macros are excluded.
 pub fn crate_declared_query_keys(
     db: &mut dyn SourceDatabase,
     crate_id: Crate,
@@ -457,6 +459,9 @@ fn def_map_declared_query_keys(
         Either::Right(block) => block_def_map(db, block),
     };
     let mut keys: Vec<_> = map.declared_query_keys().collect();
+    keys.extend(map.macro_def_to_macro_id.values().filter_map(|&mac| {
+        mac.declarative_expander_key(db).map(|key| key.as_id())
+    }));
     let owners: Vec<_> = map.modules().flat_map(|(_, module)| {
         module.scope.declarations()
             .filter_map(|def| match def {

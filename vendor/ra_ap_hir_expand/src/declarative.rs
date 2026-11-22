@@ -78,16 +78,35 @@ impl DeclarativeMacroExpander {
     }
 }
 
-#[salsa::tracked]
+/// The defining site and crate of a compiled declarative macro.
+///
+/// This replaces the expander query's implicit argument interner, so owners can
+/// select its memo without compiling the macro or scanning interned arguments.
+#[salsa::interned(debug)]
+pub struct DeclarativeMacroKey {
+    pub ast_id: AstId<ast::Macro>,
+    pub def_crate: Crate,
+}
+
 impl AstId<ast::Macro> {
     /// Fetches (and compiles) the expander of this decl macro.
-    #[salsa::tracked(returns(ref))]
-    pub fn decl_macro_expander(
+    pub fn decl_macro_expander<'db>(
         self,
-        db: &dyn SourceDatabase,
+        db: &'db dyn SourceDatabase,
         def_crate: Crate,
-    ) -> DeclarativeMacroExpander {
-        let id = self;
+    ) -> &'db DeclarativeMacroExpander {
+        DeclarativeMacroKey::new(db, self, def_crate).expander(db)
+    }
+}
+
+#[salsa::tracked]
+impl<'db> DeclarativeMacroKey<'db> {
+    /// Compile this definition; the memo owns the compiled rules.
+    #[salsa::tracked(returns(ref))]
+    pub fn expander(self, db: &'db dyn SourceDatabase) -> DeclarativeMacroExpander {
+        let _span = tracing::debug_span!("decl_macro_expander_query").entered();
+        let id = self.ast_id(db);
+        let def_crate = self.def_crate(db);
         let (root, map) = id.file_id.parse_with_map(db);
 
         let root = root.syntax_node();

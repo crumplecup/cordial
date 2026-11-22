@@ -8,10 +8,11 @@
 //!
 //! Harvesting, observability and follow-up gate discovery must finish before
 //! the pass retires values keyed by copied crates, their local declarations,
-//! cached trait/impl members, enum variants, declarations in current block maps
-//! and tracked outputs of queries on those keys. Other eviction follows the
-//! run's pressure policy; uncached owners, missing producer records, composite
-//! keys and copied inputs can still accumulate.
+//! declarative macro expanders, cached trait/impl members, enum variants,
+//! declarations in current block maps and tracked outputs of queries on those
+//! keys. Other eviction follows the run's pressure policy; uncached owners,
+//! missing producer records, other composite keys and copied inputs can still
+//! accumulate.
 
 mod copy_functions;
 mod flips;

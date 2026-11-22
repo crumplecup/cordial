@@ -786,9 +786,10 @@ Retirement now runs there for copied crate keys, module-scope declaration keys,
 locally defined macro keys recorded in the definition map, members and variants
 recorded in already-current trait/impl/enum query results, body-local declarations
 in current block maps reached through producer records, and tracked identities
-created by queries on those keys, transitively. Selected
+created by queries on those keys, transitively. Local declarative macro
+definitions also select their explicit expander keys. Selected
 non-persisted values are dropped, and persisted values spill when a run cache
-is available, even without memory pressure. Composite arguments are not yet
+is available, even without memory pressure. Other composite arguments are not yet
 selected through their owners. Selection reads the current map and skips absent,
 stale or provisional member/variant/block results; removed declarations from
 earlier revisions and block maps missing producer records are not enumerated.
@@ -1405,6 +1406,59 @@ No Cordial self-execution or full-program measurement ran. These tests establish
 query residency and reference release, not retained bytes or RSS. Step 2 remains partial
 for composite keys, absent/stale/provisional owner results, removed declarations,
 missing producer records after restore and input/identity/header storage.
+
+**Declarative expander key design, 2026-11-21.** Compiled declarative macro
+rules already live in a regenerable query memo, but its implicit Salsa argument
+interner hides the `(AstId<Macro>, defining Crate)` key from exact-key retirement.
+Replace that implicit interner with a named interned key containing the same
+two fields. Keep the existing `AstId::decl_macro_expander` API as a forwarding
+method, with the compilation query on the named key. There is one compiled
+value and one argument interner, not a wrapper memo or parallel ownership table.
+The key keeps the existing interner's revision/reuse policy.
+
+Derive that key from each local macro's existing interned location, filtering
+out builtins and procedural macros. Select it from the same persisted local
+macro table already used for retirement, including current block maps. Do not
+follow imported or inherited namespaces, collect syntax or compile the macro to
+select it. Collection already compiles local declarative definitions for their
+rule styles; after restore, reconstructing a key whose non-persisted value was
+not saved may allocate a small identity, but never recreates the compiled rules.
+Input/identity/header storage remains a separate step. No Salsa API or dependency
+representation change is needed for this RA query-key replacement.
+
+Check actual expander memo residency in cold/restored 1/4/16 families, preserved
+ordinary/shared/uncompleted values, repeat retirement without compilation,
+same-ID re-entry with unchanged expansion facts, edited definitions, local and
+generated macros, macro 2.0 and builtin exclusion. Query counts establish memo
+residency, not retained bytes or RSS.
+
+**Declarative expander retirement checkpoint, 2026-11-21.** Implemented the
+named key above in RA, replacing the implicit argument interner and retaining
+the existing forwarding API. The current local macro tables select compiled
+declarative values at both crate and body-local scopes. Selection does not
+compile missing rules, including after restore; ordinary, dependency and
+uncompleted-context values remain resident.
+
+The cold/restored 1/4/16 legacy-macro families include shadowed, nested, exported,
+cfg-gated and generated definitions. Each completed context has zero resident
+expander values after retirement. Repeated retirement compiles nothing;
+same-ID re-entry recompiles exactly its nine definitions without recollecting
+definition maps. The body-local families also retire their compiled macros.
+Separate fixtures cover current versus replaced definitions, macro 2.0 expansion
+before and after edits, builtin exclusion and missing non-persisted expanders
+after restore. A shared-source-site check preserves distinct keys and cfg-based
+transparency for two defining crates. The vendored incremental expectations
+name the replacement query.
+
+All 94 focused Nextest tests passed across 13 binaries with `hotpath-alloc`,
+including unchanged saved-query accounting checks. Formatting,
+all-features/all-targets Clippy with warnings denied and diff checks passed.
+No Cordial self-execution or full-program measurement ran.
+
+Step 2 remains partial for other composite keys, absent/stale/provisional owner
+results, removed declarations, missing producer records and copied
+input/identity/header storage. This checkpoint establishes expander memo
+residency in fixtures, not retained bytes or process RSS.
 
 ## Historical evidence
 

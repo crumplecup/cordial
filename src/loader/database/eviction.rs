@@ -286,8 +286,8 @@ impl SourceDatabase {
         }
     }
 
-    /// Retire values keyed by completed context crates, declared locations and tracked outputs.
-    /// Composite keys and locations without current owner records still need selection rules.
+    /// Retire values keyed by completed context crates, declarations, expanders and tracked outputs.
+    /// Other composite keys and locations without current owner records still need selection rules.
     #[instrument(level = "debug", skip(self, seeds))]
     #[hotpath::measure(impl_type = "SourceDatabase")]
     pub(super) fn retire_context_values(&mut self, seeds: &[salsa::Id], after: &str) {

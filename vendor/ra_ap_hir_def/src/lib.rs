@@ -796,6 +796,29 @@ impl MacroId {
     pub fn is_attribute(self, db: &dyn SourceDatabase) -> bool {
         matches!(self, MacroId::ProcMacroId(it) if it.lookup(db).kind == ProcMacroKind::Attr)
     }
+
+    /// The compiled declarative expander's key, without reading or compiling it.
+    /// Builtins and procedural macros have no such key. The defining location
+    /// comes from this macro's interned fields, not a semantic query or import.
+    pub fn declarative_expander_key<'db>(
+        self,
+        db: &'db dyn SourceDatabase,
+    ) -> Option<hir_expand::declarative::DeclarativeMacroKey<'db>> {
+        let (id, container, expander) = match self {
+            Self::MacroRulesId(id) => {
+                let loc = id.lookup(db);
+                (loc.id.upcast(), loc.container, loc.expander)
+            }
+            Self::Macro2Id(id) => {
+                let loc = id.lookup(db);
+                (loc.id.upcast(), loc.container, loc.expander)
+            }
+            Self::ProcMacroId(_) => return None,
+        };
+        matches!(expander, MacroExpander::Declarative { .. }).then(|| {
+            hir_expand::declarative::DeclarativeMacroKey::new(db, id, container.krate(db))
+        })
+    }
 }
 
 #[salsa::tracked]
