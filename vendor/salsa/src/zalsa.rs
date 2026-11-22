@@ -548,6 +548,32 @@ impl Zalsa {
         keys
     }
 
+    /// Exact keys with an already verified, final value in one of the named queries.
+    /// Inspect metadata only, including for encoded values; never run or decode queries.
+    #[doc(hidden)]
+    pub fn cached_query_keys(&mut self, inputs: &[Id], only: &[&str]) -> Vec<Id> {
+        let mut seen = FxHashSet::default();
+        inputs.iter().copied().filter(|&key| {
+            if !seen.insert(key) {
+                return false;
+            }
+            let index = self.ingredient_index(key).as_u32() as usize;
+            self.memo_ingredient_indices.get(index).into_iter().flatten().any(|&index| {
+                let ingredient = self.lookup_ingredient(index);
+                if !only.is_empty() && !only.contains(&ingredient.debug_name()) {
+                    return false;
+                }
+                let Some(function) = ingredient.as_function() else {
+                    return false;
+                };
+                // SAFETY: Exclusive storage access prevents queries, slot reuse and memo
+                // replacement. The mapping lists only queries compatible with this key.
+                unsafe { function.memo_unchecked(self, key) }
+                    .is_some_and(|memo| memo.has_current_value(self.current_revision()))
+            })
+        }).collect()
+    }
+
     /// Like [`Self::values_in_memory`], restricted to memos keyed directly by these inputs.
     /// An empty list selects nothing. This does not follow dependency edges or composite keys.
     #[doc(hidden)]

@@ -782,13 +782,15 @@ Unchanged files may alias ordinary files; copied files share their original's
 text allocation. Each copied crate still has separate definition maps and
 context-dependent query results. The last-consumer boundary now follows
 observability, planning and optional persistence fingerprint preparation.
-Retirement now runs there for copied crate keys, module-scope declaration keys
-and tracked identities created by queries on those keys, transitively. Selected
-non-persisted values are dropped, and persisted values spill when a run cache
-is available, even without memory pressure. Associated items, enum variants,
-non-exported legacy macro definitions, body-local declarations and composite
-arguments are not yet selected through their owners. Selection reads the
-current map; removed declarations from earlier revisions are not enumerated.
+Retirement now runs there for copied crate keys, module-scope declaration keys,
+members recorded in already-current trait/impl query results, and tracked
+identities created by queries on those keys, transitively. Selected non-persisted
+values are dropped, and persisted values spill when a run cache is available,
+even without memory pressure. Enum variants, non-exported legacy macro
+definitions, body-local declarations and composite arguments are not yet
+selected through their owners. Selection reads the current map and skips
+absent, stale or provisional member results; removed declarations from earlier
+revisions are not enumerated.
 The existing broader eviction hook remains conditional and does not select
 individual contexts.
 Removing a `ContextCrates` handle alone would not free
@@ -1223,6 +1225,59 @@ persisted. Unconditionally reading them after restore could perform syntax,
 attribute and macro analysis merely to select values for retirement. Cover
 that path in a native fixture before extending selection; preserve the saved
 reuse checks rather than broadly allowing new retirement-time analysis.
+
+**Associated-item design review, 2026-11-21.** Keep RA's existing `TraitItems`
+and `ImplItems` results as the only member lists. Make those query values
+persistable with their existing diagnostics and macro-call records. At
+retirement, enumerate only locally declared trait/impl owners from the current
+persisted crate map. A narrow Salsa metadata selector will return owners whose
+named query already holds a value (resident or encoded), is verified in the
+current revision and is final. Reading these results can decode saved data but
+must not collect members. Absent, stale or provisional results are skipped;
+normal analysis can warm them before a later retirement. No intern-table scan,
+ownership index, macro-library fork or erased output-value visitor is needed.
+
+The selector uses exclusive database access and the same exact-key memo lookup
+as tracked-output selection. It does not validate memos or follow dependencies.
+Tests must cover cold and restored 1/4/16 families, actual method bodies, cfg
+members, macro-generated members, ordinary/shared work, repeated retirement,
+same-ID re-entry, edits and untouched owners. Existing saved-query accounting
+assertions stay intact. This expands value retirement only; input/identity
+storage and other ownership gaps remain.
+
+**Associated-item retirement checkpoint, 2026-11-21.** Context completion now
+adds the associated functions, constants, type aliases and macro-call IDs
+recorded by existing, current trait/impl query results. Local scope ownership
+excludes imported/re-exported dependency traits and types. The existing member
+queries now persist their results and diagnostics. A metadata-only exact-key
+selector checks memo presence, verification revision and finality before any
+member-list read; saved lists can decode without syntax or macro collection.
+No ownership index or macro dependency change was introduced.
+
+The native RA fixture covers 1, 4 and 16 cfg copies in cold and restored
+databases, including default and required trait methods, inherent and trait
+impl methods, cfg-gated methods and macro-generated members. Real body queries
+and persisted item payloads release their resident values for completed copies;
+weak markers confirm release of their original payload objects. Ordinary,
+dependency and uncompleted-copy values remain resident. Repeated retirement
+and same-ID re-entry reuse member lists without collection. A separate fixture
+checks untouched and stale results: selection does not collect or validate
+them; after normal analysis, replacement members are selected instead of the
+removed declarations. Salsa selector tests check exact keys, duplicates, empty
+selections, dropped/stale/missing values and encoded results without decoding.
+
+All 82 focused Nextest tests passed across 13 binaries with `hotpath-alloc`.
+Saved-query accounting assertions remain unchanged and pass. Formatting,
+all-features/all-targets Clippy with warnings denied and diff checks passed.
+No Cordial self-execution or full-program measurement ran.
+
+Step 2 remains partial. Member selection deliberately skips absent, stale and
+provisional results; it cannot recover removed declarations from earlier
+revisions. Enum variants, non-exported legacy macro definitions, body-local
+declarations, composite arguments, missing producer records after restore and
+input/identity/header storage remain separate gaps. These fixtures establish
+memo residency and original-object release, not retained-byte or whole-program
+RSS savings.
 
 ## Historical evidence
 

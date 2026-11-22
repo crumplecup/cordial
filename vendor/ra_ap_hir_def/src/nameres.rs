@@ -411,16 +411,56 @@ pub fn crate_def_map(db: &dyn SourceDatabase, crate_id: Crate) -> &DefMap {
     external_def_map(db, crate_id)
 }
 
-/// Keys declared in a crate's module scopes, for retiring completed semantic values.
+/// Local declaration and cached member keys, for retiring completed semantic values.
 ///
 /// Read the persisted owner directly so restoring a context does not recreate the
 /// external-map projection just to enumerate these keys. The owner may decode or
-/// recompute on this read; the iterator itself only visits stored facts.
+/// recompute on this read. Member lists are read only when their existing memos
+/// are verified and final in this revision, including encoded saved results.
+/// Absent or stale member queries are not executed just to retire their values.
 pub fn crate_declared_query_keys(
-    db: &dyn SourceDatabase,
+    db: &mut dyn SourceDatabase,
     crate_id: Crate,
-) -> impl Iterator<Item = salsa::Id> + '_ {
-    crate_local_def_map(db, crate_id).def_map.declared_query_keys()
+) -> Vec<salsa::Id> {
+    let map = &crate_local_def_map(db, crate_id).def_map;
+    let mut keys: Vec<_> = map.declared_query_keys().collect();
+    let owners: Vec<_> = map.modules().flat_map(|(_, module)| {
+        module.scope.declarations()
+            .filter_map(|def| match def {
+                crate::ModuleDefId::TraitId(id) => Some(Either::Left(id)),
+                _ => None,
+            })
+            .chain(module.scope.impls().map(Either::Right))
+    }).collect();
+    let owner_keys: Vec<_> = owners.iter()
+        .map(|owner| match owner {
+            Either::Left(id) => id.as_id(),
+            Either::Right(id) => id.as_id(),
+        })
+        .collect();
+    let cached: rustc_hash::FxHashSet<_> = db
+        .cached_query_keys(
+            &owner_keys,
+            &["TraitItems::query_with_diagnostics_", "ImplItems::of_"],
+        )
+        .into_iter()
+        .collect();
+    for owner in owners {
+        let (items, calls) = match owner {
+            Either::Left(id) if cached.contains(&id.as_id()) => {
+                let items = id.trait_items(db);
+                (&items.items, &items.macro_calls)
+            }
+            Either::Right(id) if cached.contains(&id.as_id()) => {
+                let items = id.impl_items(db);
+                (&items.items, &items.macro_calls)
+            }
+            _ => continue,
+        };
+        keys.extend(items.iter().map(|(_, id)| id.as_id()));
+        keys.extend(calls.iter().map(|(_, id)| id.as_id()));
+    }
+    keys
 }
 
 // Keep the large payloads in the query memo so spilling that memo can release them.

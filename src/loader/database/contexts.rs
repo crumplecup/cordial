@@ -7,10 +7,10 @@
 //! and syntax trees. Context-specific semantic results are copied into the IR.
 //!
 //! Harvesting, observability and follow-up gate discovery must finish before
-//! the pass retires values keyed by copied crates, their module-level declarations
-//! and tracked outputs of queries on those keys. Other eviction follows the run's
-//! pressure policy; associated items, body-local declarations, composite keys and
-//! copied inputs can still accumulate.
+//! the pass retires values keyed by copied crates, their local declarations,
+//! cached trait/impl members and tracked outputs of queries on those keys. Other
+//! eviction follows the run's pressure policy; uncached members, body-local
+//! declarations, composite keys and copied inputs can still accumulate.
 
 mod copy_functions;
 mod flips;
@@ -51,7 +51,8 @@ impl super::SourceDatabase {
             // Collect stored local declarations before dropping their map. Visible namespace
             // entries also contain imports and must not seed retirement of shared work.
             keys.extend(ra_ap_hir_def::nameres::crate_declared_query_keys(
-                &self.db, krate,
+                &mut self.db,
+                krate,
             ));
         }
         self.retire_context_values(&keys, after);

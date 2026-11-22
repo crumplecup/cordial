@@ -75,6 +75,18 @@ pub trait Database: Send + ZalsaDatabase + AsDynDatabase {
         self.zalsa_mut().tracked_output_keys(inputs)
     }
 
+    /// Return exact input keys with a value in one of the named queries, verified
+    /// and final in the current revision. Encoded values count; empty `only` matches
+    /// all queries. Does not execute, validate or decode queries, or follow edges.
+    /// Missing, stale and provisional memos are excluded. Keys must belong to this
+    /// database; each matching key is returned once, in input order.
+    ///
+    /// **WARNING:** Just like an ordinary write, this method triggers cancellation.
+    #[doc(hidden)]
+    fn cached_query_keys(&mut self, inputs: &[crate::Id], only: &[&str]) -> Vec<crate::Id> {
+        self.zalsa_mut().cached_query_keys(inputs, only)
+    }
+
     /// Like [`Self::values_in_memory`], restricted to query memos keyed directly by `inputs`.
     /// Pass input IDs from this database. An empty list selects nothing; dependency edges,
     /// tracked identities and composite query keys are not followed.

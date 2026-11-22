@@ -10,7 +10,7 @@ use ra_ap_hir_def::nameres::{
     crate_declared_query_keys, crate_def_map, stable::def_map_fingerprint,
 };
 use ra_ap_hir_def::resolver::HasResolver;
-use ra_ap_hir_def::{FunctionId, ModuleDefId};
+use ra_ap_hir_def::{AssocItemId, FunctionId, ModuleDefId};
 use ra_ap_hir_expand::intern::Symbol;
 use ra_ap_ide_db::RootDatabase;
 use ra_ap_ide_db::base_db::{
@@ -87,17 +87,21 @@ impl Fixture {
     }
 
     fn build(main_text: &str, contexts: usize) -> Self {
+        Self::build_with_dependency(
+            main_text,
+            contexts,
+            "pub struct Dependency; pub fn shared() {}",
+        )
+    }
+
+    fn build_with_dependency(main_text: &str, contexts: usize, dependency_text: &str) -> Self {
         let mut db = RootDatabase::default();
         let mut graph = CrateGraphBuilder::default();
         let mut files = FileSet::default();
         let mut change = FileChange::default();
         let mut roots = Vec::new();
         for id in 0..contexts + 2 {
-            let text = if id == 1 {
-                "pub struct Dependency; pub fn shared() {}"
-            } else {
-                main_text
-            };
+            let text = if id == 1 { dependency_text } else { main_text };
             let mut cfg = CfgOptions::default();
             if id >= 2 {
                 cfg.insert_key_value(
@@ -254,6 +258,65 @@ fn declared_functions(db: &RootDatabase, krate: Crate) -> Vec<FunctionId> {
     functions
 }
 
+fn associated_functions(db: &RootDatabase, krate: Crate) -> Vec<FunctionId> {
+    let mut functions = Vec::new();
+    for (_, module) in crate_def_map(db, krate).modules() {
+        let traits = module.scope.declarations().filter_map(|def| match def {
+            ModuleDefId::TraitId(id) => Some(id),
+            _ => None,
+        });
+        for items in traits
+            .map(|id| &id.trait_items(db).items)
+            .chain(module.scope.impls().map(|id| &id.impl_items(db).items))
+        {
+            functions.extend(items.iter().filter_map(|(_, id)| match id {
+                AssocItemId::FunctionId(id) => Some(*id),
+                _ => None,
+            }));
+        }
+    }
+    functions.sort_unstable_by_key(|id| id.as_id().as_bits());
+    functions
+}
+
+fn associated_query_keys(db: &RootDatabase, krate: Crate) -> Vec<salsa::Id> {
+    let mut keys = Vec::new();
+    for (_, module) in crate_def_map(db, krate).modules() {
+        for def in module.scope.declarations() {
+            if let ModuleDefId::TraitId(id) = def {
+                let members = id.trait_items(db);
+                keys.extend(members.items.iter().map(|(_, id)| id.as_id()));
+                keys.extend(members.macro_calls().map(|(_, id)| id.as_id()));
+            }
+        }
+        for id in module.scope.impls() {
+            let members = id.impl_items(db);
+            keys.extend(members.items.iter().map(|(_, id)| id.as_id()));
+            keys.extend(members.macro_calls().map(|(_, id)| id.as_id()));
+        }
+    }
+    keys
+}
+
+#[derive(Clone, Default)]
+struct MemberExecutions(Arc<AtomicUsize>);
+
+impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for MemberExecutions {
+    fn on_new_span(
+        &self,
+        attrs: &tracing::span::Attributes<'_>,
+        _: &tracing::Id,
+        _: tracing_subscriber::layer::Context<'_, S>,
+    ) {
+        if matches!(
+            attrs.metadata().name(),
+            "trait_items_with_diagnostics_query" | "impl_items_with_diagnostics_query"
+        ) {
+            self.0.fetch_add(1, Ordering::SeqCst);
+        }
+    }
+}
+
 fn warm_items(db: &RootDatabase, functions: &[FunctionId]) -> Vec<Weak<()>> {
     functions
         .iter()
@@ -281,6 +344,200 @@ fn held_item_values(db: &mut RootDatabase, functions: &[FunctionId]) -> u64 {
         &mut |_, count| held += count,
     );
     held
+}
+
+#[test]
+fn associated_locations_retire_method_bodies_without_collecting_members() {
+    let _fixture = FIXTURE.lock().unwrap();
+    let _reset = ResetStore;
+    for count in [1, 4, 16] {
+        let mut source = String::from(
+            "extern crate unused; pub use unused::{Dependency, Shared};\n\
+             macro_rules! member { () => { fn generated() {} } }\n\
+             pub trait Local { fn defaulted() {} fn required(); type Item; const VALUE: u8 = 1; member!(); }\n\
+             pub struct LocalType;\n\
+             impl LocalType { pub fn inherent() {} member!(); }\n\
+             impl Local for LocalType { fn required() {} type Item = u8; const VALUE: u8 = 2; }\n",
+        );
+        for variant in 0..count {
+            source.push_str(&format!(
+                "impl LocalType {{ #[cfg(variant = \"{variant}\")] fn selected() {{ let _ = {variant}; }} }}\n"
+            ));
+        }
+        for restored in [false, true] {
+            salsa::set_spill_store(Some(Arc::new(Store::default())));
+            let executions = MemberExecutions::default();
+            let subscriber = tracing_subscriber::registry().with(executions.clone());
+            tracing::subscriber::with_default(subscriber, || {
+                let mut fixture = Fixture::build_with_dependency(
+                    &source,
+                    count,
+                    "pub struct Dependency; pub trait Shared { fn shared() {} } impl Dependency { pub fn shared() {} }",
+                );
+                fixture.add_dependency();
+                let dependency = ra_ap_ide_db::base_db::all_crates(&fixture.db)
+                    .iter()
+                    .copied()
+                    .find(|krate| *krate != fixture.krate && !fixture.contexts.contains(krate))
+                    .unwrap();
+                let ordinary = associated_functions(&fixture.db, fixture.krate);
+                assert_eq!(ordinary.len(), 6);
+                let functions: Vec<_> = fixture
+                    .contexts
+                    .iter()
+                    .map(|&krate| associated_functions(&fixture.db, krate))
+                    .collect();
+                assert!(functions.iter().all(|items| items.len() == 7));
+                let members: Vec<_> = fixture
+                    .contexts
+                    .iter()
+                    .map(|&krate| associated_query_keys(&fixture.db, krate))
+                    .collect();
+                assert!(
+                    members.iter().all(|keys| keys.len() == 13),
+                    "methods, consts, type aliases and macro calls"
+                );
+                // Shared member work can first be computed while processing a cfg copy.
+                let shared = associated_functions(&fixture.db, dependency);
+                assert_eq!(shared.len(), 2);
+                for items in functions.iter().chain([&ordinary, &shared]) {
+                    warm_items(&fixture.db, items);
+                }
+                let collected = executions.0.load(Ordering::SeqCst);
+                assert!(collected > 0);
+                if restored {
+                    fixture.restore();
+                }
+                let ordinary_markers = warm_items(&fixture.db, &ordinary);
+                let shared_markers = warm_items(&fixture.db, &shared);
+                let markers: Vec<_> = functions
+                    .iter()
+                    .map(|items| warm_items(&fixture.db, items))
+                    .collect();
+                for (index, &krate) in fixture.contexts.iter().enumerate() {
+                    let keys = declared_context_keys(&mut fixture.db, krate);
+                    assert!(
+                        functions[index].iter().all(|id| keys.contains(&id.as_id())),
+                        "associated method keys must be selected"
+                    );
+                    assert!(members[index].iter().all(|id| keys.contains(id)));
+                    assert!(
+                        ordinary
+                            .iter()
+                            .chain(&shared)
+                            .all(|id| !keys.contains(&id.as_id()))
+                    );
+                    for _ in 0..2 {
+                        fixture.db.values_in_memory_for_inputs(
+                            &keys,
+                            true,
+                            false,
+                            &[],
+                            &mut |_, _| {},
+                        );
+                        fixture.db.spill_persisted_for_inputs(&keys);
+                        assert_eq!(held_item_values(&mut fixture.db, &functions[index]), 0);
+                    }
+                    for (other, markers) in markers.iter().enumerate() {
+                        assert!(
+                            markers
+                                .iter()
+                                .all(|marker| (marker.strong_count() > 0) == (other > index))
+                        );
+                    }
+                    assert!(
+                        ordinary_markers
+                            .iter()
+                            .chain(&shared_markers)
+                            .all(|marker| marker.strong_count() > 0)
+                    );
+                    assert_eq!(
+                        held_item_values(&mut fixture.db, &ordinary),
+                        2 * ordinary.len() as u64
+                    );
+                    assert_eq!(
+                        held_item_values(&mut fixture.db, &shared),
+                        2 * shared.len() as u64
+                    );
+                }
+                assert_eq!(
+                    executions.0.load(Ordering::SeqCst),
+                    collected,
+                    "retirement must only decode existing member results"
+                );
+                for (index, &krate) in fixture.contexts.iter().enumerate() {
+                    assert_eq!(associated_functions(&fixture.db, krate), functions[index]);
+                    warm_items(&fixture.db, &functions[index]);
+                    assert_eq!(held_item_values(&mut fixture.db, &functions[index]), 14);
+                }
+                assert_eq!(
+                    executions.0.load(Ordering::SeqCst),
+                    collected,
+                    "re-entry must decode saved member lists"
+                );
+            });
+        }
+    }
+}
+
+#[test]
+fn associated_location_selection_skips_untouched_and_stale_member_results() {
+    let _fixture = FIXTURE.lock().unwrap();
+    let _reset = ResetStore;
+    for restored in [false, true] {
+        salsa::set_spill_store(Some(Arc::new(Store::default())));
+        let executions = MemberExecutions::default();
+        let subscriber = tracing_subscriber::registry().with(executions.clone());
+        tracing::subscriber::with_default(subscriber, || {
+            let mut fixture = Fixture::build(
+                "pub trait Local { fn original() {} } pub struct LocalType; impl LocalType { pub fn original() {} }",
+                1,
+            );
+            let context = fixture.contexts[0];
+            crate_def_map(&fixture.db, context);
+            if restored {
+                fixture.restore();
+            }
+            declared_context_keys(&mut fixture.db, context);
+            assert_eq!(
+                executions.0.load(Ordering::SeqCst),
+                0,
+                "untouched members are not collected to retire them"
+            );
+            let previous = associated_functions(&fixture.db, context);
+            assert_eq!(previous.len(), 2);
+            warm_items(&fixture.db, &previous);
+            let collected = executions.0.load(Ordering::SeqCst);
+            assert_eq!(collected, 2);
+            let mut change = FileChange::default();
+            change.change_file(FileId::from_raw(2), Some(
+                "pub trait Local { fn replacement() {} } pub struct LocalType; impl LocalType { pub fn replacement() {} }".into()));
+            change.apply(&mut fixture.db);
+            let keys = declared_context_keys(&mut fixture.db, context);
+            assert_eq!(
+                executions.0.load(Ordering::SeqCst),
+                collected,
+                "stale members are not validated merely for retirement"
+            );
+            assert!(previous.iter().all(|id| !keys.contains(&id.as_id())));
+            let current = associated_functions(&fixture.db, context);
+            assert_eq!(current.len(), 2);
+            assert_ne!(previous, current);
+            let markers = warm_items(&fixture.db, &current);
+            let keys = declared_context_keys(&mut fixture.db, context);
+            assert!(current.iter().all(|id| keys.contains(&id.as_id())));
+            assert!(previous.iter().all(|id| !keys.contains(&id.as_id())));
+            fixture
+                .db
+                .values_in_memory_for_inputs(&keys, true, false, &[], &mut |_, _| {});
+            fixture.db.spill_persisted_for_inputs(&keys);
+            assert_eq!(held_item_values(&mut fixture.db, &current), 0);
+            assert!(markers.iter().all(|marker| marker.strong_count() == 0));
+            let collected = executions.0.load(Ordering::SeqCst);
+            assert_eq!(associated_functions(&fixture.db, context), current);
+            assert_eq!(executions.0.load(Ordering::SeqCst), collected);
+        });
+    }
 }
 
 #[test]

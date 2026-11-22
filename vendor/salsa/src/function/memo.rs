@@ -200,6 +200,13 @@ impl<'memo> ErasedMemo<'memo> {
         unsafe { (self.to_dyn_fn)(self.data).as_ref() }.has_value()
     }
 
+    /// A final value that can be read now without verifying dependencies.
+    pub(crate) fn has_current_value(self, revision: Revision) -> bool {
+        self.header().verified_at.load() == revision
+            && !self.header().may_be_provisional()
+            && self.has_value()
+    }
+
     /// Returns the concrete memo after asserting that it uses configuration `C`.
     ///
     /// # Panics

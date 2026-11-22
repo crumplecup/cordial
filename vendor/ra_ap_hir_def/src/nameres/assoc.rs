@@ -31,7 +31,7 @@ use crate::{
     },
 };
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct TraitItems {
     pub items: Box<[(Name, AssocItemId)]>,
     // `ThinVec` as the vec is usually empty anyways
@@ -45,11 +45,13 @@ impl TraitItems {
         &Self::query_with_diagnostics(db, tr).0
     }
 
-    #[salsa::tracked(returns(ref))]
+    #[salsa::tracked(returns(ref), persist)]
+    #[allow(unused_lifetimes, reason = "Salsa's persisted method input assertion adds a lifetime to lifetime-free IDs")]
     pub fn query_with_diagnostics(
         db: &dyn SourceDatabase,
         tr: TraitId,
     ) -> (TraitItems, DefDiagnostics) {
+        let _p = tracing::info_span!("trait_items_with_diagnostics_query").entered();
         let ItemLoc { container: module_id, id: ast_id } = *tr.lookup(db);
         let ast_id_map = ast_id.file_id.ast_id_map(db);
         let source = ast_id.with_value(ast_id_map.get(ast_id.value)).to_node(db);
@@ -103,7 +105,7 @@ impl TraitItems {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ImplItems {
     pub items: Box<[(Name, AssocItemId)]>,
     // `ThinVec` as the vec is usually empty anyways
@@ -112,7 +114,8 @@ pub struct ImplItems {
 
 #[salsa::tracked]
 impl ImplItems {
-    #[salsa::tracked(returns(ref))]
+    #[salsa::tracked(returns(ref), persist)]
+    #[allow(unused_lifetimes, reason = "Salsa's persisted method input assertion adds a lifetime to lifetime-free IDs")]
     pub fn of(db: &dyn SourceDatabase, id: ImplId) -> (ImplItems, DefDiagnostics) {
         let _p = tracing::info_span!("impl_items_with_diagnostics_query").entered();
         let ItemLoc { container: module_id, id: ast_id } = *id.lookup(db);

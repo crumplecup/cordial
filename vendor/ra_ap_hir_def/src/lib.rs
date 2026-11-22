@@ -936,7 +936,7 @@ impl DefWithBodyId {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, salsa::Supertype)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, salsa::Supertype, serde::Serialize, serde::Deserialize)]
 pub enum AssocItemId {
     FunctionId(FunctionId),
     ConstId(ConstId),
