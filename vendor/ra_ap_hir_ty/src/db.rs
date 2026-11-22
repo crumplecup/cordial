@@ -90,8 +90,11 @@ pub trait HirDatabase: SourceDatabase + 'static {
         env: StoredParamEnvAndCrate,
     ) -> Result<&'db MirBody<'db>, MirLowerError<'db>> {
         let db = self.as_dyn();
-        crate::mir::monomorphized_mir_body_for_closure_query(db, def, subst, env)
-            .map_err(|err| err.clone())
+        crate::mir::monomorphized_mir_body_for_closure_query(
+            db,
+            crate::mir::MonomorphizedClosureKey::new(db, def, subst, env),
+        )
+        .map_err(|err| err.clone())
     }
 
     fn const_eval<'db>(
@@ -150,7 +153,10 @@ pub trait HirDatabase: SourceDatabase + 'static {
         trait_env: StoredParamEnvAndCrate,
     ) -> Result<Arc<Layout>, LayoutError> {
         let db = self.as_dyn();
-        crate::layout::layout_of_adt_query(db, def, args, trait_env)
+        crate::layout::layout_of_adt_query(
+            db,
+            crate::layout::AdtLayoutKey::new(db, def, args, trait_env),
+        )
     }
 
     fn layout_of_ty(
@@ -159,7 +165,7 @@ pub trait HirDatabase: SourceDatabase + 'static {
         env: StoredParamEnvAndCrate,
     ) -> Result<Arc<Layout>, LayoutError> {
         let db = self.as_dyn();
-        crate::layout::layout_of_ty_query(db, ty, env)
+        crate::layout::layout_of_ty_query(db, crate::layout::TypeLayoutKey::new(db, ty, env))
     }
 
     fn target_data_layout(&self, krate: Crate) -> Result<&TargetDataLayout, TargetLoadError> {

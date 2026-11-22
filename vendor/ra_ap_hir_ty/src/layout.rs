@@ -32,7 +32,10 @@ use crate::{
     traits::StoredParamEnvAndCrate,
 };
 
-pub use self::{adt::layout_of_adt_query, target::target_data_layout_query};
+pub use self::{
+    adt::{AdtLayoutKey, layout_of_adt_query},
+    target::target_data_layout_query,
+};
 
 pub(crate) mod adt;
 pub(crate) mod target;
@@ -160,12 +163,19 @@ fn layout_of_simd_ty<'db>(
     Ok(Arc::new(cx.calc.simd_type(e_ly, e_len, repr_packed)?))
 }
 
+#[salsa::interned(debug)]
+pub struct TypeLayoutKey {
+    pub ty: StoredTy,
+    pub trait_env: StoredParamEnvAndCrate,
+}
+
 #[salsa::tracked(cycle_result = layout_of_ty_cycle_result, returns(clone))]
 pub fn layout_of_ty_query(
     db: &dyn HirDatabase,
-    ty: StoredTy,
-    trait_env: StoredParamEnvAndCrate,
+    key: TypeLayoutKey<'_>,
 ) -> Result<Arc<Layout>, LayoutError> {
+    let ty = key.ty(db);
+    let trait_env = key.trait_env(db).clone();
     let krate = trait_env.krate;
     let interner = DbInterner::new_with(db, krate);
     let Ok(target) = db.target_data_layout(krate) else {
@@ -506,8 +516,7 @@ pub fn layout_of_ty_query(
 fn layout_of_ty_cycle_result(
     _: &dyn HirDatabase,
     _: salsa::Id,
-    _: StoredTy,
-    _: StoredParamEnvAndCrate,
+    _: TypeLayoutKey<'_>,
 ) -> Result<Arc<Layout>, LayoutError> {
     Err(LayoutError::RecursiveTypeWithoutIndirection)
 }

@@ -1533,7 +1533,7 @@ below pass.
 
 ### Salsa-native owner index
 
-**Status: runtime checkpoints 1 and 2 and the checkpoint 3 MIR pilot implemented; remaining families and scaling checks remain.**
+**Status: checkpoints 1-4 implemented; final combined scaling and overhead checks remain.**
 The design started from `af18e87f`. This extends the existing patched Salsa
 runtime and RA crates; it does not change or vendor Hotpath, add another
 profiler, or authorize a full-program measurement.
@@ -1759,7 +1759,8 @@ Retirement reads the unclassified count directly rather than computing index
 statistics over historical roots. Runtime callbacks and membership handles are
 excluded from persistence; incompatible cache versions are rejected explicitly.
 RA argument classification, production root registration and loader retirement
-are the next checkpoint, followed by family coverage and scaling/Hotpath checks.
+are implemented, as are all nine composite-family policies. Final combined
+scaling and upstream Hotpath checks remain.
 
 Use test-only independent expected sets or a bounded reference scan to check
 the index. Do not retain a second production ownership registry or enumeration
@@ -1768,6 +1769,61 @@ capacities and visited entries; upstream Hotpath remains the allocator profiler.
 Measure the actual metadata representation and classifier allocation traffic in
 fixtures instead of guessing a per-entry byte cost. Do not assert a constant
 RSS bound from value counts or allocator traffic.
+
+#### MIR pilot checkpoint
+
+The first RA policy registers the exact monomorphized body MIR query. Its named
+key retains the original definition, substitutions and parameter environment.
+The argument visitor follows nested types, constants, regions, predicates,
+binders and definition locations without running analysis. Inference variables
+fail closed as unclassified. Shared definitions with local substitutions are
+owned by the local roots; wholly shared arguments remain shared.
+
+Loader context creation and re-entry activate every copied-crate root. Restore
+registers the resolver and roots before use; finishing a context retires owned
+payloads after fingerprints and persistence have consumed the context. Existing
+direct-key retirement remains in place. Structural retirement outcomes are
+reported through the existing eviction tracing target.
+
+Validation: 46 Nextest tests passed across `ra_def_map_storage`, `context_parses`,
+`salsa_owner_index` and `salsa_owner_lifecycle`. Pilot fixtures cover multiple
+substitutions, nested types, shared work, two-owner protection, a local trait
+found only through environment clauses, early errors, restore, edits and
+reactivation without an input revision. Formatting, all-features/all-targets
+Clippy with warnings denied and diff checks pass. No full-program measurement
+was run.
+
+#### Remaining-family checkpoint
+
+The remaining eight families now use named argument keys and exact query-jar
+policies. Forwarding APIs and query names remain unchanged, with one tracked
+query per existing argument combination. Closure MIR, constant and anonymous
+constant evaluation, type and ADT layout use the shared argument visitor.
+Associated shorthand follows both generic owners; specialization follows both
+impls and retains its feature guard.
+
+The proc-macro span firewall is classified by its definition-site source.
+Ordinary source files remain shared; copied tool sources use their explicit
+source-root crate associations. Missing associations fail closed as unclassified.
+Macro-generated definition sites use their expansion crate identity. No parser,
+expansion or global crate inventory is queried by this resolver.
+
+Tiny fixtures cover successful constant evaluation and closure MIR, nested
+unevaluated constants, early layout errors, early-bound lifetime/type/constant
+parameters, shared versus local shorthand, two-impl protection, definition-site
+spans and tracked association repair. Constant evaluation's layout and MIR
+children are included in ownership assertions. A runtime matrix independently
+varies 1/4/16 live contexts, 1/64 shared entries and 0/32 completed historical
+contexts: each fixed-size context must visit exactly two memos, preserving
+unfinished/shared work and leaving zero empty bucket capacity at completion.
+
+
+Validation: all 55 combined Nextest tests across `ra_def_map_storage`,
+`context_parses`, `salsa_owner_index` and `salsa_owner_lifecycle` passed, followed
+by the additional macro-generated definition-site span fixture. Formatting,
+all-features/all-targets Clippy with warnings denied and diff checks pass.
+No Cordial self-execution or full-program measurement was performed.
+
 
 #### Limits and subsequent decision
 
@@ -1796,26 +1852,3 @@ phase-1A extension (`ea7cc38e`) and uncommitted phase-1B additions are work to
 remove in phase 1A above, not accepted completed checkpoints. The earlier
 [measurement plan](memory-measurement.md) is historical wherever it requires
 those extensions.
-
-#### MIR pilot checkpoint
-
-The first RA policy registers the exact monomorphized body MIR query. Its named
-key retains the original definition, substitutions and parameter environment.
-The argument visitor follows nested types, constants, regions, predicates,
-binders and definition locations without running analysis. Inference variables
-fail closed as unclassified. Shared definitions with local substitutions are
-owned by the local roots; wholly shared arguments remain shared.
-
-Loader context creation and re-entry activate every copied-crate root. Restore
-registers the resolver and roots before use; finishing a context retires owned
-payloads after fingerprints and persistence have consumed the context. Existing
-direct-key retirement remains in place. Structural retirement outcomes are
-reported through the existing eviction tracing target.
-
-Validation: 46 Nextest tests passed across `ra_def_map_storage`, `context_parses`,
-`salsa_owner_index` and `salsa_owner_lifecycle`. Pilot fixtures cover multiple
-substitutions, nested types, shared work, two-owner protection, a local trait
-found only through environment clauses, early errors, restore, edits and
-reactivation without an input revision. Formatting, all-features/all-targets
-Clippy with warnings denied and diff checks pass. No full-program measurement
-was run.

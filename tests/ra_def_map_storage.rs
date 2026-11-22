@@ -26,6 +26,7 @@ use ra_ap_ide_db::base_db::{
     SourceRoot, VfsPath,
 };
 use ra_ap_ide_db::span::Edition;
+use rustc_type_ir::inherent::{GenericArgs as _, IntoKind};
 use salsa::plumbing::AsId;
 use salsa::{Database, SpillKey, SpillStore};
 use tracing_subscriber::layer::SubscriberExt;
@@ -2759,5 +2760,507 @@ fn early_mir_errors_have_the_same_argument_ownership_policy() {
     assert_eq!(
         salsa::retire_owned_values(&mut fixture.db, &[root.as_id()]).released,
         1
+    );
+}
+
+#[test]
+fn layout_owners_walk_type_const_and_region_parameters_before_early_errors() {
+    use ra_ap_hir_ty::db::HirDatabase;
+    use ra_ap_hir_ty::next_solver::{DbInterner, GenericArgs, ParamEnv, TyKind};
+    let _fixture = FIXTURE.lock().unwrap();
+    let mut fixture = Fixture::build_with_dependency(
+        "pub fn parameters<'a, T: 'a, const N: usize>(value: &'a T) where 'a: 'a {}",
+        1,
+        "pub struct Shared;",
+    );
+    let shared = fixture.graph.clone().set_in_db(&mut fixture.db)[&fixture.dependency];
+    let root = fixture.contexts[0];
+    salsa::activate_owner_roots(&mut fixture.db, &[root.as_id()]);
+    let function = declared_functions(&fixture.db, root)[0];
+    let shared_type = fixture_adt(&fixture.db, shared);
+    let TyKind::Adt(adt, _) = shared_type.as_ref().kind() else {
+        panic!("ADT")
+    };
+    let adt = adt.def_id();
+    let environment = ra_ap_hir_ty::ParamEnvAndCrate {
+        param_env: ParamEnv::empty(),
+        krate: shared,
+    }
+    .store();
+    let arguments =
+        GenericArgs::identity_for_item(DbInterner::new_no_crate(&fixture.db), function.into());
+    assert_eq!(arguments.len(), 3);
+    for argument in arguments.as_slice() {
+        assert!(
+            fixture
+                .db
+                .layout_of_adt(
+                    adt,
+                    GenericArgs::new_from_slice(&[*argument]).store(),
+                    environment.clone()
+                )
+                .is_err()
+        );
+    }
+    assert!(
+        fixture
+            .db
+            .layout_of_adt(adt, GenericArgs::empty().store(), environment.clone())
+            .is_err()
+    );
+    assert!(fixture.db.layout_of_ty(shared_type, environment).is_err());
+    let stats = salsa::owner_index_stats(&mut fixture.db);
+    assert_eq!(
+        (stats.memberships, stats.shared, stats.unclassified),
+        (3, 2, 0)
+    );
+    let retired = salsa::retire_owned_values(&mut fixture.db, &[root.as_id()]);
+    assert_eq!((retired.visited, retired.released), (3, 3));
+    let stats = salsa::owner_index_stats(&mut fixture.db);
+    assert_eq!((stats.memberships, stats.capacity, stats.shared), (0, 0, 2));
+}
+
+#[test]
+fn type_layout_walks_nested_unevaluated_constants_and_protects_both_roots() {
+    use ra_ap_hir_ty::db::HirDatabase;
+    use ra_ap_hir_ty::next_solver::{
+        Const, ConstKind, DbInterner, GenericArgs, ParamEnv, Ty, TyKind, UnevaluatedConst,
+    };
+    let _fixture = FIXTURE.lock().unwrap();
+    let mut fixture = Fixture::build("pub const LENGTH: usize = 2;", 2);
+    let (left, right) = (fixture.contexts[0], fixture.contexts[1]);
+    salsa::activate_owner_roots(&mut fixture.db, &[left.as_id(), right.as_id()]);
+    let constant = crate_def_map(&fixture.db, left)
+        .modules()
+        .flat_map(|(_, module)| module.scope.declarations())
+        .find_map(|id| match id {
+            ModuleDefId::ConstId(id) => Some(id),
+            _ => None,
+        })
+        .unwrap();
+    let shared = fixture.graph.clone().set_in_db(&mut fixture.db)[&fixture.dependency];
+    let shared_type = fixture_adt(&fixture.db, shared);
+    let array = {
+        let interner = DbInterner::new_no_crate(&fixture.db);
+        let length = Const::new(
+            interner,
+            ConstKind::Unevaluated(UnevaluatedConst {
+                def: ra_ap_hir_ty::db::GeneralConstId::ConstId(constant).into(),
+                args: GenericArgs::empty(),
+            }),
+        );
+        Ty::new(interner, TyKind::Array(shared_type.as_ref(), length)).store()
+    };
+    let env = ra_ap_hir_ty::ParamEnvAndCrate {
+        param_env: ParamEnv::empty(),
+        krate: right,
+    }
+    .store();
+    assert!(fixture.db.layout_of_ty(array.clone(), env.clone()).is_err());
+    assert_eq!(salsa::owner_index_stats(&mut fixture.db).memberships, 2);
+    let left_report = salsa::retire_owned_values(&mut fixture.db, &[left.as_id()]);
+    assert_eq!(
+        (
+            left_report.visited,
+            left_report.protected,
+            left_report.released
+        ),
+        (1, 1, 0)
+    );
+    assert_eq!(
+        salsa::retire_owned_values(&mut fixture.db, &[right.as_id()]).released,
+        1
+    );
+    salsa::activate_owner_roots(&mut fixture.db, &[left.as_id(), right.as_id()]);
+    assert!(fixture.db.layout_of_ty(array, env).is_err());
+    assert_eq!(
+        salsa::retire_owned_values(&mut fixture.db, &[left.as_id(), right.as_id()]).released,
+        1
+    );
+}
+
+fn enable_fixture_target(db: &mut RootDatabase, krate: Crate) {
+    use ra_ap_ide_db::base_db::target::{Arch, TargetData};
+    use salsa::Setter;
+    krate
+        .set_workspace_data(db)
+        .to(triomphe::Arc::new(CrateWorkspaceData {
+            target: Ok(TargetData {
+                data_layout: "e-p:64:64-i64:64-n8:16:32:64-S128".into(),
+                arch: Arch::Other,
+            }),
+            toolchain: None,
+        }));
+}
+
+#[test]
+fn const_evaluation_retires_local_substitutions_and_optional_environments() {
+    use ra_ap_hir_ty::db::HirDatabase;
+    use ra_ap_hir_ty::next_solver::{GenericArg, GenericArgs, ParamEnv};
+    let _fixture = FIXTURE.lock().unwrap();
+    let mut fixture =
+        Fixture::build_with_dependency("pub struct Local;", 2, "pub const VALUE: u8 = 7;");
+    let shared = fixture.graph.clone().set_in_db(&mut fixture.db)[&fixture.dependency];
+    enable_fixture_target(&mut fixture.db, shared);
+    for root in fixture.contexts.clone() {
+        enable_fixture_target(&mut fixture.db, root);
+    }
+    let (left, right) = (fixture.contexts[0], fixture.contexts[1]);
+    salsa::activate_owner_roots(&mut fixture.db, &[left.as_id(), right.as_id()]);
+    let constant = crate_def_map(&fixture.db, shared)
+        .modules()
+        .flat_map(|(_, module)| module.scope.declarations())
+        .find_map(|id| match id {
+            ModuleDefId::ConstId(id) => Some(id),
+            _ => None,
+        })
+        .unwrap();
+    let ty = fixture_adt(&fixture.db, left);
+    let args = GenericArgs::new_from_slice(&[GenericArg::from(ty.as_ref())]).store();
+    let env = ra_ap_hir_ty::ParamEnvAndCrate {
+        param_env: ParamEnv::empty(),
+        krate: right,
+    }
+    .store();
+    assert!(
+        fixture
+            .db
+            .const_eval(constant, args.as_ref(), Some(env.as_ref(&fixture.db)))
+            .is_ok()
+    );
+    assert!(
+        fixture
+            .db
+            .const_eval(constant, GenericArgs::empty(), None)
+            .is_ok()
+    );
+    let stats = salsa::owner_index_stats(&mut fixture.db);
+    assert_eq!(
+        (stats.memberships, stats.shared, stats.unclassified),
+        (4, 3, 0)
+    );
+    let retired = salsa::retire_owned_values(&mut fixture.db, &[left.as_id()]);
+    assert_eq!(
+        (retired.visited, retired.protected, retired.released),
+        (2, 1, 1)
+    );
+    assert_eq!(
+        salsa::retire_owned_values(&mut fixture.db, &[right.as_id()]).released,
+        2
+    );
+    salsa::activate_owner_roots(&mut fixture.db, &[left.as_id(), right.as_id()]);
+    let value = fixture
+        .db
+        .const_eval(constant, args.as_ref(), Some(env.as_ref(&fixture.db)))
+        .unwrap();
+    assert_eq!(value.memory.as_ref(), &[7]);
+}
+
+#[test]
+fn anonymous_const_evaluation_uses_its_signature_owner_and_reenters() {
+    use ra_ap_hir_ty::db::{AnonConstId, HirDatabase};
+    use ra_ap_hir_ty::next_solver::GenericArgs;
+    let _fixture = FIXTURE.lock().unwrap();
+    let mut fixture = Fixture::build(
+        "pub fn with_array(value: [u8; { let length = 3; length }]) {}",
+        1,
+    );
+    let root = fixture.contexts[0];
+    enable_fixture_target(&mut fixture.db, root);
+    salsa::activate_owner_roots(&mut fixture.db, &[root.as_id()]);
+    let function = declared_functions(&fixture.db, root)[0];
+    let anon = AnonConstId::all_from_signature(&fixture.db, function.into())
+        .next()
+        .unwrap()
+        .as_id();
+    use salsa::plumbing::FromId;
+    let first = fixture
+        .db
+        .anon_const_eval(AnonConstId::from_id(anon), GenericArgs::empty(), None)
+        .unwrap()
+        .memory
+        .to_vec();
+    let stats = salsa::owner_index_stats(&mut fixture.db);
+    assert_eq!((stats.memberships, stats.unclassified), (3, 0));
+    assert_eq!(
+        salsa::retire_owned_values(&mut fixture.db, &[root.as_id()]).released,
+        3
+    );
+    salsa::activate_owner_roots(&mut fixture.db, &[root.as_id()]);
+    assert_eq!(
+        fixture
+            .db
+            .anon_const_eval(AnonConstId::from_id(anon), GenericArgs::empty(), None)
+            .unwrap()
+            .memory
+            .as_ref(),
+        first
+    );
+}
+
+#[test]
+fn closure_mir_owned_by_local_instantiation_preserves_shared_instantiation() {
+    use ra_ap_hir_ty::db::{HirDatabase, InternedClosureId};
+    use ra_ap_hir_ty::display::DisplayTarget;
+    use ra_ap_hir_ty::next_solver::{GenericArg, GenericArgs, ParamEnv};
+    use salsa::plumbing::FromId;
+    let _fixture = FIXTURE.lock().unwrap();
+    let mut fixture = Fixture::build_with_dependency(
+        "pub struct Local;",
+        1,
+        "pub struct Shared; pub fn make<T>() { let value = || {}; }",
+    );
+    let shared = fixture.graph.clone().set_in_db(&mut fixture.db)[&fixture.dependency];
+    let root = fixture.contexts[0];
+    salsa::activate_owner_roots(&mut fixture.db, &[root.as_id()]);
+    let function = declared_functions(&fixture.db, shared)[0];
+    let closure = fixture.db.mir_body(function.into()).unwrap().closures[0].as_id();
+    let local = fixture_adt(&fixture.db, root);
+    let shared_type = fixture_adt(&fixture.db, shared);
+    let local_args = GenericArgs::new_from_slice(&[GenericArg::from(local.as_ref())]).store();
+    let shared_args =
+        GenericArgs::new_from_slice(&[GenericArg::from(shared_type.as_ref())]).store();
+    let env = ra_ap_hir_ty::ParamEnvAndCrate {
+        param_env: ParamEnv::empty(),
+        krate: shared,
+    }
+    .store();
+    let render = |db: &RootDatabase, args| {
+        db.monomorphized_mir_body_for_closure(
+            InternedClosureId::from_id(closure),
+            args,
+            env.clone(),
+        )
+        .unwrap()
+        .pretty_print(db, DisplayTarget::from_crate(db, shared))
+    };
+    let expected = render(&fixture.db, local_args.clone());
+    let shared_mir = render(&fixture.db, shared_args.clone());
+    let stats = salsa::owner_index_stats(&mut fixture.db);
+    assert_eq!(
+        (stats.memberships, stats.shared, stats.unclassified),
+        (1, 1, 0)
+    );
+    assert_eq!(
+        salsa::retire_owned_values(&mut fixture.db, &[root.as_id()]).released,
+        1
+    );
+    assert_eq!(render(&fixture.db, shared_args), shared_mir);
+    salsa::activate_owner_roots(&mut fixture.db, &[root.as_id()]);
+    assert_eq!(render(&fixture.db, local_args), expected);
+}
+
+fn held_family(db: &mut RootDatabase, family: &str) -> u64 {
+    let mut held = 0;
+    db.values_in_memory(false, true, &[family], &mut |_, count| held += count);
+    held
+}
+
+#[test]
+fn associated_shorthand_retires_local_resolution_and_preserves_shared_resolution() {
+    use ra_ap_hir_ty::db::HirDatabase;
+    let _fixture = FIXTURE.lock().unwrap();
+    let text = "pub trait Source { type Output; } pub fn project<T: Source>(value: T::Output) {}";
+    let mut fixture = Fixture::build_with_dependency(text, 1, text);
+    let shared = fixture.graph.clone().set_in_db(&mut fixture.db)[&fixture.dependency];
+    let root = fixture.contexts[0];
+    salsa::activate_owner_roots(&mut fixture.db, &[root.as_id()]);
+    let local = declared_functions(&fixture.db, root)[0];
+    let shared_fn = declared_functions(&fixture.db, shared)[0];
+    let expected = ra_ap_hir_ty::attach_db(&fixture.db, || {
+        format!("{:?}", fixture.db.fn_sig_for_fn_with_diagnostics(local))
+    });
+    fixture.db.fn_sig_for_fn_with_diagnostics(shared_fn);
+    let family = "resolve_type_param_assoc_type_shorthand";
+    assert_eq!(held_family(&mut fixture.db, family), 4);
+    assert_eq!(salsa::owner_index_stats(&mut fixture.db).unclassified, 0);
+    assert_eq!(
+        salsa::retire_owned_values(&mut fixture.db, &[root.as_id()]).released,
+        2
+    );
+    assert_eq!(held_family(&mut fixture.db, family), 2);
+    fixture.db.drop_regenerable_values();
+    salsa::activate_owner_roots(&mut fixture.db, &[root.as_id()]);
+    assert_eq!(
+        ra_ap_hir_ty::attach_db(&fixture.db, || format!(
+            "{:?}",
+            fixture.db.fn_sig_for_fn_with_diagnostics(local)
+        )),
+        expected
+    );
+    assert_eq!(held_family(&mut fixture.db, family), 2);
+}
+
+#[test]
+fn specialization_protects_both_impl_owners_and_preserves_shared_pairs() {
+    use ra_ap_hir_ty::next_solver::DbInterner;
+    use rustc_type_ir::Interner;
+    let _fixture = FIXTURE.lock().unwrap();
+    let text = "#![feature(min_specialization)] pub trait Trait {} pub struct Local; impl Trait for Local {}";
+    let mut fixture = Fixture::build_with_dependency(text, 2, text);
+    let shared = fixture.graph.clone().set_in_db(&mut fixture.db)[&fixture.dependency];
+    let (left, right) = (fixture.contexts[0], fixture.contexts[1]);
+    salsa::activate_owner_roots(&mut fixture.db, &[left.as_id(), right.as_id()]);
+    let implementation = |db: &RootDatabase, krate| {
+        crate_def_map(db, krate)
+            .modules()
+            .flat_map(|(_, m)| m.scope.impls())
+            .next()
+            .unwrap()
+    };
+    let left_impl = implementation(&fixture.db, left);
+    let right_impl = implementation(&fixture.db, right);
+    let shared_impl = implementation(&fixture.db, shared);
+    let specializes = |db: &RootDatabase, a: ra_ap_hir_def::ImplId, b: ra_ap_hir_def::ImplId| {
+        DbInterner::new_no_crate(db).impl_specializes(a.into(), b.into())
+    };
+    assert!(!specializes(&fixture.db, left_impl, right_impl));
+    assert!(specializes(&fixture.db, left_impl, left_impl));
+    assert!(specializes(&fixture.db, shared_impl, shared_impl));
+    let family = "specializes_query";
+    assert_eq!(held_family(&mut fixture.db, family), 3);
+    let report = salsa::retire_owned_values(&mut fixture.db, &[left.as_id()]);
+    assert_eq!((report.protected, report.released), (1, 1));
+    assert_eq!(held_family(&mut fixture.db, family), 2);
+    assert_eq!(
+        salsa::retire_owned_values(&mut fixture.db, &[right.as_id()]).released,
+        1
+    );
+    assert_eq!(held_family(&mut fixture.db, family), 1);
+    salsa::activate_owner_roots(&mut fixture.db, &[left.as_id(), right.as_id()]);
+    assert!(!specializes(&fixture.db, left_impl, right_impl));
+    assert_eq!(salsa::owner_index_stats(&mut fixture.db).unclassified, 0);
+}
+
+fn span_key(db: &RootDatabase, file: HirFileId) -> ra_ap_hir_expand::ProcMacroSpanKey<'_> {
+    use ra_ap_syntax::{AstNode, ast};
+    let function = file
+        .parse_or_expand(db)
+        .descendants()
+        .find_map(ast::Fn::cast)
+        .unwrap();
+    let ast = ra_ap_hir_expand::InFile::new(file, file.ast_id_map(db).ast_id(&function));
+    ra_ap_hir_expand::ProcMacroSpanKey::new(db, ast)
+}
+
+#[test]
+fn proc_macro_spans_follow_definition_source_and_fail_closed_for_unassociated_copies() {
+    use ra_ap_hir_expand::{EditionedFileId, proc_macro_span};
+    use ra_ap_ide_db::base_db::{SourceRootId, TOOL_SOURCE_ROOTS, set_tool_root_crates};
+    let _fixture = FIXTURE.lock().unwrap();
+    let mut fixture = Fixture::build("pub fn definition() {}", 2);
+    let (left, right) = (fixture.contexts[0], fixture.contexts[1]);
+    salsa::activate_owner_roots(&mut fixture.db, &[left.as_id(), right.as_id()]);
+    for (offset, krate) in [left, right].into_iter().enumerate() {
+        let file = FileId::from_raw(offset as u32 + 2);
+        let root = SourceRootId(TOOL_SOURCE_ROOTS + offset as u32);
+        let mut files = FileSet::default();
+        files.insert(file, VfsPath::new_virtual_path(format!("/{offset}/lib.rs")));
+        fixture.db.set_source_root_with_durability(
+            root,
+            triomphe::Arc::new(SourceRoot::new_local(files)),
+            salsa::Durability::HIGH,
+        );
+        fixture
+            .db
+            .set_file_source_root_with_durability(file, root, salsa::Durability::HIGH);
+        if offset == 0 {
+            set_tool_root_crates(
+                &mut fixture.db,
+                root,
+                Arc::from([krate]),
+                salsa::Durability::HIGH,
+            );
+        }
+    }
+    let file = |db: &RootDatabase, id| {
+        HirFileId::FileId(EditionedFileId::new(
+            db,
+            FileId::from_raw(id),
+            Edition::CURRENT,
+        ))
+    };
+    let local = span_key(&fixture.db, file(&fixture.db, 2)).as_id();
+    let shared = span_key(&fixture.db, file(&fixture.db, 0)).as_id();
+    let unknown = span_key(&fixture.db, file(&fixture.db, 3)).as_id();
+    use ra_ap_hir_expand::ProcMacroSpanKey;
+    use salsa::plumbing::FromId;
+    let expected = proc_macro_span(&fixture.db, ProcMacroSpanKey::from_id(local));
+    let shared_span = proc_macro_span(&fixture.db, ProcMacroSpanKey::from_id(shared));
+    proc_macro_span(&fixture.db, ProcMacroSpanKey::from_id(unknown));
+    let stats = salsa::owner_index_stats(&mut fixture.db);
+    assert_eq!(
+        (stats.memberships, stats.shared, stats.unclassified),
+        (1, 1, 1)
+    );
+    assert_eq!(
+        salsa::retire_owned_values(&mut fixture.db, &[left.as_id()]).released,
+        1
+    );
+    assert_eq!(held_family(&mut fixture.db, "proc_macro_span"), 2);
+    assert_eq!(
+        proc_macro_span(&fixture.db, ProcMacroSpanKey::from_id(shared)),
+        shared_span
+    );
+    salsa::activate_owner_roots(&mut fixture.db, &[left.as_id()]);
+    assert_eq!(
+        proc_macro_span(&fixture.db, ProcMacroSpanKey::from_id(local)),
+        expected
+    );
+    // The association itself is a tracked dependency: repair it without losing the AST identity.
+    set_tool_root_crates(
+        &mut fixture.db,
+        SourceRootId(TOOL_SOURCE_ROOTS + 1),
+        Arc::from([right]),
+        salsa::Durability::HIGH,
+    );
+    proc_macro_span(&fixture.db, ProcMacroSpanKey::from_id(unknown));
+    let stats = salsa::owner_index_stats(&mut fixture.db);
+    assert_eq!(
+        (stats.memberships, stats.shared, stats.unclassified),
+        (2, 1, 0)
+    );
+}
+
+#[test]
+fn proc_macro_spans_in_expansions_follow_the_expansion_crate() {
+    use ra_ap_hir_expand::proc_macro_span;
+    let _fixture = FIXTURE.lock().unwrap();
+    let text = "macro_rules! make { () => { pub fn generated() {} } } make!();";
+    let mut fixture = Fixture::build_with_dependency(text, 1, text);
+    let shared = fixture.graph.clone().set_in_db(&mut fixture.db)[&fixture.dependency];
+    let root = fixture.contexts[0];
+    salsa::activate_owner_roots(&mut fixture.db, &[root.as_id()]);
+    let expansion = |db: &RootDatabase, krate| {
+        let call = crate_def_map(db, krate)
+            .modules()
+            .flat_map(|(_, module)| module.scope.all_macro_calls())
+            .next()
+            .unwrap();
+        HirFileId::MacroFile(call)
+    };
+    let local = expansion(&fixture.db, root);
+    let shared = expansion(&fixture.db, shared);
+    let expected = proc_macro_span(&fixture.db, span_key(&fixture.db, local));
+    let shared_span = proc_macro_span(&fixture.db, span_key(&fixture.db, shared));
+    assert_eq!(held_family(&mut fixture.db, "proc_macro_span"), 2);
+    let stats = salsa::owner_index_stats(&mut fixture.db);
+    assert_eq!(
+        (stats.memberships, stats.shared, stats.unclassified),
+        (1, 1, 0)
+    );
+    assert_eq!(
+        salsa::retire_owned_values(&mut fixture.db, &[root.as_id()]).released,
+        1
+    );
+    assert_eq!(held_family(&mut fixture.db, "proc_macro_span"), 1);
+    assert_eq!(
+        proc_macro_span(&fixture.db, span_key(&fixture.db, shared)),
+        shared_span
+    );
+    salsa::activate_owner_roots(&mut fixture.db, &[root.as_id()]);
+    assert_eq!(
+        proc_macro_span(&fixture.db, span_key(&fixture.db, local)),
+        expected
     );
 }

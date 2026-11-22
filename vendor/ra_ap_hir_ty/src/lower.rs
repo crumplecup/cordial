@@ -2090,14 +2090,50 @@ enum AssocTypeShorthandResolution {
 /// This is a query mostly to handle cycles somewhat gracefully; e.g. the
 /// following bounds are disallowed: `T: Foo<U::Item>, U: Foo<T::Item>`, but
 /// these are fine: `T: Foo<U::Item>, U: Foo<()>`.
+#[salsa::interned(debug)]
+struct AssocTypeShorthandKey {
+    #[returns(copy)]
+    pub def: GenericDefId,
+    #[returns(copy)]
+    pub param: TypeParamId,
+    pub assoc_name: Name,
+}
+
+fn resolve_type_param_assoc_type_shorthand_for<'db>(
+    db: &'db dyn HirDatabase,
+    def: GenericDefId,
+    param: TypeParamId,
+    assoc_name: Name,
+) -> &'db AssocTypeShorthandResolution {
+    resolve_type_param_assoc_type_shorthand(
+        db,
+        AssocTypeShorthandKey::new(db, def, param, assoc_name),
+    )
+}
+
+pub(crate) fn register_query_ownership(db: &mut impl salsa::Database) {
+    use salsa::plumbing::FromId;
+    salsa::register_query_ownership::<resolve_type_param_assoc_type_shorthand, dyn HirDatabase>(
+        db,
+        |db, id| {
+            let key = AssocTypeShorthandKey::from_id(id);
+            let mut owners = crate::query_ownership::ArgumentOwners::new(db);
+            owners.definition(key.def(db));
+            owners.definition(key.param(db).parent());
+            owners.finish()
+        },
+    );
+}
+
 #[tracing::instrument(skip(db), ret)]
 #[salsa::tracked(returns(ref), cycle_result = resolve_type_param_assoc_type_shorthand_cycle_result)]
 fn resolve_type_param_assoc_type_shorthand(
     db: &dyn HirDatabase,
-    def: GenericDefId,
-    param: TypeParamId,
-    assoc_name: Name,
+    key: AssocTypeShorthandKey<'_>,
 ) -> AssocTypeShorthandResolution {
+    let def = key.def(db);
+    let param = key.param(db);
+    let assoc_name = key.assoc_name(db).clone();
     let generics = generics(db, def);
     let store = generics.store();
     let generics = &OnceCell::from(generics);
@@ -2161,7 +2197,7 @@ fn resolve_type_param_assoc_type_shorthand(
                 ctx.lower_trait_ref_from_resolved_path(bounded_trait, param_ty, false, Span::Dummy);
             // Now, search from the start on the *bounded* trait like if we wrote `Self::Assoc`. Eventually, we'll get
             // the correct trait ref (or a cycle).
-            let lookup_on_bounded_trait = resolve_type_param_assoc_type_shorthand(
+            let lookup_on_bounded_trait = resolve_type_param_assoc_type_shorthand_for(
                 db,
                 bounded_trait.into(),
                 TypeParamId::trait_self(bounded_trait),
@@ -2234,9 +2270,7 @@ fn resolve_type_param_assoc_type_shorthand(
 fn resolve_type_param_assoc_type_shorthand_cycle_result(
     _db: &dyn HirDatabase,
     _: salsa::Id,
-    _def: GenericDefId,
-    _param: TypeParamId,
-    _assoc_name: Name,
+    _: AssocTypeShorthandKey<'_>,
 ) -> AssocTypeShorthandResolution {
     AssocTypeShorthandResolution::Cycle
 }
@@ -3145,7 +3179,7 @@ pub(crate) fn associated_type_by_name_including_super_traits_allow_ambiguity<'db
 ) -> Option<(TypeAliasId, GenericArgs<'db>)> {
     let (AssocTypeShorthandResolution::Resolved(assoc_type)
     | AssocTypeShorthandResolution::Ambiguous { sub_trait_resolution: Some(assoc_type) }) =
-        resolve_type_param_assoc_type_shorthand(
+        resolve_type_param_assoc_type_shorthand_for(
             db,
             trait_ref.def_id.0.into(),
             TypeParamId::trait_self(trait_ref.def_id.0),

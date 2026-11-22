@@ -10,9 +10,10 @@
 //! the pass retires values keyed by copied crates, their local declarations,
 //! declarative macro expanders, file/block item trees, cached trait/impl members, enum variants,
 //! declarations in current block maps and tracked outputs of queries on those
-//! keys, plus composite body MIR payloads indexed by their semantic argument owners.
+//! keys, plus composite MIR, constant, layout, shorthand, specialization and span
+//! payloads indexed by their semantic argument owners.
 //! Other eviction follows the run's pressure policy; uncached owners,
-//! missing producer records, other composite keys and copied inputs can still
+//! missing producer records and copied inputs can still
 //! accumulate.
 
 mod copy_functions;

@@ -45,7 +45,8 @@ pub use lower::{
     mir_body_query,
 };
 pub use monomorphization::{
-    MonomorphizedMirBodyKey, monomorphized_mir_body_for_closure_query, monomorphized_mir_body_query,
+    MonomorphizedClosureKey, MonomorphizedMirBodyKey, monomorphized_mir_body_for_closure_query,
+    monomorphized_mir_body_query,
 };
 
 pub type BasicBlockId = Idx<BasicBlock>;

@@ -19,12 +19,7 @@ use crate::{
 // and indeed I was unable to cause cycles even with erroneous code. However, in r-a we can
 // create a cycle if there is an error in the impl's where clauses. I believe well formed code
 // cannot create a cycle, but a cycle handler is required nevertheless.
-fn specializes_query_cycle(
-    _db: &dyn HirDatabase,
-    _: salsa::Id,
-    _specializing_impl_def_id: ImplId,
-    _parent_impl_def_id: ImplId,
-) -> bool {
+fn specializes_query_cycle(_db: &dyn HirDatabase, _: salsa::Id, _: SpecializationKey<'_>) -> bool {
     false
 }
 
@@ -39,12 +34,29 @@ fn specializes_query_cycle(
 /// `parent_impl_def_id` is a const impl (conditionally based off of some `[const]`
 /// bounds), then `specializing_impl_def_id` must also be const for the same
 /// set of types.
+#[salsa::interned(debug)]
+struct SpecializationKey {
+    #[returns(copy)]
+    pub specializing: ImplId,
+    #[returns(copy)]
+    pub parent: ImplId,
+}
+
+pub(crate) fn register_query_ownership(db: &mut impl salsa::Database) {
+    use salsa::plumbing::FromId;
+    salsa::register_query_ownership::<specializes_query, dyn HirDatabase>(db, |db, id| {
+        let key = SpecializationKey::from_id(id);
+        let mut owners = crate::query_ownership::ArgumentOwners::new(db);
+        owners.definition(key.specializing(db));
+        owners.definition(key.parent(db));
+        owners.finish()
+    });
+}
+
 #[salsa::tracked(cycle_result = specializes_query_cycle, returns(copy))]
-fn specializes_query(
-    db: &dyn HirDatabase,
-    specializing_impl_def_id: ImplId,
-    parent_impl_def_id: ImplId,
-) -> bool {
+fn specializes_query(db: &dyn HirDatabase, key: SpecializationKey<'_>) -> bool {
+    let specializing_impl_def_id = key.specializing(db);
+    let parent_impl_def_id = key.parent(db);
     let trait_env = db.trait_environment(specializing_impl_def_id.into());
     let interner = DbInterner::new_with(db, specializing_impl_def_id.krate(db));
 
@@ -155,5 +167,5 @@ pub(crate) fn specializes(
         return false;
     }
 
-    specializes_query(db, specializing_impl_def_id, parent_impl_def_id)
+    specializes_query(db, SpecializationKey::new(db, specializing_impl_def_id, parent_impl_def_id))
 }

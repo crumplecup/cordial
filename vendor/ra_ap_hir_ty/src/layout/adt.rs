@@ -20,13 +20,22 @@ use crate::{
     traits::StoredParamEnvAndCrate,
 };
 
+#[salsa::interned(debug)]
+pub struct AdtLayoutKey {
+    #[returns(copy)]
+    pub def: AdtId,
+    pub args: StoredGenericArgs,
+    pub trait_env: StoredParamEnvAndCrate,
+}
+
 #[salsa::tracked(cycle_result = layout_of_adt_cycle_result, returns(clone))]
 pub fn layout_of_adt_query(
     db: &dyn HirDatabase,
-    def: AdtId,
-    args: StoredGenericArgs,
-    trait_env: StoredParamEnvAndCrate,
+    key: AdtLayoutKey<'_>,
 ) -> Result<Arc<Layout>, LayoutError> {
+    let def = key.def(db);
+    let args = key.args(db);
+    let trait_env = key.trait_env(db);
     let krate = trait_env.krate;
     let Ok(target) = db.target_data_layout(krate) else {
         return Err(LayoutError::TargetLayoutNotAvailable);
@@ -104,9 +113,7 @@ pub fn layout_of_adt_query(
 fn layout_of_adt_cycle_result(
     _: &dyn HirDatabase,
     _: salsa::Id,
-    _def: AdtId,
-    _args: StoredGenericArgs,
-    _trait_env: StoredParamEnvAndCrate,
+    _: AdtLayoutKey<'_>,
 ) -> Result<Arc<Layout>, LayoutError> {
     Err(LayoutError::RecursiveTypeWithoutIndirection)
 }

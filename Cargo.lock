@@ -365,6 +365,7 @@ dependencies = [
  "petgraph",
  "proc-macro2",
  "quote",
+ "ra-ap-rustc_type_ir",
  "ra_ap_cfg",
  "ra_ap_hir",
  "ra_ap_hir_def",

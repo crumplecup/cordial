@@ -470,37 +470,47 @@ pub(crate) fn const_eval<'db>(
     subst: GenericArgs<'db>,
     trait_env: Option<ParamEnvAndCrate<'db>>,
 ) -> Result<Allocation<'db>, ConstEvalError<'db>> {
-    return match const_eval_query(db, def, subst.store(), trait_env.map(|env| env.store())) {
+    match const_eval_query(
+        db,
+        ConstEvalKey::new(db, def, subst.store(), trait_env.map(|env| env.store())),
+    ) {
         Ok(konst) => Ok(konst.as_ref()),
         Err(err) => Err(err.clone()),
-    };
-
-    #[salsa::tracked(returns(ref), cycle_result = const_eval_cycle_result)]
-    pub(crate) fn const_eval_query<'db>(
-        db: &'db dyn HirDatabase,
-        def: ConstId,
-        subst: StoredGenericArgs,
-        trait_env: Option<StoredParamEnvAndCrate>,
-    ) -> Result<StoredAllocation, ConstEvalError<'db>> {
-        let body = db.monomorphized_mir_body(
-            def.into(),
-            subst,
-            ParamEnvAndCrate { param_env: db.trait_environment(def.into()), krate: def.krate(db) }
-                .store(),
-        )?;
-        let c = interpret_mir(db, body, false, trait_env.as_ref().map(|env| env.as_ref(db)))?.0?;
-        Ok(c.store())
     }
+}
 
-    pub(crate) fn const_eval_cycle_result<'db>(
-        _: &'db dyn HirDatabase,
-        _: salsa::Id,
-        _: ConstId,
-        _: StoredGenericArgs,
-        _: Option<StoredParamEnvAndCrate>,
-    ) -> Result<StoredAllocation, ConstEvalError<'db>> {
-        Err(ConstEvalError::MirLowerError(MirLowerError::Loop))
-    }
+#[salsa::interned(debug)]
+pub(crate) struct ConstEvalKey {
+    #[returns(copy)]
+    pub def: ConstId,
+    pub subst: StoredGenericArgs,
+    pub trait_env: Option<StoredParamEnvAndCrate>,
+}
+
+#[salsa::tracked(returns(ref), cycle_result = const_eval_cycle_result)]
+pub(crate) fn const_eval_query<'db>(
+    db: &'db dyn HirDatabase,
+    key: ConstEvalKey<'db>,
+) -> Result<StoredAllocation, ConstEvalError<'db>> {
+    let def = key.def(db);
+    let subst = key.subst(db).clone();
+    let trait_env = key.trait_env(db);
+    let body = db.monomorphized_mir_body(
+        def.into(),
+        subst,
+        ParamEnvAndCrate { param_env: db.trait_environment(def.into()), krate: def.krate(db) }
+            .store(),
+    )?;
+    let c = interpret_mir(db, body, false, trait_env.as_ref().map(|env| env.as_ref(db)))?.0?;
+    Ok(c.store())
+}
+
+pub(crate) fn const_eval_cycle_result<'db>(
+    _: &'db dyn HirDatabase,
+    _: salsa::Id,
+    _: ConstEvalKey<'db>,
+) -> Result<StoredAllocation, ConstEvalError<'db>> {
+    Err(ConstEvalError::MirLowerError(MirLowerError::Loop))
 }
 
 pub(crate) fn anon_const_eval<'db>(
@@ -509,40 +519,50 @@ pub(crate) fn anon_const_eval<'db>(
     subst: GenericArgs<'db>,
     trait_env: Option<ParamEnvAndCrate<'db>>,
 ) -> Result<Allocation<'db>, ConstEvalError<'db>> {
-    return match anon_const_eval_query(db, def, subst.store(), trait_env.map(|env| env.store())) {
+    match anon_const_eval_query(
+        db,
+        AnonConstEvalKey::new(db, def, subst.store(), trait_env.map(|env| env.store())),
+    ) {
         Ok(konst) => Ok(konst.as_ref()),
         Err(err) => Err(err.clone()),
-    };
-
-    #[salsa::tracked(returns(ref), cycle_result = anon_const_eval_cycle_result)]
-    pub(crate) fn anon_const_eval_query<'db>(
-        db: &'db dyn HirDatabase,
-        def: AnonConstId<'db>,
-        subst: StoredGenericArgs,
-        trait_env: Option<StoredParamEnvAndCrate>,
-    ) -> Result<StoredAllocation, ConstEvalError<'db>> {
-        let body = db.monomorphized_mir_body(
-            def.into(),
-            subst,
-            ParamEnvAndCrate {
-                param_env: db.trait_environment(def.loc(db).owner.generic_def(db)),
-                krate: def.krate(db),
-            }
-            .store(),
-        )?;
-        let c = interpret_mir(db, body, false, trait_env.as_ref().map(|env| env.as_ref(db)))?.0?;
-        Ok(c.store())
     }
+}
 
-    pub(crate) fn anon_const_eval_cycle_result<'db>(
-        _: &'db dyn HirDatabase,
-        _: salsa::Id,
-        _: AnonConstId<'db>,
-        _: StoredGenericArgs,
-        _: Option<StoredParamEnvAndCrate>,
-    ) -> Result<StoredAllocation, ConstEvalError<'db>> {
-        Err(ConstEvalError::MirLowerError(MirLowerError::Loop))
-    }
+#[salsa::interned(debug)]
+pub(crate) struct AnonConstEvalKey {
+    #[returns(copy)]
+    pub def: AnonConstId<'db>,
+    pub subst: StoredGenericArgs,
+    pub trait_env: Option<StoredParamEnvAndCrate>,
+}
+
+#[salsa::tracked(returns(ref), cycle_result = anon_const_eval_cycle_result)]
+pub(crate) fn anon_const_eval_query<'db>(
+    db: &'db dyn HirDatabase,
+    key: AnonConstEvalKey<'db>,
+) -> Result<StoredAllocation, ConstEvalError<'db>> {
+    let def = key.def(db);
+    let subst = key.subst(db).clone();
+    let trait_env = key.trait_env(db);
+    let body = db.monomorphized_mir_body(
+        def.into(),
+        subst,
+        ParamEnvAndCrate {
+            param_env: db.trait_environment(def.loc(db).owner.generic_def(db)),
+            krate: def.krate(db),
+        }
+        .store(),
+    )?;
+    let c = interpret_mir(db, body, false, trait_env.as_ref().map(|env| env.as_ref(db)))?.0?;
+    Ok(c.store())
+}
+
+pub(crate) fn anon_const_eval_cycle_result<'db>(
+    _: &'db dyn HirDatabase,
+    _: salsa::Id,
+    _: AnonConstEvalKey<'db>,
+) -> Result<StoredAllocation, ConstEvalError<'db>> {
+    Err(ConstEvalError::MirLowerError(MirLowerError::Loop))
 }
 
 pub(crate) fn const_eval_static<'db>(

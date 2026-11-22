@@ -616,6 +616,8 @@ name = "syn_doc_link"
 required-features = ["rustdoc"]
 
 [dev-dependencies]
+# Use the same IR traits as the patched RA queries in focused ownership fixtures.
+rustc_type_ir = { package = "ra-ap-rustc_type_ir", version = "=0.166.0" }
 rustdoc-types = "0.61"
 miette = { version = "7", features = ["fancy"] }
 

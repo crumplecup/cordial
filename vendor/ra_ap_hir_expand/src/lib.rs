@@ -767,7 +767,7 @@ fn expand_proc_macro_of(db: &dyn SourceDatabase, call: MacroCallId) -> ExpandRes
     };
 
     let ExpandResult { value: mut tt, err } = {
-        let span = proc_macro_span(db, ast);
+        let span = proc_macro_span_for_ast(db, ast);
         expander.expand(
             db,
             loc.def.krate,
@@ -953,7 +953,7 @@ impl MacroCallId {
         // Otherwise the expand query will fetch the non speculative attribute args and pass those instead.
         let mut speculative_expansion = match loc.def.kind {
             MacroDefKind::ProcMacro(ast, expander, _) => {
-                let span = proc_macro_span(db, ast);
+                let span = proc_macro_span_for_ast(db, ast);
                 tt.set_top_subtree_delimiter_kind(tt::DelimiterKind::Invisible);
                 tt.set_top_subtree_delimiter_span(tt::DelimSpan::from_single(span));
                 expander.expand(
@@ -1015,24 +1015,60 @@ fn expand_unimplemented_builtin_macro(span: Span) -> ExpandResult<tt::TopSubtree
     )
 }
 
-/// Retrieves the span to be used for a proc-macro expansions spans.
-/// This is a firewall query as it requires parsing the file, which we don't want proc-macros to
-/// directly depend on as that would cause to frequent invalidations, mainly because of the
-/// parse queries being LRU cached. If they weren't the invalidations would only happen if the
-/// user wrote in the file that defines the proc-macro.
-fn proc_macro_span(db: &dyn SourceDatabase, ast: AstId<ast::Fn>) -> Span {
-    #[salsa::tracked(returns(copy))]
-    fn proc_macro_span(db: &dyn SourceDatabase, ast: AstId<ast::Fn>, _: ()) -> Span {
-        let (parse, span_map) = ast.file_id.parse_with_map(db);
-        let root = parse.syntax_node();
-        let ast_id_map = ast.file_id.ast_id_map(db);
+/// The definition-site identity of the proc-macro span firewall query.
+#[salsa::interned(debug)]
+pub struct ProcMacroSpanKey {
+    #[returns(copy)]
+    pub ast: AstId<ast::Fn>,
+}
 
-        let node = ast_id_map.get(ast.value).to_node(&root);
-        let range = ast::HasName::name(&node)
-            .map_or_else(|| node.syntax().text_range(), |name| name.syntax().text_range());
-        span_map.span_for_range(range)
-    }
-    proc_macro_span(db, ast, ())
+/// Register definition-site retention without parsing or expanding the source.
+pub fn register_query_ownership(db: &mut impl salsa::Database) {
+    salsa::register_query_ownership::<proc_macro_span, dyn SourceDatabase>(db, |db, id| {
+        let key = ProcMacroSpanKey::from_id(id);
+        match key.ast(db).file_id {
+            HirFileId::MacroFile(call) => {
+                let root = call.loc(db).krate.as_id();
+                if salsa::is_owner_root(db, root) {
+                    salsa::QueryOwnership::owned([root])
+                } else {
+                    salsa::QueryOwnership::Shared
+                }
+            }
+            HirFileId::FileId(file) => {
+                let root = db.file_source_root(file.file_id(db)).source_root_id(db);
+                if root.0 < base_db::TOOL_SOURCE_ROOTS {
+                    return salsa::QueryOwnership::Shared;
+                }
+                let crates = db.source_root(root).crates(db);
+                if crates.is_empty() {
+                    return salsa::QueryOwnership::Unclassified;
+                }
+                salsa::QueryOwnership::owned(
+                    crates.iter().map(AsId::as_id).filter(|&id| salsa::is_owner_root(db, id)),
+                )
+            }
+        }
+    });
+}
+
+fn proc_macro_span_for_ast(db: &dyn SourceDatabase, ast: AstId<ast::Fn>) -> Span {
+    proc_macro_span(db, ProcMacroSpanKey::new(db, ast))
+}
+
+/// Retrieves the span used for proc-macro expansion spans.
+///
+/// This firewall keeps callers independent of parsing the definition's file.
+#[salsa::tracked(returns(copy))]
+pub fn proc_macro_span(db: &dyn SourceDatabase, key: ProcMacroSpanKey<'_>) -> Span {
+    let ast = key.ast(db);
+    let (parse, span_map) = ast.file_id.parse_with_map(db);
+    let root = parse.syntax_node();
+    let ast_id_map = ast.file_id.ast_id_map(db);
+    let node = ast_id_map.get(ast.value).to_node(&root);
+    let range = ast::HasName::name(&node)
+        .map_or_else(|| node.syntax().text_range(), |name| name.syntax().text_range());
+    span_map.span_for_range(range)
 }
 
 pub(crate) fn token_tree_to_syntax_node(

@@ -30,8 +30,31 @@ use crate::{
 /// Install the opted-in policies once after database construction or restoration.
 /// Restored callbacks are registered independently of persisted declarations.
 pub fn register(db: &mut impl salsa::Database) {
+    hir_expand::register_query_ownership(db);
+    crate::lower::register_query_ownership(db);
+    crate::specialization::register_query_ownership(db);
     salsa::register_query_ownership::<monomorphized_mir_body_query, dyn HirDatabase>(
         db, mir_owners,
+    );
+    salsa::register_query_ownership::<
+        crate::mir::monomorphized_mir_body_for_closure_query,
+        dyn HirDatabase,
+    >(db, closure_owners);
+    salsa::register_query_ownership::<crate::consteval::const_eval_query, dyn HirDatabase>(
+        db,
+        const_owners,
+    );
+    salsa::register_query_ownership::<crate::consteval::anon_const_eval_query, dyn HirDatabase>(
+        db,
+        anon_const_owners,
+    );
+    salsa::register_query_ownership::<crate::layout::layout_of_ty_query, dyn HirDatabase>(
+        db,
+        type_layout_owners,
+    );
+    salsa::register_query_ownership::<crate::layout::layout_of_adt_query, dyn HirDatabase>(
+        db,
+        adt_layout_owners,
     );
 }
 
@@ -41,6 +64,54 @@ fn mir_owners(db: &dyn HirDatabase, id: Id) -> QueryOwnership {
     owners.definition(key.owner(db));
     owners.environment(key.trait_env(db));
     key.subst(db).as_ref().visit_with(&mut owners);
+    owners.finish()
+}
+
+fn closure_owners(db: &dyn HirDatabase, id: Id) -> QueryOwnership {
+    let key = crate::mir::MonomorphizedClosureKey::from_id(id);
+    let mut owners = ArgumentOwners::new(db);
+    owners.definition(key.closure(db).loc(db).owner);
+    owners.environment(key.trait_env(db));
+    key.subst(db).as_ref().visit_with(&mut owners);
+    owners.finish()
+}
+
+fn const_owners(db: &dyn HirDatabase, id: Id) -> QueryOwnership {
+    let key = crate::consteval::ConstEvalKey::from_id(id);
+    let mut owners = ArgumentOwners::new(db);
+    owners.definition(key.def(db));
+    if let Some(environment) = key.trait_env(db) {
+        owners.environment(environment);
+    }
+    key.subst(db).as_ref().visit_with(&mut owners);
+    owners.finish()
+}
+
+fn anon_const_owners(db: &dyn HirDatabase, id: Id) -> QueryOwnership {
+    let key = crate::consteval::AnonConstEvalKey::from_id(id);
+    let mut owners = ArgumentOwners::new(db);
+    owners.def_id(key.def(db).into());
+    if let Some(environment) = key.trait_env(db) {
+        owners.environment(environment);
+    }
+    key.subst(db).as_ref().visit_with(&mut owners);
+    owners.finish()
+}
+
+fn type_layout_owners(db: &dyn HirDatabase, id: Id) -> QueryOwnership {
+    let key = crate::layout::TypeLayoutKey::from_id(id);
+    let mut owners = ArgumentOwners::new(db);
+    owners.environment(key.trait_env(db));
+    key.ty(db).as_ref().visit_with(&mut owners);
+    owners.finish()
+}
+
+fn adt_layout_owners(db: &dyn HirDatabase, id: Id) -> QueryOwnership {
+    let key = crate::layout::AdtLayoutKey::from_id(id);
+    let mut owners = ArgumentOwners::new(db);
+    owners.definition(key.def(db));
+    owners.environment(key.trait_env(db));
+    key.args(db).as_ref().visit_with(&mut owners);
     owners.finish()
 }
 

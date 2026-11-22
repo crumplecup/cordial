@@ -267,13 +267,22 @@ fn monomorphized_mir_body_cycle_result<'db>(
     Err(MirLowerError::Loop)
 }
 
+#[salsa::interned(debug)]
+pub struct MonomorphizedClosureKey {
+    #[returns(copy)]
+    pub closure: InternedClosureId<'db>,
+    pub subst: StoredGenericArgs,
+    pub trait_env: StoredParamEnvAndCrate,
+}
+
 #[salsa::tracked(returns(as_ref), cycle_result = monomorphized_mir_body_for_closure_cycle_result)]
 pub fn monomorphized_mir_body_for_closure_query<'db>(
     db: &'db dyn HirDatabase,
-    closure: InternedClosureId<'db>,
-    subst: StoredGenericArgs,
-    trait_env: StoredParamEnvAndCrate,
+    key: MonomorphizedClosureKey<'db>,
 ) -> Result<MirBody<'db>, MirLowerError<'db>> {
+    let closure = key.closure(db);
+    let subst = key.subst(db);
+    let trait_env = key.trait_env(db);
     let mut filler = Filler::new(db, trait_env.as_ref(db), subst.as_ref());
     let body = db.mir_body_for_closure(closure)?;
     let mut body = (*body).clone();
@@ -284,9 +293,7 @@ pub fn monomorphized_mir_body_for_closure_query<'db>(
 fn monomorphized_mir_body_for_closure_cycle_result<'db>(
     _db: &'db dyn HirDatabase,
     _: salsa::Id,
-    _: InternedClosureId<'db>,
-    _: StoredGenericArgs,
-    _: StoredParamEnvAndCrate,
+    _: MonomorphizedClosureKey<'db>,
 ) -> Result<MirBody<'db>, MirLowerError<'db>> {
     Err(MirLowerError::Loop)
 }

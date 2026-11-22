@@ -492,7 +492,7 @@ impl<'a, 'b, 'db> PathLoweringContext<'a, 'b, 'db> {
         let (assoc_type, trait_args) = match res {
             Some(TypeNs::GenericParam(param)) => {
                 let AssocTypeShorthandResolution::Resolved(assoc_type) =
-                    super::resolve_type_param_assoc_type_shorthand(
+                    super::resolve_type_param_assoc_type_shorthand_for(
                         db,
                         def,
                         param,
@@ -513,7 +513,7 @@ impl<'a, 'b, 'db> PathLoweringContext<'a, 'b, 'db> {
                 let impl_trait = impl_trait.instantiate_identity().skip_norm_wip();
                 // Searching for `Self::Assoc` in `impl Trait for Type` is like searching for `Self::Assoc` in `Trait`.
                 let AssocTypeShorthandResolution::Resolved(assoc_type) =
-                    super::resolve_type_param_assoc_type_shorthand(
+                    super::resolve_type_param_assoc_type_shorthand_for(
                         db,
                         impl_trait.def_id.0.into(),
                         TypeParamId::trait_self(impl_trait.def_id.0),

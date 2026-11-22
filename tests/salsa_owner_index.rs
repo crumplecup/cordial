@@ -157,3 +157,82 @@ fn unknown_owners_fail_closed_and_are_reported() {
     );
     assert_eq!(salsa::retire_owned_values(&mut db, &[]).unclassified, 1);
 }
+
+#[test]
+fn retirement_work_is_independent_of_shared_and_completed_history() {
+    for contexts in [1, 4, 16] {
+        for shared_entries in [1, 64] {
+            for historical_contexts in [0, 32] {
+                let mut db = configured();
+                let shared = Source::new(&db, vec![], 17);
+                let shared_keys: Vec<_> = (0..shared_entries)
+                    .map(|offset| Arguments::new(&db, shared, offset).as_id())
+                    .collect();
+                for &key in &shared_keys {
+                    first(&db, Arguments::from_id(key));
+                }
+                for _ in 0..historical_contexts {
+                    let root = Source::new(&db, vec![], 0).as_id();
+                    salsa::activate_owner_roots(&mut db, &[root]);
+                    let source = Source::new(&db, vec![root], 3);
+                    first(&db, Arguments::new(&db, source, 0));
+                    assert_eq!(salsa::retire_owned_values(&mut db, &[root]).released, 1);
+                }
+                let roots: Vec<_> = (0..contexts)
+                    .map(|_| Source::new(&db, vec![], 0).as_id())
+                    .collect();
+                salsa::activate_owner_roots(&mut db, &roots);
+                let expected: Vec<_> = roots
+                    .iter()
+                    .enumerate()
+                    .map(|(index, &root)| {
+                        let source = Source::new(&db, vec![root], index as u32);
+                        let key = Arguments::new(&db, source, 2);
+                        first(&db, key);
+                        second(&db, key);
+                        (key.as_id(), index as u32)
+                    })
+                    .collect();
+                assert_eq!(salsa::owner_index_stats(&mut db).memberships, contexts * 2);
+                for (retired, &root) in roots.iter().enumerate() {
+                    let report = salsa::retire_owned_values(&mut db, &[root]);
+                    assert_eq!(
+                        (
+                            report.visited,
+                            report.selected,
+                            report.owner_checks,
+                            report.released
+                        ),
+                        (2, 2, 2, 2)
+                    );
+                    let stats = salsa::owner_index_stats(&mut db);
+                    assert_eq!(
+                        (stats.memberships, stats.buckets, stats.shared),
+                        (
+                            (contexts - retired - 1) * 2,
+                            contexts - retired - 1,
+                            shared_entries as usize
+                        )
+                    );
+                    // Read the independent expected unfinished/shared populations. Hits must
+                    // neither reclassify ownership nor grow the reverse index.
+                    for &(key, value) in &expected[retired + 1..] {
+                        assert_eq!(first(&db, Arguments::from_id(key)), &[value + 2; 16]);
+                        assert_eq!(second(&db, Arguments::from_id(key)), &[value; 8]);
+                    }
+                    for &key in &shared_keys {
+                        first(&db, Arguments::from_id(key));
+                    }
+                    assert_eq!(salsa::owner_index_stats(&mut db), stats);
+                }
+                let stats = salsa::owner_index_stats(&mut db);
+                assert_eq!((stats.memberships, stats.capacity), (0, 0));
+                assert_eq!(stats.roots, contexts + historical_contexts);
+                let (key, value) = expected[0];
+                salsa::activate_owner_roots(&mut db, &roots[..1]);
+                assert_eq!(first(&db, Arguments::from_id(key)), &[value + 2; 16]);
+                assert_eq!(salsa::retire_owned_values(&mut db, &roots[..1]).released, 1);
+            }
+        }
+    }
+}
