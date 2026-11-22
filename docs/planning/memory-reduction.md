@@ -2038,6 +2038,71 @@ the package's own atoms, but no self-run was made. Projecting a dependency
 package as a target still works; it gets the ordinary analysis and no contexts
 of its own.
 
+### Base-load decomposition and save verification checkpoint, 2026-11-22
+
+A run now says where its memory and time go, from its own events and metrics
+(`~/.cordial/<project>/metrics.json`, kept for a run stopped by `--stop-after` as
+well as by the memory limit): memory milestones with elapsed time and the machine's
+free memory, one event per definition map built (crate, local or sysroot, source
+size, time, queries, macro expansions, memory), the memory budget the run believed
+it had, the leaf and context timings, and for the save the verification's executed
+queries, verified memos, edges and top re-executed queries.
+
+Cold runs, `--stop-after source_ir`, RSS at the end of each step:
+
+| Step | elicit_doc (small) | amenable (medium) |
+| --- | ---: | ---: |
+| Cargo metadata, build scripts, RA load | 0.25 GiB at 3 s | 0.29 GiB at 4 s |
+| Final load step (`finish`) | +0.00 | +0.56 GiB, 7.8 s |
+| Definition maps (192 / 158 crates built) | +0.76 GiB, 11.5 s | +0.58 GiB, 17.0 s |
+| Function evidence | +0.46 GiB, 12.5 s | +1.04 GiB, 18 s |
+| File scans, ordinary projection | +0.48 GiB | +0.16 GiB |
+| Contexts | +0.00 | +0.03 GiB, 12 s |
+| Leaf functions | not separate | 34 s, memory flat |
+| Save: verification | 0.5 s | **+1.48 GiB, 13 s** |
+| Save: encoding | small | +0.40 to 0.56 GiB, 16 s |
+| Peak | 1.99 GiB | 4.83 GiB |
+
+The "loading" phase label in `phase_queries` covers everything up to the next
+progress message, so its 7.4 GiB on Cordial was load, definition maps and the whole
+ordinary projection together. Per-crate cost is concentrated: in elicit_doc `core`
+and `libc` are 48% of the macro expansions, the sysroot crates 57%; in amenable four
+crates are 70%. Per-crate RSS growth is not additive (scaffolding is released between
+crates); time, queries and expansions are the reliable costs. Source text is about 3%
+of the base. The parsimony line (30% of the 20.5 GB ladder, 5.9 GiB) is never reached
+on either workspace, and a line of 1% releases 182K to 402K values for a 13% lower
+working set after priming, 11 to 20% more time, and no lower peak, because the peak
+is the save. Releasing earlier trades time for space and is not the lever.
+
+**Save verification re-ran queries.** The save verifies every persisted memo so it
+is saved as valid now. In amenable that executed 173,954 queries and grew the process
+by 1.48 GiB; the earlier Cordial run recorded 519 s for it and was stopped there. No
+persisted memo was re-run (`changed_and_run_again` was 0 everywhere): the queries
+were underneath them. `tests/verify_before_save.rs` reproduces it on a four-file
+crate: 0 re-runs for 0 to 2 contexts, then 14 at 3 and 27 to 39 at 4. Salsa's own
+`salsa::stale` events named the cause: memos out of date because of an interned key
+(`ExtractKey`, `FileItemTreeKey`, then `InternedFileId`). Interned values expire a
+few revisions after their last use, each context's input writes advance the revision,
+and a persisted memo that read an expired key is out of date, so its queries run again
+at the save. The fix is the rule `ItemKey` already followed: every interned key that
+long-lived queries read is `revisions = usize::MAX`. Five keys of the patched crates
+(`InternedSourceRootId`, `InternedFileId`, `FileItemTreeKey`, `BlockItemTreeKey`, the
+proc-macro span and declarative-expander keys) and `ExtractKey` were not; they are
+now. The test is green at 8 contexts with no re-run and no memo out of date.
+
+Not measured: the effect on a real run. The fix removes the cause the fixture shows;
+how much of amenable's 174K re-executions and Cordial's 519 s it was is unknown until
+a run, which the plan keeps for after the remaining design items. Remaining design
+items, from the evidence: the other cordial-owned interned keys keep the default
+expiry (`ScanKey`, `FileKey`, `HeldKey`, `ItemsKey`, `LayoutKey`, `ModuleTreeKey` and
+the rest) and should be audited by the same test over more query kinds; `start_of` and
+`persisted_evidence` walks are 13.5 s and 12 s of the verification and may be
+deeper dependencies than needed; `context.finish` builds definition maps outside the
+ordered loop; the leaf step is 34 s of 125 s on amenable; the forced closure builds
+every dependency's definition map, and whether the demanded set is smaller is
+unmeasured. Immortal keys do not reclaim identity storage; that is the bounded
+identity work.
+
 ## Historical evidence
 
 The first cold capture used Cordial `65cbde11` against `elicit_doc` `8d2968a7`,

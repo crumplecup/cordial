@@ -1016,7 +1016,7 @@ fn expand_unimplemented_builtin_macro(span: Span) -> ExpandResult<tt::TopSubtree
 }
 
 /// The definition-site identity of the proc-macro span firewall query.
-#[salsa::interned(debug)]
+#[salsa::interned(debug, revisions = usize::MAX)]
 pub struct ProcMacroSpanKey {
     #[returns(copy)]
     pub ast: AstId<ast::Fn>,

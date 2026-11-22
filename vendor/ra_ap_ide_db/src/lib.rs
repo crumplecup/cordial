@@ -277,7 +277,7 @@ impl RootDatabase {
 }
 
 pub fn line_index(db: &dyn SourceDatabase, file_id: FileId) -> &Arc<LineIndex> {
-    #[salsa::interned]
+    #[salsa::interned(revisions = usize::MAX)]
     pub struct InternedFileId {
         #[returns(copy)]
         id: FileId,

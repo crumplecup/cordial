@@ -174,7 +174,11 @@ fn scanned<T>(
 ))]
 /// A file as the fused extraction reads it: the database's id for it, the path the IR names it by,
 /// and the crate root. The scan tree is the one of the root's that holds the path.
-#[salsa::interned(persist)]
+///
+/// Immortal: every cfg context's input writes advance the revision, and a key that expired would
+/// put out of date every memo that read it, so the save's verification would run the queries of
+/// the earlier contexts again.
+#[salsa::interned(persist, revisions = usize::MAX)]
 pub(super) struct ExtractKey<'db> {
     #[returns(copy)]
     file: ra_ap_vfs::FileId,

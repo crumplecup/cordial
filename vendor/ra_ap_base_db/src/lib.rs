@@ -549,7 +549,7 @@ pub fn all_crates(db: &dyn salsa::Database) -> std::sync::Arc<[Crate]> {
 
 // FIXME: VFS rewrite should allow us to get rid of this wrapper
 #[doc(hidden)]
-#[salsa::interned]
+#[salsa::interned(revisions = usize::MAX)]
 pub struct InternedSourceRootId {
     #[returns(copy)]
     pub id: SourceRootId,

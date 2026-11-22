@@ -138,8 +138,10 @@ pub fn file_item_tree(db: &dyn SourceDatabase, file_id: HirFileId, krate: Crate)
 }
 
 /// Explicit argument key; definition-map owners can select the memo without lowering syntax.
-/// Replaces the query's implicit interner without changing its slot reuse policy.
-#[salsa::interned(debug)]
+///
+/// Immortal: each cfg context's input writes advance the revision, and a key that expired would put
+/// out of date what read it (a persisted definition map), which the next save would run again.
+#[salsa::interned(debug, revisions = usize::MAX)]
 pub struct FileItemTreeKey {
     #[returns(copy)]
     pub file_id: HirFileId,
@@ -147,7 +149,7 @@ pub struct FileItemTreeKey {
     pub krate: Crate,
 }
 
-#[salsa::interned(debug)]
+#[salsa::interned(debug, revisions = usize::MAX)]
 pub struct BlockItemTreeKey {
     #[returns(copy)]
     pub block: BlockId,

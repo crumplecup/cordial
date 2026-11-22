@@ -82,7 +82,7 @@ impl DeclarativeMacroExpander {
 ///
 /// This replaces the expander query's implicit argument interner, so owners can
 /// select its memo without compiling the macro or scanning interned arguments.
-#[salsa::interned(debug)]
+#[salsa::interned(debug, revisions = usize::MAX)]
 pub struct DeclarativeMacroKey {
     pub ast_id: AstId<ast::Macro>,
     pub def_crate: Crate,
