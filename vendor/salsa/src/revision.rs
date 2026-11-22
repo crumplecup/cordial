@@ -61,7 +61,7 @@ impl serde::Serialize for Revision {
     where
         S: serde::Serializer,
     {
-        serde::Serialize::serialize(&self.as_usize(), serializer)
+        serde::Serialize::serialize(&crate::stamps::stamp(self.as_usize()), serializer)
     }
 }
 
@@ -92,7 +92,10 @@ impl serde::Serialize for AtomicRevision {
     where
         S: serde::Serializer,
     {
-        serde::Serialize::serialize(&self.data.load(Ordering::Relaxed), serializer)
+        serde::Serialize::serialize(
+            &crate::stamps::stamp(self.data.load(Ordering::Relaxed)),
+            serializer,
+        )
     }
 }
 
@@ -166,7 +169,10 @@ impl serde::Serialize for OptionalAtomicRevision {
     where
         S: serde::Serializer,
     {
-        serde::Serialize::serialize(&self.data.load(Ordering::Relaxed), serializer)
+        serde::Serialize::serialize(
+            &crate::stamps::stamp(self.data.load(Ordering::Relaxed)),
+            serializer,
+        )
     }
 }
 

@@ -73,59 +73,70 @@ leaf cost is the first context and how much the later ones.
 **Goal.** A save writes what changed. A warm run with a small edit writes a few MB and does not
 flatten or encode the rest; a cold run is no slower than today.
 
-**A0. Questions, answered by tests and reading before the format is fixed.**
-1. Which ingredients and how many memos change after a body edit, a comment edit and a new file?
-   Use the existing edit-reuse fixtures, `persisted_executions` and the `salsa::write` events.
-2. Is a memo's verified-at revision part of its saved form? If so it changes on every save and every
-   ingredient is dirty; the fix is to save "verified at the save" as a flag and an older revision
-   only when it is older. Read `MappedMemo` and `with_origin`.
-3. Can a saved dependency set change while its memo does not? A memo's own edges are fixed, but the
-   non-persisted queries between it and its inputs can run again with different dependencies. The
-   flattening's `closure.changed` is the revision to compare with the saved one; check that it covers
-   dependency changes and not only value changes.
-4. Names and sizes of the five largest ingredients (`STATE_SIZES_VARIABLE` already logs them).
-5. Does restoring a `FileText` and then loading the workspace write an unchanged text? (`set_file_text`
-   compares, so it should not; a test pins it.)
+**A0. Answered (2026-11-22), by reading the save code and comparing two real saves.** A small project
+was run cold, a comment line was added to one file, and it was run again from the first state; the two
+saved states were compared entry by entry.
+1. *What changes.* 34,638 of 96,696 entries (36%) differ, across 60 of 88 ingredients, and **34,546 of
+   those (99.7%) differ only in a revision stamp, `7` became `8`**. 92 entries really changed, 31 of
+   the ingredients, 24 of them memos that ran again. The true delta of a save is about 0.1% of it.
+2. *Why everything differs.* A memo is saved as `{ value, verified_at, revisions }`, where `verified_at`
+   is an absolute revision number, and an interned slot as `{ durability, last_interned_at, fields }`,
+   an input as per-field changed-at revisions, a tracked struct with its `updated_at`. All 8,693 memos
+   in the second state have `verified_at` equal to the save's revision, so the field says nothing; the
+   slots' stamps vary (6 for 54K slots, 8 for 25K, `u64::MAX` for the 52 that never expire).
+3. *Can a saved dependency set change while its memo does not?* Yes: a query between a memo and its
+   inputs can run again and read something new, with the same value. The flattening recomputes every
+   set at every save, so a save is always right, but a "this memo did not execute" test is not enough
+   to skip one. Dirtiness is therefore **content-addressed first**: a chunk is written when the hash of
+   its saved form changed. Generation counters that skip the encoding come later, when the flattening
+   they have to trust is shared (workstream B).
+4. *Largest ingredients.* By shape: the file texts (12,324 slots, 165 MB), a 117K-memo query, a per-crate
+   query with 698 memos at 79 MB, two interned tables. Names are still to be confirmed with the
+   per-ingredient size event.
+5. *A restore followed by a load writes no unchanged text.* `set_file_text` compares, so it does not;
+   only the edited file's text differs between the two states.
 
-**A1. A segmented format, with no incrementality yet.** The state directory holds a manifest (format
-version, runtime, the ingredient order, and for each segment its file, length and content hash) and
-one file per ingredient. Restore reads the manifest and the segments in the same order as today.
-The existing single-file state is refused as "saved by another format" and the run is cold. Done
-when every existing saved-state and context-reuse test passes unchanged and a save followed by a
-restore followed by a save writes the same bytes.
+**A1. Stable stamps (before the format is split).** When every persisted memo is verified as of the save
+revision, which verifying them before the save does, a stamp at or before that revision says nothing a
+restore needs: the memos are all valid as of it and whatever a later revision creates is newer. Such a
+state is written with every stamp as the first revision (the never-expires value is kept), and a restore
+gives the "valid as of the save" stamps the revision it restores: format version 2. A state saved when some
+memo is not verified keeps its stamps (version 1, still readable), because a memo an input changed under
+must still be found out of date. Tests, in `tests/salsa_stable_save.rs`: after a write to one input, a save
+differs from the one before only in that input's slot and the memos that read it (22 differing entries
+before, 11 after). Measured on the A0 specimen with a release build: after the same comment edit, 41 of
+96,696 entries differ (24 ingredients), where 34,638 did; a change after a canonical restore finds out of date what depends on it through an input,
+an interned key and a tracked struct's field; an unverified state is saved with its stamps and not trusted.
 
-**A2. File texts by reference.** For library and sysroot roots, `FileText` is saved as its length, a
-content hash and its path; on restore it is a non-resident `FileContents` that reads the path when
-asked (the type already has a re-read source for this: `drop_library_texts`). On the first read the
-hash is checked, and a text that differs is written as a change, so what read it is invalidated.
-Local files keep their text. This removes about 28% of the bytes on amenable and nearly all the
-sysroot's, and it is the first thing workstream C relies on. Tests: edit a library file between runs
-and the memos that read it re-run; edit nothing and nothing does.
+**A2. A segmented format.** The state directory holds a manifest (format version, runtime, the ingredient
+order, and for each segment its file, length and content hash) and one file per ingredient. Restore reads the
+manifest and the segments in the same order as today. Done when every existing saved-state and context-reuse
+test passes unchanged and a save followed by a restore followed by a save writes the same bytes, which A1 makes
+true.
 
-**A3. Dirty tracking and reuse of clean segments.** Each ingredient carries a generation that is
-bumped when a memo is inserted, replaced or removed and when a struct slot is created, changed or
-freed (not when a memo is only verified). The manifest records the generation each segment was
-written at. A save writes only ingredients whose generation moved, and a clean ingredient's segment
-is linked or copied from the previous state, which is on the same file system by construction (the
-new state is written beside it and renamed over it). A function ingredient is also dirty when a
-query in the closure of one of its memos ran again since the base, which the flattening reports.
-Done when a one-file edit on a fixture rewrites a small, asserted number of segments.
+**A3. File texts by reference.** For library and sysroot roots, `FileText` is saved as its length, a content
+hash and its path; on restore it is a non-resident `FileContents` that reads the path when asked (the type
+already has a re-read source for this: `drop_library_texts`). On the first read the hash is checked, and a
+text that differs is written as a change, so what read it is invalidated. Local files keep their text. This
+removes about 28% of the bytes on amenable and nearly all the sysroot's, and workstream C relies on it. Tests:
+edit a library file between runs and the memos that read it re-run; edit nothing and nothing does.
 
-**A4. Chunks.** Split the large ingredients by id range (for example 4,096 slots or memos), so that
-a one-file edit rewrites the chunks its ids fall in and not a whole 137 MB ingredient. A manifest
-entry per chunk; compaction when more than a set share of the chunks are dirty. Ids are assigned
-mostly in creation order, so edited files' new values land in the last chunks; A0 confirms.
+**A4. Content-addressed chunks.** Split the large ingredients by id range (for example 4,096 slots or memos).
+A save serializes one chunk at a time, hashes it, and writes it only when the hash differs from the manifest's,
+linking the previous file otherwise; memory is one chunk. Done when a one-line edit on a fixture rewrites a
+small, asserted number of chunks. Ids are assigned mostly in creation order, so an edited file's new values land
+in the last chunks.
 
-**A5. Verification narrows.** Verification exists to make a memo valid as of the save. For a clean
-segment, whose memos and closures did not change, it has nothing to do; the walk is limited to the
-memos whose closure moved. This is the part that also lowers the peak, and it meets workstream B.
+**A5. Skip the encoding of clean chunks.** Per-ingredient generations, bumped when a memo is inserted, replaced
+or removed and when a struct slot is created, changed or freed, say which chunks cannot have changed, so they are
+neither encoded nor hashed. This needs the flattening's sets to be trusted per memo, so it follows workstream B.
 
 **Safety.** Written to a new directory and renamed, with the manifest last, as today; segments that a
 link still needs are kept until the rename; a missing, truncated or hash-mismatched segment is a cold
 run, never a partial restore. The spill file and the run-in-processes path keep their own state and
 are tested with it.
 
-**Checkpoint.** After A3: one amenable run, a cold run and then a one-line edit: bytes written, time of
+**Checkpoint.** After A4: one amenable run, a cold run and then a one-line edit: bytes written, time of
 the save, and the peak.
 
 **Risks.** Slot ids and free lists after a restore must be exactly those of the save, or a delta
@@ -262,13 +273,13 @@ context work already has (findings equal before and after).
 
 ```text
 A1 -> A2 -> A3 -> A4 -> A5
- \         \
+ \               \
   B0 -> B1 -> B2 -> B3 -> B4        (B1 stands alone; B2 feeds A3 and A5)
             C0 -> C1 -> C2 -> C3 -> C4 -> C5   (needs A1 to A3)
                   D0 -> D1 -> D2 -> D3 -> (D4)  (D0 can start any time)
 ```
 
-A1 to A3 are the first slice: the segmented format, file texts by reference and dirty tracking. B1 is small
+A1 to A4 are the first slice: stable stamps, the segmented format, file texts by reference and content-addressed chunks. B1 is small
 enough to take whenever it is convenient. D0 is instrumentation and can run alongside any of them.
 
 ## Instrumentation to add, first

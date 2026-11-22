@@ -300,6 +300,13 @@ pub trait Ingredient: Any + fmt::Debug + Send + Sync {
         false
     }
 
+    /// Whether every memo this ingredient would serialize is verified as of the current revision.
+    /// A state is saved with canonical revision stamps only when every ingredient says so (see
+    /// `stamps`); an ingredient with no memos has nothing that could be out of date.
+    fn all_verified_now(&self, _zalsa: &Zalsa) -> bool {
+        true
+    }
+
     /// Serialize the ingredient.
     ///
     /// This function should invoke the provided callback with a reference to an object implementing [`erased_serde::Serialize`].

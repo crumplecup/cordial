@@ -263,6 +263,8 @@ mod database_impl;
 mod durability;
 mod event;
 mod flatten;
+#[cfg(feature = "persistence")]
+mod stamps;
 pub use flatten::{
     deep_verifications, edges_expanded, flatten_breadth, persisted_executions,
     set_verifications,

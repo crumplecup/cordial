@@ -495,7 +495,8 @@ fn assigned_values_refuse_retirement_without_changing_revision() {
 #[test]
 fn incompatible_snapshot_versions_fail_before_loading_memos() {
     let _fixture = FIXTURE.lock().unwrap();
-    for encoded in ["[0]", "[2]", "{\"ingredients\":[]}"] {
+    // Versions 1 and 2 are the two ways of writing stamps (see `stamps`); any other is refused.
+    for encoded in ["[0]", "[3]", "{\"ingredients\":[]}"] {
         let mut db = Db::default();
         let error =
             <dyn Database>::deserialize(&mut db, &mut serde_json::Deserializer::from_str(encoded))

@@ -1804,7 +1804,14 @@ mod persistence {
                     lru: LruEntry {
                         link: LinkedListLink::new(),
                         id: UnsafeCell::new(id),
-                        last_interned_at: AtomicRevision::new(value.last_interned_at),
+                        // A value that never expires stays so; any other was interned as of the
+                        // save, in a state saved with canonical stamps.
+                        last_interned_at: AtomicRevision::new(
+                            match crate::stamps::restored_current() {
+                                Some(current) if value.last_interned_at != Revision::max() => current,
+                                _ => value.last_interned_at,
+                            },
+                        ),
                     },
                     fields: UnsafeCell::new(value.fields.0),
                     // SAFETY: We only ever access the memos of a value that we allocated through

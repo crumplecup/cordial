@@ -400,21 +400,32 @@ mod persistence {
 
     // Ownership declarations change the memo encoding. Reject snapshots that cannot
     // distinguish absent policy from a proved shared declaration before loading memos.
-    struct FormatVersion;
+    //
+    // Version 1 writes every stamp (the revision a memo was verified at, a slot interned at, an input
+    // changed at) as it is; version 2 writes them all as the first revision, which is what a state
+    // saved when every memo is verified as of the save means by them (see `stamps`).
+    #[derive(Clone, Copy, PartialEq, Eq)]
+    enum FormatVersion {
+        Stamped,
+        Canonical,
+    }
 
     impl serde::Serialize for FormatVersion {
         fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-            serializer.serialize_u32(1)
+            serializer.serialize_u32(match self {
+                Self::Stamped => 1,
+                Self::Canonical => 2,
+            })
         }
     }
 
     impl<'de> serde::Deserialize<'de> for FormatVersion {
         fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-            let version = <u32 as serde::Deserialize>::deserialize(deserializer)?;
-            if version != 1 {
-                return Err(de::Error::custom("unsupported Salsa ownership format"));
+            match <u32 as serde::Deserialize>::deserialize(deserializer)? {
+                1 => Ok(Self::Stamped),
+                2 => Ok(Self::Canonical),
+                _ => Err(de::Error::custom("unsupported Salsa ownership format")),
             }
-            Ok(Self)
         }
     }
 
@@ -430,22 +441,34 @@ mod persistence {
         /// Acquires exclusive storage access for the lifetime of the serializer.
         fn new(db: &'db mut dyn Database) -> Self {
             let zalsa = db.zalsa_mut();
+            // Canonical stamps only when no memo could be out of date: see `stamps`.
+            let canonical = zalsa
+                .ingredients()
+                .filter(|ingredient| ingredient.should_serialize(zalsa))
+                .all(|ingredient| ingredient.all_verified_now(zalsa));
             Self {
-                format: FormatVersion,
+                format: if canonical {
+                    FormatVersion::Canonical
+                } else {
+                    FormatVersion::Stamped
+                },
                 runtime: zalsa.runtime(),
-                ingredients: SerializeIngredients(zalsa),
+                ingredients: SerializeIngredients(zalsa, canonical),
             }
         }
     }
 
-    struct SerializeIngredients<'db>(&'db Zalsa);
+    struct SerializeIngredients<'db>(&'db Zalsa, bool);
 
     impl serde::Serialize for SerializeIngredients<'_> {
         fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
         where
             S: serde::Serializer,
         {
-            let SerializeIngredients(zalsa) = self;
+            let SerializeIngredients(zalsa, canonical) = self;
+            // The runtime is written before this and keeps its revisions exact; the ingredients
+            // are written with their stamps canonical when the state is.
+            let _canonical = crate::stamps::Canonical::enter(*canonical);
 
             let mut ingredients = zalsa
                 .ingredients()
@@ -528,12 +551,15 @@ mod persistence {
         where
             V: SeqAccess<'de>,
         {
-            let _: FormatVersion = seq
+            let format: FormatVersion = seq
                 .next_element()?
                 .ok_or_else(|| de::Error::invalid_length(0, &self))?;
-            let mut runtime = seq
+            let mut runtime: Runtime = seq
                 .next_element()?
                 .ok_or_else(|| de::Error::invalid_length(1, &self))?;
+            let _restoring = crate::stamps::Restoring::enter(
+                (format == FormatVersion::Canonical).then(|| runtime.current_revision()),
+            );
             let () = seq
                 .next_element_seed(DeserializeIngredients(self.0))?
                 .ok_or_else(|| de::Error::invalid_length(2, &self))?;
@@ -573,6 +599,20 @@ mod persistence {
                             return Err(serde::de::Error::duplicate_field("ingredients"));
                         }
 
+                        // Canonical stamps stand for the revision the state was saved at, which is
+                        // the runtime's: it has to be known before the ingredients.
+                        let current = match (format, runtime.as_ref()) {
+                            (Some(FormatVersion::Canonical), Some(runtime)) => {
+                                Some(Runtime::current_revision(runtime))
+                            }
+                            (Some(FormatVersion::Canonical), None) => {
+                                return Err(de::Error::custom(
+                                    "the runtime must come before the ingredients",
+                                ));
+                            }
+                            _ => None,
+                        };
+                        let _restoring = crate::stamps::Restoring::enter(current);
                         ingredients = Some(map.next_value_seed(DeserializeIngredients(self.0))?);
                     }
                 }

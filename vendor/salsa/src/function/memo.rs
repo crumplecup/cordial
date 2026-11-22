@@ -754,7 +754,10 @@ mod persistence {
             let memo = DeserializeMemo::deserialize(deserializer)?;
 
             // The value stays as the bytes it was saved as until a query reads the memo.
-            let mut restored = Memo::<C>::new(None, memo.verified_at.load(), memo.revisions);
+            // A state saved with canonical stamps says its memos are valid as of the save, which
+            // is the revision restored.
+            let verified_at = crate::stamps::restored_current().unwrap_or_else(|| memo.verified_at.load());
+            let mut restored = Memo::<C>::new(None, verified_at, memo.revisions);
             restored.spilled = Some(Box::new(super::Spilled {
                 at: super::SpilledAt::Held(memo.value.0.into_boxed_slice()),
                 restored: std::sync::OnceLock::new(),

@@ -832,6 +832,24 @@ where
         }
     }
 
+    fn all_verified_now(&self, zalsa: &Zalsa) -> bool {
+        if !C::PERSIST {
+            return true;
+        }
+        let current = zalsa.current_revision();
+        for entry in <C::SalsaStruct<'_> as SalsaStructInDb>::entries(zalsa) {
+            let memo_ingredient_index = self.memo_ingredient_indices.get(entry.ingredient_index());
+            let memo =
+                self.get_memo_from_table_for(zalsa, entry.key_index(), memo_ingredient_index);
+            if memo.is_some_and(|memo| {
+                memo.should_serialize() && memo.header.verified_at.load() != current
+            }) {
+                return false;
+            }
+        }
+        true
+    }
+
     fn should_serialize(&self, zalsa: &Zalsa) -> bool {
         if !C::PERSIST {
             return false;
