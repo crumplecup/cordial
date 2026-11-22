@@ -12,7 +12,7 @@ use ra_ap_hir_def::nameres::{
 };
 use ra_ap_hir_def::resolver::HasResolver;
 use ra_ap_hir_def::signatures::VariantFields;
-use ra_ap_hir_def::{AdtId, AssocItemId, EnumVariantId, FunctionId, ModuleDefId};
+use ra_ap_hir_def::{AdtId, AssocItemId, EnumVariantId, FunctionId, MacroId, ModuleDefId};
 use ra_ap_hir_expand::intern::Symbol;
 use ra_ap_ide_db::RootDatabase;
 use ra_ap_ide_db::base_db::{
@@ -70,6 +70,15 @@ struct ItemPayload {
 fn native_item_payload(_db: &dyn SourceDatabase, function: FunctionId) -> ItemPayload {
     ItemPayload {
         bytes: vec![function.as_id().as_bits() as u8; 4096],
+        alive: Arc::default(),
+    }
+}
+
+/// Witness release for payloads keyed directly by a local macro's interned identity.
+#[salsa::tracked(persist, returns(ref))]
+fn native_macro_payload(_db: &dyn SourceDatabase, mac: MacroId) -> ItemPayload {
+    ItemPayload {
+        bytes: vec![mac.as_id().as_bits() as u8; 4096],
         alive: Arc::default(),
     }
 }
@@ -258,6 +267,44 @@ fn declared_functions(db: &RootDatabase, krate: Crate) -> Vec<FunctionId> {
         .collect();
     functions.sort_unstable_by_key(|id| id.as_id().as_bits());
     functions
+}
+
+fn declared_macros(db: &RootDatabase, krate: Crate) -> Vec<MacroId> {
+    let mut macros: Vec<_> = crate_def_map(db, krate)
+        .macro_def_to_macro_id
+        .values()
+        .copied()
+        .collect();
+    macros.sort_unstable_by_key(|id| id.as_id().as_bits());
+    macros
+}
+
+fn warm_macros(db: &RootDatabase, macros: &[MacroId]) -> Vec<Weak<()>> {
+    macros
+        .iter()
+        .map(|&mac| {
+            mac.definition(db);
+            ra_ap_hir_def::attrs::AttrFlags::query(db, mac.into());
+            Arc::downgrade(&native_macro_payload(db, mac).alive)
+        })
+        .collect()
+}
+
+fn held_macro_values(db: &mut RootDatabase, macros: &[MacroId]) -> u64 {
+    let keys: Vec<_> = macros.iter().map(AsId::as_id).collect();
+    let mut held = 0;
+    db.values_in_memory_for_inputs(
+        &keys,
+        false,
+        true,
+        &[
+            "native_macro_payload",
+            "MacroId::definition_",
+            "AttrFlags::query_",
+        ],
+        &mut |_, count| held += count,
+    );
+    held
 }
 
 fn associated_functions(db: &RootDatabase, krate: Crate) -> Vec<FunctionId> {
@@ -930,6 +977,193 @@ fn declared_locations_retire_cfg_item_values_without_retiring_imported_work() {
                 );
             });
         }
+    }
+}
+
+#[test]
+fn local_legacy_macros_retire_without_selecting_inherited_dependency_work() {
+    let _fixture = FIXTURE.lock().unwrap();
+    let _reset = ResetStore;
+    for count in [1, 4, 16] {
+        let mut source = String::from(
+            "#[macro_use] extern crate unused; use unused::shared;\n\
+             macro_rules! inherited { () => {} }\n\
+             macro_rules! same { () => {} }\n\
+             macro_rules! same { () => {} }\n\
+             macro_rules! make { () => { macro_rules! generated { () => {} } } } make!();\n\
+             #[macro_use] mod nested {\n\
+                 macro_rules! inside { () => {} }\n\
+                 macro_rules! same { () => {} }\n\
+             }\n\
+             pub mod inheritor {}\n\
+             #[macro_export] macro_rules! exported { () => {} }\n",
+        );
+        for variant in 0..count {
+            source.push_str(&format!(
+                "#[cfg(variant = \"{variant}\")] macro_rules! selected {{ () => {{}} }}\n"
+            ));
+        }
+        for restored in [false, true] {
+            salsa::set_spill_store(Some(Arc::new(Store::default())));
+            let executions = MapExecutions::default();
+            let subscriber = tracing_subscriber::registry().with(executions.clone());
+            tracing::subscriber::with_default(subscriber, || {
+                let mut fixture = Fixture::build_with_dependency(
+                    &source,
+                    count,
+                    "#[macro_export] macro_rules! shared { () => {} }\n\
+                     macro_rules! private { () => {} }",
+                );
+                fixture.add_dependency();
+                let dependency = ra_ap_ide_db::base_db::all_crates(&fixture.db)
+                    .iter()
+                    .copied()
+                    .find(|krate| *krate != fixture.krate && !fixture.contexts.contains(krate))
+                    .unwrap();
+                let ordinary = declared_macros(&fixture.db, fixture.krate);
+                let shared = declared_macros(&fixture.db, dependency);
+                assert_eq!(ordinary.len(), 8);
+                assert_eq!(shared.len(), 2);
+                let macros: Vec<_> = fixture
+                    .contexts
+                    .iter()
+                    .map(|&krate| declared_macros(&fixture.db, krate))
+                    .collect();
+                assert!(macros.iter().all(|items| items.len() == 9));
+                for items in &macros {
+                    warm_macros(&fixture.db, items);
+                    warm_macros(&fixture.db, &shared);
+                }
+                warm_macros(&fixture.db, &ordinary);
+                if restored {
+                    fixture.restore();
+                }
+                let shared_markers = warm_macros(&fixture.db, &shared);
+                let ordinary_markers = warm_macros(&fixture.db, &ordinary);
+                let markers: Vec<_> = macros
+                    .iter()
+                    .map(|items| warm_macros(&fixture.db, items))
+                    .collect();
+                let collected = executions.0.load(Ordering::SeqCst);
+                assert_eq!(collected, count + 2);
+                for (index, &krate) in fixture.contexts.iter().enumerate() {
+                    let map = crate_def_map(&fixture.db, krate);
+                    let visible_legacy = map
+                        .modules()
+                        .flat_map(|(_, module)| module.scope.legacy_macros())
+                        .map(|(_, ids)| ids.len())
+                        .sum::<usize>();
+                    assert!(visible_legacy > macros[index].len());
+                    assert!(
+                        map.modules().any(|(_, module)| module.scope.entries().any(
+                            |(_, entry)| entry.take_macros().is_some_and(|id| shared.contains(&id))
+                        )),
+                        "the dependency macro must actually be imported"
+                    );
+                    let keys = declared_context_keys(&mut fixture.db, krate);
+                    assert!(macros[index].iter().all(|id| keys.contains(&id.as_id())));
+                    assert!(
+                        ordinary
+                            .iter()
+                            .chain(&shared)
+                            .all(|id| !keys.contains(&id.as_id()))
+                    );
+                    for _ in 0..2 {
+                        fixture.db.values_in_memory_for_inputs(
+                            &keys,
+                            true,
+                            false,
+                            &[],
+                            &mut |_, _| {},
+                        );
+                        fixture.db.spill_persisted_for_inputs(&keys);
+                        assert_eq!(held_macro_values(&mut fixture.db, &macros[index]), 0);
+                    }
+                    for (other, markers) in markers.iter().enumerate() {
+                        assert!(
+                            markers
+                                .iter()
+                                .all(|marker| { (marker.strong_count() > 0) == (other > index) })
+                        );
+                        assert_eq!(
+                            held_macro_values(&mut fixture.db, &macros[other]),
+                            if other > index { 27 } else { 0 }
+                        );
+                    }
+                    assert!(
+                        ordinary_markers
+                            .iter()
+                            .chain(&shared_markers)
+                            .all(|marker| marker.strong_count() > 0)
+                    );
+                    assert_eq!(held_macro_values(&mut fixture.db, &ordinary), 24);
+                    assert_eq!(held_macro_values(&mut fixture.db, &shared), 6);
+                }
+                for (index, &krate) in fixture.contexts.iter().enumerate() {
+                    assert_eq!(declared_macros(&fixture.db, krate), macros[index]);
+                    for &mac in &macros[index] {
+                        assert_eq!(
+                            native_macro_payload(&fixture.db, mac).bytes,
+                            vec![mac.as_id().as_bits() as u8; 4096]
+                        );
+                    }
+                    warm_macros(&fixture.db, &macros[index]);
+                    assert_eq!(held_macro_values(&mut fixture.db, &macros[index]), 27);
+                }
+                assert_eq!(executions.0.load(Ordering::SeqCst), collected);
+            });
+        }
+    }
+}
+
+#[test]
+fn legacy_macro_selection_follows_the_current_map_after_an_edit() {
+    let _fixture = FIXTURE.lock().unwrap();
+    let _reset = ResetStore;
+    for restored in [false, true] {
+        salsa::set_spill_store(Some(Arc::new(Store::default())));
+        let mut fixture = Fixture::build("macro_rules! original { () => {} }", 1);
+        let context = fixture.contexts[0];
+        let previous = declared_macros(&fixture.db, context);
+        assert_eq!(previous.len(), 1);
+        warm_macros(&fixture.db, &previous);
+        if restored {
+            fixture.restore();
+        }
+        let ordinary = declared_macros(&fixture.db, fixture.krate);
+        let ordinary_markers = warm_macros(&fixture.db, &ordinary);
+        let mut change = FileChange::default();
+        change.change_file(
+            FileId::from_raw(2),
+            Some("macro_rules! replacement { () => {} }".into()),
+        );
+        change.apply(&mut fixture.db);
+        let current = declared_macros(&fixture.db, context);
+        assert_eq!(current.len(), 1);
+        assert_ne!(current, previous);
+        let markers = warm_macros(&fixture.db, &current);
+        let keys = declared_context_keys(&mut fixture.db, context);
+        assert!(current.iter().all(|id| keys.contains(&id.as_id())));
+        assert!(
+            previous
+                .iter()
+                .chain(&ordinary)
+                .all(|id| !keys.contains(&id.as_id()))
+        );
+        fixture
+            .db
+            .values_in_memory_for_inputs(&keys, true, false, &[], &mut |_, _| {});
+        fixture.db.spill_persisted_for_inputs(&keys);
+        assert_eq!(held_macro_values(&mut fixture.db, &current), 0);
+        assert!(markers.iter().all(|marker| marker.strong_count() == 0));
+        assert!(
+            ordinary_markers
+                .iter()
+                .all(|marker| marker.strong_count() > 0)
+        );
+        assert_eq!(declared_macros(&fixture.db, context), current);
+        warm_macros(&fixture.db, &current);
+        assert_eq!(held_macro_values(&mut fixture.db, &current), 3);
     }
 }
 

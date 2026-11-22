@@ -783,14 +783,14 @@ text allocation. Each copied crate still has separate definition maps and
 context-dependent query results. The last-consumer boundary now follows
 observability, planning and optional persistence fingerprint preparation.
 Retirement now runs there for copied crate keys, module-scope declaration keys,
-members and variants recorded in already-current trait/impl/enum query results,
+locally defined macro keys recorded in the definition map, members and variants
+recorded in already-current trait/impl/enum query results,
 and tracked identities created by queries on those keys, transitively. Selected
 non-persisted values are dropped, and persisted values spill when a run cache
-is available, even without memory pressure. Non-exported legacy macro
-definitions, body-local declarations and composite arguments are not yet
-selected through their owners. Selection reads the current map and skips
-absent, stale or provisional member/variant results; removed declarations from
-earlier revisions are not enumerated.
+is available, even without memory pressure. Body-local declarations and composite
+arguments are not yet selected through their owners. Selection reads the current
+map and skips absent, stale or provisional member/variant results; removed
+declarations from earlier revisions are not enumerated.
 The existing broader eviction hook remains conditional and does not select
 individual contexts.
 Removing a `ContextCrates` handle alone would not free
@@ -1320,6 +1320,41 @@ references themselves keep the original objects alive until dropped. Step 2
 remains partial for absent/stale/provisional lists, removed declarations,
 non-exported legacy macro definitions, body-local declarations, composite keys,
 missing producer records after restore and input/identity/header storage.
+
+**Local legacy macro selection design, 2026-11-21.** The persisted `DefMap`
+already records local macro definitions in `macro_def_to_macro_id`. Its
+collector inserts macro rules, macro 2.0 and procedural definitions there;
+inheritance and imports update separate namespace tables. Seed retirement from
+this existing ownership table, including private, shadowed and macro-generated
+legacy definitions. Do not walk every module's copied legacy namespace or
+introduce another ownership index. Test ordinary/shared/uncompleted ownership,
+cold/restored 1/4/16 families, cfg filtering, repeated retirement, same-ID
+re-entry and edits. This covers exact macro-ID query keys; composite macro
+expander keys remain outside this checkpoint.
+
+**Local legacy macro retirement checkpoint, 2026-11-21.** Retirement now
+includes the map's existing local macro-definition keys, without following
+inherited or imported macro names. The native fixture covers private, shadowed,
+nested, exported, macro-generated and cfg-gated macro rules across cold/restored
+1/4/16 context families. It also verifies that the dependency macro is actually
+imported and that legacy namespaces contain inherited entries.
+
+Actual RA macro-definition and attribute-query residency drops to zero for
+completed contexts, as does the persisted test payload keyed by each macro ID.
+Weak markers verify release of the original test allocations. Ordinary,
+dependency and uncompleted-context values remain resident. Repeated retirement,
+same-ID re-entry, persisted payload contents and edited replacement definitions
+pass without extra crate-map collection. These checks establish exact-key
+residency and test-allocation release; they do not measure expander allocation
+release, retained bytes or RSS.
+
+All 86 focused Nextest tests passed across 13 binaries with `hotpath-alloc`,
+including the unchanged saved-query accounting checks. Formatting,
+all-features/all-targets Clippy with warnings denied and diff checks passed.
+No Cordial self-execution or full-program measurement ran. Step 2 remains partial
+for body-local declarations, composite keys, absent/stale/provisional owner
+lists, removed declarations, missing producer records after restore and
+input/identity/header storage.
 
 ## Historical evidence
 

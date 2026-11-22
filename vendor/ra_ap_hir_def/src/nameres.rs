@@ -653,12 +653,13 @@ impl DefMap {
     ///
     /// Used to retire module-level semantic values without scanning interned locations.
     /// The iterator reads existing facts only; keys may repeat. Associated items, enum
-    /// variants, non-exported legacy macro definitions and declarations in body-local
-    /// block maps are not enumerated here.
+    /// variants and declarations in body-local block maps are not enumerated here.
+    /// Macro definitions come from the local definition table, not the inherited
+    /// legacy namespace stored in every module scope.
     fn declared_query_keys(&self) -> impl Iterator<Item = salsa::Id> + '_ {
         self.modules().flat_map(|(id, module)| {
             std::iter::once(id.as_id()).chain(module.scope.declared_query_keys())
-        })
+        }).chain(self.macro_def_to_macro_id.values().map(|id| id.as_id()))
     }
 
     /// Returns all inline modules (mod name { ... }) in the crate that are associated with the given macro expansion.
