@@ -131,6 +131,16 @@ text that differs is written as a change, so what read it is invalidated. Local 
 removes about 28% of the bytes on amenable and nearly all the sysroot's, and workstream C relies on it. Tests:
 edit a library file between runs and the memos that read it re-run; edit nothing and nothing does.
 
+*Done (2026-11-22).* `FileContents` gained a digest (SHA-256), `attach_source`, `reference`, `is` and a typed
+`ColdTextError` under `get` (no source, unreadable, length changed, content changed). Before a save, library
+files (dependencies and the sysroot) that are on the disk with the length of their text get their path attached,
+and are saved as `{path, len, digest}`; the text stays in memory for the run. A restore makes them cold, and the
+load's `set_file_text` compares by digest (`is`), so an unchanged file stays on the disk and a changed one,
+even at the same length, is written and invalidates what read it. Measured on the A0 specimen (release): the
+saved Salsa state is 46.7 MB where it was 102 MB, and a restored run saves in 0.25 s. Tests:
+`file_text_reference` (reference saved, cold on restore, no text in any segment, unchanged load writes nothing,
+changed load writes, each error is typed), `cold_texts`, `saved_state`.
+
 **A4. Content-addressed chunks.** Split the large ingredients by id range (for example 4,096 slots or memos).
 A save serializes one chunk at a time, hashes it, and writes it only when the hash differs from the manifest's,
 linking the previous file otherwise; memory is one chunk. Done when a one-line edit on a fixture rewrites a

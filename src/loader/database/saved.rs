@@ -120,6 +120,7 @@ impl SavedState {
             .filter_map(|context| context.to_saved(&order))
             .collect();
         let contexts = rmp_serde::to_vec(&contexts).map_err(|error| self.encoding(&error))?;
+        super::cold_texts::attach_library_sources(database, vfs);
         let database: &mut dyn salsa::Database = database;
         crate::host::event("analysis state: encoding the memos".to_owned());
         crate::process_memory::log("save: encoding begun");

@@ -65,6 +65,9 @@ version = "0.3.1"
 [dependencies.rustc-hash]
 version = "2.1.1"
 
+[dependencies.sha2]
+version = "0.11"
+
 [dependencies.serde]
 version = "1"
 features = ["derive", "rc"]

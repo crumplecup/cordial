@@ -67,7 +67,7 @@ macro_rules! impl_intern_key {
 }
 
 mod file_contents;
-pub use file_contents::FileContents;
+pub use file_contents::{ColdTextError, FileContents, TextDigest, TextReference};
 
 pub const DEFAULT_FILE_TEXT_LRU_CAP: u16 = 16;
 pub const DEFAULT_PARSE_LRU_CAP: u16 = 128;
@@ -153,7 +153,7 @@ impl Files {
             Entry::Occupied(mut occupied) => {
                 // Salsa does not compare a new input with the old one; an unchanged
                 // text must not invalidate what read it.
-                if *occupied.get().text(db) != *text {
+                if !occupied.get().contents(db).is(&*text) {
                     occupied.get_mut().set_contents(db).to(FileContents::resident(Arc::from(text)));
                 }
             }
@@ -175,7 +175,7 @@ impl Files {
     ) {
         match self.files.entry(file_id) {
             Entry::Occupied(mut occupied) => {
-                if *occupied.get().text(db) != *text {
+                if !occupied.get().contents(db).is(&*text) {
                     occupied.get_mut().set_contents(db).to(FileContents::resident(text));
                 }
             }
@@ -195,7 +195,7 @@ impl Files {
     ) {
         match self.files.entry(file_id) {
             Entry::Occupied(mut occupied) => {
-                if *occupied.get().text(db) != *text {
+                if !occupied.get().contents(db).is(&*text) {
                     occupied
                         .get_mut()
                         .set_contents(db)
@@ -317,19 +317,47 @@ pub struct LocalRoots {
     pub roots: FxHashSet<SourceRootId>,
 }
 
-/// Persist a file's text as a plain string: `Arc<str>` has no `Deserialize`.
+/// What a saved state holds of a file's text: the text, or where it is on the disk and what it was
+/// when the file is a library's, which does not change and is not worth keeping twice.
+#[derive(serde::Serialize)]
+enum SavedText<'a> {
+    Text(&'a str),
+    Reference(TextReference),
+}
+
+#[derive(serde::Deserialize)]
+enum RestoredText {
+    Text(String),
+    Reference(TextReference),
+}
+
+/// Persist a file's text as a plain string, or as a reference to the file when it has one: `Arc<str>`
+/// has no `Deserialize`.
 fn serialize_file_text<S: serde::Serializer>(
     value: &(FileContents, vfs::FileId),
     serializer: S,
 ) -> Result<S::Ok, S::Error> {
-    serde::Serialize::serialize(&(&*value.0.get(), value.1), serializer)
+    match value.0.reference() {
+        Some(reference) => {
+            serde::Serialize::serialize(&(SavedText::Reference(reference), value.1), serializer)
+        }
+        None => {
+            let text = value.0.try_get().map_err(serde::ser::Error::custom)?;
+            serde::Serialize::serialize(&(SavedText::Text(&text), value.1), serializer)
+        }
+    }
 }
 
 fn deserialize_file_text<'de, D: serde::Deserializer<'de>>(
     deserializer: D,
 ) -> Result<(FileContents, vfs::FileId), D::Error> {
-    let (text, file_id): (String, vfs::FileId) = serde::Deserialize::deserialize(deserializer)?;
-    Ok((FileContents::resident(Arc::from(text.as_str())), file_id))
+    let (text, file_id): (RestoredText, vfs::FileId) =
+        serde::Deserialize::deserialize(deserializer)?;
+    let contents = match text {
+        RestoredText::Text(text) => FileContents::resident(Arc::from(text.as_str())),
+        RestoredText::Reference(reference) => FileContents::cold(reference),
+    };
+    Ok((contents, file_id))
 }
 
 #[salsa::input(
