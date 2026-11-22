@@ -2119,6 +2119,24 @@ the one source root of the copy's context for a copy. `PlacedFile` is immortal. 
 (none, plain, derive, leaf, and all three with a second package) re-run nothing at 12
 contexts. The measured run predates this second fix.
 
+Final amenable run (cold, `--stop-after source_ir`, after both fixes), against the original:
+
+| | Original | First fix | Both fixes |
+| --- | ---: | ---: | ---: |
+| Peak | 4.83 GiB | 3.94 | **3.74** |
+| Queries run in the save's verification | 173,954 | 157,974 | **633** |
+| Verification time / growth | 12.9 s / +1.48 GiB | 12.2 s / +0.58 | 8.5 s / +0.31 |
+| Whole run | 124 s | 128 s | 122 s |
+
+The run's time is unchanged because the verification was a small part of it. What remains
+(all measured, none changed): the final load step 9.6 s and +0.56 GiB; definition maps 17 s and
++0.58 GiB; function evidence 19 s and +1.05 GiB, the largest growth; contexts 13 s with flat
+memory; leaf functions 34 s with flat memory (6 leaf contexts, 225 ms entering them and
+30.6 s reading, already on worker threads); the save 25 s, of which the encoding is 16 s. The
+peak, 3.74 GiB, is 1.07 GiB above the analysis working set of 2.67 GiB and occurs inside the
+verification although only 633 queries run there, so what it builds is the flattened
+dependency sets of 1.18M memos and 14.4M edges; that is a Salsa persistence design item.
+
 Not measured: the effect on a real run. The fix removes the cause the fixture shows;
 how much of amenable's 174K re-executions and Cordial's 519 s it was is unknown until
 a run, which the plan keeps for after the remaining design items. Remaining design
