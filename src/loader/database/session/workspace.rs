@@ -276,9 +276,17 @@ fn load_database(
                 std::process::exit(crate::MEMORY_STUCK_EXIT);
             }
             crate::host::event(format!("analysis state: not used ({reason}); loading cold"));
-            (RootDatabase::new(None), ra_ap_vfs::Vfs::default(), None)
+            (
+                super::super::scan_queries::empty_database(),
+                ra_ap_vfs::Vfs::default(),
+                None,
+            )
         }
-        None => (RootDatabase::new(None), ra_ap_vfs::Vfs::default(), None),
+        None => (
+            super::super::scan_queries::empty_database(),
+            ra_ap_vfs::Vfs::default(),
+            None,
+        ),
     };
     let (vfs, server) = load_workspace_into_db_with_vfs(
         workspace,

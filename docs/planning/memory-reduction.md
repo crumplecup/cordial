@@ -1941,6 +1941,60 @@ Remaining for step 3: siteless definitions stay process-local by design.
 Bounded input, identity and memo-header storage (step 4) is the next memory
 target.
 
+### Per-file ownership and storage-growth checkpoint, 2026-11-22
+
+Step 4 begins from measurement. `SourceDatabase::salsa_footprint` (feature
+`hotpath`) reads Salsa's memory report and its resident-value counts into a
+`SalsaFootprint`: per query, memos, resident values and bytes; per struct
+ingredient, slots, bytes and claimed slots. `record_database` now reads it too.
+`tests/context_storage_growth.rs` projects a crate of nine files, each carrying a
+gate for every context, with 1 and 16 contexts, so 135 copied files are added,
+and reports what grows once every context has finished.
+
+Resident values that grew with every completed context, before and after this
+checkpoint (all counts from the fixture, 1 to 16 contexts):
+
+| Query | Before | After | Why |
+| --- | ---: | ---: | --- |
+| `extract_file` (not persisted) | +135 | 0 | owned by the copy's contexts, released at completion |
+| `real_span_map` (not persisted) | +135 | 0 | the same, through `hir_expand` |
+| `observability_file` and the other persisted per-file queries | +135 | +135 | spilled when a run cache exists; this fixture has none, so they are kept |
+| `line_index` | +59 | +56 | function-local query in `ide_db`; no policy yet |
+| `crate_local_def_map`, `functions_in_copy`, `source_root_crates` | +15 each | +15 | persisted or tiny; spilled with a store |
+
+The new policies classify a file by its source root, as `proc_macro_span`
+already did: a copy root's crates are the owners, an ordinary root is shared, and
+a copy root with no recorded crate stays unclassified so its values are
+preserved. `extract_file`, every `ScanKey`-keyed per-file collector query and
+`real_span_map` are registered; registration is installed on every fresh and
+restored database and mirrors each query's feature gate. Retirement then needs
+no new call: `finish_context` already retires the context's roots, and the log
+shows 9 values released and 9 persisted memos retained (`spill_unavailable`) per
+context in the fixture. Every memo of a registered query now has a canonical
+ownership record, owned or shared, including the span map of each ordinary file
+the analysis reads; that metadata and the resolver call are unmeasured on a
+whole program. The owner-index fixtures that count index contents now include
+those span maps.
+
+What still grows per added context and per copied file is the identity and input
+storage retirement does not touch. Claimed slots grew by `EditionedFileId`,
+`FileText`, `FileSourceRootInput`, `ModuleIdLt`, `ScanKey` and `ExtractKey` (one
+each per copied file), `FunctionId` (240), `EnumId`, `ImplId` and `StructId`
+(120 each), `FileItemTreeKey` (74), and one `Crate`, `ItemKey` and
+`SourceRootInput` per context. These are the bounded input/identity targets.
+Measurement limits: Salsa's `size_of_fields` is the shallow struct size and counts
+a memo whether or not its value is resident, so the byte columns are not
+retained heap; counts and resident values are the evidence. The fixture is tiny,
+so absolute sizes say nothing about a real run, and no Cordial self-run or
+whole-program measurement ran.
+
+Evidence: the growth test passes with a reversible control (the same measure must
+show growth for a persisted query kept for lack of a store); all 118 tests across
+`ra_def_map_storage`, the owner-index, cfg-context, saved-state, identity and
+Hotpath binaries pass; formatting, all-features/all-targets Clippy with warnings
+denied and the diff check pass; the library also checks with no features and
+with each of nine single features.
+
 ## Historical evidence
 
 The first cold capture used Cordial `65cbde11` against `elicit_doc` `8d2968a7`,

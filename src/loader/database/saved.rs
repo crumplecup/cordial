@@ -198,6 +198,7 @@ impl SavedState {
                 .collect::<Option<Vec<_>>>()
                 .ok_or_else(|| "a saved context names a crate that is not there".to_owned())?;
             ra_ap_hir_ty::query_ownership::register(&mut database);
+            super::scan_queries::register_query_ownership(&mut database);
             let roots: Vec<_> = contexts
                 .iter()
                 .flat_map(super::ContextCrates::shadows)

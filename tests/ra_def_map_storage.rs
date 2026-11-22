@@ -2566,10 +2566,12 @@ fn shared_generic_mir_with_local_arguments_retires_and_reenters_equivalently() {
         std::slice::from_ref(&shared_type),
         shared,
     );
+    // The span map of each ordinary file read is classified too: `real_span_map` has an ownership
+    // policy, so its memo counts as shared, and as owned or unclassified for a context's copy.
     let stats = salsa::owner_index_stats(&mut fixture.db);
     assert_eq!(
         (stats.memberships, stats.shared, stats.unclassified),
-        (3, 1, 0)
+        (3, 4, 0)
     );
     // Cache hits do not create memberships.
     assert_eq!(
@@ -2623,7 +2625,7 @@ fn shared_generic_mir_with_local_arguments_retires_and_reenters_equivalently() {
             stats.memberships,
             stats.shared
         ),
-        (0, 0, 0, 1)
+        (0, 0, 0, 4)
     );
 }
 
@@ -2823,15 +2825,17 @@ fn layout_owners_walk_type_const_and_region_parameters_before_early_errors() {
             .is_err()
     );
     assert!(fixture.db.layout_of_ty(shared_type, environment).is_err());
+    // The span map of each ordinary file read is classified too: `real_span_map` has an ownership
+    // policy, so its memo counts as shared, and as owned or unclassified for a context's copy.
     let stats = salsa::owner_index_stats(&mut fixture.db);
     assert_eq!(
         (stats.memberships, stats.shared, stats.unclassified),
-        (3, 2, 0)
+        (3, 4, 0)
     );
     let retired = salsa::retire_owned_values(&mut fixture.db, &[root.as_id()]);
     assert_eq!((retired.visited, retired.released), (3, 3));
     let stats = salsa::owner_index_stats(&mut fixture.db);
-    assert_eq!((stats.memberships, stats.capacity, stats.shared), (0, 0, 2));
+    assert_eq!((stats.memberships, stats.capacity, stats.shared), (0, 0, 4));
 }
 
 #[test]
@@ -2948,10 +2952,12 @@ fn const_evaluation_retires_local_substitutions_and_optional_environments() {
             .const_eval(constant, GenericArgs::empty(), None)
             .is_ok()
     );
+    // The span map of each ordinary file read is classified too: `real_span_map` has an ownership
+    // policy, so its memo counts as shared, and as owned or unclassified for a context's copy.
     let stats = salsa::owner_index_stats(&mut fixture.db);
     assert_eq!(
         (stats.memberships, stats.shared, stats.unclassified),
-        (4, 3, 0)
+        (4, 6, 0)
     );
     let retired = salsa::retire_owned_values(&mut fixture.db, &[left.as_id()]);
     assert_eq!(
@@ -3050,10 +3056,12 @@ fn closure_mir_owned_by_local_instantiation_preserves_shared_instantiation() {
     };
     let expected = render(&fixture.db, local_args.clone());
     let shared_mir = render(&fixture.db, shared_args.clone());
+    // The span map of each ordinary file read is classified too: `real_span_map` has an ownership
+    // policy, so its memo counts as shared, and as owned or unclassified for a context's copy.
     let stats = salsa::owner_index_stats(&mut fixture.db);
     assert_eq!(
         (stats.memberships, stats.shared, stats.unclassified),
-        (1, 1, 0)
+        (1, 3, 0)
     );
     assert_eq!(
         salsa::retire_owned_values(&mut fixture.db, &[root.as_id()]).released,
@@ -3202,14 +3210,17 @@ fn proc_macro_spans_follow_definition_source_and_fail_closed_for_unassociated_co
     let expected = proc_macro_span(&fixture.db, ProcMacroSpanKey::from_id(local));
     let shared_span = proc_macro_span(&fixture.db, ProcMacroSpanKey::from_id(shared));
     proc_macro_span(&fixture.db, ProcMacroSpanKey::from_id(unknown));
+    // The three files' span maps are classified like their spans: one owned by the copy, one
+    // shared, one unclassified, in addition to the three spans.
     let stats = salsa::owner_index_stats(&mut fixture.db);
     assert_eq!(
         (stats.memberships, stats.shared, stats.unclassified),
-        (1, 1, 1)
+        (2, 2, 2)
     );
+    // The copy's span and the span map of its file are both released.
     assert_eq!(
         salsa::retire_owned_values(&mut fixture.db, &[left.as_id()]).released,
-        1
+        2
     );
     assert_eq!(held_family(&mut fixture.db, "proc_macro_span"), 2);
     assert_eq!(
@@ -3229,10 +3240,12 @@ fn proc_macro_spans_follow_definition_source_and_fail_closed_for_unassociated_co
         salsa::Durability::HIGH,
     );
     proc_macro_span(&fixture.db, ProcMacroSpanKey::from_id(unknown));
+    // The repair reclassifies the unknown file's span map with its span: both are now owned by
+    // the repaired root, as the local file's span and span map are by the first.
     let stats = salsa::owner_index_stats(&mut fixture.db);
     assert_eq!(
         (stats.memberships, stats.shared, stats.unclassified),
-        (2, 1, 0)
+        (4, 2, 0)
     );
 }
 
@@ -3258,10 +3271,12 @@ fn proc_macro_spans_in_expansions_follow_the_expansion_crate() {
     let expected = proc_macro_span(&fixture.db, span_key(&fixture.db, local));
     let shared_span = proc_macro_span(&fixture.db, span_key(&fixture.db, shared));
     assert_eq!(held_family(&mut fixture.db, "proc_macro_span"), 2);
+    // The span map of each ordinary file read is classified too: `real_span_map` has an ownership
+    // policy, so its memo counts as shared, and as owned or unclassified for a context's copy.
     let stats = salsa::owner_index_stats(&mut fixture.db);
     assert_eq!(
         (stats.memberships, stats.shared, stats.unclassified),
-        (1, 1, 0)
+        (1, 3, 0)
     );
     assert_eq!(
         salsa::retire_owned_values(&mut fixture.db, &[root.as_id()]).released,
@@ -3368,7 +3383,14 @@ fn combined_owner_families_scale_without_visiting_shared_or_historical_keys() {
                             stats.shared,
                             stats.unclassified
                         ),
-                        ((live - index - 1) * 3, live - index - 1, shared_count, 0)
+                        (
+                            (live - index - 1) * 3,
+                            live - index - 1,
+                            // The span map of each context crate's file and of the dependency's
+                            // is classified shared too: these fixture crates are ordinary.
+                            shared_count + live + history + 1,
+                            0
+                        )
                     );
                     for next in index + 1..live {
                         assert_eq!(

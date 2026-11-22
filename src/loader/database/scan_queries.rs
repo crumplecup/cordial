@@ -675,3 +675,165 @@ pub(super) fn prime_compliance(
     );
     let _ = error_compliance_file(db, key);
 }
+
+/// Who owns what a file's queries computed: the cfg context whose copy the file is, or nobody
+/// when it is the ordinary build's.
+///
+/// A context's copies are all in one source root of their own, whose crates are the context's
+/// copied crates; those are the roots that decide when the context's values may be retired. A copy
+/// root with no crate recorded cannot be told from a context's, so its values are preserved.
+/// Nothing is analysed: this reads two inputs.
+#[cfg(any(
+    feature = "error_sites",
+    feature = "error_chain",
+    feature = "internal_error_chain",
+    feature = "tracing",
+    feature = "verus_ir",
+    feature = "visibility",
+    feature = "allows",
+    feature = "cfg_hygiene",
+    feature = "cfg_scatter",
+    feature = "glob_imports",
+    feature = "inline_tests",
+    feature = "modularity",
+    feature = "pageantry",
+    feature = "derives",
+    feature = "cli_layout"
+))]
+#[tracing::instrument(level = "trace", skip(db))]
+#[hotpath::measure]
+fn file_ownership(
+    db: &ra_ap_ide_db::RootDatabase,
+    file: ra_ap_vfs::FileId,
+) -> salsa::QueryOwnership {
+    use ra_ap_ide_db::base_db::{SourceDatabase as _, TOOL_SOURCE_ROOTS};
+    use salsa::plumbing::AsId;
+    let root = db.file_source_root(file).source_root_id(db);
+    if root.0 < TOOL_SOURCE_ROOTS {
+        return salsa::QueryOwnership::Shared;
+    }
+    let crates = db.source_root(root).crates(db);
+    if crates.is_empty() {
+        return salsa::QueryOwnership::Unclassified;
+    }
+    salsa::QueryOwnership::owned(
+        crates
+            .iter()
+            .map(AsId::as_id)
+            .filter(|&id| salsa::is_owner_root(db, id)),
+    )
+}
+
+#[cfg(any(
+    feature = "error_sites",
+    feature = "error_chain",
+    feature = "internal_error_chain",
+    feature = "tracing",
+    feature = "verus_ir",
+    feature = "visibility",
+    feature = "allows",
+    feature = "cfg_hygiene",
+    feature = "cfg_scatter",
+    feature = "glob_imports",
+    feature = "inline_tests",
+    feature = "modularity",
+    feature = "pageantry",
+    feature = "derives",
+    feature = "cli_layout"
+))]
+#[tracing::instrument(level = "trace", skip(db))]
+#[hotpath::measure]
+fn extract_owners(db: &dyn SemanticDatabase, id: salsa::Id) -> salsa::QueryOwnership {
+    use salsa::plumbing::FromId;
+    file_ownership(db.root_database(), ExtractKey::from_id(id).file(db))
+}
+
+#[cfg(any(
+    feature = "error_sites",
+    feature = "error_chain",
+    feature = "internal_error_chain",
+    feature = "tracing",
+    feature = "verus_ir",
+    feature = "visibility",
+    feature = "allows",
+    feature = "cfg_hygiene",
+    feature = "cfg_scatter",
+    feature = "glob_imports",
+    feature = "inline_tests",
+    feature = "modularity",
+    feature = "pageantry",
+    feature = "derives",
+    feature = "cli_layout"
+))]
+#[tracing::instrument(level = "trace", skip(db))]
+#[hotpath::measure]
+fn scan_owners(db: &dyn SemanticDatabase, id: salsa::Id) -> salsa::QueryOwnership {
+    use salsa::plumbing::FromId;
+    file_ownership(db.root_database(), ScanKey::from_id(id).file(db))
+}
+
+/// Install the ownership of the per-file queries, so that a context's copied files release what
+/// was computed from them when the context finishes. Once after a database is built or restored,
+/// before these queries run; a registration is a cache policy and changes no semantic input.
+#[tracing::instrument(level = "debug", skip(db))]
+pub(super) fn register_query_ownership(db: &mut impl salsa::Database) {
+    #[cfg(any(
+        feature = "error_sites",
+        feature = "error_chain",
+        feature = "internal_error_chain",
+        feature = "tracing",
+        feature = "verus_ir",
+        feature = "visibility",
+        feature = "allows",
+        feature = "cfg_hygiene",
+        feature = "cfg_scatter",
+        feature = "glob_imports",
+        feature = "inline_tests",
+        feature = "modularity",
+        feature = "pageantry",
+        feature = "derives",
+        feature = "cli_layout"
+    ))]
+    salsa::register_query_ownership::<extract_file, dyn SemanticDatabase>(db, extract_owners);
+    #[cfg(feature = "error_sites")]
+    salsa::register_query_ownership::<error_sites_file, dyn SemanticDatabase>(db, scan_owners);
+    #[cfg(feature = "error_chain")]
+    salsa::register_query_ownership::<error_chains_file, dyn SemanticDatabase>(db, scan_owners);
+    #[cfg(feature = "internal_error_chain")]
+    {
+        salsa::register_query_ownership::<error_types_file, dyn SemanticDatabase>(db, scan_owners);
+        salsa::register_query_ownership::<error_compliance_file, dyn SemanticDatabase>(
+            db,
+            scan_owners,
+        );
+        salsa::register_query_ownership::<error_apply_file, dyn SemanticDatabase>(db, scan_owners);
+    }
+    #[cfg(feature = "tracing")]
+    salsa::register_query_ownership::<observability_file, dyn SemanticDatabase>(db, scan_owners);
+    #[cfg(feature = "verus_ir")]
+    salsa::register_query_ownership::<verus_file, dyn SemanticDatabase>(db, scan_owners);
+    #[cfg(feature = "visibility")]
+    salsa::register_query_ownership::<visibility_file, dyn SemanticDatabase>(db, scan_owners);
+    #[cfg(any(
+        feature = "allows",
+        feature = "cfg_hygiene",
+        feature = "cfg_scatter",
+        feature = "glob_imports",
+        feature = "inline_tests",
+        feature = "modularity",
+        feature = "pageantry",
+        feature = "derives",
+        feature = "visibility",
+        feature = "cli_layout"
+    ))]
+    salsa::register_query_ownership::<policy_file, dyn SemanticDatabase>(db, scan_owners);
+    let _ = db;
+}
+
+/// A database with nothing loaded, with the ownership of the per-file queries installed.
+#[tracing::instrument(level = "debug")]
+pub(super) fn empty_database() -> ra_ap_ide_db::RootDatabase {
+    let mut db = ra_ap_ide_db::RootDatabase::new(None);
+    register_query_ownership(&mut db);
+    db
+}

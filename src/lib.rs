@@ -449,6 +449,8 @@ pub use result_store::{
 pub use session::{
     RunAll, RunFilter, RunOutcome, RuntimeSession, STAGES, Session, SessionBuilder, SessionView,
 };
+#[cfg(feature = "hotpath")]
+pub use storage::{SalsaFootprint, SalsaUsage};
 pub use storage::{StoreUsage, store_usage};
 pub use store::{StoreLayout, SysrootCache, default_store_home, project_slug_from_path};
 pub use store_lock::{SysrootLock, WorklistLock};

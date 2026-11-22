@@ -14,7 +14,6 @@ pub use sync::SyncOutcome;
 
 use super::{Reporter, SourceDatabase};
 use ra_ap_hir::ChangeWithProcMacros;
-use ra_ap_ide_db::RootDatabase;
 use ra_ap_ide_db::base_db::SourceDatabase as RaSourceDatabase;
 use ra_ap_vfs::{Vfs, VfsPath};
 use tracing::instrument;
@@ -28,7 +27,7 @@ impl SourceDatabase {
     #[hotpath::measure]
     pub(crate) fn new() -> Self {
         Self {
-            db: RootDatabase::new(None),
+            db: super::scan_queries::empty_database(),
             vfs: Vfs::default(),
             revision: 1,
             workspace: None,
@@ -121,6 +120,16 @@ impl SourceDatabase {
     #[hotpath::measure]
     pub fn describe_item(&self, id: crate::SemanticItemId) -> String {
         super::types::description(&self.db, id)
+    }
+
+    /// What the Salsa database holds now: memoised results per query, and slots, bytes and
+    /// claimed slots per input, identity and tracked struct. It needs the database exclusively and
+    /// walks every memo.
+    #[cfg(feature = "hotpath")]
+    #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure]
+    pub fn salsa_footprint(&mut self) -> crate::SalsaFootprint {
+        crate::storage::salsa_footprint(&mut self.db)
     }
 
     /// Whether `id` names a definition this database can find again from its

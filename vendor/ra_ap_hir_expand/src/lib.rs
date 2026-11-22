@@ -1025,6 +1025,33 @@ pub struct ProcMacroSpanKey {
 /// Register definition-site retention without parsing or expanding the source.
 pub fn register_query_ownership(db: &mut impl salsa::Database) {
     salsa::register_query_ownership::<proc_macro_span, dyn SourceDatabase>(db, span_owners);
+    salsa::register_query_ownership::<span_map::real_span_map, dyn SourceDatabase>(
+        db,
+        real_span_map_owners,
+    );
+}
+
+#[hotpath::measure]
+fn real_span_map_owners(db: &dyn SourceDatabase, id: salsa::Id) -> salsa::QueryOwnership {
+    let file = base_db::EditionedFileId::from_id(id);
+    file_owners(db, file.file_id(db))
+}
+
+/// Who owns what is computed from `file`: the cfg context whose copy it is, nobody when it is the
+/// ordinary build's. A copy root with no crate recorded cannot be told from a context's, so what
+/// is computed from its files is preserved. Reads two inputs; nothing is analysed.
+fn file_owners(db: &dyn SourceDatabase, file: span::FileId) -> salsa::QueryOwnership {
+    let root = db.file_source_root(file).source_root_id(db);
+    if root.0 < base_db::TOOL_SOURCE_ROOTS {
+        return salsa::QueryOwnership::Shared;
+    }
+    let crates = db.source_root(root).crates(db);
+    if crates.is_empty() {
+        return salsa::QueryOwnership::Unclassified;
+    }
+    salsa::QueryOwnership::owned(
+        crates.iter().map(AsId::as_id).filter(|&id| salsa::is_owner_root(db, id)),
+    )
 }
 
 #[hotpath::measure]
@@ -1039,19 +1066,7 @@ fn span_owners(db: &dyn SourceDatabase, id: salsa::Id) -> salsa::QueryOwnership 
                 salsa::QueryOwnership::Shared
             }
         }
-        HirFileId::FileId(file) => {
-            let root = db.file_source_root(file.file_id(db)).source_root_id(db);
-            if root.0 < base_db::TOOL_SOURCE_ROOTS {
-                return salsa::QueryOwnership::Shared;
-            }
-            let crates = db.source_root(root).crates(db);
-            if crates.is_empty() {
-                return salsa::QueryOwnership::Unclassified;
-            }
-            salsa::QueryOwnership::owned(
-                crates.iter().map(AsId::as_id).filter(|&id| salsa::is_owner_root(db, id)),
-            )
-        }
+        HirFileId::FileId(file) => file_owners(db, file.file_id(db)),
     }
 }
 
