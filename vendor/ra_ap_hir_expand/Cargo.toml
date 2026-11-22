@@ -53,6 +53,11 @@ version = "2.0.0"
 [dependencies.either]
 version = "1.15.0"
 
+# Published consumer instrumentation; enabled by the application's Hotpath features.
+[dependencies.hotpath]
+version = "=0.31.2"
+default-features = false
+
 [dependencies.intern]
 version = "=0.0.358"
 package = "ra_ap_intern"

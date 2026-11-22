@@ -2693,7 +2693,9 @@ fn mir_parameter_environment_walks_local_trait_identity_with_shared_types() {
 }
 
 #[test]
-fn mir_owner_policy_survives_restore_edit_and_reentry() {
+fn combined_owner_policies_survive_restore_edit_and_reentry() {
+    use ra_ap_hir_ty::db::HirDatabase;
+    use ra_ap_hir_ty::next_solver::{GenericArgs, ParamEnv, TyKind};
     let _fixture = FIXTURE.lock().unwrap();
     let mut fixture = Fixture::build_with_dependency(
         "pub struct Local;",
@@ -2705,35 +2707,47 @@ fn mir_owner_policy_survives_restore_edit_and_reentry() {
     let root = fixture.contexts[0];
     salsa::activate_owner_roots(&mut fixture.db, &[root.as_id()]);
     let local = fixture_adt(&fixture.db, root);
-    let original = instantiated_mir(&fixture.db, function, std::slice::from_ref(&local), shared);
+    let TyKind::Adt(adt, _) = local.as_ref().kind() else {
+        panic!("ADT")
+    };
+    let adt = adt.def_id();
+    let environment = ra_ap_hir_ty::ParamEnvAndCrate {
+        param_env: ParamEnv::empty(),
+        krate: shared,
+    }
+    .store();
+    let warm = |db: &RootDatabase| {
+        let mir = instantiated_mir(db, function, std::slice::from_ref(&local), shared);
+        assert!(db.layout_of_ty(local.clone(), environment.clone()).is_err());
+        assert!(
+            db.layout_of_adt(adt, GenericArgs::empty().store(), environment.clone())
+                .is_err()
+        );
+        mir
+    };
+    let original = warm(&fixture.db);
     assert_eq!(
         salsa::retire_owned_values(&mut fixture.db, &[root.as_id()]).released,
-        1
+        3
     );
     fixture.restore();
-    assert_eq!(
-        instantiated_mir(&fixture.db, function, std::slice::from_ref(&local), shared),
-        original
-    );
-    assert_eq!(salsa::owner_index_stats(&mut fixture.db).memberships, 1);
+    assert_eq!(warm(&fixture.db), original);
+    assert_eq!(salsa::owner_index_stats(&mut fixture.db).memberships, 3);
     let mut change = FileChange::default();
     change.change_file(
         FileId::from_raw(1),
         Some("pub fn identity<T>(value: T) -> T { loop {} }".to_owned()),
     );
     change.apply(&mut fixture.db);
-    let edited = instantiated_mir(&fixture.db, function, std::slice::from_ref(&local), shared);
+    let edited = warm(&fixture.db);
     assert_ne!(edited, original);
-    assert_eq!(salsa::owner_index_stats(&mut fixture.db).memberships, 1);
+    assert_eq!(salsa::owner_index_stats(&mut fixture.db).memberships, 3);
     assert_eq!(
         salsa::retire_owned_values(&mut fixture.db, &[root.as_id()]).released,
-        1
+        3
     );
     salsa::activate_owner_roots(&mut fixture.db, &[root.as_id()]);
-    assert_eq!(
-        instantiated_mir(&fixture.db, function, &[local], shared),
-        edited
-    );
+    assert_eq!(warm(&fixture.db), edited);
 }
 
 #[test]
@@ -3263,4 +3277,206 @@ fn proc_macro_spans_in_expansions_follow_the_expansion_crate() {
         proc_macro_span(&fixture.db, span_key(&fixture.db, local)),
         expected
     );
+}
+
+#[test]
+fn combined_owner_families_scale_without_visiting_shared_or_historical_keys() {
+    use ra_ap_hir_ty::db::HirDatabase;
+    use ra_ap_hir_ty::next_solver::{DbInterner, GenericArg, GenericArgs, ParamEnv, Ty, TyKind};
+    let _fixture = FIXTURE.lock().unwrap();
+    for live in [1, 4, 16] {
+        for shared_count in [1, 8] {
+            for history in [0, 4] {
+                let mut fixture = Fixture::build_with_dependency(
+                    "pub struct Local;",
+                    live + history,
+                    "pub struct Shared; pub fn identity<T>(value: T) -> T { value }",
+                );
+                let shared = fixture.graph.clone().set_in_db(&mut fixture.db)[&fixture.dependency];
+                let function = declared_functions(&fixture.db, shared)[0];
+                let shared_type = fixture_adt(&fixture.db, shared);
+                let TyKind::Adt(adt, _) = shared_type.as_ref().kind() else {
+                    panic!("ADT")
+                };
+                let adt = adt.def_id();
+                let environment = ra_ap_hir_ty::ParamEnvAndCrate {
+                    param_env: ParamEnv::empty(),
+                    krate: shared,
+                }
+                .store();
+                let shared_types: Vec<_> = (0..shared_count)
+                    .map(|index| {
+                        Ty::new(
+                            DbInterner::new_no_crate(&fixture.db),
+                            TyKind::Tuple(ra_ap_hir_ty::next_solver::Tys::new_from_slice(
+                                &vec![shared_type.as_ref(); index],
+                            )),
+                        )
+                        .store()
+                    })
+                    .collect();
+                let shared_mir: Vec<_> = shared_types
+                    .iter()
+                    .map(|ty| {
+                        instantiated_mir(&fixture.db, function, std::slice::from_ref(ty), shared)
+                    })
+                    .collect();
+                let roots: Vec<_> = fixture.contexts.iter().map(AsId::as_id).collect();
+                salsa::activate_owner_roots(&mut fixture.db, &roots);
+                let local_types: Vec<_> = fixture
+                    .contexts
+                    .iter()
+                    .map(|&root| fixture_adt(&fixture.db, root))
+                    .collect();
+                let warm = |db: &RootDatabase, ty: &ra_ap_hir_ty::next_solver::StoredTy| {
+                    let mir = instantiated_mir(db, function, std::slice::from_ref(ty), shared);
+                    assert!(db.layout_of_ty(ty.clone(), environment.clone()).is_err());
+                    assert!(
+                        db.layout_of_adt(
+                            adt,
+                            GenericArgs::new_from_slice(&[GenericArg::from(ty.as_ref())]).store(),
+                            environment.clone()
+                        )
+                        .is_err()
+                    );
+                    mir
+                };
+                for (index, ty) in local_types[..history].iter().enumerate() {
+                    warm(&fixture.db, ty);
+                    let report =
+                        salsa::retire_owned_values(&mut fixture.db, &roots[index..index + 1]);
+                    assert_eq!((report.visited, report.released), (3, 3));
+                }
+                let expected: Vec<_> = local_types[history..]
+                    .iter()
+                    .map(|ty| warm(&fixture.db, ty))
+                    .collect();
+                for index in 0..live {
+                    let report = salsa::retire_owned_values(
+                        &mut fixture.db,
+                        &roots[history + index..history + index + 1],
+                    );
+                    assert_eq!(
+                        (report.visited, report.selected, report.released),
+                        (3, 3, 3)
+                    );
+                    let stats = salsa::owner_index_stats(&mut fixture.db);
+                    assert_eq!(
+                        (
+                            stats.memberships,
+                            stats.buckets,
+                            stats.shared,
+                            stats.unclassified
+                        ),
+                        ((live - index - 1) * 3, live - index - 1, shared_count, 0)
+                    );
+                    for next in index + 1..live {
+                        assert_eq!(
+                            warm(&fixture.db, &local_types[history + next]),
+                            expected[next]
+                        );
+                    }
+                    for (ty, expected) in shared_types.iter().zip(&shared_mir) {
+                        assert_eq!(
+                            instantiated_mir(
+                                &fixture.db,
+                                function,
+                                std::slice::from_ref(ty),
+                                shared
+                            ),
+                            *expected
+                        );
+                    }
+                    assert_eq!(salsa::owner_index_stats(&mut fixture.db), stats);
+                }
+                assert_eq!(salsa::owner_index_stats(&mut fixture.db).capacity, 0);
+                salsa::activate_owner_roots(&mut fixture.db, &roots[history..history + 1]);
+                assert_eq!(warm(&fixture.db, &local_types[history]), expected[0]);
+            }
+        }
+    }
+}
+
+#[cfg(feature = "hotpath-alloc")]
+#[test]
+fn published_hotpath_measures_classifier_traffic_and_skips_cache_hits()
+-> Result<(), Box<dyn std::error::Error>> {
+    let directory = tempfile::tempdir()?;
+    let status = std::process::Command::new(std::env::current_exe()?)
+        .args(["--exact", "owner_classifier_capture_fixture"])
+        .env("CORDIAL_OWNER_FIXTURE", directory.path())
+        .env("HOTPATH_ALLOC_CUMULATIVE", "false")
+        .env("HOTPATH_ALLOC_METRIC", "bytes")
+        .env_remove("CORDIAL_PERF_PROFILE_DIR")
+        .status()?;
+    assert!(status.success());
+    let captures = cordial::perf::read_captures(directory.path())?;
+    let manifest = captures[0].manifest.as_ref().ok_or("missing manifest")?;
+    assert_eq!(manifest.hotpath_version, "0.31.2");
+    let report: serde_json::Value =
+        serde_json::from_reader(std::fs::File::open(&manifest.report)?)?;
+    let functions = report["functions_alloc"]["data"]
+        .as_array()
+        .ok_or("missing allocations")?;
+    let row = functions
+        .iter()
+        .find(|row| {
+            row["name"]
+                .as_str()
+                .is_some_and(|name| name.ends_with("type_layout_owners"))
+        })
+        .ok_or("missing classifier")?;
+    assert_eq!(
+        row["calls"], 32,
+        "16 cold calls and 16 re-entries; 16 cache hits do not classify"
+    );
+    let traffic = cordial::perf::parse_bytes(row["total"].as_str().ok_or("missing bytes")?)
+        .ok_or("invalid bytes")?;
+    assert!(traffic > 0);
+    println!("published Hotpath classifier fixture: {row}");
+    Ok(())
+}
+
+#[cfg(feature = "hotpath-alloc")]
+#[test]
+fn owner_classifier_capture_fixture() -> Result<(), Box<dyn std::error::Error>> {
+    use cordial::profiling::{Capture, FinishReason, Identity};
+    use ra_ap_hir_ty::db::HirDatabase;
+    use ra_ap_hir_ty::next_solver::ParamEnv;
+    let Some(directory) = std::env::var_os("CORDIAL_OWNER_FIXTURE") else {
+        return Ok(());
+    };
+    let mut fixture = Fixture::build("pub struct Local;", 16);
+    let roots: Vec<_> = fixture.contexts.iter().map(AsId::as_id).collect();
+    salsa::activate_owner_roots(&mut fixture.db, &roots);
+    let arguments: Vec<_> = fixture
+        .contexts
+        .iter()
+        .map(|&root| {
+            (
+                fixture_adt(&fixture.db, root),
+                ra_ap_hir_ty::ParamEnvAndCrate {
+                    param_env: ParamEnv::empty(),
+                    krate: root,
+                }
+                .store(),
+            )
+        })
+        .collect();
+    let mut capture = Capture::start(std::path::Path::new(&directory), Identity::default())?;
+    for _ in 0..2 {
+        for (ty, env) in &arguments {
+            assert!(fixture.db.layout_of_ty(ty.clone(), env.clone()).is_err());
+        }
+    }
+    assert_eq!(
+        salsa::retire_owned_values(&mut fixture.db, &roots).released,
+        16
+    );
+    salsa::activate_owner_roots(&mut fixture.db, &roots);
+    for (ty, env) in &arguments {
+        assert!(fixture.db.layout_of_ty(ty.clone(), env.clone()).is_err());
+    }
+    capture.finish(FinishReason::Normal)?;
+    Ok(())
 }

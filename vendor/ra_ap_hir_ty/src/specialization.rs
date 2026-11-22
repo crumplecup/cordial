@@ -43,14 +43,17 @@ struct SpecializationKey {
 }
 
 pub(crate) fn register_query_ownership(db: &mut impl salsa::Database) {
+    salsa::register_query_ownership::<specializes_query, dyn HirDatabase>(db, specialization_owners);
+}
+
+#[hotpath::measure]
+fn specialization_owners(db: &dyn HirDatabase, id: salsa::Id) -> salsa::QueryOwnership {
     use salsa::plumbing::FromId;
-    salsa::register_query_ownership::<specializes_query, dyn HirDatabase>(db, |db, id| {
-        let key = SpecializationKey::from_id(id);
-        let mut owners = crate::query_ownership::ArgumentOwners::new(db);
-        owners.definition(key.specializing(db));
-        owners.definition(key.parent(db));
-        owners.finish()
-    });
+    let key = SpecializationKey::from_id(id);
+    let mut owners = crate::query_ownership::ArgumentOwners::new(db);
+    owners.definition(key.specializing(db));
+    owners.definition(key.parent(db));
+    owners.finish()
 }
 
 #[salsa::tracked(cycle_result = specializes_query_cycle, returns(copy))]

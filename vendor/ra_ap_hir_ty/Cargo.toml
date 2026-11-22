@@ -66,6 +66,11 @@ package = "ra_ap_hir_expand"
 version = "2.9.0"
 features = ["serde"]
 
+# Published consumer instrumentation; enabled by the application's Hotpath features.
+[dependencies.hotpath]
+version = "=0.31.2"
+default-features = false
+
 [dependencies.intern]
 version = "=0.0.358"
 package = "ra_ap_intern"

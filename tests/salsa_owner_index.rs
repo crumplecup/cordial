@@ -236,3 +236,47 @@ fn retirement_work_is_independent_of_shared_and_completed_history() {
         }
     }
 }
+
+#[salsa::tracked(returns(ref))]
+fn footprint(db: &dyn Database, arguments: Arguments<'_>) -> Vec<u32> {
+    // Keep the read set identical with and without the ownership callback.
+    let source = arguments.source(db);
+    std::hint::black_box(source.owners(db));
+    vec![*source.value(db); 16]
+}
+
+#[test]
+fn metadata_cost_uses_actual_records_and_owner_arrays() {
+    fn metadata(registered: bool, owner_count: usize) -> usize {
+        let mut db = Db::default();
+        if registered {
+            salsa::register_query_ownership::<footprint, dyn Database>(&mut db, owners);
+        }
+        let roots: Vec<_> = (0..owner_count)
+            .map(|_| Source::new(&db, vec![], 0).as_id())
+            .collect();
+        salsa::activate_owner_roots(&mut db, &roots);
+        let source = Source::new(&db, roots, 1);
+        footprint(&db, Arguments::new(&db, source, 0));
+        let report = <dyn Database>::memory_usage(&mut db);
+        let info = &report.queries["footprint"];
+        assert_eq!(info.count(), 1);
+        info.size_of_metadata()
+    }
+    let plain = metadata(false, 0);
+    let shared = metadata(true, 0);
+    let single = metadata(true, 1);
+    let pair = metadata(true, 2);
+    let layout = salsa::owner_index_layout();
+    assert!(shared >= plain + layout.canonical_record);
+    assert_eq!(single - shared, layout.root_id);
+    assert_eq!(pair - shared, 2 * layout.root_id);
+    assert_eq!(layout.root_id, std::mem::size_of::<Id>());
+    assert_eq!(
+        layout.reverse_entry,
+        std::mem::size_of::<(salsa::DatabaseKeyIndex, u64)>()
+    );
+    println!(
+        "owner metadata: unconfigured={plain}, shared={shared}, single={single}, pair={pair}; layout={layout:?}"
+    );
+}

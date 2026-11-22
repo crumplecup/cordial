@@ -1,6 +1,6 @@
 # Memory measurement and reduction using upstream Hotpath
 
-Status: **Upstream restoration, phases 3–4, narrow phase 5–6 reductions, phase 7 cold measurement review, getter scope reduction, query-owned RA definition maps and crate/tracked-output/module-declaration/item-tree retirement complete; other location/composite keys, bounded input/identity storage and stable IR identity remain, 2026-11-21.**
+Status: **Upstream restoration, phases 3–4, narrow phase 5–6 reductions, phase 7 cold measurement review, getter scope reduction, query-owned RA definition maps, direct-key retirement and Salsa-native ownership for all nine remaining composite families complete; bounded input/identity storage and stable IR identity remain, 2026-11-22.**
 The immediate checkpoints restored published Hotpath with focused consumer
 tests and removed the graph-sized serialization copy. Existing measurement
 gaps are accepted and documented; they do not block application improvements.
@@ -1524,16 +1524,16 @@ would retire shared dependency work. An index retains metadata, but that alone
 does not justify rejecting it: compare its cost with repeated classification,
 retirement work and the payload memory it enables us to release.
 
-The proposed direction is a Salsa-native owner index, detailed below. It
+The implemented direction is a Salsa-native owner index, detailed below. It
 supersedes the earlier preference for enumerating argument records at every
 retirement. Ordinary public interner `entries()` is unsuitable even as a
 production fallback because it marks enumerated slots current. Composite-key
-retirement remains **incomplete** until ownership, lifecycle and coverage checks
-below pass.
+retirement is **complete for these nine families** following the ownership,
+lifecycle and coverage checks below. Input/identity storage remains separate.
 
 ### Salsa-native owner index
 
-**Status: checkpoints 1-4 implemented; final combined scaling and overhead checks remain.**
+**Status: all five checkpoints implemented and gated, 2026-11-22.**
 The design started from `af18e87f`. This extends the existing patched Salsa
 runtime and RA crates; it does not change or vendor Hotpath, add another
 profiler, or authorize a full-program measurement.
@@ -1759,8 +1759,8 @@ Retirement reads the unclassified count directly rather than computing index
 statistics over historical roots. Runtime callbacks and membership handles are
 excluded from persistence; incompatible cache versions are rejected explicitly.
 RA argument classification, production root registration and loader retirement
-are implemented, as are all nine composite-family policies. Final combined
-scaling and upstream Hotpath checks remain.
+are implemented, as are all nine composite-family policies. Combined scaling,
+encoded restore, actual metadata sizes and upstream Hotpath checks also pass.
 
 Use test-only independent expected sets or a bounded reference scan to check
 the index. Do not retain a second production ownership registry or enumeration
@@ -1817,13 +1817,69 @@ varies 1/4/16 live contexts, 1/64 shared entries and 0/32 completed historical
 contexts: each fixed-size context must visit exactly two memos, preserving
 unfinished/shared work and leaving zero empty bucket capacity at completion.
 
-
 Validation: all 55 combined Nextest tests across `ra_def_map_storage`,
 `context_parses`, `salsa_owner_index` and `salsa_owner_lifecycle` passed, followed
 by the additional macro-generated definition-site span fixture. Formatting,
 all-features/all-targets Clippy with warnings denied and diff checks pass.
 No Cordial self-execution or full-program measurement was performed.
 
+
+#### Scaling and measurement checkpoint
+
+The runtime matrix varies 1/4/16 live contexts, 1/64 shared entries and 0/32
+completed historical contexts. A combined RA matrix varies 1/4/16 live contexts,
+1/8 shared instantiations and 0/4 completed historical contexts. Each context's
+three composite payloads (body MIR, type layout and ADT layout) require exactly
+three reverse-link visits and selections, independent of the other populations.
+Unfinished and shared results remain usable without adding links; re-entry
+reproduces the original MIR, and successful retirement frees empty bucket
+capacity. The combined restore/edit/re-entry fixture covers all three families
+and observes changed MIR after a source edit.
+
+A separate 1/4/16-context by 1/32-shared-entry matrix restores persisted payloads
+as encoded RAM bytes. Retiring one context visits, selects and spills exactly
+one payload without decoding, executing or reclassifying any query. Re-entry
+fetches the original bytes; unrelated shared values remain available.
+
+All nine policies have explicit RA fixtures: body MIR and closure MIR; constant
+and anonymous-constant evaluation; type and ADT layout; associated shorthand;
+specialization; and ordinary, copied and macro-generated definition-site spans.
+Missing copied-source associations fail closed and tracked association repair
+reclassifies them. Runtime fixtures separately cover unregistered roots,
+refusals, spill failures, cancellation, cycles and replaced generations.
+
+The structural fixture measures actual target representation through Salsa's
+existing memory report and `owner_index_layout()`. On this x86-64 build, the
+representative memo's metadata is 56 bytes without ownership, 160 with a shared
+classification, 168 with one owner and 176 with two. The canonical ownership
+record is 72 bytes; each stored owner ID is 8 bytes, each reverse-entry element
+24 bytes, a root-map element 48 bytes and the fixed index state 64 bytes. Hash
+table spare capacity/control bytes, Arc and allocator headers, dependency
+storage and argument records are additional. These are representation sizes,
+not a claim about allocator occupancy or retained RSS.
+
+All nine classifiers carry consumer-side `#[hotpath::measure]` markers in the
+existing patched RA crates. They depend on the unchanged published Hotpath
+`=0.31.2`, with instrumentation enabled by the application's existing features.
+The isolated layout fixture captures 16 cold classifications, 16 cache hits and
+16 classifications after retirement/re-entry. Published Hotpath reports exactly
+32 classifier calls, averaging **92 B of allocation traffic per call** (2.9 KB
+reported total). Cache hits add no classifier calls. This simple local-type
+fixture measures classifier traffic, not payload size, index publication cost,
+complex-type costs or whole-program RAM. Its capture uses a disposable test
+directory; no production measurement directory or baseline was created.
+
+
+Validation: **146 distinct focused Nextest tests passed across 16 binaries**
+with `hotpath-alloc`. The broad invocation passed 144 tests; its profiling
+coverage assertion required a test correction to follow local untracked
+forwarders to measured regions. The corrected assertion and new negative/cycle
+regression test both passed. This correction preserves the requirement that
+each tracked query is measured and does not cross an unmeasured tracked-query
+boundary to claim coverage. Shared measured callees aggregate counts rather
+than identify each caller's executions. Formatting, all-features/all-targets
+Clippy with warnings denied and diff checks pass. No Cordial self-execution or
+full-program measurement was run.
 
 #### Limits and subsequent decision
 

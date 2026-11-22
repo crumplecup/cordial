@@ -92,6 +92,30 @@ pub struct OwnerIndexStats {
     pub unclassified: usize,
 }
 
+/// Sizes of the actual ownership metadata types on this build's target.
+///
+/// These describe representation, not allocator overhead or retained RSS. Hash
+/// table control bytes, spare slots, root ID arrays and Arc headers are separate.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct OwnerIndexLayout {
+    pub canonical_record: usize,
+    pub root_id: usize,
+    pub root_state: usize,
+    pub reverse_entry: usize,
+    pub index_state: usize,
+}
+
+/// Inspect metadata representation without sampling allocations or scanning memos.
+pub fn owner_index_layout() -> OwnerIndexLayout {
+    OwnerIndexLayout {
+        canonical_record: std::mem::size_of::<MemoOwnership>(),
+        root_id: std::mem::size_of::<Id>(),
+        root_state: std::mem::size_of::<(Id, Root)>(),
+        reverse_entry: std::mem::size_of::<(DatabaseKeyIndex, u64)>(),
+        index_state: std::mem::size_of::<OwnerIndex>(),
+    }
+}
+
 #[derive(Default)]
 struct Root {
     retired: bool,

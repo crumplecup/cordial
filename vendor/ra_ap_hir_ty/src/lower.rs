@@ -2112,17 +2112,20 @@ fn resolve_type_param_assoc_type_shorthand_for<'db>(
 }
 
 pub(crate) fn register_query_ownership(db: &mut impl salsa::Database) {
-    use salsa::plumbing::FromId;
     salsa::register_query_ownership::<resolve_type_param_assoc_type_shorthand, dyn HirDatabase>(
         db,
-        |db, id| {
-            let key = AssocTypeShorthandKey::from_id(id);
-            let mut owners = crate::query_ownership::ArgumentOwners::new(db);
-            owners.definition(key.def(db));
-            owners.definition(key.param(db).parent());
-            owners.finish()
-        },
+        shorthand_owners,
     );
+}
+
+#[hotpath::measure]
+fn shorthand_owners(db: &dyn HirDatabase, id: salsa::Id) -> salsa::QueryOwnership {
+    use salsa::plumbing::FromId;
+    let key = AssocTypeShorthandKey::from_id(id);
+    let mut owners = crate::query_ownership::ArgumentOwners::new(db);
+    owners.definition(key.def(db));
+    owners.definition(key.param(db).parent());
+    owners.finish()
 }
 
 #[tracing::instrument(skip(db), ret)]

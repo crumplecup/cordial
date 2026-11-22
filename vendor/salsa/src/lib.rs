@@ -340,8 +340,8 @@ pub use self::id::Id;
 pub use self::input::setter::Setter;
 pub use self::key::DatabaseKeyIndex;
 pub use self::ownership::{
-    OwnerIndexStats, OwnerRetirementReport, QueryOwnership, activate_owner_roots, is_owner_root,
-    owner_index_stats, register_query_ownership, retire_owned_values,
+    OwnerIndexLayout, OwnerIndexStats, OwnerRetirementReport, QueryOwnership, activate_owner_roots,
+    is_owner_root, owner_index_layout, owner_index_stats, register_query_ownership, retire_owned_values,
 };
 pub use self::return_mode::SalsaAsDeref;
 pub use self::return_mode::SalsaAsRef;

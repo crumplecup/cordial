@@ -572,3 +572,101 @@ fn immediate_cycle_fallback_has_one_current_membership() {
     assert_eq!(salsa::retire_owned_values(&mut db, &[root]).released, 1);
     assert_eq!(salsa::owner_index_stats(&mut db).capacity, 0);
 }
+
+#[test]
+fn restored_encoded_population_retires_by_owner_without_decoding_or_scanning_neighbors() {
+    let _fixture = FIXTURE.lock().unwrap();
+    let _reset = Reset;
+    salsa::set_spill_store(Some(Arc::new(Store::default())));
+    for contexts in [1, 4, 16] {
+        for shared_count in [1, 32] {
+            let mut db = Db::default();
+            register(&mut db);
+            let roots: Vec<_> = (0..contexts)
+                .map(|_| Source::new(&db, vec![], 0).as_id())
+                .collect();
+            salsa::activate_owner_roots(&mut db, &roots);
+            let local_keys: Vec<_> = roots
+                .iter()
+                .enumerate()
+                .map(|(index, &root)| {
+                    let source = Source::new(&db, vec![root], index as u8);
+                    let key = Arguments::new(&db, source, 0);
+                    persisted(&db, key);
+                    key.as_id()
+                })
+                .collect();
+            let source = Source::new(&db, vec![], 23);
+            let shared_keys: Vec<_> = (0..shared_count)
+                .map(|offset| {
+                    let key = Arguments::new(&db, source, offset);
+                    persisted(&db, key);
+                    key.as_id()
+                })
+                .collect();
+            let saved = rmp_serde::to_vec(&<dyn Database>::as_serialize(&mut db)).unwrap();
+            let before = (
+                DECODES.load(Ordering::SeqCst),
+                EXECUTIONS.load(Ordering::SeqCst),
+                CLASSIFICATIONS.load(Ordering::SeqCst),
+            );
+            let mut restored = Db::default();
+            <dyn Database>::deserialize(
+                &mut restored,
+                &mut rmp_serde::Deserializer::new(saved.as_slice()),
+            )
+            .unwrap();
+            register(&mut restored);
+            assert_eq!(
+                salsa::owner_index_stats(&mut restored).memberships,
+                contexts
+            );
+            for (index, &root) in roots.iter().enumerate() {
+                let report = salsa::retire_owned_values(&mut restored, &[root]);
+                assert_eq!(
+                    (
+                        report.visited,
+                        report.selected,
+                        report.released,
+                        report.spill.written
+                    ),
+                    (1, 1, 1, 1)
+                );
+                let stats = salsa::owner_index_stats(&mut restored);
+                assert_eq!(
+                    (stats.memberships, stats.shared),
+                    (contexts - index - 1, shared_count as usize)
+                );
+            }
+            assert_eq!(salsa::owner_index_stats(&mut restored).capacity, 0);
+            assert_eq!(
+                (
+                    DECODES.load(Ordering::SeqCst),
+                    EXECUTIONS.load(Ordering::SeqCst),
+                    CLASSIFICATIONS.load(Ordering::SeqCst)
+                ),
+                before
+            );
+            for (index, &key) in local_keys.iter().enumerate() {
+                salsa::activate_owner_roots(&mut restored, &roots[index..index + 1]);
+                assert_eq!(
+                    persisted(&restored, Arguments::from_id(key)).bytes,
+                    vec![index as u8; 4096]
+                );
+            }
+            for (offset, &key) in shared_keys.iter().enumerate() {
+                assert_eq!(
+                    persisted(&restored, Arguments::from_id(key)).bytes,
+                    vec![23 + offset as u8; 4096]
+                );
+            }
+            assert_eq!(
+                (
+                    EXECUTIONS.load(Ordering::SeqCst),
+                    CLASSIFICATIONS.load(Ordering::SeqCst)
+                ),
+                (before.1, before.2)
+            );
+        }
+    }
+}

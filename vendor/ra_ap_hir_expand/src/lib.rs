@@ -1024,32 +1024,35 @@ pub struct ProcMacroSpanKey {
 
 /// Register definition-site retention without parsing or expanding the source.
 pub fn register_query_ownership(db: &mut impl salsa::Database) {
-    salsa::register_query_ownership::<proc_macro_span, dyn SourceDatabase>(db, |db, id| {
-        let key = ProcMacroSpanKey::from_id(id);
-        match key.ast(db).file_id {
-            HirFileId::MacroFile(call) => {
-                let root = call.loc(db).krate.as_id();
-                if salsa::is_owner_root(db, root) {
-                    salsa::QueryOwnership::owned([root])
-                } else {
-                    salsa::QueryOwnership::Shared
-                }
-            }
-            HirFileId::FileId(file) => {
-                let root = db.file_source_root(file.file_id(db)).source_root_id(db);
-                if root.0 < base_db::TOOL_SOURCE_ROOTS {
-                    return salsa::QueryOwnership::Shared;
-                }
-                let crates = db.source_root(root).crates(db);
-                if crates.is_empty() {
-                    return salsa::QueryOwnership::Unclassified;
-                }
-                salsa::QueryOwnership::owned(
-                    crates.iter().map(AsId::as_id).filter(|&id| salsa::is_owner_root(db, id)),
-                )
+    salsa::register_query_ownership::<proc_macro_span, dyn SourceDatabase>(db, span_owners);
+}
+
+#[hotpath::measure]
+fn span_owners(db: &dyn SourceDatabase, id: salsa::Id) -> salsa::QueryOwnership {
+    let key = ProcMacroSpanKey::from_id(id);
+    match key.ast(db).file_id {
+        HirFileId::MacroFile(call) => {
+            let root = call.loc(db).krate.as_id();
+            if salsa::is_owner_root(db, root) {
+                salsa::QueryOwnership::owned([root])
+            } else {
+                salsa::QueryOwnership::Shared
             }
         }
-    });
+        HirFileId::FileId(file) => {
+            let root = db.file_source_root(file.file_id(db)).source_root_id(db);
+            if root.0 < base_db::TOOL_SOURCE_ROOTS {
+                return salsa::QueryOwnership::Shared;
+            }
+            let crates = db.source_root(root).crates(db);
+            if crates.is_empty() {
+                return salsa::QueryOwnership::Unclassified;
+            }
+            salsa::QueryOwnership::owned(
+                crates.iter().map(AsId::as_id).filter(|&id| salsa::is_owner_root(db, id)),
+            )
+        }
+    }
 }
 
 fn proc_macro_span_for_ast(db: &dyn SourceDatabase, ast: AstId<ast::Fn>) -> Span {

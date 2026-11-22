@@ -58,6 +58,7 @@ pub fn register(db: &mut impl salsa::Database) {
     );
 }
 
+#[hotpath::measure]
 fn mir_owners(db: &dyn HirDatabase, id: Id) -> QueryOwnership {
     let key = MonomorphizedMirBodyKey::from_id(id);
     let mut owners = ArgumentOwners::new(db);
@@ -67,6 +68,7 @@ fn mir_owners(db: &dyn HirDatabase, id: Id) -> QueryOwnership {
     owners.finish()
 }
 
+#[hotpath::measure]
 fn closure_owners(db: &dyn HirDatabase, id: Id) -> QueryOwnership {
     let key = crate::mir::MonomorphizedClosureKey::from_id(id);
     let mut owners = ArgumentOwners::new(db);
@@ -76,6 +78,7 @@ fn closure_owners(db: &dyn HirDatabase, id: Id) -> QueryOwnership {
     owners.finish()
 }
 
+#[hotpath::measure]
 fn const_owners(db: &dyn HirDatabase, id: Id) -> QueryOwnership {
     let key = crate::consteval::ConstEvalKey::from_id(id);
     let mut owners = ArgumentOwners::new(db);
@@ -87,6 +90,7 @@ fn const_owners(db: &dyn HirDatabase, id: Id) -> QueryOwnership {
     owners.finish()
 }
 
+#[hotpath::measure]
 fn anon_const_owners(db: &dyn HirDatabase, id: Id) -> QueryOwnership {
     let key = crate::consteval::AnonConstEvalKey::from_id(id);
     let mut owners = ArgumentOwners::new(db);
@@ -98,6 +102,7 @@ fn anon_const_owners(db: &dyn HirDatabase, id: Id) -> QueryOwnership {
     owners.finish()
 }
 
+#[hotpath::measure]
 fn type_layout_owners(db: &dyn HirDatabase, id: Id) -> QueryOwnership {
     let key = crate::layout::TypeLayoutKey::from_id(id);
     let mut owners = ArgumentOwners::new(db);
@@ -106,6 +111,7 @@ fn type_layout_owners(db: &dyn HirDatabase, id: Id) -> QueryOwnership {
     owners.finish()
 }
 
+#[hotpath::measure]
 fn adt_layout_owners(db: &dyn HirDatabase, id: Id) -> QueryOwnership {
     let key = crate::layout::AdtLayoutKey::from_id(id);
     let mut owners = ArgumentOwners::new(db);

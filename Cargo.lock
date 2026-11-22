@@ -1823,6 +1823,7 @@ version = "0.0.358"
 dependencies = [
  "cov-mark",
  "either",
+ "hotpath",
  "itertools",
  "ra_ap_base_db",
  "ra_ap_cfg",
@@ -1852,6 +1853,7 @@ dependencies = [
  "cov-mark",
  "either",
  "ena",
+ "hotpath",
  "indexmap",
  "itertools",
  "la-arena",
