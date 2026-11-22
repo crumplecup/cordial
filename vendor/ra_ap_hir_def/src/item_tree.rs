@@ -598,7 +598,7 @@ pub struct Enum {
     pub(crate) visibility: RawVisibilityId,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum FieldsShape {
     Record,
     Tuple,

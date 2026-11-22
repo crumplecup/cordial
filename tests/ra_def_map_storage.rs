@@ -6,11 +6,13 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, Weak};
 
 use ra_ap_cfg::CfgOptions;
+use ra_ap_hir_def::expr_store::body::Body;
 use ra_ap_hir_def::nameres::{
     crate_declared_query_keys, crate_def_map, stable::def_map_fingerprint,
 };
 use ra_ap_hir_def::resolver::HasResolver;
-use ra_ap_hir_def::{AssocItemId, FunctionId, ModuleDefId};
+use ra_ap_hir_def::signatures::VariantFields;
+use ra_ap_hir_def::{AdtId, AssocItemId, EnumVariantId, FunctionId, ModuleDefId};
 use ra_ap_hir_expand::intern::Symbol;
 use ra_ap_ide_db::RootDatabase;
 use ra_ap_ide_db::base_db::{
@@ -344,6 +346,266 @@ fn held_item_values(db: &mut RootDatabase, functions: &[FunctionId]) -> u64 {
         &mut |_, count| held += count,
     );
     held
+}
+
+fn declared_variants(db: &RootDatabase, krate: Crate) -> (Vec<EnumVariantId>, usize) {
+    let mut variants = Vec::new();
+    let mut inactive = 0;
+    for (_, module) in crate_def_map(db, krate).modules() {
+        for def in module.scope.declarations() {
+            if let ModuleDefId::AdtId(AdtId::EnumId(id)) = def {
+                let (members, diagnostics) = id.enum_variants_with_diagnostics(db);
+                variants.extend(members.variants.values().map(|(id, _)| *id));
+                inactive += diagnostics.len();
+            }
+        }
+    }
+    variants.sort_unstable_by_key(|id| id.as_id().as_bits());
+    (variants, inactive)
+}
+
+#[derive(Clone, Default)]
+struct VariantExecutions(Arc<AtomicUsize>);
+
+impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for VariantExecutions {
+    fn on_new_span(
+        &self,
+        attrs: &tracing::span::Attributes<'_>,
+        _: &tracing::Id,
+        _: tracing_subscriber::layer::Context<'_, S>,
+    ) {
+        if attrs.metadata().name() == "enum_variants_query" {
+            self.0.fetch_add(1, Ordering::SeqCst);
+        }
+    }
+}
+
+struct VariantValues {
+    body: triomphe::Arc<Body>,
+    fields: triomphe::Arc<VariantFields>,
+}
+
+impl VariantValues {
+    fn assert_held(&self, expected: bool) {
+        // Triomphe has no weak pointers. Exclude this test's one retained witness;
+        // count == 1 proves that no database owner still holds the original value.
+        assert_eq!(triomphe::Arc::strong_count(&self.body) > 1, expected);
+        assert_eq!(triomphe::Arc::strong_count(&self.fields) > 1, expected);
+    }
+}
+
+fn warm_variants(db: &RootDatabase, variants: &[EnumVariantId]) -> Vec<VariantValues> {
+    variants
+        .iter()
+        .map(|&variant| {
+            let body = Body::with_source_map(db, variant.into());
+            variant.fields(db);
+            let fields = VariantFields::with_source_map(db, variant.into());
+            VariantValues {
+                body: triomphe::Arc::clone(&body.0),
+                fields: triomphe::Arc::clone(&fields.0),
+            }
+        })
+        .collect()
+}
+
+fn held_variant_values(db: &mut RootDatabase, variants: &[EnumVariantId]) -> u64 {
+    let keys: Vec<_> = variants.iter().map(AsId::as_id).collect();
+    let mut held = 0;
+    db.values_in_memory_for_inputs(
+        &keys,
+        false,
+        true,
+        &[
+            "Body::with_source_map_",
+            "VariantFields::of_",
+            "VariantFields::with_source_map_",
+        ],
+        &mut |_, count| held += count,
+    );
+    held
+}
+
+#[test]
+fn enum_variants_retire_real_bodies_and_fields_without_collecting_lists() {
+    let _fixture = FIXTURE.lock().unwrap();
+    let _reset = ResetStore;
+    for count in [1, 4, 16] {
+        let mut source = String::from(
+            "extern crate unused; pub use unused::Shared;\n\
+             macro_rules! make { () => { pub enum Generated { Made = 2 } } } make!();\n\
+             pub enum Shapes { Unit, Tuple(u8), Record { value: u8 } }\n\
+             pub enum Local { Default = 1,\n",
+        );
+        for variant in 0..count {
+            source.push_str(&format!(
+                "#[cfg(variant = \"{variant}\")] Selected{variant} = {},\n",
+                variant + 2
+            ));
+        }
+        source.push_str("}\n");
+        for restored in [false, true] {
+            salsa::set_spill_store(Some(Arc::new(Store::default())));
+            let executions = VariantExecutions::default();
+            let subscriber = tracing_subscriber::registry().with(executions.clone());
+            tracing::subscriber::with_default(subscriber, || {
+                let mut fixture = Fixture::build_with_dependency(
+                    &source,
+                    count,
+                    "#[repr(u8)] pub enum Shared { Unit = 3, Tuple(u8) = 4 }",
+                );
+                fixture.add_dependency();
+                let dependency = ra_ap_ide_db::base_db::all_crates(&fixture.db)
+                    .iter()
+                    .copied()
+                    .find(|krate| *krate != fixture.krate && !fixture.contexts.contains(krate))
+                    .unwrap();
+                let (ordinary, inactive) = declared_variants(&fixture.db, fixture.krate);
+                assert_eq!(ordinary.len(), 5);
+                assert_eq!(inactive, count);
+                let variants: Vec<_> = fixture
+                    .contexts
+                    .iter()
+                    .map(|&krate| {
+                        let (variants, inactive) = declared_variants(&fixture.db, krate);
+                        assert_eq!(variants.len(), 6);
+                        assert_eq!(inactive, count - 1);
+                        variants
+                    })
+                    .collect();
+                let (shared, _) = declared_variants(&fixture.db, dependency);
+                assert_eq!(shared.len(), 2);
+                for items in &variants {
+                    warm_variants(&fixture.db, items);
+                    warm_variants(&fixture.db, &shared);
+                }
+                warm_variants(&fixture.db, &ordinary);
+                let collected = executions.0.load(Ordering::SeqCst);
+                assert!(collected > 0);
+                if restored {
+                    fixture.restore();
+                }
+                let ordinary_values = warm_variants(&fixture.db, &ordinary);
+                let shared_values = warm_variants(&fixture.db, &shared);
+                let values: Vec<_> = variants
+                    .iter()
+                    .map(|items| warm_variants(&fixture.db, items))
+                    .collect();
+                for (index, &krate) in fixture.contexts.iter().enumerate() {
+                    for _ in 0..2 {
+                        let keys = declared_context_keys(&mut fixture.db, krate);
+                        assert!(variants[index].iter().all(|id| keys.contains(&id.as_id())));
+                        assert!(
+                            ordinary
+                                .iter()
+                                .chain(&shared)
+                                .all(|id| !keys.contains(&id.as_id()))
+                        );
+                        fixture.db.values_in_memory_for_inputs(
+                            &keys,
+                            true,
+                            false,
+                            &[],
+                            &mut |_, _| {},
+                        );
+                        fixture.db.spill_persisted_for_inputs(&keys);
+                        assert_eq!(held_variant_values(&mut fixture.db, &variants[index]), 0);
+                        let mut lists = 0;
+                        fixture.db.values_in_memory_for_inputs(
+                            &keys,
+                            false,
+                            true,
+                            &["EnumVariants::of_"],
+                            &mut |_, count| lists += count,
+                        );
+                        assert_eq!(
+                            lists, 0,
+                            "completed variant lists are encoded, not resident"
+                        );
+                    }
+                    for (other, values) in values.iter().enumerate() {
+                        for value in values {
+                            value.assert_held(other > index);
+                        }
+                    }
+                    for value in ordinary_values.iter().chain(&shared_values) {
+                        value.assert_held(true);
+                    }
+                    assert_eq!(held_variant_values(&mut fixture.db, &ordinary), 15);
+                    assert_eq!(held_variant_values(&mut fixture.db, &shared), 6);
+                }
+                assert_eq!(executions.0.load(Ordering::SeqCst), collected);
+                for (index, &krate) in fixture.contexts.iter().enumerate() {
+                    let (current, inactive) = declared_variants(&fixture.db, krate);
+                    assert_eq!(current, variants[index]);
+                    assert_eq!(inactive, count - 1);
+                    warm_variants(&fixture.db, &current);
+                    assert_eq!(held_variant_values(&mut fixture.db, &current), 18);
+                }
+                assert_eq!(
+                    executions.0.load(Ordering::SeqCst),
+                    collected,
+                    "selection and re-entry reuse saved variant lists"
+                );
+            });
+        }
+    }
+}
+
+#[test]
+fn enum_variant_selection_skips_untouched_and_stale_lists() {
+    let _fixture = FIXTURE.lock().unwrap();
+    let _reset = ResetStore;
+    for restored in [false, true] {
+        salsa::set_spill_store(Some(Arc::new(Store::default())));
+        let executions = VariantExecutions::default();
+        let subscriber = tracing_subscriber::registry().with(executions.clone());
+        tracing::subscriber::with_default(subscriber, || {
+            let mut fixture = Fixture::build("pub enum Local { Original = 1 }", 1);
+            let context = fixture.contexts[0];
+            crate_def_map(&fixture.db, context);
+            if restored {
+                fixture.restore();
+            }
+            declared_context_keys(&mut fixture.db, context);
+            assert_eq!(executions.0.load(Ordering::SeqCst), 0);
+            let (previous, _) = declared_variants(&fixture.db, context);
+            assert_eq!(previous.len(), 1);
+            warm_variants(&fixture.db, &previous);
+            assert_eq!(executions.0.load(Ordering::SeqCst), 1);
+            let mut change = FileChange::default();
+            change.change_file(
+                FileId::from_raw(2),
+                Some("pub enum Local { Replacement = 2 }".into()),
+            );
+            change.apply(&mut fixture.db);
+            let keys = declared_context_keys(&mut fixture.db, context);
+            assert_eq!(
+                executions.0.load(Ordering::SeqCst),
+                1,
+                "retirement does not validate stale variant lists"
+            );
+            assert!(previous.iter().all(|id| !keys.contains(&id.as_id())));
+            let (current, _) = declared_variants(&fixture.db, context);
+            assert_eq!(current.len(), 1);
+            assert_ne!(current, previous);
+            let values = warm_variants(&fixture.db, &current);
+            let keys = declared_context_keys(&mut fixture.db, context);
+            assert!(current.iter().all(|id| keys.contains(&id.as_id())));
+            assert!(previous.iter().all(|id| !keys.contains(&id.as_id())));
+            fixture
+                .db
+                .values_in_memory_for_inputs(&keys, true, false, &[], &mut |_, _| {});
+            fixture.db.spill_persisted_for_inputs(&keys);
+            assert_eq!(held_variant_values(&mut fixture.db, &current), 0);
+            for value in values {
+                value.assert_held(false);
+            }
+            let collected = executions.0.load(Ordering::SeqCst);
+            assert_eq!(declared_variants(&fixture.db, context).0, current);
+            assert_eq!(executions.0.load(Ordering::SeqCst), collected);
+        });
+    }
 }
 
 #[test]

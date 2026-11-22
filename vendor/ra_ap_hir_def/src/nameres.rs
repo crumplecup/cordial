@@ -415,7 +415,7 @@ pub fn crate_def_map(db: &dyn SourceDatabase, crate_id: Crate) -> &DefMap {
 ///
 /// Read the persisted owner directly so restoring a context does not recreate the
 /// external-map projection just to enumerate these keys. The owner may decode or
-/// recompute on this read. Member lists are read only when their existing memos
+/// recompute on this read. Member/variant lists are read only when their existing memos
 /// are verified and final in this revision, including encoded saved results.
 /// Absent or stale member queries are not executed just to retire their values.
 pub fn crate_declared_query_keys(
@@ -432,16 +432,24 @@ pub fn crate_declared_query_keys(
             })
             .chain(module.scope.impls().map(Either::Right))
     }).collect();
-    let owner_keys: Vec<_> = owners.iter()
+    let enums: Vec<_> = map.modules()
+        .flat_map(|(_, module)| module.scope.declarations())
+        .filter_map(|def| match def {
+            crate::ModuleDefId::AdtId(crate::AdtId::EnumId(id)) => Some(id),
+            _ => None,
+        })
+        .collect();
+    let mut owner_keys: Vec<_> = owners.iter()
         .map(|owner| match owner {
             Either::Left(id) => id.as_id(),
             Either::Right(id) => id.as_id(),
         })
         .collect();
+    owner_keys.extend(enums.iter().map(|id| id.as_id()));
     let cached: rustc_hash::FxHashSet<_> = db
         .cached_query_keys(
             &owner_keys,
-            &["TraitItems::query_with_diagnostics_", "ImplItems::of_"],
+            &["TraitItems::query_with_diagnostics_", "ImplItems::of_", "EnumVariants::of_"],
         )
         .into_iter()
         .collect();
@@ -459,6 +467,11 @@ pub fn crate_declared_query_keys(
         };
         keys.extend(items.iter().map(|(_, id)| id.as_id()));
         keys.extend(calls.iter().map(|(_, id)| id.as_id()));
+    }
+    for id in enums {
+        if cached.contains(&id.as_id()) {
+            keys.extend(id.enum_variants(db).variants.values().map(|(id, _)| id.as_id()));
+        }
     }
     keys
 }

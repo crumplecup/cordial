@@ -1047,25 +1047,27 @@ fn lower_fields<Field: ast::HasAttrs + ast::HasVisibility>(
     Some((arena, store, source_map))
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct InactiveEnumVariantCode {
     pub cfg: CfgExpr,
     pub opts: CfgOptions,
     pub ast_id: span::FileAstId<ast::Variant>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct EnumVariants {
     pub variants: FxIndexMap<Name, (EnumVariantId, FieldsShape)>,
 }
 
 #[salsa::tracked]
 impl EnumVariants {
-    #[salsa::tracked(returns(ref))]
+    #[salsa::tracked(returns(ref), persist)]
+    #[allow(unused_lifetimes, reason = "Salsa's persisted method input assertion adds a lifetime to lifetime-free IDs")]
     pub(crate) fn of(
         db: &dyn SourceDatabase,
         e: EnumId,
     ) -> (EnumVariants, ThinVec<InactiveEnumVariantCode>) {
+        let _p = tracing::info_span!("enum_variants_query").entered();
         let loc = e.lookup(db);
         let source = loc.source(db);
         let ast_id_map = source.file_id.ast_id_map(db);

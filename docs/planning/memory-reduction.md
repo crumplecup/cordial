@@ -783,14 +783,14 @@ text allocation. Each copied crate still has separate definition maps and
 context-dependent query results. The last-consumer boundary now follows
 observability, planning and optional persistence fingerprint preparation.
 Retirement now runs there for copied crate keys, module-scope declaration keys,
-members recorded in already-current trait/impl query results, and tracked
-identities created by queries on those keys, transitively. Selected non-persisted
-values are dropped, and persisted values spill when a run cache is available,
-even without memory pressure. Enum variants, non-exported legacy macro
+members and variants recorded in already-current trait/impl/enum query results,
+and tracked identities created by queries on those keys, transitively. Selected
+non-persisted values are dropped, and persisted values spill when a run cache
+is available, even without memory pressure. Non-exported legacy macro
 definitions, body-local declarations and composite arguments are not yet
 selected through their owners. Selection reads the current map and skips
-absent, stale or provisional member results; removed declarations from earlier
-revisions are not enumerated.
+absent, stale or provisional member/variant results; removed declarations from
+earlier revisions are not enumerated.
 The existing broader eviction hook remains conditional and does not select
 individual contexts.
 Removing a `ContextCrates` handle alone would not free
@@ -1278,6 +1278,48 @@ declarations, composite arguments, missing producer records after restore and
 input/identity/header storage remain separate gaps. These fixtures establish
 memo residency and original-object release, not retained-byte or whole-program
 RSS savings.
+
+**Enum-variant selection design, 2026-11-21.** Extend the existing declaration
+selection with locally declared enum owners, using the same current/final memo
+selector as associated items. Persist the existing `EnumVariants` result and
+inactive-variant diagnostics, then read only already-current results to select
+their interned variant IDs. Do not reconstruct variants from syntax, follow
+imported enum names or collect absent/stale lists at retirement. Cover unit,
+tuple, record, cfg-gated and macro-generated variants in cold/restored 1/4/16
+families. Check actual discriminant-body and field-owner reference counts,
+shared work, repeated retirement, same-ID re-entry, inactive diagnostics and
+edits before the next commit.
+
+**Enum-variant retirement checkpoint, 2026-11-21.** Local enum owners now use
+the same current/final exact-key selector as trait/impl owners. Their existing
+variant lists and inactive-variant diagnostics persist, so selecting variant
+IDs after restoration can decode the existing result without collecting it.
+Imported/re-exported dependency enums do not become local owners.
+
+The native fixture covers 1/4/16 cold/restored families with unit, tuple,
+record, cfg-gated and macro-generated variants. It warms actual RA
+discriminant-body and field queries, including their field projection, and
+keeps one test reference to each original body and field object. After each
+retirement those test references are the sole remaining owners of completed
+objects: RA has released every reference to them. Ordinary, shared and
+uncompleted-copy objects retain database owners. Repeated selection/retirement
+and same-ID re-entry preserve variant lists and inactive diagnostics without
+collection. Separate edit checks skip untouched/stale lists, then select the
+current replacement variants once normal analysis has warmed them.
+
+All 84 focused Nextest tests passed across 13 binaries with `hotpath-alloc`.
+After adding the explicit zero-residency assertion for completed variant lists,
+all 10 native RA checks passed again. Saved-query accounting assertions remain
+unchanged and pass. Formatting, all-features/all-targets Clippy with warnings
+denied and diff checks passed. No Cordial self-execution or full-program
+measurement ran.
+
+These tests establish query residency and RA reference release, not retained
+bytes or process RSS; Triomphe has no weak pointers, and the explicit test
+references themselves keep the original objects alive until dropped. Step 2
+remains partial for absent/stale/provisional lists, removed declarations,
+non-exported legacy macro definitions, body-local declarations, composite keys,
+missing producer records after restore and input/identity/header storage.
 
 ## Historical evidence
 
