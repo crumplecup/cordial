@@ -46,6 +46,14 @@ pub unsafe trait ZalsaDatabase: Any {
     #[doc(hidden)]
     fn zalsa_mut(&mut self) -> &mut Zalsa;
 
+    /// Exclusive access for metadata inspection, without changing query state.
+    /// Implementations may avoid cancellation when this is the only handle.
+    /// Callers must not execute queries or mutate memo values through this access.
+    #[doc(hidden)]
+    fn zalsa_mut_for_inspection(&mut self) -> &mut Zalsa {
+        self.zalsa_mut()
+    }
+
     /// Access the thread-local state associated with this database
     #[doc(hidden)]
     fn zalsa_local(&self) -> &ZalsaLocal;

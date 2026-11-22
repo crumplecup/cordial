@@ -784,13 +784,14 @@ context-dependent query results. The last-consumer boundary now follows
 observability, planning and optional persistence fingerprint preparation.
 Retirement now runs there for copied crate keys, module-scope declaration keys,
 locally defined macro keys recorded in the definition map, members and variants
-recorded in already-current trait/impl/enum query results,
-and tracked identities created by queries on those keys, transitively. Selected
+recorded in already-current trait/impl/enum query results, body-local declarations
+in current block maps reached through producer records, and tracked identities
+created by queries on those keys, transitively. Selected
 non-persisted values are dropped, and persisted values spill when a run cache
-is available, even without memory pressure. Body-local declarations and composite
-arguments are not yet selected through their owners. Selection reads the current
-map and skips absent, stale or provisional member/variant results; removed
-declarations from earlier revisions are not enumerated.
+is available, even without memory pressure. Composite arguments are not yet
+selected through their owners. Selection reads the current map and skips absent,
+stale or provisional member/variant/block results; removed declarations from
+earlier revisions and block maps missing producer records are not enumerated.
 The existing broader eviction hook remains conditional and does not select
 individual contexts.
 Removing a `ContextCrates` handle alone would not free
@@ -1355,6 +1356,55 @@ No Cordial self-execution or full-program measurement ran. Step 2 remains partia
 for body-local declarations, composite keys, absent/stale/provisional owner
 lists, removed declarations, missing producer records after restore and
 input/identity/header storage.
+
+**Body-local declaration selection design, 2026-11-21.** Body lowering creates
+tracked block identities, and the existing tracked-output selector reaches those
+keys without reading bodies. Select only current/final `block_def_map` memos on
+those exact keys, then reuse the existing local declaration/member/variant/macro
+selection on each map. Repeat from newly discovered declaration keys to reach
+nested item bodies; visit each block map once. Reading a selected persisted map
+may decode it but must not collect it. Do not add another scope index, reconstruct
+locations from syntax, follow read dependencies or collect untouched/stale maps.
+Missing producer memos, including non-persisted body producers after restore,
+remain a stated gap. Check actual body ownership, nested local items, shared
+work, saved map decoding, repeated retirement, edits and no extra collection.
+
+**Read-only inspection correction, 2026-11-21.** The body-local fixture exposed
+a correctness issue in selection and diagnostic counts: `zalsa_mut()` bumps
+Salsa's cancellation counter even with a sole handle. Its 8-bit rollover advances
+the revision, so sufficiently many read-only inspections make untouched memos
+fail current-value selection. Metadata inspection now obtains exclusive storage
+directly when the database has one handle, without executing queries, mutating
+memo values or changing cancellation/revision state. When other handles exist,
+the existing cancellation/wait path remains. Dropping and spilling values keep
+their existing mutation path. A regression repeats all four inspection APIs
+512 times, checks exact selection, residency, revision and execution counts,
+then verifies ordinary edit invalidation. Another check verifies cancellation
+and waiting for a cloned handle before inspecting memos.
+
+**Body-local retirement checkpoint, 2026-11-21.** Retirement now traverses
+existing tracked-output records to current block maps and repeats the local
+declaration, member, variant and macro selection there. Each block map is visited
+once. No new source scan or ownership index is introduced.
+
+The native fixture exercises cold/restored 1/4/16 families containing nested
+functions, constants, statics, local trait/impl members, enum discriminants,
+macro-generated functions and cfg-gated locals. Persisted block maps are spilled
+before selection. Completed contexts retain zero tested body/projection values,
+and each original body has only its explicit test reference left. Ordinary,
+dependency and uncompleted-context objects retain database references. Repeated
+retirement and same-ID re-entry preserve the facts without collecting block maps;
+retirement itself collects neither bodies nor block maps. Separate checks skip
+untouched/stale owners and the persisted maps whose non-persisted body producer
+records are absent after restore, without rebuilding those producers.
+
+All 91 focused Nextest tests passed across 13 binaries with `hotpath-alloc`,
+including unchanged saved-query accounting checks. Formatting,
+all-features/all-targets Clippy with warnings denied and diff checks passed.
+No Cordial self-execution or full-program measurement ran. These tests establish
+query residency and reference release, not retained bytes or RSS. Step 2 remains partial
+for composite keys, absent/stale/provisional owner results, removed declarations,
+missing producer records after restore and input/identity/header storage.
 
 ## Historical evidence
 

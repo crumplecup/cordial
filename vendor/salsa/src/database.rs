@@ -51,7 +51,9 @@ pub trait Database: Send + ZalsaDatabase + AsDynDatabase {
     /// query at a time, calling `after` with the query's name and the count when each is done. The
     /// queries run again when something reads what was dropped.
     ///
-    /// **WARNING:** Just like an ordinary write, this method triggers cancellation.
+    /// **WARNING:** Dropping values triggers cancellation, just like an ordinary
+    /// write. Read-only inspection cancels other handles if any exist; with a sole
+    /// handle it does not advance cancellation state or the database revision.
     fn values_in_memory(
         &mut self,
         drop: bool,
@@ -59,7 +61,7 @@ pub trait Database: Send + ZalsaDatabase + AsDynDatabase {
         only: &[&str],
         after: &mut dyn FnMut(&'static str, u64),
     ) {
-        let zalsa_mut = self.zalsa_mut();
+        let zalsa_mut = if drop { self.zalsa_mut() } else { self.zalsa_mut_for_inspection() };
         zalsa_mut.values_in_memory(drop, include_persisted, only, |query, held| after(query, held));
     }
 
@@ -69,10 +71,11 @@ pub trait Database: Send + ZalsaDatabase + AsDynDatabase {
     /// Missing producer memos (including non-persisted ones after restore) add no keys.
     /// All keys must belong to this database. An empty list selects nothing.
     ///
-    /// **WARNING:** Just like an ordinary write, this method triggers cancellation.
+    /// **WARNING:** Cancels other database handles if any exist. With a sole handle,
+    /// inspection does not advance cancellation state or the database revision.
     #[doc(hidden)]
     fn tracked_output_keys(&mut self, inputs: &[crate::Id]) -> Vec<crate::Id> {
-        self.zalsa_mut().tracked_output_keys(inputs)
+        self.zalsa_mut_for_inspection().tracked_output_keys(inputs)
     }
 
     /// Return exact input keys with a value in one of the named queries, verified
@@ -81,17 +84,20 @@ pub trait Database: Send + ZalsaDatabase + AsDynDatabase {
     /// Missing, stale and provisional memos are excluded. Keys must belong to this
     /// database; each matching key is returned once, in input order.
     ///
-    /// **WARNING:** Just like an ordinary write, this method triggers cancellation.
+    /// **WARNING:** Cancels other database handles if any exist. With a sole handle,
+    /// inspection does not advance cancellation state or the database revision.
     #[doc(hidden)]
     fn cached_query_keys(&mut self, inputs: &[crate::Id], only: &[&str]) -> Vec<crate::Id> {
-        self.zalsa_mut().cached_query_keys(inputs, only)
+        self.zalsa_mut_for_inspection().cached_query_keys(inputs, only)
     }
 
     /// Like [`Self::values_in_memory`], restricted to query memos keyed directly by `inputs`.
     /// Pass input IDs from this database. An empty list selects nothing; dependency edges,
     /// tracked identities and composite query keys are not followed.
     ///
-    /// **WARNING:** Just like an ordinary write, this method triggers cancellation.
+    /// **WARNING:** Dropping values triggers cancellation, just like an ordinary
+    /// write. Read-only inspection cancels other handles if any exist; with a sole
+    /// handle it does not advance cancellation state or the database revision.
     fn values_in_memory_for_inputs(
         &mut self,
         inputs: &[crate::Id],
@@ -100,7 +106,8 @@ pub trait Database: Send + ZalsaDatabase + AsDynDatabase {
         only: &[&str],
         after: &mut dyn FnMut(&'static str, u64),
     ) {
-        self.zalsa_mut()
+        let zalsa_mut = if drop { self.zalsa_mut() } else { self.zalsa_mut_for_inspection() };
+        zalsa_mut
             .values_in_memory_for_inputs(inputs, drop, include_persisted, only, after);
     }
 

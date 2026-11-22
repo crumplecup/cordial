@@ -250,6 +250,17 @@ unsafe impl<T: HasStorage> ZalsaDatabase for T {
         self.storage_mut().cancel_others()
     }
 
+    fn zalsa_mut_for_inspection(&mut self) -> &mut Zalsa {
+        let storage = self.storage_mut();
+        if Arc::strong_count(&storage.handle.zalsa_impl) == 1 {
+            // Exclusive access to the sole handle prevents all query execution
+            // and slot reuse, without invalidating any provisional results.
+            Arc::get_mut(&mut storage.handle.zalsa_impl).unwrap()
+        } else {
+            storage.cancel_others()
+        }
+    }
+
     #[inline(always)]
     fn zalsa_local(&self) -> &ZalsaLocal {
         &self.storage().zalsa_local

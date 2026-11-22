@@ -70,7 +70,7 @@ use hir_expand::{
 use intern::{Symbol, sym};
 use itertools::Itertools;
 use rustc_hash::FxHashMap;
-use salsa::plumbing::AsId;
+use salsa::plumbing::{AsId, FromId};
 use span::{Edition, FileAstId, FileId, ROOT_ERASED_FILE_AST_ID};
 use stdx::format_to;
 use syntax::{AstNode, SmolStr, SyntaxNode, ToSmolStr, ast};
@@ -417,12 +417,45 @@ pub fn crate_def_map(db: &dyn SourceDatabase, crate_id: Crate) -> &DefMap {
 /// external-map projection just to enumerate these keys. The owner may decode or
 /// recompute on this read. Member/variant lists are read only when their existing memos
 /// are verified and final in this revision, including encoded saved results.
-/// Absent or stale member queries are not executed just to retire their values.
+/// Follow existing tracked-output links to already-current block maps and repeat
+/// declaration selection there. Absent or stale member/block queries are not
+/// executed just to retire their values. Missing producer records add no keys.
 pub fn crate_declared_query_keys(
     db: &mut dyn SourceDatabase,
     crate_id: Crate,
 ) -> Vec<salsa::Id> {
-    let map = &crate_local_def_map(db, crate_id).def_map;
+    let mut keys = def_map_declared_query_keys(db, Either::Left(crate_id));
+    let mut pending = keys.clone();
+    pending.push(crate_id.as_id());
+    let mut visited_blocks = rustc_hash::FxHashSet::default();
+    loop {
+        let outputs = db.tracked_output_keys(&pending);
+        let blocks = db.cached_query_keys(&outputs, &["block_def_map"]);
+        pending.clear();
+        for key in blocks {
+            if visited_blocks.insert(key) {
+                // This query's exact input is a BlockId; the memo selector has
+                // checked its ingredient and current/final value before this read.
+                let block = BlockId::from_id(key);
+                pending.extend(def_map_declared_query_keys(db, Either::Right(block)));
+            }
+        }
+        if pending.is_empty() {
+            break;
+        }
+        keys.extend(pending.iter().copied());
+    }
+    keys
+}
+
+fn def_map_declared_query_keys(
+    db: &mut dyn SourceDatabase,
+    owner: Either<Crate, BlockId>,
+) -> Vec<salsa::Id> {
+    let map: &DefMap = match owner {
+        Either::Left(krate) => &crate_local_def_map(db, krate).def_map,
+        Either::Right(block) => block_def_map(db, block),
+    };
     let mut keys: Vec<_> = map.declared_query_keys().collect();
     let owners: Vec<_> = map.modules().flat_map(|(_, module)| {
         module.scope.declarations()
@@ -446,6 +479,9 @@ pub fn crate_declared_query_keys(
         })
         .collect();
     owner_keys.extend(enums.iter().map(|id| id.as_id()));
+    if owner_keys.is_empty() {
+        return keys;
+    }
     let cached: rustc_hash::FxHashSet<_> = db
         .cached_query_keys(
             &owner_keys,
@@ -532,6 +568,7 @@ pub(crate) fn crate_local_def_map(db: &dyn SourceDatabase, crate_id: Crate) -> D
 
 #[salsa::tracked(returns(ref), persist)]
 pub fn block_def_map<'db>(db: &'db dyn SourceDatabase, block_id: BlockIdLt<'db>) -> DefMap {
+    let _p = tracing::info_span!("block_def_map_query").entered();
     let block_id = unsafe { block_id.to_static() };
     let ast_id = block_id.ast_id(db);
     let module = unsafe { block_id.module(db).to_static() };

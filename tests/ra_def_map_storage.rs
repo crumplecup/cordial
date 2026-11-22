@@ -12,7 +12,9 @@ use ra_ap_hir_def::nameres::{
 };
 use ra_ap_hir_def::resolver::HasResolver;
 use ra_ap_hir_def::signatures::VariantFields;
-use ra_ap_hir_def::{AdtId, AssocItemId, EnumVariantId, FunctionId, MacroId, ModuleDefId};
+use ra_ap_hir_def::{
+    AdtId, AssocItemId, BlockId, DefWithBodyId, EnumVariantId, FunctionId, MacroId, ModuleDefId,
+};
 use ra_ap_hir_expand::intern::Symbol;
 use ra_ap_ide_db::RootDatabase;
 use ra_ap_ide_db::base_db::{
@@ -305,6 +307,138 @@ fn held_macro_values(db: &mut RootDatabase, macros: &[MacroId]) -> u64 {
         &mut |_, count| held += count,
     );
     held
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct LocalBodies {
+    bodies: Vec<DefWithBodyId>,
+    blocks: Vec<BlockId>,
+    macros: Vec<MacroId>,
+}
+
+impl LocalBodies {
+    fn collect(db: &RootDatabase, krate: Crate) -> Self {
+        let mut facts = Self {
+            bodies: Vec::new(),
+            blocks: Vec::new(),
+            macros: Vec::new(),
+        };
+        facts.collect_map(db, crate_def_map(db, krate));
+        let mut next = 0;
+        while next < facts.bodies.len() {
+            let body = &Body::with_source_map(db, facts.bodies[next]).0;
+            for (block, map) in body.blocks(db) {
+                if !facts.blocks.contains(&block) {
+                    facts.blocks.push(block);
+                    facts.collect_map(db, map);
+                }
+            }
+            next += 1;
+        }
+        facts.bodies.sort_unstable_by_key(|id| id.as_id().as_bits());
+        facts.blocks.sort_unstable_by_key(|id| id.as_id().as_bits());
+        facts.macros.sort_unstable_by_key(|id| id.as_id().as_bits());
+        facts
+    }
+
+    fn collect_map(&mut self, db: &RootDatabase, map: &ra_ap_hir_def::nameres::DefMap) {
+        for &mac in map.macro_def_to_macro_id.values() {
+            if !self.macros.contains(&mac) {
+                self.macros.push(mac);
+            }
+        }
+        let mut bodies = Vec::new();
+        for (_, module) in map.modules() {
+            for def in module.scope.declarations() {
+                match def {
+                    ModuleDefId::FunctionId(id) => bodies.push(id.into()),
+                    ModuleDefId::ConstId(id) => bodies.push(id.into()),
+                    ModuleDefId::StaticId(id) => bodies.push(id.into()),
+                    ModuleDefId::AdtId(AdtId::EnumId(id)) => bodies.extend(
+                        id.enum_variants(db)
+                            .variants
+                            .values()
+                            .map(|(id, _)| DefWithBodyId::VariantId(*id)),
+                    ),
+                    ModuleDefId::TraitId(id) => {
+                        bodies.extend(id.trait_items(db).items.iter().filter_map(
+                            |(_, id)| match id {
+                                AssocItemId::FunctionId(id) => Some(DefWithBodyId::FunctionId(*id)),
+                                AssocItemId::ConstId(id) => Some(DefWithBodyId::ConstId(*id)),
+                                _ => None,
+                            },
+                        ));
+                    }
+                    _ => {}
+                }
+            }
+            for id in module.scope.impls() {
+                bodies.extend(
+                    id.impl_items(db)
+                        .items
+                        .iter()
+                        .filter_map(|(_, id)| match id {
+                            AssocItemId::FunctionId(id) => Some(DefWithBodyId::FunctionId(*id)),
+                            AssocItemId::ConstId(id) => Some(DefWithBodyId::ConstId(*id)),
+                            _ => None,
+                        }),
+                );
+            }
+        }
+        for body in bodies {
+            if !self.bodies.contains(&body) {
+                self.bodies.push(body);
+            }
+        }
+    }
+
+    fn warm(&self, db: &RootDatabase) -> Vec<triomphe::Arc<Body>> {
+        self.bodies
+            .iter()
+            .map(|&id| {
+                Body::of(db, id);
+                Body::with_source_map(db, id).0.clone()
+            })
+            .collect()
+    }
+
+    fn held(&self, db: &mut RootDatabase) -> u64 {
+        let keys: Vec<_> = self.bodies.iter().map(AsId::as_id).collect();
+        let mut held = 0;
+        db.values_in_memory_for_inputs(
+            &keys,
+            false,
+            true,
+            &["Body::of_", "Body::with_source_map_"],
+            &mut |_, count| held += count,
+        );
+        held
+    }
+}
+
+#[derive(Clone, Default)]
+struct LocalExecutions {
+    blocks: Arc<AtomicUsize>,
+    bodies: Arc<AtomicUsize>,
+}
+
+impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for LocalExecutions {
+    fn on_new_span(
+        &self,
+        attrs: &tracing::span::Attributes<'_>,
+        _: &tracing::Id,
+        _: tracing_subscriber::layer::Context<'_, S>,
+    ) {
+        match attrs.metadata().name() {
+            "block_def_map_query" => {
+                self.blocks.fetch_add(1, Ordering::SeqCst);
+            }
+            "body_with_source_map_query" => {
+                self.bodies.fetch_add(1, Ordering::SeqCst);
+            }
+            _ => {}
+        }
+    }
 }
 
 fn associated_functions(db: &RootDatabase, krate: Crate) -> Vec<FunctionId> {
@@ -1165,6 +1299,279 @@ fn legacy_macro_selection_follows_the_current_map_after_an_edit() {
         warm_macros(&fixture.db, &current);
         assert_eq!(held_macro_values(&mut fixture.db, &current), 3);
     }
+}
+
+#[test]
+fn body_local_declarations_retire_real_bodies_through_current_block_maps() {
+    let _fixture = FIXTURE.lock().unwrap();
+    let _reset = ResetStore;
+    for count in [1, 4, 16] {
+        let mut source = String::from(
+            "extern crate unused; use unused::shared;\n\
+             pub fn outer() {\n\
+                 fn inner() { { fn deepest() {} deepest(); } }\n\
+                 const LOCAL: usize = { fn from_const() {} 1 };\n\
+                 static STATIC: usize = { fn from_static() {} 2 };\n\
+                 trait Local { fn defaulted() { fn from_method() {} } }\n\
+                 struct LocalType;\n\
+                 impl LocalType { fn inherent() { fn inside_impl() {} } }\n\
+                 impl Local for LocalType {}\n\
+                 enum LocalEnum { A = { fn from_variant() {} 1 } }\n\
+                 macro_rules! make { () => { fn generated() {} } } make!();\n\
+                 { fn nested() {} }\n",
+        );
+        for variant in 0..count {
+            source.push_str(&format!(
+                "#[cfg(variant = \"{variant}\")] fn selected() {{ fn inside_cfg() {{}} }}\n"
+            ));
+        }
+        source.push_str("inner(); }");
+        for restored in [false, true] {
+            salsa::set_spill_store(Some(Arc::new(Store::default())));
+            let executions = LocalExecutions::default();
+            let subscriber = tracing_subscriber::registry().with(executions.clone());
+            tracing::subscriber::with_default(subscriber, || {
+                let mut fixture = Fixture::build(&source, count);
+                fixture.add_dependency();
+                let dependency = ra_ap_ide_db::base_db::all_crates(&fixture.db)
+                    .iter()
+                    .copied()
+                    .find(|krate| *krate != fixture.krate && !fixture.contexts.contains(krate))
+                    .unwrap();
+                let ordinary = LocalBodies::collect(&fixture.db, fixture.krate);
+                let shared = LocalBodies::collect(&fixture.db, dependency);
+                let locals: Vec<_> = fixture
+                    .contexts
+                    .iter()
+                    .map(|&krate| LocalBodies::collect(&fixture.db, krate))
+                    .collect();
+                assert_eq!(ordinary.bodies.len(), 15);
+                assert_eq!(shared.bodies.len(), 1);
+                assert!(locals.iter().all(|facts| facts.bodies.len() == 17));
+                assert!(locals.iter().all(|facts| facts.macros.len() == 1));
+                if restored {
+                    fixture.restore();
+                    for (index, &krate) in fixture.contexts.iter().enumerate() {
+                        assert_eq!(LocalBodies::collect(&fixture.db, krate), locals[index]);
+                    }
+                    assert_eq!(LocalBodies::collect(&fixture.db, fixture.krate), ordinary);
+                    assert_eq!(LocalBodies::collect(&fixture.db, dependency), shared);
+                }
+                let ordinary_values = ordinary.warm(&fixture.db);
+                let shared_values = shared.warm(&fixture.db);
+                let values: Vec<_> = locals.iter().map(|facts| facts.warm(&fixture.db)).collect();
+                for (index, facts) in locals.iter().enumerate() {
+                    let blocks: Vec<_> = facts.blocks.iter().map(AsId::as_id).collect();
+                    fixture.db.spill_persisted_for_inputs(&blocks);
+                    assert_eq!(
+                        fixture.db.cached_query_keys(&blocks, &["block_def_map"]),
+                        blocks,
+                        "current block maps before retirement: count={count} restored={restored} context={index}"
+                    );
+                    let bodies: Vec<_> = facts.bodies.iter().map(AsId::as_id).collect();
+                    let outputs = fixture.db.tracked_output_keys(&bodies);
+                    assert!(
+                        blocks.iter().all(|id| outputs.contains(id)),
+                        "body output records before retirement: count={count} restored={restored} context={index}"
+                    );
+                }
+                let collected_blocks = executions.blocks.load(Ordering::SeqCst);
+                let collected_bodies = executions.bodies.load(Ordering::SeqCst);
+                assert!(collected_blocks > count);
+                for (index, &krate) in fixture.contexts.iter().enumerate() {
+                    for retirement in 0..2 {
+                        let keys = declared_context_keys(&mut fixture.db, krate);
+                        assert!(
+                            locals[index]
+                                .bodies
+                                .iter()
+                                .all(|id| keys.contains(&id.as_id())),
+                            "count={count} restored={restored} context={index} retirement={retirement}; missing {:?}",
+                            locals[index]
+                                .bodies
+                                .iter()
+                                .filter(|id| !keys.contains(&id.as_id()))
+                                .collect::<Vec<_>>()
+                        );
+                        assert!(
+                            locals[index]
+                                .blocks
+                                .iter()
+                                .all(|id| keys.contains(&id.as_id()))
+                        );
+                        assert!(
+                            locals[index]
+                                .macros
+                                .iter()
+                                .all(|id| keys.contains(&id.as_id()))
+                        );
+                        assert!(
+                            ordinary
+                                .bodies
+                                .iter()
+                                .chain(&shared.bodies)
+                                .all(|id| !keys.contains(&id.as_id()))
+                        );
+                        fixture.db.values_in_memory_for_inputs(
+                            &keys,
+                            true,
+                            false,
+                            &[],
+                            &mut |_, _| {},
+                        );
+                        fixture.db.spill_persisted_for_inputs(&keys);
+                        assert_eq!(locals[index].held(&mut fixture.db), 0);
+                        let mut held_blocks = 0;
+                        fixture.db.values_in_memory_for_inputs(
+                            &keys,
+                            false,
+                            true,
+                            &["block_def_map"],
+                            &mut |_, count| held_blocks += count,
+                        );
+                        assert_eq!(held_blocks, 0);
+                        assert_eq!(executions.blocks.load(Ordering::SeqCst), collected_blocks);
+                        assert_eq!(executions.bodies.load(Ordering::SeqCst), collected_bodies);
+                    }
+                    for (other, bodies) in values.iter().enumerate() {
+                        assert!(bodies.iter().all(|body| {
+                            (triomphe::Arc::strong_count(body) > 1) == (other > index)
+                        }));
+                        assert_eq!(
+                            locals[other].held(&mut fixture.db),
+                            if other > index { 34 } else { 0 }
+                        );
+                    }
+                    assert!(
+                        ordinary_values
+                            .iter()
+                            .chain(&shared_values)
+                            .all(|body| triomphe::Arc::strong_count(body) > 1)
+                    );
+                    assert_eq!(ordinary.held(&mut fixture.db), 30);
+                    assert_eq!(shared.held(&mut fixture.db), 2);
+                }
+                for (index, &krate) in fixture.contexts.iter().enumerate() {
+                    assert_eq!(LocalBodies::collect(&fixture.db, krate), locals[index]);
+                    locals[index].warm(&fixture.db);
+                    assert_eq!(locals[index].held(&mut fixture.db), 34);
+                }
+                assert_eq!(executions.blocks.load(Ordering::SeqCst), collected_blocks);
+            });
+        }
+    }
+}
+
+#[test]
+fn body_local_selection_skips_untouched_and_stale_owners() {
+    let _fixture = FIXTURE.lock().unwrap();
+    let _reset = ResetStore;
+    for restored in [false, true] {
+        salsa::set_spill_store(Some(Arc::new(Store::default())));
+        let executions = LocalExecutions::default();
+        let subscriber = tracing_subscriber::registry().with(executions.clone());
+        tracing::subscriber::with_default(subscriber, || {
+            let mut fixture = Fixture::build("pub fn outer() { fn original() {} }", 1);
+            let context = fixture.contexts[0];
+            crate_def_map(&fixture.db, context);
+            if restored {
+                fixture.restore();
+            }
+            declared_context_keys(&mut fixture.db, context);
+            assert_eq!(executions.blocks.load(Ordering::SeqCst), 0);
+            assert_eq!(executions.bodies.load(Ordering::SeqCst), 0);
+            let previous = LocalBodies::collect(&fixture.db, context);
+            let outer: DefWithBodyId = declared_functions(&fixture.db, context)[0].into();
+            assert_eq!(previous.bodies.len(), 2);
+            assert_eq!(previous.blocks.len(), 1);
+            let collected_blocks = executions.blocks.load(Ordering::SeqCst);
+            let collected_bodies = executions.bodies.load(Ordering::SeqCst);
+            let mut change = FileChange::default();
+            change.change_file(
+                FileId::from_raw(2),
+                Some("pub fn outer() { fn replacement() {} }".into()),
+            );
+            change.apply(&mut fixture.db);
+            let keys = declared_context_keys(&mut fixture.db, context);
+            assert_eq!(executions.blocks.load(Ordering::SeqCst), collected_blocks);
+            assert_eq!(executions.bodies.load(Ordering::SeqCst), collected_bodies);
+            // The outer location can survive an edit, but its stale local list is skipped.
+            assert!(
+                previous
+                    .bodies
+                    .iter()
+                    .filter(|&&id| id != outer)
+                    .all(|id| !keys.contains(&id.as_id()))
+            );
+            let current = LocalBodies::collect(&fixture.db, context);
+            assert_ne!(previous, current);
+            assert_eq!(current.bodies.len(), 2);
+            let values = current.warm(&fixture.db);
+            let collected_blocks = executions.blocks.load(Ordering::SeqCst);
+            let collected_bodies = executions.bodies.load(Ordering::SeqCst);
+            let keys = declared_context_keys(&mut fixture.db, context);
+            assert!(current.bodies.iter().all(|id| keys.contains(&id.as_id())));
+            fixture
+                .db
+                .values_in_memory_for_inputs(&keys, true, false, &[], &mut |_, _| {});
+            fixture.db.spill_persisted_for_inputs(&keys);
+            assert_eq!(current.held(&mut fixture.db), 0);
+            assert!(
+                values
+                    .iter()
+                    .all(|body| triomphe::Arc::strong_count(body) == 1)
+            );
+            assert_eq!(executions.blocks.load(Ordering::SeqCst), collected_blocks);
+            assert_eq!(executions.bodies.load(Ordering::SeqCst), collected_bodies);
+        });
+    }
+}
+
+#[test]
+fn restored_body_local_selection_does_not_rebuild_missing_producers() {
+    let _fixture = FIXTURE.lock().unwrap();
+    let _reset = ResetStore;
+    salsa::set_spill_store(Some(Arc::new(Store::default())));
+    let executions = LocalExecutions::default();
+    let subscriber = tracing_subscriber::registry().with(executions.clone());
+    tracing::subscriber::with_default(subscriber, || {
+        let mut fixture = Fixture::build("pub fn outer() { fn inner() {} }", 1);
+        let context = fixture.contexts[0];
+        let previous = LocalBodies::collect(&fixture.db, context);
+        let outer: DefWithBodyId = declared_functions(&fixture.db, context)[0].into();
+        assert_eq!(previous.bodies.len(), 2);
+        assert_eq!(previous.blocks.len(), 1);
+        fixture.restore();
+        let block_keys: Vec<_> = previous.blocks.iter().map(AsId::as_id).collect();
+        assert_eq!(
+            fixture
+                .db
+                .cached_query_keys(&block_keys, &["block_def_map"]),
+            block_keys
+        );
+        let collected_blocks = executions.blocks.load(Ordering::SeqCst);
+        let collected_bodies = executions.bodies.load(Ordering::SeqCst);
+        let keys = declared_context_keys(&mut fixture.db, context);
+        assert!(
+            previous
+                .bodies
+                .iter()
+                .filter(|&&id| id != outer)
+                .all(|id| !keys.contains(&id.as_id()))
+        );
+        assert!(
+            block_keys.iter().all(|id| !keys.contains(id)),
+            "persisted maps alone do not recover missing non-persisted producer records"
+        );
+        assert_eq!(executions.blocks.load(Ordering::SeqCst), collected_blocks);
+        assert_eq!(executions.bodies.load(Ordering::SeqCst), collected_bodies);
+        assert_eq!(LocalBodies::collect(&fixture.db, context), previous);
+        let collected_bodies = executions.bodies.load(Ordering::SeqCst);
+        let keys = declared_context_keys(&mut fixture.db, context);
+        assert!(previous.bodies.iter().all(|id| keys.contains(&id.as_id())));
+        assert_eq!(executions.blocks.load(Ordering::SeqCst), collected_blocks);
+        assert_eq!(executions.bodies.load(Ordering::SeqCst), collected_bodies);
+    });
 }
 
 #[test]
