@@ -410,7 +410,9 @@ impl SourceDatabase {
             let canonical_id =
                 |id: SemanticItemId| -> SemanticItemId { item_key::canonical_id(&self.db, id) };
             let mut definitions: HashMap<SemanticItemId, NodeId> = HashMap::new();
-            let mut calls: Vec<(NodeId, SemanticItemId)> = Vec::new();
+            // Each call as the facts give its target, as the context's copy names it (which is what
+            // can be located) and as the ordinary build names it (which is what is recorded).
+            let mut calls: Vec<(NodeId, SemanticItemId, SemanticItemId)> = Vec::new();
             let (mut saved_files, mut rust_analyzer_files, mut aliased_files) =
                 (0usize, 0usize, 0usize);
             // The functions the context's copy has, and those of them it kept full facts for
@@ -482,13 +484,13 @@ impl SourceDatabase {
                         let facts = match record.anchor() {
                             Some(anchor) => facts.with_ranges_from(*anchor as usize),
                             None => facts.clone(),
-                        }
-                        .map_identities(&mut |id| canonical_id(id));
+                        };
                         for call in facts.calls() {
                             if let crate::SemanticCallTarget::Function(target) = call.target() {
-                                calls.push((node, *target));
+                                calls.push((node, canonical_id(*target), *target));
                             }
                         }
+                        let facts = facts.map_identities(&mut |id| canonical_id(id));
                         push_facts(
                             graph,
                             node,
@@ -544,13 +546,13 @@ impl SourceDatabase {
                             "semantic function source",
                         )
                     })?;
-                    let facts = super::super::queries::in_file(&self.db, definition, facts)
-                        .map_identities(&mut |id| canonical_id(id));
+                    let facts = super::super::queries::in_file(&self.db, definition, facts);
                     for call in facts.calls() {
                         if let crate::SemanticCallTarget::Function(target) = call.target() {
-                            calls.push((node, *target));
+                            calls.push((node, canonical_id(*target), *target));
                         }
                     }
+                    let facts = facts.map_identities(&mut |id| canonical_id(id));
                     push_facts(
                         graph,
                         node,
@@ -571,7 +573,7 @@ impl SourceDatabase {
             );
             let mut edges: BTreeSet<(NodeId, NodeId)> = BTreeSet::new();
             let mut external: BTreeMap<NodeId, BTreeSet<crate::FunctionLocation>> = BTreeMap::new();
-            for (caller, target) in calls {
+            for (caller, target, named_here) in calls {
                 let callee = definitions.get(&target);
                 tracing::debug!(
                     target: "cordial::semantic::contexts",
@@ -583,7 +585,7 @@ impl SourceDatabase {
                 );
                 if let Some(callee) = callee {
                     edges.insert((caller, *callee));
-                } else if let Some(location) = locator.locate(target) {
+                } else if let Some(location) = locator.locate(named_here) {
                     external.entry(caller).or_default().insert(location);
                 }
             }

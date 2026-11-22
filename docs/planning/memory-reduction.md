@@ -1894,6 +1894,53 @@ After the fixture checkpoints, report payload release, index overhead,
 classification cost and remaining retained structures. Discuss readiness before
 another `elicit_doc` measurement; do not substitute a Cordial self-run.
 
+### Stable IR identity checkpoint, 2026-11-22
+
+Step 3 of the ordered cfg-context work, inventoried and closed for declarations
+that exist only in a context.
+
+| Identity | Source | Stable across processes and context order |
+| --- | --- | --- |
+| Ordinary definition | Source description | Yes |
+| Context copy of an ordinary definition | `canonical_id` gives the ordinary description | Yes |
+| Declaration only a context has | `canonical_id` gives the original path and place, route `gated` | **Yes (this checkpoint); before it named the copy and its context number** |
+| Macro-generated or derive-synthesized item | Site, expansion chain and member | Yes, when the site exists |
+| Definition with no site | `volatile\|<process nonce>` | Never, by design: it reads back as unknown, not as another definition |
+
+Before this change a context-only declaration kept its copy's description,
+`/__cordial_context_N/<path>`, where N is the context's ordinal in that run. The
+same declaration read as context 0 in one run and context 1 in another was two
+identities, so a fact saved about it missed on restore. It never answered
+wrongly: lookup checks that a definition's description equals the one asked for.
+This cost reuse, not memory, and does not by itself lower the peak.
+
+`canonical_description` now returns the ordinary description when the ordinary
+build resolves one, and otherwise the same original path and place with route
+`gated`. A gated description names no context and can never equal an ordinary
+one. `resolve` returns `None` for it: only the context that has the declaration
+can find it, from the copy's own identity, so no lookup searches every context's
+copy or answers from a retired one. IR ids are never looked up again, so nothing
+that consumes them changes. The one path that located a canonicalized target
+(external call locations in `contexts/pass.rs`) now keeps the copy's own id
+beside the canonical one and locates through that. The persisted
+`canonical_description` result changes representation; saved state is already
+rejected across executables.
+
+Evidence in `tests/context_item_identity.rs`: a context-only declaration's
+description names no copy; it is equal read as context 0 and as context 1;
+exclusive same-named declarations in two contexts stay two identities; and a
+context-only callee in a file the projection is not asked about still gets its
+external location. The first two failed before the change. The location test
+passes with the change and was not run against the old locate path. The wider
+`cfg_contexts`, `context_crates`, `context_reuse`, `context_parses`,
+`saved_contexts` and `item_identity` binaries pass (49 tests with the new four),
+as do formatting, all-features/all-targets Clippy with warnings denied and the
+diff check. No Cordial self-execution or full-program measurement ran.
+
+Remaining for step 3: siteless definitions stay process-local by design.
+Bounded input, identity and memo-header storage (step 4) is the next memory
+target.
+
 ## Historical evidence
 
 The first cold capture used Cordial `65cbde11` against `elicit_doc` `8d2968a7`,

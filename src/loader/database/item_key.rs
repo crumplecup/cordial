@@ -12,6 +12,12 @@
 //! macro, say) is described with a nonce of this process, so it matches nothing in
 //! another process: a saved fact about it reads back as an unknown definition, never
 //! as a wrong one.
+//!
+//! A cfg context reads its own copy of each file, whose path names the context's number. That
+//! number means something only in the run that gave it, so an identity that reaches the IR never
+//! names it: a copy of a definition the ordinary build has is identified as that definition, and a
+//! declaration only a context has is identified by its original path and place, marked *gated*.
+//! The copy's own description is what that context's lookups use.
 
 use std::sync::OnceLock;
 
@@ -162,13 +168,16 @@ pub(super) fn file_of_scope(db: &RootDatabase, scope: &str) -> Option<FileId> {
     )
 }
 
-/// What a context's copy of a definition stands for in the ordinary build: the description of the
-/// definition at the same place of the original file, when the ordinary build has one. `None` for
-/// a description that is not a copy's, or whose original is not there.
+/// What a context's copy of a definition stands for outside the context: the description of the
+/// definition at the same place of the original file when the ordinary build has one, and
+/// otherwise the same place described as *gated* (see [`Site`]), for a declaration that only a
+/// cfg context has. `None` for a description that is not a copy's.
 ///
 /// A copy's description is the original's with the copy's file named for the original's, and the
-/// crate named for the original's, so the original's is written down from the copy's alone. Saved
-/// with the database, so a restored run does not ask rust-analyzer to match them.
+/// crate named for the original's, so the original's is written down from the copy's alone. Neither
+/// form names the context, whose number means something only in the run that gave it: the same
+/// declaration is one identity whichever context number it is read in. Saved with the database, so
+/// a restored run does not ask rust-analyzer to match them.
 #[salsa::tracked(persist, returns(ref))]
 #[instrument(level = "debug", skip(db, key))]
 #[hotpath::measure]
@@ -185,13 +194,19 @@ fn canonical_description<'db>(db: &'db dyn SemanticDatabase, key: ItemKey<'db>) 
             .to_string_lossy()
             .into_owned();
     }
-    let text = site.text();
-    resolve(db, ItemKey::new(db, text.clone()))?;
-    Some(text)
+    let ordinary = site.text();
+    if resolve(db, ItemKey::new(db, ordinary.clone())).is_some() {
+        return Some(ordinary);
+    }
+    site.gated = true;
+    Some(site.text())
 }
 
 /// The identity facts about a context's copy of a definition are given, in place of its own: the
-/// ordinary build's definition at the same place when there is one.
+/// ordinary build's definition at the same place when there is one, and otherwise the
+/// context-independent description of a gated declaration. A gated identity cannot be looked up
+/// again from its text: only the context that has the declaration can find it, from the copy's own
+/// identity, which is what the lookups of that context are given.
 #[instrument(level = "trace", skip(db, id))]
 #[hotpath::measure]
 pub(super) fn canonical_id(db: &RootDatabase, id: SemanticItemId) -> SemanticItemId {
@@ -331,6 +346,11 @@ fn resolve<'db>(db: &'db dyn SemanticDatabase, key: ItemKey<'db>) -> Option<Modu
     let root = db.root_database();
     let descriptor = key.descriptor(db);
     let site = Site::parse(descriptor)?;
+    // A declaration only a cfg context has is found by that context, from the copy's own
+    // description: nothing in this one says which context's copy to read.
+    if site.gated {
+        return None;
+    }
     let file = file_at(root, &site.path)?;
     let direct = attach_db(root, || {
         let sema = Semantics::new(root);
@@ -477,9 +497,14 @@ pub(super) struct DefSite {
 }
 
 /// A [`DefSite`] with its file named by path, which means the same in every process.
+///
+/// A `gated` site is written at a real path that the ordinary build reads with the declaration
+/// switched off: it exists only in a cfg context. Its text names the route `gated`, so it is never
+/// the description of an ordinary definition, and it names no context.
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Site {
     kind: u8,
+    gated: bool,
     path: PathText,
     place: String,
     chain: Vec<u32>,
@@ -525,9 +550,10 @@ impl Site {
     fn parse(text: &str) -> Option<Self> {
         let mut parts = text.splitn(7, '|');
         let kind = parts.next()?.parse().ok()?;
-        let real = match parts.next()? {
-            "real" => true,
-            "virtual" => false,
+        let (real, gated) = match parts.next()? {
+            "real" => (true, false),
+            "virtual" => (false, false),
+            "gated" => (true, true),
             _ => return None,
         };
         let place = parts.next()?.to_owned();
@@ -547,6 +573,7 @@ impl Site {
         let krate = parts.next()?.to_owned();
         Some(Self {
             kind,
+            gated,
             path: PathText {
                 real,
                 text: parts.next()?.to_owned(),
@@ -560,7 +587,11 @@ impl Site {
 
     #[instrument(level = "trace", skip(self))]
     fn text(&self) -> String {
-        let route = if self.path.real { "real" } else { "virtual" };
+        let route = match (self.gated, self.path.real) {
+            (true, _) => "gated",
+            (false, true) => "real",
+            (false, false) => "virtual",
+        };
         let chain = self
             .chain
             .iter()
@@ -950,6 +981,7 @@ fn describe(db: &RootDatabase, definition: ModuleDef) -> String {
             Some(
                 Site {
                     kind: site.kind,
+                    gated: false,
                     path: path_of(db, site.file)?,
                     place: site.place,
                     chain: site.chain,

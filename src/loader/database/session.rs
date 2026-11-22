@@ -124,7 +124,8 @@ impl SourceDatabase {
     }
 
     /// Whether `id` names a definition this database can find again from its
-    /// description.
+    /// description. A declaration only a cfg context has is not found this way
+    /// from its context-independent identity: the context that has it finds it.
     #[instrument(level = "debug", skip(self, id))]
     #[hotpath::measure]
     pub fn knows_item(&self, id: crate::SemanticItemId) -> bool {
