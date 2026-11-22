@@ -377,6 +377,10 @@ impl SourceDatabase {
     #[instrument(level = "debug", skip(self))]
     #[hotpath::measure(impl_type = "SourceDatabase")]
     pub(super) fn build_definition_maps(&mut self) {
+        // Which call this is: the projection asks twice, and a crate whose map is built again by a
+        // later call is something to see, so each call's events are named by it.
+        static CALLS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let call = ordinal(CALLS.fetch_add(1, std::sync::atomic::Ordering::Relaxed));
         let needed: std::collections::BTreeSet<ra_ap_ide_db::base_db::Crate> =
             attach_db(&self.db, || {
                 self.ordinary_crates()
@@ -388,28 +392,82 @@ impl SourceDatabase {
                     })
                     .collect()
             });
-        crate::process_memory::log("definition maps: crates chosen");
+        crate::process_memory::log(&format!("definition maps: crates chosen (call {call})"));
         let order: Vec<Crate> = attach_db(&self.db, || {
             Crate::all(&self.db)
                 .into_iter()
                 .filter(|krate| needed.contains(&krate.base()))
                 .collect()
         });
+        let (everything, local, library, sysroot) = attach_db(&self.db, || {
+            let kinds: Vec<_> = order.iter().map(|krate| krate.origin(&self.db)).collect();
+            (
+                Crate::all(&self.db).len(),
+                kinds.iter().filter(|origin| origin.is_local()).count(),
+                kinds.iter().filter(|origin| origin.is_lib()).count(),
+                kinds.iter().filter(|origin| origin.is_lang()).count(),
+            )
+        });
+        tracing::info!(
+            target: "cordial::definition_maps",
+            step = %format!("chosen {call}"),
+            crates = order.len(),
+            everything,
+            local,
+            library,
+            sysroot,
+            "the crates whose definition maps are built, of all the crates the database holds"
+        );
+        let started = std::time::Instant::now();
+        let status = crate::LiveStatus::global();
+        let mut built = 0_u64;
         let mut released_at = crate::memory_limit::meter_kib().unwrap_or(0);
         for krate in order {
-            let name = attach_db(&self.db, || {
+            let (queries_before, expansions_before, crate_started) = (
+                status.executed(),
+                status.executed_of(MACRO_EXPANSION),
+                std::time::Instant::now(),
+            );
+            let (name, local, lang, files, source_kib) = attach_db(&self.db, || {
                 let _ = ra_ap_hir_def::nameres::crate_def_map(&self.db, krate.base());
-                krate
-                    .display_name(&self.db)
-                    .map_or_else(String::new, |name| name.to_string())
+                let origin = krate.origin(&self.db);
+                let (files, bytes) = source_root_size(&self.db, krate);
+                (
+                    krate
+                        .display_name(&self.db)
+                        .map_or_else(String::new, |name| name.to_string()),
+                    origin.is_local(),
+                    origin.is_lang(),
+                    files,
+                    bytes / 1024,
+                )
             });
             let held = crate::memory_limit::meter_kib().unwrap_or(0);
-            tracing::debug!(
-                target: "cordial::enumeration",
-                krate = %name,
-                held_kib = held,
-                "a crate's definition map was built"
-            );
+            let memory = crate::process_memory::sample();
+            let queries = status.executed().saturating_sub(queries_before);
+            // A map that was already built costs nothing here and is not said again: the crates
+            // reported are the ones this call built.
+            if queries > 0 {
+                built += 1;
+            }
+            if queries > 0 {
+                tracing::info!(
+                    target: "cordial::definition_maps",
+                    krate = %format!("{name} {call}"),
+                    local,
+                    sysroot = lang,
+                    files,
+                    source_kib,
+                    micros = u64::try_from(crate_started.elapsed().as_micros()).unwrap_or(u64::MAX),
+                    queries,
+                    expansions = status.executed_of(MACRO_EXPANSION).saturating_sub(expansions_before),
+                    held_kib = held,
+                    resident_kib = memory.map_or(0, |memory| memory.resident_kib()),
+                    peak_kib = memory.map_or(0, |memory| memory.peak_kib()),
+                    elapsed_ms = status.elapsed_ms(),
+                    "a crate's definition map was built"
+                );
+            }
             if crate::memory_limit::scaffolding_to_go()
                 && held.saturating_sub(released_at) >= crate::memory_limit::scaffolding_step_kib()
             {
@@ -423,7 +481,46 @@ impl SourceDatabase {
                 released_at = crate::memory_limit::meter_kib().unwrap_or(0);
             }
         }
+        tracing::info!(
+            target: "cordial::definition_maps",
+            step = %format!("built {call}"),
+            crates_built = built,
+            micros = u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX),
+            "every chosen definition map was built"
+        );
+        crate::process_memory::log(&format!("definition maps built (call {call})"));
     }
+}
+
+/// The word for the `index`th call (from 0). Metric names drop digits, and two calls must not
+/// share one.
+fn ordinal(index: u64) -> &'static str {
+    const WORDS: [&str; 8] = [
+        "first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth",
+    ];
+    usize::try_from(index)
+        .ok()
+        .and_then(|index| WORDS.get(index))
+        .copied()
+        .unwrap_or("later")
+}
+
+/// The query that parses one macro expansion: its executions count the expansions a phase made.
+const MACRO_EXPANSION: &str = "MacroCallId::parse_macro_expansion_";
+
+/// How many files the source root holding `krate`'s root file has, and their size in bytes. A
+/// crate's definition map reads files of its own source root, so this says how much text a crate
+/// stands on; a toolchain's libraries share one root.
+#[instrument(level = "trace", skip(db))]
+fn source_root_size(db: &RootDatabase, krate: Crate) -> (u64, u64) {
+    use ra_ap_ide_db::base_db::SourceDatabase as RaSourceDatabase;
+    let root = db.file_source_root(krate.root_file(db)).source_root_id(db);
+    let (mut files, mut bytes) = (0_u64, 0_u64);
+    for file in db.source_root(root).source_root(db).iter() {
+        files += 1;
+        bytes += db.file_text(file).text(db).len() as u64;
+    }
+    (files, bytes)
 }
 
 /// The functions declared in the workspace's own crates: free functions, trait

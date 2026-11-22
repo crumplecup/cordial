@@ -123,6 +123,7 @@ impl SourceDatabase {
             }
             self.audit_reused_evidence();
             self.evict_regenerable("evidence");
+            crate::process_memory::log("function evidence primed");
             #[cfg(any(
                 feature = "error_sites",
                 feature = "error_chain",
@@ -141,6 +142,7 @@ impl SourceDatabase {
                 feature = "cli_layout"
             ))]
             self.prime_file_scans(target)?;
+            crate::process_memory::log("file scans primed");
             let ordinary_watch =
                 crate::process_memory::Watch::start("ordinary projection".to_owned());
             let (mut graph, outline) = attach_db(&self.db, || {
@@ -204,6 +206,7 @@ impl SourceDatabase {
             self.project_contexts(paths, outline.functions(), graph)?;
             self.stage_done(graph, None, "contexts");
         }
+        crate::process_memory::log("cfg contexts done");
         #[cfg(feature = "tracing")]
         {
             if !self.unit_is_done("tracing-inventories") {
@@ -211,11 +214,14 @@ impl SourceDatabase {
                 self.project_tracing_inventories(outline, graph)?;
                 self.stage_done(graph, None, "tracing-inventories");
             }
+            crate::process_memory::log("tracing inventories done");
             if !self.unit_is_done("leaves") {
                 self.project_leaves(graph)?;
                 self.stage_done(graph, None, "leaves");
             }
+            crate::process_memory::log("leaf functions done");
             self.project_observability_calls(outline, graph)?;
+            crate::process_memory::log("observability calls done");
         }
         Ok(())
     }

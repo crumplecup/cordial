@@ -367,7 +367,12 @@ impl RuntimeSession {
     #[instrument(level = "trace", skip(self), err(level = "warn"))]
     pub(super) fn checkpoint(&self, stage: &str) -> CordialResult<()> {
         match &self.stop_after {
-            Some(wanted) if wanted == stage => Err(CordialError::stopped_after(stage)),
+            Some(wanted) if wanted == stage => {
+                // The run ends here on request, to measure the stages before it: what it said about
+                // them is kept like that of a run the memory limit ended.
+                crate::run_metrics::write_ended("stopped after", stage);
+                Err(CordialError::stopped_after(stage))
+            }
             _ => Ok(()),
         }
     }

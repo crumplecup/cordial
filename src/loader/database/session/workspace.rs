@@ -77,8 +77,10 @@ impl SourceDatabase {
         let config = options.cargo_config();
         reporter.say("Reading Cargo metadata");
         let mut workspace = discover(&root, &config)?;
+        crate::process_memory::log("cargo metadata read");
         reporter.say("Running build scripts");
         let gaps = run_build_scripts(&mut workspace, &config)?;
+        crate::process_memory::log("build scripts run");
         let context = context::WorkspaceInputs::capture(&workspace, options, gaps)?;
         let external_packages = packages::collect_external(&workspace);
         reporter.say("Loading the workspace into rust-analyzer");
@@ -88,6 +90,7 @@ impl SourceDatabase {
             server,
             kept,
         } = load_database(workspace, &config, saved.as_ref())?;
+        crate::process_memory::log("rust-analyzer database loaded");
         let context = context.finish(&db, &vfs, server.as_ref())?;
         crate::process_memory::log("workspace loaded");
         Ok(Self {

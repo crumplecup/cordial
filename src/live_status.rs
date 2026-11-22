@@ -133,6 +133,57 @@ impl LiveStatus {
         );
     }
 
+    /// How many times each query has executed in the current phase, to compare with a later
+    /// reading by [`Self::top_since`].
+    #[instrument(level = "trace", skip(self))]
+    pub fn counts(&self) -> std::collections::HashMap<String, u64> {
+        self.in_phase
+            .lock()
+            .map(|names| names.clone())
+            .unwrap_or_default()
+    }
+
+    /// The queries executed since `before` was read, most first, at most `limit` of them, as
+    /// `name=count` text: what a step that should have run nothing, or little, actually ran.
+    #[instrument(level = "trace", skip(self, before))]
+    pub fn top_since(
+        &self,
+        before: &std::collections::HashMap<String, u64>,
+        limit: usize,
+    ) -> String {
+        let mut ran: Vec<(String, u64)> = self
+            .counts()
+            .into_iter()
+            .filter_map(|(name, count)| {
+                let more = count.saturating_sub(before.get(&name).copied().unwrap_or(0));
+                (more > 0).then_some((name, more))
+            })
+            .collect();
+        ran.sort_by_key(|(name, count)| (std::cmp::Reverse(*count), name.clone()));
+        ran.iter()
+            .take(limit)
+            .map(|(name, count)| format!("{name}={count}"))
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+
+    /// Milliseconds since the run began.
+    #[instrument(level = "trace", skip(self))]
+    pub fn elapsed_ms(&self) -> u64 {
+        u64::try_from(self.started.elapsed().as_millis()).unwrap_or(u64::MAX)
+    }
+
+    /// How many times the query `name` has executed in the current phase: a difference of two
+    /// readings says how often it ran between them, which Salsa's total count does not.
+    #[instrument(level = "trace", skip(self))]
+    pub fn executed_of(&self, name: &str) -> u64 {
+        self.in_phase
+            .lock()
+            .ok()
+            .and_then(|names| names.get(name).copied())
+            .unwrap_or(0)
+    }
+
     /// What the run was last said to be doing.
     #[instrument(level = "trace", skip(self))]
     pub fn phase(&self) -> String {

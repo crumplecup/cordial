@@ -102,6 +102,7 @@ impl SavedState {
         let contexts = rmp_serde::to_vec(&contexts).map_err(|error| self.encoding(&error))?;
         let database: &mut dyn salsa::Database = database;
         crate::host::event("analysis state: encoding the memos".to_owned());
+        crate::process_memory::log("save: encoding begun");
         let encoding = std::time::Instant::now();
         // Straight to the file: the encoded state held in memory first, and grown as it is written,
         // is a copy or two of the state on top of what the run holds, at the moment a run that is
@@ -335,18 +336,33 @@ impl super::SourceDatabase {
         // would be saved with dependencies it did not have then and be found out of date.
         // What read a definition map is saved as depending on its fingerprint, which has to have been
         // asked for.
+        crate::process_memory::log("save begun");
         self.ask_fingerprints();
+        crate::process_memory::log("save: fingerprints asked");
         let verifying = std::time::Instant::now();
+        let (queries_before, (memos_before, edges_before), counts_before) = (
+            crate::LiveStatus::global().executed(),
+            salsa::deep_verifications(),
+            crate::LiveStatus::global().counts(),
+        );
         self.verify_persisted_in_parallel();
+        let (memos_after, edges_after) = salsa::deep_verifications();
+        crate::process_memory::log("save: persisted memos verified");
         tracing::debug!(
             target: "cordial::cache",
             step = "verified",
             micros = u64::try_from(verifying.elapsed().as_micros()).unwrap_or(u64::MAX),
+            queries = crate::LiveStatus::global().executed().saturating_sub(queries_before),
+            memos = memos_after.saturating_sub(memos_before),
+            edges = edges_after.saturating_sub(edges_before),
+            top = %crate::LiveStatus::global().top_since(&counts_before, 40),
             "persisted memos verified before the save"
         );
         self.reporter.say("Saving the analysis state");
         let started = std::time::Instant::now();
-        match saved.save(&mut self.db, &self.vfs, &self.context_crates) {
+        let saved_state = saved.save(&mut self.db, &self.vfs, &self.context_crates);
+        crate::process_memory::log("save: state written");
+        match saved_state {
             Ok(bytes) => {
                 tracing::debug!(
                     target: "cordial::cache",
@@ -498,10 +514,15 @@ impl super::SourceDatabase {
 // Named worker boundaries retain dependency attribution on the worker's thread.
 #[hotpath::measure]
 fn verify_closure_part(db: &RootDatabase, part: usize, parts: usize) {
-    <dyn salsa::Database>::verify_persisted_memos_by_closure_part(db, part, parts);
+    // Attached, so that what runs again is named in Salsa's events and not a bare key.
+    salsa::attach(db, || {
+        <dyn salsa::Database>::verify_persisted_memos_by_closure_part(db, part, parts);
+    });
 }
 
 #[hotpath::measure]
 fn verify_query_part(db: &RootDatabase, part: usize, parts: usize) {
-    <dyn salsa::Database>::verify_persisted_memos_part(db, part, parts);
+    salsa::attach(db, || {
+        <dyn salsa::Database>::verify_persisted_memos_part(db, part, parts);
+    });
 }

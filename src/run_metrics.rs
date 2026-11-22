@@ -45,7 +45,7 @@ const FILE: &str = "metrics.json";
 const LIMIT: usize = 4_000;
 
 /// The fields that say what an event is about, in the order they are looked for.
-const QUALIFIERS: &[&str] = &["ingredient", "phase", "step", "part", "what"];
+const QUALIFIERS: &[&str] = &["ingredient", "phase", "step", "part", "what", "krate"];
 
 /// The text fields kept as notes.
 const NOTES: &[&str] = &[
@@ -139,6 +139,11 @@ pub fn metrics_filter() -> Targets {
 pub fn metrics_filter_with(steps: bool) -> Targets {
     let targets = Targets::new()
         .with_target("cordial::phase_queries", tracing::Level::INFO)
+        .with_target("cordial::milestones", tracing::Level::DEBUG)
+        .with_target("cordial::budget", tracing::Level::INFO)
+        .with_target("cordial::semantic::contexts", tracing::Level::INFO)
+        .with_target("cordial::semantic::leaves", tracing::Level::INFO)
+        .with_target("cordial::definition_maps", tracing::Level::INFO)
         .with_target("cordial::audit", tracing::Level::INFO)
         .with_target("cordial::eviction", tracing::Level::INFO)
         .with_target("salsa::eviction", tracing::Level::DEBUG)

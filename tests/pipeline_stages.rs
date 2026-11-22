@@ -57,6 +57,24 @@ fn a_run_stops_after_the_stage_it_is_asked_to_and_says_what_it_reused() -> Resul
     );
     assert_eq!(seconds(&source, "enrich_s"), 0.0);
 
+    // What the run said of the stages before the stop is kept, with where it was stopped: a run
+    // stopped to measure a stage is the one whose numbers are wanted.
+    let store = cordial::StoreLayout::from_root(project.home.join("mini"), "mini".to_owned());
+    let metrics = cordial::read_run_metrics(&store);
+    assert_eq!(metrics.values().get("run.ended.stopped_after"), Some(&1));
+    assert_eq!(
+        metrics.notes().get("run.ended.during").map(String::as_str),
+        Some("source_ir")
+    );
+    assert!(
+        metrics
+            .values()
+            .get("definition_maps.chosen.crates")
+            .is_some_and(|chosen| *chosen > 0),
+        "the load's own numbers are kept: {:?}",
+        metrics.values().keys().collect::<Vec<_>>()
+    );
+
     // The stage before left the crate's IR in the run cache; this run says it
     // used it. The path inclusions were not reached last time, so it projects
     // them now, which is why it loads the database again, and says that too.

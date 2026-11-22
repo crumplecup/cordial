@@ -108,6 +108,7 @@ pub(super) fn run_session(
     );
     store.ensure_dirs()?;
     crate::run_metrics::keep_at(&store);
+    crate::memory_limit::log_budget();
 
     let setup = session
         .progress()

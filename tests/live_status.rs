@@ -106,3 +106,33 @@ fn a_phase_that_ends_says_which_queries_it_executed_most() {
     assert_eq!(*queries, 35);
     assert!(top.starts_with("parse_probe=30 infer_probe=5"), "{top}");
 }
+
+/// What a step ran, named and counted: the queries executed since a reading, most first.
+#[test]
+fn what_ran_since_a_reading_is_named_most_first() {
+    let subscriber = tracing_subscriber::registry().with(LiveLayer.with_filter(live_filter()));
+    let _guard = tracing::subscriber::set_default(subscriber);
+    let run = |name: &str, times: u32| {
+        for number in 0..times {
+            tracing::info!(
+                target: "salsa::function::execute",
+                "{name}(Id({number})): executing query"
+            );
+        }
+    };
+    run("earlier_probe", 5);
+    let before = LiveStatus::global().counts();
+    run("alpha_probe", 3);
+    run("beta_probe", 1);
+    run("earlier_probe", 2);
+    assert_eq!(
+        LiveStatus::global().top_since(&before, 10),
+        "alpha_probe=3 earlier_probe=2 beta_probe=1",
+        "only what ran after the reading, by how often"
+    );
+    assert_eq!(
+        LiveStatus::global().top_since(&before, 1),
+        "alpha_probe=3",
+        "at most as many as asked for"
+    );
+}

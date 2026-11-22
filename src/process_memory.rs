@@ -35,17 +35,34 @@ pub fn sample() -> Option<MemorySample> {
     Some(MemorySample::new(field("VmRSS")?, field("VmHWM")?))
 }
 
+/// What the machine has free to give this process and its children, in kibibytes
+/// (`MemAvailable`): the headroom that the process's own resident size does not show.
+#[instrument(level = "trace")]
+pub fn available_kib() -> Option<u64> {
+    std::fs::read_to_string("/proc/meminfo")
+        .ok()?
+        .lines()
+        .find_map(|line| line.strip_prefix("MemAvailable:"))?
+        .split_whitespace()
+        .next()?
+        .parse()
+        .ok()
+}
+
 /// Emit the current memory beside the phase that just finished, as a
-/// `cordial::metrics` event, so a run's log shows where memory grew.
+/// `cordial::milestones` event, so a run's log and its metrics show where memory grew and when.
+/// One event per milestone: the run's metrics add up the numbers of events with the same name.
 #[instrument(level = "debug")]
 #[hotpath::measure]
 pub(crate) fn log(phase: &str) {
     if let Some(memory) = sample() {
         tracing::debug!(
-            target: "cordial::metrics",
+            target: "cordial::milestones",
             phase,
             resident_kib = memory.resident_kib(),
             peak_kib = memory.peak_kib(),
+            available_kib = available_kib().unwrap_or(0),
+            elapsed_ms = crate::LiveStatus::global().elapsed_ms(),
             "memory"
         );
     }

@@ -133,6 +133,23 @@ pub fn scaffolding_due(held_kib: u64, ladder_bytes: u64, percent: u64) -> bool {
         && held_kib.saturating_mul(1024) >= ladder_bytes / 100 * percent
 }
 
+/// Say what budget this run works to, as an event its metrics keep: the line at which it lets go of
+/// the scaffolding it builds is a share of the budget, and a run that never lets go of any should
+/// show whether it was ever given a line.
+#[instrument(level = "debug")]
+pub fn log_budget() {
+    let ladder = ladder_bytes();
+    let percent = PARSIMONY_PERCENT.load(Ordering::Relaxed);
+    tracing::info!(
+        target: "cordial::budget",
+        ladder_kib = ladder / 1024,
+        parsimony_percent = percent,
+        scaffolding_line_kib = if ladder == 0 || percent == 0 { 0 } else { ladder / 100 * percent / 1024 },
+        available_kib = crate::process_memory::available_kib().unwrap_or(0),
+        "the memory this run works to, and the line at which it lets go of scaffolding"
+    );
+}
+
 /// Whether the scaffolding should be let go of now: the run feels pressure, or holds a share of its
 /// budget that it should not hold more of.
 #[must_use]
