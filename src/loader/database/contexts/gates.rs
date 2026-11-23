@@ -29,6 +29,8 @@ pub(super) struct CfgHost {
     pub(super) written: BTreeSet<String>,
     /// The names other code sees of it.
     pub(super) seen: BTreeSet<String>,
+    /// The names it defines for other crates (see `Reach::Defined`).
+    pub(super) defined: BTreeSet<String>,
 }
 
 /// What a file's attributes say about its gates.
@@ -81,6 +83,7 @@ impl FileGates {
                 predicate,
                 written,
                 seen,
+                defined: super::flips::host_names(&host, Reach::Defined),
             });
         }
         gates

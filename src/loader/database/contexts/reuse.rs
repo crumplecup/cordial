@@ -120,6 +120,15 @@ fn reads_cfg_otherwise(text: &str, pairs: &[(CfgOptions, CfgOptions)]) -> bool {
         || (text.contains("cfg_attr") && cfg_attr_flips(text, pairs))
 }
 
+/// Whether the text of a file can move where a module's file is: an `include!`, a `#[path]`, or a `cfg_attr`
+/// whose predicate the context flips (it may add a `path`). A `cfg!` cannot: it is an expression, and no `mod`
+/// is hidden behind one.
+fn moves_modules(text: &str, pairs: &[(CfgOptions, CfgOptions)]) -> bool {
+    text.contains("include!")
+        || text.contains("#[path")
+        || (text.contains("cfg_attr") && cfg_attr_flips(text, pairs))
+}
+
 /// Whether the predicate of a `cfg_attr` in `text` holds under the context's cfg as it does not under
 /// the ordinary one, or the other way, for any of the `pairs`.
 #[instrument(level = "trace", skip_all)]
@@ -226,7 +235,7 @@ impl SourceDatabase {
                 .iter()
                 .filter(|(_, path)| !is_a_leaf_file(path))
                 .flat_map(|(file, _)| {
-                    Flips::of_file(&self.db, *file, pairs, Reach::Seen)
+                    Flips::of_file(&self.db, *file, pairs, Reach::Defined)
                         .names()
                         .clone()
                 })
@@ -306,7 +315,7 @@ impl SourceDatabase {
             .any(|candidate| {
                 *flips.entry(candidate).or_insert_with(|| {
                     Flips::of_file(&self.db, candidate, pairs, Reach::Written).is_flipped()
-                        || reads_cfg_otherwise(&self.db.file_text(candidate).text(&self.db), pairs)
+                        || moves_modules(&self.db.file_text(candidate).text(&self.db), pairs)
                 })
             })
     }

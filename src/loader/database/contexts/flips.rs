@@ -27,6 +27,10 @@ pub(in crate::loader::database) enum Reach {
     Written,
     /// What other code sees of the gate: for a gated function, its own name.
     Seen,
+    /// What the gate defines for other crates: the names of the items, fields, variants and methods inside it,
+    /// and for an `impl` or a `use` the names its header writes (what it adds to, or brings in), and not what
+    /// the bodies it holds use.
+    Defined,
 }
 
 impl Flips {
@@ -71,6 +75,7 @@ impl Flips {
             flips.names.extend(match reach {
                 Reach::Written => host.written.iter().cloned(),
                 Reach::Seen => host.seen.iter().cloned(),
+                Reach::Defined => host.defined.iter().cloned(),
             });
         }
         flips
@@ -117,6 +122,9 @@ impl Flips {
 /// module) can change what the names it writes mean, so every name written in it counts.
 #[instrument(level = "trace", skip_all)]
 pub(super) fn host_names(host: &SyntaxNode, reach: Reach) -> BTreeSet<String> {
+    if reach == Reach::Defined {
+        return defined_names(host);
+    }
     if reach == Reach::Seen
         && let Some(function) = ast::Fn::cast(host.clone())
     {
@@ -133,6 +141,52 @@ pub(super) fn host_names(host: &SyntaxNode, reach: Reach) -> BTreeSet<String> {
                 .or_else(|| ast::NameRef::cast(node).map(|name| name.text().to_string()))
         })
         .collect()
+}
+
+/// The names a gate on `host` defines for other crates: see [`Reach::Defined`].
+fn defined_names(host: &SyntaxNode) -> BTreeSet<String> {
+    use ra_ap_syntax::SyntaxKind;
+    let mut names: BTreeSet<String> = BTreeSet::new();
+    // What is named in the header of an `impl` (the type and the trait it is for) or in a `use`.
+    if let Some(implementation) = ast::Impl::cast(host.clone()) {
+        for part in [
+            implementation.self_ty().map(|ty| ty.syntax().clone()),
+            implementation.trait_().map(|ty| ty.syntax().clone()),
+        ]
+        .into_iter()
+        .flatten()
+        {
+            names.extend(
+                part.descendants()
+                    .filter_map(ast::NameRef::cast)
+                    .map(|name| name.text().to_string()),
+            );
+        }
+    } else if ast::Use::can_cast(host.kind()) {
+        names.extend(
+            host.descendants()
+                .filter_map(ast::NameRef::cast)
+                .map(|name| name.text().to_string()),
+        );
+    }
+    // The items, fields, variants and methods inside, which are named by their `Name` child.
+    names.extend(
+        host.descendants()
+            .filter_map(ast::Name::cast)
+            .filter(|name| {
+                name.syntax().parent().is_some_and(|parent| {
+                    ast::Item::can_cast(parent.kind())
+                        || matches!(
+                            parent.kind(),
+                            SyntaxKind::RECORD_FIELD
+                                | SyntaxKind::VARIANT
+                                | SyntaxKind::CONST_PARAM
+                        )
+                })
+            })
+            .map(|name| name.text().to_string()),
+    );
+    names
 }
 
 #[instrument(level = "debug", skip(cfg, predicate))]

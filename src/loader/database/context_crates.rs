@@ -342,7 +342,7 @@ impl SourceDatabase {
             if classified.why.get(file) != Some(&"flipped") {
                 continue;
             }
-            let names = flipped_names_of(&self.db, *file, pairs, Reach::Seen);
+            let names = flipped_names_of(&self.db, *file, pairs, Reach::Defined);
             for krate in owners.owners_of(path) {
                 flipped
                     .entry(krate)
