@@ -255,6 +255,25 @@ of the working set: nothing like inference results is in it, so the +1.04 GiB of
 and not saved, and finding out what it holds is the next measurement. And macro expansion is the largest saved
 mass, as it was the largest cost to compute, which is what a base layer (workstream C) shares across crates.
 
+**Two hypotheses about the working set, tried on fixtures and not on large builds (2026-11-23).** (1) *Building a
+definition map for every transitive dependency does work nobody asked for.* False. With a strategy option that
+builds only the workspace's maps and leaves the dependencies' to be built on demand, a workspace that uses
+nothing of the standard library beyond the prelude executes 21 definition maps either way (the 20 of the
+sysroot and its own), and one with a registry dependency whose own dependency is used only inside a body (a
+vendored directory source, so it is a library crate) executes 23 either way: the evidence follows calls through
+library bodies (`collect_reachable`; 340 bodies lowered for a 20-function workspace), so what the closure builds
+is what is reached. The option was removed again. (2) *The evidence costs more than a few queries per function.*
+False: `tests/evidence_steps.rs` runs a workspace at 20 and at 60 functions and takes the difference of the
+queries Salsa executed, by the step that asked: 29 queries for each function added in all, none of any kind
+more than 2, and it pins both. What does not grow with the functions is large and is the libraries': about
+13,000 impl-signature and attribute queries, and 22,000 attribute queries under `crate_functions`, for a
+40-function workspace with the sysroot, all once. So the working set of a project grows with the number of
+library crates the evidence reaches and the work for each, not with its functions; an algorithmic win is a
+cheaper once-per-library-crate cost or sharing it (workstream C), and not a cheaper function. Allocator
+tunables (`arena_max=2`; trim and mmap thresholds) move the resident size of `elicit_doc` by under 3%: it is
+live data. Salsa's own count of what the database holds is 142 MB of the 1.96 GiB (what a value owns on the
+heap is in neither number), which is why `CORDIAL_FOOTPRINT` reports counts and shallow bytes only.
+
 **B2. One flatten per save.** The results do not depend on who asks, which the module comment states;
 one exception is read in the code: `owner` stops a fingerprint's own dependencies short of the query it
 fingerprints for. So the cache is keyed by edge and valid for every owner except the fingerprint
