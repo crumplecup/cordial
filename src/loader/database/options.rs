@@ -54,6 +54,9 @@ pub struct SemanticCargoOptions {
     /// Copy every local crate for a context, and not only the ones it changes and what they depend
     /// on. For the tests of what the pass does.
     copy_every_crate: bool,
+    /// Give every context its own copy of each crate it changes, and not the one an earlier context
+    /// made when the two differ in nothing the crate names. For the tests of what the pass does.
+    do_not_share_context_copies: bool,
 }
 
 impl SemanticCargoOptions {

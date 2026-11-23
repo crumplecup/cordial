@@ -187,6 +187,7 @@ impl SourceDatabase {
         // A process that takes up a run an earlier one began goes on from the contexts it analysed.
         let resume = self.resume_contexts.take();
         let outcome = self.analyse_contexts(&cfgs, paths, nodes, graph, &mut analysed, resume);
+        self.release_shared_copies("cfg contexts");
         // Gated code is extra evidence: failing to analyse it must not fail a run
         // that asked for nothing else. The plan says it is incomplete, and the log
         // carries the whole error chain.

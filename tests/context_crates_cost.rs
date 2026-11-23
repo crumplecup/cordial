@@ -260,3 +260,76 @@ fn a_cfg_attr_the_context_flips_makes_its_crate_changed_and_one_it_does_not_flip
         Ok(())
     })
 }
+
+/// `a` defines the same name under `kani` and under `creusot`, so the two cannot be one context; `b` is
+/// gated on `creusot` and `both` on the two together. The contexts are `kani`, `creusot` and both, and
+/// `b`'s copy under `creusot` is the copy it has under both (and under the two together that is first
+/// tried and dissolved), since it says nothing of `kani`.
+fn nested() -> Result<tempfile::TempDir> {
+    let root = tempfile::tempdir().into_diagnostic()?;
+    let members: Vec<String> = ["a", "b", "both"].map(String::from).into();
+    write_workspace(root.path(), &members)?;
+    write_crate(
+        root.path(),
+        "a",
+        &[],
+        "pub fn plain_a() -> u32 { 1 }\n#[cfg(kani)]\npub fn alternative() -> u32 { 2 }\n#[cfg(creusot)]\npub fn alternative() -> u32 { 3 }\n",
+    )?;
+    write_crate(
+        root.path(),
+        "b",
+        &[],
+        "pub fn plain_b() -> u32 { 3 }\n#[cfg(creusot)]\npub fn only_creusot() -> u32 { 4 }\n",
+    )?;
+    write_crate(
+        root.path(),
+        "both",
+        &["a", "b"],
+        "pub fn plain() -> u32 { a::plain_a() + b::plain_b() }\n#[cfg(all(kani, creusot))]\npub fn only_both() -> u32 { 5 }\n",
+    )?;
+    Ok(root)
+}
+
+fn project_sharing(root: &std::path::Path, target: &str, share: bool) -> Result<String> {
+    let options = SemanticCargoOptions::default().with_do_not_share_context_copies(!share);
+    let mut session = SourceDatabase::load_with(root, &options).into_diagnostic()?;
+    let dir = root.join(target);
+    let graph = session
+        .project(&CrateTarget::new(target, &dir), &[dir.join("src/lib.rs")])
+        .into_diagnostic()?;
+    Ok(format!("{graph:?}"))
+}
+
+/// Contexts that differ in what a crate never names share that crate's copy: its definition map is built
+/// once, not once for each context, and what the contexts find is the same.
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn contexts_that_differ_in_what_a_crate_never_names_share_its_copy() -> Result<()> {
+    cordial::init_tracing();
+    let scratch = tempfile::tempdir().into_diagnostic()?;
+    let subscriber =
+        tracing_subscriber::registry().with(MetricsLayer.with_filter(metrics_filter_with(true)));
+    let (alone, shared, alone_graph, shared_graph) =
+        tracing::subscriber::with_default(subscriber, || -> Result<_> {
+            let root = nested()?;
+            let alone_graph = project_sharing(root.path(), "both", false)?;
+            let alone = context_maps(&metrics_of(scratch.path())?);
+            let shared_graph = project_sharing(root.path(), "both", true)?;
+            let shared = context_maps(&metrics_of(scratch.path())?) - alone;
+            Ok((alone, shared, alone_graph, shared_graph))
+        })?;
+    assert!(
+        alone_graph.contains("only_both"),
+        "the function only the third context has is found: {alone_graph}"
+    );
+    assert_eq!(
+        described(&shared_graph),
+        described(&alone_graph),
+        "the same graph"
+    );
+    assert!(
+        shared < alone,
+        "{shared} definition maps under the contexts when copies are shared, {alone} when not"
+    );
+    Ok(())
+}

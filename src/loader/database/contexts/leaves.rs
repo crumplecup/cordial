@@ -86,7 +86,9 @@ impl SourceDatabase {
             .collect();
         let mut leaves: Vec<LeafFunction> = Vec::new();
         if !files.is_empty() {
-            self.read_leaf_contexts(&files, &mut leaves)?;
+            let read = self.read_leaf_contexts(&files, &mut leaves);
+            self.release_shared_copies("leaf contexts");
+            read?;
         }
         graph.set_attr(
             graph.root(),

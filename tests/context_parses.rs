@@ -197,7 +197,7 @@ fn context_fingerprints_are_ready_before_eviction_and_reused_by_the_save() -> Re
                 .filter(|(key, _)| key.starts_with("steps.") && key.ends_with(query))
                 .collect();
             assert_eq!(
-                count_at("finish_context"),
+                count_at("retire_crates"),
                 expected,
                 "{query}, restored={restored}: {counts:#?}"
             );

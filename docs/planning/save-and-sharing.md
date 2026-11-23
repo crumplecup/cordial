@@ -473,6 +473,20 @@ crates are leaf targets (101 leaf files). So this project's context cost is most
 to a small fraction, and what would (D4, cfg evaluated per atom inside rust-analyzer so that a crate's memos
 depend on the atoms it tests) is the largest change in this plan and is not started.
 
+*D1 done, on a fixture (2026-11-23).* A crate's copy under a context is identified by the crate, the part of the
+context's change its files name (the atoms of their `cfg` and `cfg_attr` predicates, plus the implicit ones:
+`test`, `debug_assertions`, the target's), and the copies it depends on. A context that finds the same key in the
+table takes that copy, with its files, and copies only the files of the crates it makes itself (`crates_shared`
+in the context's log line). A crate with a `cfg!`, `include!` or `#[path` names more than its predicates say and
+takes the whole change. The first version dropped `test` from a crate that never names it and the leaf pass found
+no leaves: `#[test]` is read through it, hence the implicit list. On a fixture with three contexts
+(`kani`, `creusot`, both, where the first two cannot merge) the contexts build fewer definition maps and find the
+same graph (`contexts_that_differ_in_what_a_crate_never_names_share_its_copy`; `do_not_share_context_copies` is
+the control). A shared copy and its memos are kept until the pass ends (`release_shared_copies`), not retired with
+the context that made it, or the next would build them again; under memory pressure it is retired with its context.
+Not measured on amenable or the self-run: the saving there depends on how many contexts differ in atoms a crate
+does not name, and what keeping the memos costs.
+
 **D1. Copies keyed by what they differ in.** A copy's identity is the crate and the part of the context's
 cfg change that the crate's files mention (from `gates_of`), not the context's ordinal. Contexts that
 differ in atoms a crate never names then share that crate's copy and its memos, and the copy's path

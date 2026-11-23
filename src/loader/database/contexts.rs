@@ -26,8 +26,10 @@ mod pass;
 mod plan;
 mod reuse;
 
+pub(super) use gates::atoms_of;
 pub(super) use pass::{ContextsState, FunctionNodes, FunctionNodesState};
 pub(super) use plan::guard;
+pub(super) use reuse::Classified;
 
 use crate::SemanticContextKey;
 use ra_ap_cfg::{CfgAtom, CfgDiff, CfgOptions};
@@ -42,28 +44,47 @@ impl super::SourceDatabase {
     #[instrument(level = "debug", skip(self, context))]
     #[hotpath::measure(impl_type = "SourceDatabase")]
     fn finish_context(&mut self, context: &crate::ContextCrates, after: &str) {
+        // A copy another context may take is kept until the pass ends, unless memory is short.
+        let held: std::collections::BTreeSet<InputCrate> = if crate::memory_limit::pressured() {
+            self.release_shared_copies(after);
+            std::collections::BTreeSet::new()
+        } else {
+            self.shared_copies
+                .values()
+                .map(|shared| shared.copy)
+                .collect()
+        };
+        let finished: Vec<InputCrate> = context
+            .shadows()
+            .filter(|krate| !held.contains(krate))
+            .collect();
+        self.retire_crates(&finished, after);
+    }
+
+    /// Retire what `crates` own: their persistence work first, so that the final save reuses their
+    /// fingerprints without rebuilding the indexes, and then the values and the memory they hold.
+    #[instrument(level = "debug", skip(self, crates))]
+    #[hotpath::measure(impl_type = "SourceDatabase")]
+    pub(super) fn retire_crates(&mut self, crates: &[InputCrate], after: &str) {
         if self.saved.is_some() && !crate::result_store::active() && self.reuses_across_edits() {
             ra_ap_hir::attach_db(&self.db, || {
-                for krate in context.shadows() {
-                    self.ask_crate_fingerprints(krate);
+                for krate in crates {
+                    self.ask_crate_fingerprints(*krate);
                 }
             });
         }
         let mut keys = Vec::new();
-        for krate in context.shadows() {
-            keys.push(salsa::plumbing::AsId::as_id(&krate));
+        for krate in crates {
+            keys.push(salsa::plumbing::AsId::as_id(krate));
             // Collect stored local declarations before dropping their map. Visible namespace
             // entries also contain imports and must not seed retirement of shared work.
             keys.extend(ra_ap_hir_def::nameres::crate_declared_query_keys(
                 &mut self.db,
-                krate,
+                *krate,
             ));
         }
         self.retire_context_values(&keys, after);
-        let roots: Vec<_> = context
-            .shadows()
-            .map(|krate| salsa::plumbing::AsId::as_id(&krate))
-            .collect();
+        let roots: Vec<_> = crates.iter().map(salsa::plumbing::AsId::as_id).collect();
         let owned = salsa::retire_owned_values(&mut self.db, &roots);
         tracing::info!(
             target: "cordial::eviction", step = after,

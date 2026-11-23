@@ -38,6 +38,11 @@ pub(super) struct FileGates {
     pub(super) clause_sets: BTreeSet<Vec<Clause>>,
     /// The items a `cfg` attribute is on.
     pub(super) cfg_hosts: Vec<CfgHost>,
+    /// Every cfg atom a `cfg` or `cfg_attr` predicate in the file names, as a context key spells it.
+    pub(super) atoms: BTreeSet<String>,
+    /// Whether the file reads the cfg some way its predicates do not say (`cfg!`) or moves where a
+    /// module's file is (`include!`, `#[path]`): what it names is then not all it depends on.
+    pub(super) opaque: bool,
 }
 
 impl FileGates {
@@ -46,11 +51,23 @@ impl FileGates {
     #[hotpath::measure(impl_type = "FileGates")]
     fn of(tree: &SourceFile) -> Self {
         let mut gates = Self::default();
+        let text = tree.syntax().to_string();
+        gates.opaque =
+            text.contains("cfg!") || text.contains("include!") || text.contains("#[path");
+        for predicate in tree
+            .syntax()
+            .descendants()
+            .filter_map(ast::CfgAttrMeta::cast)
+            .filter_map(|meta| meta.cfg_predicate())
+        {
+            spell_atoms(&CfgExpr::parse_from_ast(predicate), &mut gates.atoms);
+        }
         for attr in tree.syntax().descendants().filter_map(ast::Attr::cast) {
             let Some(host) = attr.syntax().parent() else {
                 continue;
             };
             let predicate = guard(&host);
+            spell_atoms(&predicate, &mut gates.atoms);
             gates.clause_sets.insert(clauses(&predicate, false));
             if !matches!(attr.meta(), Some(ast::Meta::CfgMeta(_))) {
                 continue;
@@ -67,6 +84,22 @@ impl FileGates {
             });
         }
         gates
+    }
+}
+
+/// Add the atoms `expr` names to `into`, spelled as a context key spells them.
+fn spell_atoms(expr: &CfgExpr, into: &mut BTreeSet<String>) {
+    match expr {
+        CfgExpr::Invalid => {}
+        CfgExpr::Atom(atom) => {
+            into.insert(super::spell(atom));
+        }
+        CfgExpr::All(parts) | CfgExpr::Any(parts) => {
+            for part in parts.iter() {
+                spell_atoms(part, into);
+            }
+        }
+        CfgExpr::Not(inner) => spell_atoms(inner, into),
     }
 }
 
@@ -90,6 +123,18 @@ fn gates_in<'db>(db: &'db dyn SemanticDatabase, scope: ItemKey<'db>) -> FileGate
 pub(super) fn gates_of(db: &RootDatabase, file: FileId) -> Option<&FileGates> {
     let semantic: &dyn SemanticDatabase = db;
     Some(gates_in(semantic, item_key::file_scope(db, file)?))
+}
+
+/// The cfg atoms the file names, or `None` when it reads the cfg some way its predicates do not say
+/// (or its gates are not known): what it depends on is then more than what it names.
+#[instrument(level = "trace", skip(db))]
+pub(in crate::loader::database) fn atoms_of(
+    db: &RootDatabase,
+    file: FileId,
+) -> Option<&BTreeSet<String>> {
+    gates_of(db, file)
+        .filter(|gates| !gates.opaque)
+        .map(|gates| &gates.atoms)
 }
 
 impl Flips {

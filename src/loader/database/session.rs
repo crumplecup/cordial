@@ -35,6 +35,7 @@ impl SourceDatabase {
             cargo_options: None,
             proc_macro_server: None,
             context_crates: Vec::new(),
+            shared_copies: std::collections::HashMap::new(),
             reporter: Reporter::default(),
             saved: None,
             saved_once: false,

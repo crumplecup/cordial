@@ -105,6 +105,7 @@ impl SourceDatabase {
             restored: kept.is_some(),
             resume_contexts: None,
             context_crates: kept.unwrap_or_default(),
+            shared_copies: std::collections::HashMap::new(),
             reporter: reporter.clone(),
             saved,
             saved_once: false,

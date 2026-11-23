@@ -9,6 +9,7 @@ mod architecture_queries;
 mod audit;
 mod cold_texts;
 mod context_crates;
+mod context_shares;
 mod contexts;
 #[cfg(any(
     feature = "antipatterns",
@@ -138,6 +139,9 @@ pub struct SourceDatabase {
     workspace: Option<crate::SemanticWorkspaceContext>,
     // Contexts added as crates of their own beside the ordinary ones.
     context_crates: Vec<ContextCrates>,
+    // The copies contexts made, which a later context takes when it differs from the one that made
+    // them in nothing the crate names.
+    shared_copies: std::collections::HashMap<context_shares::CopyKey, context_shares::SharedCopy>,
     // Dependency packages of the loaded Cargo graph, kept out of the context
     // identity so snapshots do not carry the whole dependency tree.
     external_packages: Vec<crate::SemanticPackageContext>,
