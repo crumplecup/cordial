@@ -588,6 +588,18 @@ contexts where directory ownership copied 11). A leaf crate also still depends o
 library crate is flipped the key of every dependent differs and nothing shares: that is the cascade D1's key makes
 and a name-aware key (D4's granularity) would not. Not yet measured on amenable after these changes.
 
+*D4, name-aware dependencies (2026-11-23).* A crate's copy follows a dependency to the context's copy of it only
+where the crate mentions a name that a gate the context flips makes visible, in that dependency or in what it
+depends on (`follows_of`: the names of the flipped gates, by `Reach::Seen`, propagated up the dependency graph,
+against the words in the crate's own files; a crate whose files are not known follows everything). A crate that
+mentions none sees the dependency as the ordinary build has it, so its key names the ordinary crate and does not
+change with the context, and the copy set takes a dependency only where it is followed and is itself changed or
+follows one that is. This is the cascade that kept amenable's leaf copies from sharing and kept 98 crates copied
+in contexts that flip a few files. Fixtures: `mid` between `top` and `base` is no longer copied (2 of 4), the graph
+found is the one copying every crate finds, and in `nested` `b` and `d` are each built once across the contexts with
+`creusot` on (`d` depends on `a`, whose copies differ per context). The soundness is the file-local rule's: a use of
+a flipped name that is not written in the crate's files (a macro that makes it up) is not seen.
+
 **D1. Copies keyed by what they differ in.** A copy's identity is the crate and the part of the context's
 cfg change that the crate's files mention (from `gates_of`), not the context's ordinal. Contexts that
 differ in atoms a crate never names then share that crate's copy and its memos, and the copy's path

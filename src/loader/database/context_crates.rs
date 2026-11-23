@@ -8,7 +8,7 @@
 //! the ordinary crates are never touched: what they computed stays valid, and
 //! the context's results coexist with theirs.
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::PathBuf;
 use triomphe::Arc;
 
@@ -25,7 +25,7 @@ use tracing::instrument;
 
 use super::SourceDatabase;
 use super::context_shares::{
-    Borrowed, CopyKey, CrateFiles, SharedCopy, directories_of, restricted,
+    Borrowed, CopyKey, CrateFiles, Owners, SharedCopy, directories_of, restricted,
 };
 use super::contexts::{Classified, Leaves};
 use super::contexts::{LocalCfgs, atom};
@@ -230,6 +230,8 @@ struct CopiedFiles {
     /// For each crate this context copies, its files and what was done with them: the copy of each
     /// that was copied, and the ones that were not.
     homes: HashMap<InputCrate, CrateFiles>,
+    /// The dependencies a crate follows to the context's copy of them: (crate, dependency).
+    follows: HashSet<(InputCrate, InputCrate)>,
 }
 
 impl SourceDatabase {
@@ -257,6 +259,7 @@ impl SourceDatabase {
         locals: &[(InputCrate, FileId)],
         files: &[(FileId, PathBuf)],
         changed: &BTreeSet<FileId>,
+        follows: &HashSet<(InputCrate, InputCrate)>,
     ) -> BTreeSet<InputCrate> {
         let path_of: HashMap<FileId, &PathBuf> =
             files.iter().map(|(file, path)| (*file, path)).collect();
@@ -269,8 +272,163 @@ impl SourceDatabase {
             changed_crates.extend(directories.owners_of(path));
         }
         // The local dependencies of each local crate.
+        let dependencies = self.local_dependencies(locals);
+        // Whether a crate is changed or follows, through crates it follows, to one that is.
+        let mut needs: HashMap<InputCrate, bool> = HashMap::new();
+        fn needs_copy(
+            krate: InputCrate,
+            changed: &BTreeSet<InputCrate>,
+            dependencies: &HashMap<InputCrate, Vec<InputCrate>>,
+            follows: &HashSet<(InputCrate, InputCrate)>,
+            memo: &mut HashMap<InputCrate, bool>,
+        ) -> bool {
+            if let Some(known) = memo.get(&krate) {
+                return *known;
+            }
+            // A cycle cannot be among a crate's dependencies; if it were, no crate in it reaches
+            // the changed one by it.
+            memo.insert(krate, false);
+            let answer = changed.contains(&krate)
+                || dependencies.get(&krate).is_some_and(|below| {
+                    below.iter().any(|dependency| {
+                        follows.contains(&(krate, *dependency))
+                            && needs_copy(*dependency, changed, dependencies, follows, memo)
+                    })
+                });
+            memo.insert(krate, answer);
+            answer
+        }
+        // The changed crates, and what a copied crate follows that is changed or follows one that is.
+        let mut copied = changed_crates.clone();
+        let mut pending: Vec<InputCrate> = changed_crates.iter().copied().collect();
+        while let Some(krate) = pending.pop() {
+            for dependency in dependencies.get(&krate).into_iter().flatten() {
+                if follows.contains(&(krate, *dependency))
+                    && needs_copy(
+                        *dependency,
+                        &changed_crates,
+                        &dependencies,
+                        follows,
+                        &mut needs,
+                    )
+                    && copied.insert(*dependency)
+                {
+                    pending.push(*dependency);
+                }
+            }
+        }
+        copied
+    }
+
+    /// The dependencies each crate follows to the context's copy of them, as (crate, dependency): those
+    /// where the crate mentions a name that a gate the context flips makes visible, in the dependency or in
+    /// what the dependency depends on. A crate that mentions none sees the dependency as the ordinary build
+    /// has it, whatever the context switched there, so it is not made to depend on a copy of it: that is
+    /// what lets crates that differ in nothing they use share a copy across contexts.
+    #[instrument(level = "debug", skip_all)]
+    fn follows_of(
+        &self,
+        locals: &[(InputCrate, FileId)],
+        owners: &Owners,
+        files: &[(FileId, PathBuf)],
+        pairs: &[(ra_ap_cfg::CfgOptions, ra_ap_cfg::CfgOptions)],
+        classified: &Classified,
+    ) -> HashSet<(InputCrate, InputCrate)> {
+        use super::contexts::{Reach, flipped_names_of};
+        let dependencies = self.local_dependencies(locals);
+        // The names the gates the context flips in each crate make visible.
+        let mut flipped: HashMap<InputCrate, BTreeSet<String>> = HashMap::new();
+        for (file, path) in files {
+            if classified.why.get(file) != Some(&"flipped") {
+                continue;
+            }
+            let names = flipped_names_of(&self.db, *file, pairs, Reach::Seen);
+            for krate in owners.owners_of(path) {
+                flipped
+                    .entry(krate)
+                    .or_default()
+                    .extend(names.iter().cloned());
+            }
+        }
+        // What may differ for a crate that depends on `krate`: its own and what it depends on's.
+        fn visible(
+            krate: InputCrate,
+            flipped: &HashMap<InputCrate, BTreeSet<String>>,
+            dependencies: &HashMap<InputCrate, Vec<InputCrate>>,
+            memo: &mut HashMap<InputCrate, BTreeSet<String>>,
+        ) -> BTreeSet<String> {
+            if let Some(known) = memo.get(&krate) {
+                return known.clone();
+            }
+            memo.insert(krate, BTreeSet::new());
+            let mut names = flipped.get(&krate).cloned().unwrap_or_default();
+            for dependency in dependencies.get(&krate).into_iter().flatten() {
+                names.extend(visible(*dependency, flipped, dependencies, memo));
+            }
+            memo.insert(krate, names.clone());
+            names
+        }
+        let mut memo: HashMap<InputCrate, BTreeSet<String>> = HashMap::new();
+        let visible_through: HashMap<InputCrate, BTreeSet<String>> = locals
+            .iter()
+            .map(|(krate, _)| (*krate, visible(*krate, &flipped, &dependencies, &mut memo)))
+            .collect();
+        // The words each crate's files hold, for the crates that depend on something that can differ.
+        let mut words: HashMap<InputCrate, HashSet<String>> = HashMap::new();
+        for (krate, below) in &dependencies {
+            if below.iter().all(|dependency| {
+                visible_through
+                    .get(dependency)
+                    .is_none_or(BTreeSet::is_empty)
+            }) {
+                continue;
+            }
+            let mut held: HashSet<String> = HashSet::new();
+            for (file, path) in files {
+                if !owners.crate_owns(*krate, path) {
+                    continue;
+                }
+                let text = self.db.file_text(*file).text(&self.db).clone();
+                held.extend(
+                    text.split(|character: char| {
+                        !(character.is_alphanumeric() || character == '_')
+                    })
+                    .filter(|word| !word.is_empty())
+                    .map(str::to_owned),
+                );
+            }
+            words.insert(*krate, held);
+        }
+        let mut follows = HashSet::new();
+        for (krate, below) in &dependencies {
+            // A crate whose files are not known may use anything.
+            let unplaced = owners.unplaced().any(|unplaced| unplaced == *krate);
+            for dependency in below {
+                let Some(names) = visible_through
+                    .get(dependency)
+                    .filter(|names| !names.is_empty())
+                else {
+                    continue;
+                };
+                let uses = unplaced
+                    || words
+                        .get(krate)
+                        .is_some_and(|held| names.iter().any(|name| held.contains(name)));
+                if uses {
+                    follows.insert((*krate, *dependency));
+                }
+            }
+        }
+        follows
+    }
+
+    /// The local dependencies of each of `locals`.
+    fn local_dependencies(
+        &self,
+        locals: &[(InputCrate, FileId)],
+    ) -> HashMap<InputCrate, Vec<InputCrate>> {
         let analysed: BTreeSet<InputCrate> = locals.iter().map(|(krate, _)| *krate).collect();
-        let dependencies: HashMap<InputCrate, Vec<InputCrate>> = attach_db(&self.db, || {
+        attach_db(&self.db, || {
             locals
                 .iter()
                 .map(|(krate, _)| {
@@ -284,45 +442,7 @@ impl SourceDatabase {
                     (*krate, local)
                 })
                 .collect()
-        });
-        // Whether a crate is changed or depends, through local crates, on one that is.
-        let mut reaches: HashMap<InputCrate, bool> = HashMap::new();
-        fn reaches_changed(
-            krate: InputCrate,
-            changed: &BTreeSet<InputCrate>,
-            dependencies: &HashMap<InputCrate, Vec<InputCrate>>,
-            memo: &mut HashMap<InputCrate, bool>,
-        ) -> bool {
-            if let Some(known) = memo.get(&krate) {
-                return *known;
-            }
-            // A cycle cannot be among a crate's dependencies; if it were, no crate in it reaches
-            // the changed one by it.
-            memo.insert(krate, false);
-            let answer = changed.contains(&krate)
-                || dependencies.get(&krate).is_some_and(|below| {
-                    below
-                        .iter()
-                        .any(|dependency| reaches_changed(*dependency, changed, dependencies, memo))
-                });
-            memo.insert(krate, answer);
-            answer
-        }
-        // The changed crates, and what they depend on that reaches a changed crate.
-        let mut copied = changed_crates.clone();
-        let mut pending: Vec<InputCrate> = changed_crates.iter().copied().collect();
-        let mut seen: BTreeSet<InputCrate> = changed_crates.clone();
-        while let Some(krate) = pending.pop() {
-            for dependency in dependencies.get(&krate).into_iter().flatten() {
-                if seen.insert(*dependency) {
-                    pending.push(*dependency);
-                }
-                if reaches_changed(*dependency, &changed_crates, &dependencies, &mut reaches) {
-                    copied.insert(*dependency);
-                }
-            }
-        }
-        copied
+        })
     }
 
     /// Add `context` as a copy of the workspace beside the ordinary one, once:
@@ -386,6 +506,7 @@ impl SourceDatabase {
             changes,
             shared,
             mut homes,
+            follows,
         } = self.copy_local_files(index, previous.map(|kept| &kept.files), &pairs, context)?;
         let mut shadows: Vec<(InputCrate, InputCrate)> = Vec::new();
         let mut borrowed = Borrowed::default();
@@ -417,6 +538,9 @@ impl SourceDatabase {
             // A dependency on another local crate follows to that crate's copy,
             // so a test binary built for the context sees the library built for it.
             for dependency in &mut data.dependencies {
+                if !follows.contains(&(*krate, dependency.crate_id)) {
+                    continue;
+                }
                 if let Some((_, copy)) = shadows
                     .iter()
                     .find(|(original, _)| *original == dependency.crate_id)
@@ -592,14 +716,26 @@ impl SourceDatabase {
             },
             &locals.iter().map(|(_, root)| *root).collect::<Vec<_>>(),
         );
+        let directories = directories_of(&locals, &located);
+        // Which dependency each crate follows to the context's copy of it: only where it can tell the
+        // difference, by mentioning a name a flip there (or in what it depends on) makes visible.
+        let follows = if self.copies_every_crate() {
+            self.local_dependencies(&locals)
+                .into_iter()
+                .flat_map(|(krate, below)| {
+                    below.into_iter().map(move |dependency| (krate, dependency))
+                })
+                .collect()
+        } else {
+            self.follows_of(&locals, &directories, &located, pairs, &classified)
+        };
         // The crates this context copies: the ones it changes, and the dependencies on the way to
         // them. A crate it does not change is the ordinary crate, whose maps are built and shared.
         let copied = if self.copies_every_crate() {
             locals.iter().map(|(krate, _)| *krate).collect()
         } else {
-            self.crates_to_copy(&locals, &located, &classified.changed)
+            self.crates_to_copy(&locals, &located, &classified.changed, &follows)
         };
-        let directories = directories_of(&locals, &located);
         // Why crates are changed: for each reason a file is changed, how many crates have such a file
         // under their directory, how many crates each such file is under, and which files say so.
         {
@@ -669,6 +805,10 @@ impl SourceDatabase {
                     let mut below = Vec::new();
                     let mut own_below = false;
                     for dependency in &krate.data(&self.db).dependencies {
+                        if !follows.contains(&(*krate, dependency.crate_id)) {
+                            below.push(dependency.crate_id);
+                            continue;
+                        }
                         match effective.get(&dependency.crate_id) {
                             Some(Some(copy)) => below.push(*copy),
                             Some(None) => own_below = true,
@@ -832,6 +972,7 @@ impl SourceDatabase {
             changes,
             shared,
             homes,
+            follows,
         })
     }
 

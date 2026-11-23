@@ -216,12 +216,13 @@ fn a_context_that_copies_only_what_it_changes_finds_what_copying_every_crate_fin
             "the function only the context has is found, as the gate flips: {every}"
         );
         assert_eq!(described(&only), described(&every), "the same graph");
-        // `top` and `base` are changed, `mid` is on the way from one to the other, `other` depends on a
-        // changed crate and is changed by nothing.
+        // `top` and `base` are changed. `mid` is on the way from one to the other, but mentions nothing the
+        // flip in `base` makes visible, so `top` sees it as the ordinary build has it: it is not copied. `other`
+        // depends on a changed crate and is changed by nothing.
         assert_eq!(copied_every, 4, "every crate");
         assert_eq!(
-            copied_only, 3,
-            "all but the crate that only depends on a changed one"
+            copied_only, 2,
+            "the crates the gates change, and not what only depends on them"
         );
         Ok(())
     })
@@ -267,7 +268,7 @@ fn a_cfg_attr_the_context_flips_makes_its_crate_changed_and_one_it_does_not_flip
 /// tried and dissolved), since it says nothing of `kani`.
 fn nested() -> Result<tempfile::TempDir> {
     let root = tempfile::tempdir().into_diagnostic()?;
-    let members: Vec<String> = ["a", "b", "both"].map(String::from).into();
+    let members: Vec<String> = ["a", "b", "d", "both"].map(String::from).into();
     write_workspace(root.path(), &members)?;
     write_crate(
         root.path(),
@@ -280,6 +281,12 @@ fn nested() -> Result<tempfile::TempDir> {
         "b",
         &[],
         "pub fn plain_b() -> u32 { 3 }\n#[cfg(creusot)]\npub fn only_creusot() -> u32 { 4 }\n",
+    )?;
+    write_crate(
+        root.path(),
+        "d",
+        &["a"],
+        "pub fn plain_d() -> u32 { a::plain_a() }\n#[cfg(creusot)]\npub fn d_only() -> u32 { 6 }\n",
     )?;
     write_crate(
         root.path(),
@@ -327,8 +334,11 @@ fn contexts_that_differ_in_what_a_crate_never_names_share_its_copy() -> Result<(
         described(&alone_graph),
         "the same graph"
     );
+    // `b` (which names only `creusot`) and `d` (the same, and a dependent of `a`, whose copies differ
+    // between the contexts but which mentions nothing they switch) are each built once and not for every
+    // context that has `creusot` on.
     assert!(
-        shared < alone,
+        shared + 2 <= alone,
         "{shared} definition maps under the contexts when copies are shared, {alone} when not"
     );
     Ok(())

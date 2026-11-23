@@ -137,6 +137,17 @@ pub(in crate::loader::database) fn atoms_of(
         .map(|gates| &gates.atoms)
 }
 
+/// The names the gates of `file` that the context flips make visible.
+#[instrument(level = "trace", skip(db, pairs))]
+pub(in crate::loader::database) fn flipped_names_of(
+    db: &RootDatabase,
+    file: FileId,
+    pairs: &[(ra_ap_cfg::CfgOptions, ra_ap_cfg::CfgOptions)],
+    reach: Reach,
+) -> BTreeSet<String> {
+    Flips::of_file(db, file, pairs, reach).names().clone()
+}
+
 impl Flips {
     /// The gates of `file` that differ between any `(ordinary, context)` cfg pair, from the file's
     /// saved gates, or from its tree when they cannot be made.

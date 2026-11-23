@@ -22,7 +22,7 @@ pub(super) struct Flips {
 
 /// Which names of a flipped gate make the code that mentions them relevant.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum Reach {
+pub(in crate::loader::database) enum Reach {
     /// Every name written in the gate: the code that mentions any of them.
     Written,
     /// What other code sees of the gate: for a gated function, its own name.
