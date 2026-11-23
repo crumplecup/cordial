@@ -172,7 +172,129 @@ impl ContextCrates {
     }
 }
 
+/// What copying a context's files decided: each file's copy, the files taken as they are, and the crates
+/// that are copied.
+struct CopiedFiles {
+    copies: HashMap<FileId, FileId>,
+    aliased: std::collections::HashSet<FileId>,
+    crates: BTreeSet<InputCrate>,
+}
+
 impl SourceDatabase {
+    /// Whether every local crate is copied for a context, as its options say, and not only the ones the
+    /// context changes. For the tests of what the pass does.
+    fn copies_every_crate(&self) -> bool {
+        self.cargo_options
+            .as_ref()
+            .is_some_and(|options| *options.copy_every_crate())
+    }
+
+    /// The crates a context copies of the local crates `locals` (each with its root file), given the
+    /// workspace's `files` with their paths and the `changed` ones.
+    ///
+    /// A crate is changed when a file under its source directory is. Its copy is needed, and so is the copy
+    /// of each crate it depends on that itself depends, through crates, on a changed one: what that crate
+    /// defines can differ in the context through the changed crate, so the copy of what depends on it has
+    /// to see its copy. A crate that depends on none, and is not itself changed, defines the same in the
+    /// context as it does without it, and the copies use the ordinary one.
+    ///
+    /// A crate whose root file is not known is taken to be changed.
+    #[instrument(level = "debug", skip(self, locals, files, changed))]
+    fn crates_to_copy(
+        &self,
+        locals: &[(InputCrate, FileId)],
+        files: &[(FileId, PathBuf)],
+        changed: &BTreeSet<FileId>,
+    ) -> BTreeSet<InputCrate> {
+        let path_of: HashMap<FileId, &PathBuf> =
+            files.iter().map(|(file, path)| (*file, path)).collect();
+        let directories: Vec<(InputCrate, Option<PathBuf>)> = locals
+            .iter()
+            .map(|(krate, root)| {
+                (
+                    *krate,
+                    path_of
+                        .get(root)
+                        .and_then(|path| path.parent())
+                        .map(PathBuf::from),
+                )
+            })
+            .collect();
+        let mut changed_crates: BTreeSet<InputCrate> = directories
+            .iter()
+            .filter(|(_, directory)| directory.is_none())
+            .map(|(krate, _)| *krate)
+            .collect();
+        for file in changed {
+            let Some(path) = path_of.get(file) else {
+                continue;
+            };
+            for (krate, directory) in &directories {
+                if directory
+                    .as_ref()
+                    .is_some_and(|directory| path.starts_with(directory))
+                {
+                    changed_crates.insert(*krate);
+                }
+            }
+        }
+        // The local dependencies of each local crate.
+        let analysed: BTreeSet<InputCrate> = locals.iter().map(|(krate, _)| *krate).collect();
+        let dependencies: HashMap<InputCrate, Vec<InputCrate>> = attach_db(&self.db, || {
+            locals
+                .iter()
+                .map(|(krate, _)| {
+                    let local: Vec<InputCrate> = krate
+                        .data(&self.db)
+                        .dependencies
+                        .iter()
+                        .map(|dependency| dependency.crate_id)
+                        .filter(|dependency| analysed.contains(dependency))
+                        .collect();
+                    (*krate, local)
+                })
+                .collect()
+        });
+        // Whether a crate is changed or depends, through local crates, on one that is.
+        let mut reaches: HashMap<InputCrate, bool> = HashMap::new();
+        fn reaches_changed(
+            krate: InputCrate,
+            changed: &BTreeSet<InputCrate>,
+            dependencies: &HashMap<InputCrate, Vec<InputCrate>>,
+            memo: &mut HashMap<InputCrate, bool>,
+        ) -> bool {
+            if let Some(known) = memo.get(&krate) {
+                return *known;
+            }
+            // A cycle cannot be among a crate's dependencies; if it were, no crate in it reaches
+            // the changed one by it.
+            memo.insert(krate, false);
+            let answer = changed.contains(&krate)
+                || dependencies.get(&krate).is_some_and(|below| {
+                    below
+                        .iter()
+                        .any(|dependency| reaches_changed(*dependency, changed, dependencies, memo))
+                });
+            memo.insert(krate, answer);
+            answer
+        }
+        // The changed crates, and what they depend on that reaches a changed crate.
+        let mut copied = changed_crates.clone();
+        let mut pending: Vec<InputCrate> = changed_crates.iter().copied().collect();
+        let mut seen: BTreeSet<InputCrate> = changed_crates.clone();
+        while let Some(krate) = pending.pop() {
+            for dependency in dependencies.get(&krate).into_iter().flatten() {
+                if seen.insert(*dependency) {
+                    pending.push(*dependency);
+                }
+                if reaches_changed(*dependency, &changed_crates, &dependencies, &mut reaches) {
+                    copied.insert(*dependency);
+                }
+            }
+        }
+        copied
+    }
+
     /// Add `context` as a copy of the workspace beside the ordinary one, once:
     /// asking again for a context already added returns it. The ordinary crates'
     /// and files' inputs are not written, so nothing computed for them is
@@ -227,10 +349,18 @@ impl SourceDatabase {
     ) -> CordialResult<ContextCrates> {
         let ordinary = LocalCfgs::capture(&self.db, &self.analysed_crates());
         let pairs = ordinary.pairs(context);
-        let (files, aliased) =
-            self.copy_local_files(index, previous.map(|kept| &kept.files), &pairs)?;
+        let CopiedFiles {
+            copies: files,
+            aliased,
+            crates: copied,
+        } = self.copy_local_files(index, previous.map(|kept| &kept.files), &pairs)?;
         let mut shadows: Vec<(InputCrate, InputCrate)> = Vec::new();
         for (krate, options) in ordinary.cfgs() {
+            // A crate the context does not change is the ordinary crate: what depends on it follows
+            // to it, and what was built for it is shared.
+            if !copied.contains(krate) {
+                continue;
+            }
             let mut changed = options.clone();
             changed.apply_diff(LocalCfgs::diff_of(context));
             let mut data = krate.data(&self.db).clone();
@@ -327,10 +457,10 @@ impl SourceDatabase {
         index: usize,
         known: Option<&HashMap<FileId, FileId>>,
         pairs: &[(ra_ap_cfg::CfgOptions, ra_ap_cfg::CfgOptions)],
-    ) -> CordialResult<(HashMap<FileId, FileId>, std::collections::HashSet<FileId>)> {
+    ) -> CordialResult<CopiedFiles> {
         let root_id = SourceRootId(FIRST_COPY_ROOT + u32::try_from(index).unwrap_or(u32::MAX >> 2));
         let analysed = self.analysed_crates();
-        let (roots, crate_roots): (BTreeSet<SourceRootId>, BTreeSet<FileId>) =
+        let (roots, locals): (BTreeSet<SourceRootId>, Vec<(InputCrate, FileId)>) =
             attach_db(&self.db, || {
                 let locals: Vec<_> = Crate::all(&self.db)
                     .into_iter()
@@ -344,11 +474,11 @@ impl SourceDatabase {
                             .source_root_id(&self.db)
                     })
                     .collect();
-                let crate_roots = locals
+                let locals = locals
                     .iter()
-                    .map(|krate| krate.root_file(&self.db))
+                    .map(|krate| (krate.base(), krate.root_file(&self.db)))
                     .collect();
-                (roots, crate_roots)
+                (roots, locals)
             });
         // Every file of the workspace, with where it is.
         let mut originals: Vec<(FileId, VfsPath, PathBuf)> = Vec::new();
@@ -373,10 +503,25 @@ impl SourceDatabase {
             .filter(|(_, _, path)| path.extension().is_some_and(|extension| extension == "rs"))
             .map(|(file, _, path)| (*file, path.clone()))
             .collect();
-        let copying = self.files_to_copy(&located, &crate_roots, pairs);
+        let classified = self.classify_files(&located, pairs);
+        // The crates this context copies: the ones it changes, and the dependencies on the way to
+        // them. A crate it does not change is the ordinary crate, whose maps are built and shared.
+        let copied = if self.copies_every_crate() {
+            locals.iter().map(|(krate, _)| *krate).collect()
+        } else {
+            self.crates_to_copy(&locals, &located, &classified.changed)
+        };
+        let crate_roots: BTreeSet<FileId> = locals
+            .iter()
+            .filter(|(krate, _)| copied.contains(krate))
+            .map(|(_, root)| *root)
+            .collect();
+        let copying = classified.copying(&located, &crate_roots);
         tracing::info!(
             target: "cordial::semantic::contexts",
             context_index = index,
+            crates = locals.len(),
+            crates_copied = copied.len(),
             files = copying.reuse.files,
             flipped = copying.reuse.flipped,
             unsure = copying.reuse.unsure,
@@ -445,7 +590,11 @@ impl SourceDatabase {
             text_shared = shared,
             "the files copied for a context, and how many of them hold the original's text itself"
         );
-        Ok((copies, aliased))
+        Ok(CopiedFiles {
+            copies,
+            aliased,
+            crates: copied,
+        })
     }
 
     /// Bring every context's copy of `original` up to date with `text`.

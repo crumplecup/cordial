@@ -189,6 +189,8 @@ fn context_fingerprints_are_ready_before_eviction_and_reused_by_the_save() -> Re
                     .map(|(_, count)| *count)
                     .sum()
             };
+            // Two contexts, and the crate has gates that only `kani` flips: the `creusot` context changes
+            // nothing in it, so it copies nothing and has no fingerprint to make.
             let expected = u64::from(!restored);
             let counts: Vec<_> = found
                 .iter()
@@ -196,7 +198,7 @@ fn context_fingerprints_are_ready_before_eviction_and_reused_by_the_save() -> Re
                 .collect();
             assert_eq!(
                 count_at("finish_context"),
-                2 * expected,
+                expected,
                 "{query}, restored={restored}: {counts:#?}"
             );
             assert_eq!(
@@ -232,9 +234,12 @@ fn a_cold_run_parses_each_contexts_copy_of_the_files_for_the_passes() -> Result<
         value("context_crates.copies"),
         "each copy holds the original's text itself, not a copy of it"
     );
+    // The leaf pass reads the test file in each of its two contexts, and the library's root in the one
+    // that changes it: under `test` alone the library has no gate that flips, so a context copies none
+    // of it, and its tests are read against the ordinary library.
     let expected: std::collections::BTreeMap<String, u64> = [
         ("functions_in_copy < harvest".to_owned(), 2),
-        ("functions_in_copy < read_leaves".to_owned(), 4),
+        ("functions_in_copy < read_leaves".to_owned(), 3),
     ]
     .into();
     assert_eq!(

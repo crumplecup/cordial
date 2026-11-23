@@ -437,6 +437,24 @@ are primed and the walk is memo lookups. What is not known is the split of the 6
 (a new file id, its parse and item tree), the leaf crate's definition map, and its functions' evidence, and how
 much of it a leaf in the ordinary graph (D3) would not repeat. The per-crate split D0 asks for is not done.
 
+*D2 done, by the cost model it came from (2026-11-23).* What a context costs was proportional to the workspace,
+not to the change: on a fixture of K independent crates with a gate in one, a context built exactly one
+definition map for each crate added (1.00 each) and ran about 11 queries for each, because `build_context`
+copied every local crate and the harvest and the definition maps followed. A context now copies the crates it
+changes (a file under a crate's source directory is flipped, reads the cfg otherwise, or is a leaf) and the
+dependencies on the way from one changed crate to another (they define differently through it), and nothing
+else: a crate the context does not change is the ordinary crate, a copy that depends on it follows to it, and
+its maps are built and shared. Sound by the file-local rule the harvest already has (a function's facts are
+re-read only when a flip in its own file touches it), so a function in a crate with no flip is never read in a
+context; a crate that depends on a changed crate and is changed by nothing keeps the ordinary crate. A crate
+whose root file is not known is taken to be changed. The definition maps under a context are the same at 3
+crates and at 9 (and fewer than with every crate copied); on a chain (`top` gated over `mid` over `base`
+gated, `other` over `base`) it copies 3 of the 4 and finds the same graph, including the function only the
+context has. `copy_every_crate` restores the old behaviour for those tests. Two expectations of
+`context_parses` changed and say why: a context that flips nothing in a crate copies nothing of it. Not done:
+the leaf files are still copied by every cfg context and read by its harvest (about 16 queries a leaf file,
+under 2% on amenable), and D3 (leaf files in the ordinary graph) is untouched.
+
 **D1. Copies keyed by what they differ in.** A copy's identity is the crate and the part of the context's
 cfg change that the crate's files mention (from `gates_of`), not the context's ordinal. Contexts that
 differ in atoms a crate never names then share that crate's copy and its memos, and the copy's path

@@ -51,6 +51,9 @@ pub struct SemanticCargoOptions {
     /// steps that merge them: each step then asks for it, file by file, and the first to ask
     /// computes it. For the tests of what the pass does.
     skip_file_scan_priming: bool,
+    /// Copy every local crate for a context, and not only the ones it changes and what they depend
+    /// on. For the tests of what the pass does.
+    copy_every_crate: bool,
 }
 
 impl SemanticCargoOptions {

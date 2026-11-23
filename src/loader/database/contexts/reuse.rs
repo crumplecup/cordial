@@ -65,6 +65,41 @@ pub(in crate::loader::database) struct Copying {
     pub(in crate::loader::database) reuse: Reuse,
 }
 
+/// The files a context changes or cannot take as they are, before the files above them are added.
+#[derive(Debug, Default)]
+pub(in crate::loader::database) struct Classified {
+    /// The files with a flipped gate, the files that read the cfg otherwise and the leaf files.
+    pub(in crate::loader::database) changed: BTreeSet<FileId>,
+    /// The counts so far.
+    pub(in crate::loader::database) reuse: Reuse,
+}
+
+impl Classified {
+    /// What is copied: the changed files, the roots of the crates that are copied (`roots`), and the
+    /// files above a changed file, which a module is found from.
+    pub(in crate::loader::database) fn copying(
+        self,
+        files: &[(FileId, PathBuf)],
+        roots: &BTreeSet<FileId>,
+    ) -> Copying {
+        let by_path: HashMap<PathBuf, FileId> = files
+            .iter()
+            .map(|(file, path)| (path.clone(), *file))
+            .collect();
+        let Classified { changed, mut reuse } = self;
+        let mut spine: BTreeSet<FileId> = roots.difference(&changed).copied().collect();
+        for (file, path) in files {
+            if changed.contains(file) {
+                spine.extend(files_above(path, &by_path));
+            }
+        }
+        reuse.spine = spine.difference(&changed).count();
+        let mut copy = changed;
+        copy.extend(spine);
+        Copying { copy, reuse }
+    }
+}
+
 /// Whether the text of a file reads the cfg other than through a `#[cfg]` attribute, or moves where
 /// a module's file is.
 fn reads_cfg_otherwise(text: &str) -> bool {
@@ -104,20 +139,15 @@ fn files_above(path: &Path, by_path: &HashMap<PathBuf, FileId>) -> Vec<FileId> {
 }
 
 impl SourceDatabase {
-    /// Decide what a context copies of `files` (each with its real path), given the crate `roots`
-    /// and the context's cfg `pairs`.
-    #[instrument(level = "debug", skip(self, files, roots, pairs))]
+    /// Decide which of `files` (each with its real path) a context changes or cannot take as they are,
+    /// given the context's cfg `pairs`.
+    #[instrument(level = "debug", skip(self, files, pairs))]
     #[hotpath::measure(impl_type = "SourceDatabase")]
-    pub(in crate::loader::database) fn files_to_copy(
+    pub(in crate::loader::database) fn classify_files(
         &self,
         files: &[(FileId, PathBuf)],
-        roots: &BTreeSet<FileId>,
         pairs: &[(CfgOptions, CfgOptions)],
-    ) -> Copying {
-        let by_path: HashMap<PathBuf, FileId> = files
-            .iter()
-            .map(|(file, path)| (path.clone(), *file))
-            .collect();
+    ) -> Classified {
         let mut reuse = Reuse {
             files: files.len(),
             ..Reuse::default()
@@ -139,15 +169,6 @@ impl SourceDatabase {
                 changed.insert(*file);
             }
         }
-        let mut spine: BTreeSet<FileId> = roots.difference(&changed).copied().collect();
-        for (file, path) in files {
-            if changed.contains(file) {
-                spine.extend(files_above(path, &by_path));
-            }
-        }
-        reuse.spine = spine.difference(&changed).count();
-        let mut copy = changed;
-        copy.extend(spine);
-        Copying { copy, reuse }
+        Classified { changed, reuse }
     }
 }
