@@ -487,6 +487,10 @@ pub struct Crate {
     pub cfg_options: CfgOptions,
     #[returns(ref)]
     pub env: Env,
+    /// For a copy of a crate that the tool made to analyse it under another cfg: the crate it is a copy of.
+    /// What the two share (the expansion of a macro call in a file both take as it is) is keyed by this one.
+    #[default]
+    pub canonical: Option<Crate>,
 }
 
 impl Crate {

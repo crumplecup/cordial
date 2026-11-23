@@ -518,3 +518,63 @@ fn a_gate_in_one_integration_test_changes_that_test_and_not_the_others() -> Resu
         Ok(())
     })
 }
+
+/// A crate with a gate a context flips, and a file the context does not change that has `ITEMS` derives and
+/// item macro calls: the definition map of the context's copy of the crate expands them, as the ordinary
+/// crate's did.
+fn item_macros_in_an_unchanged_file(items: usize) -> Result<tempfile::TempDir> {
+    let root = tempfile::tempdir().into_diagnostic()?;
+    write_workspace(root.path(), &["m".to_owned()])?;
+    write_crate(
+        root.path(),
+        "m",
+        &[],
+        "mod items;\n#[cfg(feature = \"extra\")]\npub fn only_with_extra() -> u32 { 1 }\n",
+    )?;
+    let body: String = (0..items)
+        .map(|index| {
+            format!("#[derive(Clone, Debug, PartialEq)]\npub struct S{index} {{ pub a: u32 }}\nmake!(f{index});\n")
+        })
+        .collect();
+    std::fs::write(
+        root.path().join("m/src/items.rs"),
+        format!(
+            "macro_rules! make {{ ($name:ident) => {{ pub fn $name() -> u32 {{ 1 }} }}; }}\n{body}"
+        ),
+    )
+    .into_diagnostic()?;
+    Ok(root)
+}
+
+/// How many expansions of item-position macro calls and derives a context makes in a file it takes as it is,
+/// at two sizes: the ordinary build's are the same expansions.
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn a_context_expands_the_item_macros_of_a_file_it_takes_as_it_is() -> Result<()> {
+    cordial::init_tracing();
+    let scratch = tempfile::tempdir().into_diagnostic()?;
+    let subscriber =
+        tracing_subscriber::registry().with(MetricsLayer.with_filter(metrics_filter_with(true)));
+    let (few, many, ordinary) = tracing::subscriber::with_default(subscriber, || -> Result<_> {
+        project(item_macros_in_an_unchanged_file(2)?.path(), "m", false)?;
+        let metrics = metrics_of(scratch.path())?;
+        let few = context_queries(&metrics, "expand_pure_macro_of");
+        let ordinary: u64 = metrics
+            .values()
+            .iter()
+            .filter(|(name, _)| {
+                name.starts_with("steps.") && name.ends_with("> expand_pure_macro_of")
+            })
+            .map(|(_, count)| *count)
+            .sum();
+        project(item_macros_in_an_unchanged_file(12)?.path(), "m", false)?;
+        let many = context_queries(&metrics_of(scratch.path())?, "expand_pure_macro_of") - few;
+        Ok((few, many, ordinary))
+    })?;
+    assert_eq!(
+        (few, many),
+        (0, 0),
+        "expansions of item macros executed under the context at 2 and at 12 items ({ordinary} in all at 2)"
+    );
+    Ok(())
+}

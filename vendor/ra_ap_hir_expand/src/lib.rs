@@ -1131,7 +1131,49 @@ impl MacroDefId {
         ctxt: SyntaxContext,
         macro_depth: u32,
     ) -> MacroCallId {
-        MacroCallId::new(db, MacroCallLoc { def: self, krate, kind, ctxt, macro_depth })
+        let (def, krate) = self.shared_with_original(db, krate, &kind);
+        MacroCallId::new(db, MacroCallLoc { def, krate, kind, ctxt, macro_depth })
+    }
+
+    /// The macro and the crate a call is made in, as the original crate has them, when `krate` is a copy the
+    /// tool made of it under another cfg and the call is in text the copy takes from the original as it is: the
+    /// expansion is then the original's, and made once. A call in a file the copy has of its own, or one whose
+    /// macro is defined there and says `$crate`, which means the copy, keeps the copy.
+    fn shared_with_original(
+        self,
+        db: &dyn SourceDatabase,
+        krate: Crate,
+        kind: &MacroCallKind,
+    ) -> (MacroDefId, Crate) {
+        let Some(original) = krate.canonical(db).as_ref().copied() else {
+            return (self, krate);
+        };
+        let shared_file = |file: HirFileId| match (file.file_id(), file.macro_file()) {
+            (Some(file), _) => {
+                db.file_source_root(file.file_id(db)).source_root_id(db).0 < base_db::TOOL_SOURCE_ROOTS
+            }
+            // A call in an expansion that was itself shared.
+            (None, Some(call)) => call.loc(db).krate.canonical(db).is_none(),
+            (None, None) => false,
+        };
+        if !shared_file(kind.file_id()) {
+            return (self, krate);
+        }
+        let def = if self.krate == krate {
+            // A macro the copy defines: the original's, if its file is shared and its body does not name `$crate`.
+            match self.kind {
+                MacroDefKind::Declarative(id, _)
+                    if shared_file(id.file_id)
+                        && !id.to_node(db).syntax().text().to_string().contains("$crate") =>
+                {
+                    MacroDefId { krate: original, ..self }
+                }
+                _ => return (self, krate),
+            }
+        } else {
+            self
+        };
+        (def, original)
     }
 
     pub fn definition_range(&self, db: &dyn SourceDatabase) -> InFile<TextRange> {

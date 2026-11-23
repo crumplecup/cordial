@@ -611,6 +611,18 @@ jiff and verus, 8 to 17 files in 6 to 14 crates): the few large crates whose def
 under the changed cfg, which no copy count touches. That is the part of D4 that is real and not started: rebuilding a
 big crate's definition map for each cfg variant. Not known: which crates, since the leaf read does not say per crate.
 
+*D4, macro expansions shared between a copy and its original (2026-11-23).* The earlier fixture of "a context expands no
+macro of a file it takes as it is" put its calls in function bodies, which a definition map does not expand, so it
+proved nothing about what a map expands. With item-position calls and derives in an aliased file of a copied crate the
+context re-expanded one per call (2 at 2 items, 12 at 12): the call's identity names the crate, and the copy is
+another crate. Now a `Crate` input has a `canonical` field (the crate a copy is a copy of, set by the tool), and
+`MacroDefId::make_call` makes a call in a copy as the original's when the call is in a file the copy takes from the
+original as it is (a source root below the tool's roots), or in an expansion that was itself shared; a macro the copy
+defines is taken as the original's under the same condition and when its body does not say `$crate` (which would then
+mean the original). The expansion, its parse and its item tree are made once. Test: the same fixture now executes 0
+expansions under the context at both sizes (`a_context_expands_the_item_macros_of_a_file_it_takes_as_it_is`). Not done:
+the definition map itself, which still collects each copy's modules and resolves its imports afresh.
+
 **D1. Copies keyed by what they differ in.** A copy's identity is the crate and the part of the context's
 cfg change that the crate's files mention (from `gates_of`), not the context's ordinal. Contexts that
 differ in atoms a crate never names then share that crate's copy and its memos, and the copy's path

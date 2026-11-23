@@ -583,9 +583,11 @@ impl SourceDatabase {
                 write_if_different!(workspace_data, set_workspace_data, workspace);
                 write_if_different!(cfg_options, set_cfg_options, changed);
                 write_if_different!(env, set_env, env);
+                write_if_different!(canonical, set_canonical, Some(*krate));
                 copy
             } else {
                 InputCrate::builder(data, extra, workspace, changed, env)
+                    .canonical(Some(*krate))
                     .durability(Durability::LOW)
                     .new(&self.db)
             };
