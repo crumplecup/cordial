@@ -335,6 +335,7 @@ impl SavedState {
                     }
                 };
                 let micros = u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX);
+                let after = crate::process_memory::sample();
                 tracing::debug!(
                     target: "salsa::state_size",
                     ingredient = segment.name,
@@ -344,6 +345,8 @@ impl SavedState {
                     chunks = entry.chunks.len() as u64,
                     reused = was_reused,
                     micros,
+                    resident_kib = after.map_or(0, |sample| sample.resident_kib()),
+                    peak_kib = after.map_or(0, |sample| sample.peak_kib()),
                     "an ingredient's share of the saved state"
                 );
                 taken += u64::from(was_reused);
