@@ -122,6 +122,18 @@ digest changes (a state of the last build is not used, as for any layout change)
 their canonical crate through the saved id. Test: a saved state round-trips a context with shared modules and a
 restored run computes nothing for them.
 
+## Progress
+
+*S0 done (2026-11-23).* `file_item_tree` keys the query by the original crate for a copy and a file the copy takes as it
+is (`hir_expand::is_shared_with_original`, the rule `make_call` already used, now one function). The growth fixture is in
+the test file and passes (`a_contexts_item_trees_do_not_grow_with_the_modules_its_gate_does_not_touch`: it measured
+4 to 31 item trees with 3 to 30 modules before the change). 72 context, saved-state and base tests pass. `gates_in` still
+grows with the files (31 for 30 modules): it is read once per file the first time the context pass classifies it and
+is memoized after, so it is a first-use cost and not a per-context one. Open question 1 is settled by reading salsa:
+a tracked struct is allocated in the identity map of the query that makes it
+(`tracked_struct.rs`: `disambiguate`, `take_restored` by identity within the creating query), so a copy's query cannot
+make the original's `ModuleId`; S2 reads it from the original's map.
+
 ## Tests (each stage; the method is the complexity ratchet)
 
 Growth: a fixture with 3 and 30 unchanged modules, asserting what grows under the context (item tree queries,

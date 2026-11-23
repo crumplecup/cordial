@@ -1122,6 +1122,20 @@ fn check_tt_count(tt: &tt::TopSubtree) -> Result<(), ExpandResult<()>> {
     }
 }
 
+/// Whether the text of `file` is one a copy of a crate takes from the original as it is: a file of the
+/// workspace's own source roots (the tool gives a copy's own files a source root of its own), or an expansion
+/// that was itself made as the original's. What is made from such text does not depend on which of the two
+/// crates asks.
+pub fn is_shared_with_original(db: &dyn SourceDatabase, file: HirFileId) -> bool {
+    match (file.file_id(), file.macro_file()) {
+        (Some(file), _) => {
+            db.file_source_root(file.file_id(db)).source_root_id(db).0 < base_db::TOOL_SOURCE_ROOTS
+        }
+        (None, Some(call)) => call.loc(db).krate.canonical(db).is_none(),
+        (None, None) => false,
+    }
+}
+
 impl MacroDefId {
     pub fn make_call(
         self,
@@ -1148,14 +1162,7 @@ impl MacroDefId {
         let Some(original) = krate.canonical(db).as_ref().copied() else {
             return (self, krate);
         };
-        let shared_file = |file: HirFileId| match (file.file_id(), file.macro_file()) {
-            (Some(file), _) => {
-                db.file_source_root(file.file_id(db)).source_root_id(db).0 < base_db::TOOL_SOURCE_ROOTS
-            }
-            // A call in an expansion that was itself shared.
-            (None, Some(call)) => call.loc(db).krate.canonical(db).is_none(),
-            (None, None) => false,
-        };
+        let shared_file = |file: HirFileId| is_shared_with_original(db, file);
         if !shared_file(kind.file_id()) {
             return (self, krate);
         }

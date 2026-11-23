@@ -578,3 +578,68 @@ fn a_context_expands_the_item_macros_of_a_file_it_takes_as_it_is() -> Result<()>
     );
     Ok(())
 }
+
+/// A crate with a gate a context flips in its root, and `modules` modules in files of their own, each with a
+/// struct, an `impl`, a `use` of another module's struct and a function.
+fn modules_beside_a_gate(modules: usize) -> Result<tempfile::TempDir> {
+    let root = tempfile::tempdir().into_diagnostic()?;
+    write_workspace(root.path(), &["m".to_owned()])?;
+    let declared: String = (0..modules)
+        .map(|index| format!("mod m{index};\n"))
+        .collect();
+    write_crate(
+        root.path(),
+        "m",
+        &[],
+        &format!(
+            "{declared}#[cfg(feature = \"extra\")]\npub fn only_with_extra() -> u32 {{ 1 }}\n"
+        ),
+    )?;
+    for index in 0..modules {
+        let other = (index + 1) % modules;
+        std::fs::write(
+            root.path().join(format!("m/src/m{index}.rs")),
+            format!(
+                "use crate::m{other}::S{other};\npub struct S{index};\nimpl S{index} {{ pub fn f(&self) -> u32 {{ {index} }} }}\npub fn g{index}(_: S{other}) -> u32 {{ {index} }}\n"
+            ),
+        )
+        .into_diagnostic()?;
+    }
+    Ok(root)
+}
+
+/// Every kind of query executed under the contexts, with how many: what a context does for a crate.
+fn context_query_counts(metrics: &cordial::RunMetrics) -> std::collections::BTreeMap<String, u64> {
+    let mut counts = std::collections::BTreeMap::new();
+    for (name, count) in metrics.values() {
+        if name.starts_with("steps.") && name.contains("analyse_contexts") {
+            let query = name.rsplit("> ").next().unwrap_or(name).to_owned();
+            *counts.entry(query).or_default() += count;
+        }
+    }
+    counts
+}
+
+/// What a context does for the item trees of a crate it changes in one gate, when the crate has more modules the
+/// gate does not touch: the files it takes as they are are lowered once, for the ordinary crate, and not again for
+/// the copy.
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn a_contexts_item_trees_do_not_grow_with_the_modules_its_gate_does_not_touch() -> Result<()> {
+    cordial::init_tracing();
+    let scratch = tempfile::tempdir().into_diagnostic()?;
+    let subscriber =
+        tracing_subscriber::registry().with(MetricsLayer.with_filter(metrics_filter_with(true)));
+    let (few, many) = tracing::subscriber::with_default(subscriber, || -> Result<_> {
+        project(modules_beside_a_gate(3)?.path(), "m", false)?;
+        let few = context_queries(&metrics_of(scratch.path())?, "file_item_tree_query");
+        project(modules_beside_a_gate(30)?.path(), "m", false)?;
+        let many = context_queries(&metrics_of(scratch.path())?, "file_item_tree_query") - few;
+        Ok((few, many))
+    })?;
+    assert!(
+        many <= few + 3,
+        "{few} item trees lowered under the context with 3 modules and {many} with 30"
+    );
+    Ok(())
+}

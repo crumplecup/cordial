@@ -122,6 +122,12 @@ fn lower_extra_crate_attrs<'a>(
 
 /// Computes an [`ItemTree`] for the given file or macro expansion.
 pub fn file_item_tree(db: &dyn SourceDatabase, file_id: HirFileId, krate: Crate) -> &ItemTree {
+    // A copy of a crate made under another cfg lowers a file it takes from the original as it is the way the
+    // original does: a gate in the file that the cfg flips would have made the file the copy's own.
+    let krate = match krate.canonical(db) {
+        Some(original) if hir_expand::is_shared_with_original(db, file_id) => *original,
+        _ => krate,
+    };
     match file_item_tree_query(db, FileItemTreeKey::new(db, file_id, krate)) {
         Some(item_tree) => item_tree,
         None => {
