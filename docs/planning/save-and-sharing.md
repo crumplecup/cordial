@@ -243,6 +243,18 @@ IR), so it measured nothing; the edit behaviour is the specimen's (A4). The save
 the peak on amenable, so B2/B3 are now about time (28 s) and not about RSS: what sets the peak is the 2.7 GB
 working set the save starts from.
 
+**Decomposition of the working set the save starts from (amenable, cold, release, 2026-11-23).** Peak 3.0 GB,
+129 s, save 22.7 s (of which 22.6 s is encoding, flattening included). Resident, in order: the database loaded
+0.29 GiB; the workspace loaded 0.85 (+0.55); the definition maps of 158 crates 1.43 (+0.58, 17.7 s); function
+evidence primed 2.47 (**+1.04, 18 s, 38% of the working set**); file scans, ordinary projection and the cfg
+contexts together +0.2 (the contexts add 0.03); the leaf pass 0.00 (35 s: time, no memory held); the save +0.09.
+What the saved state holds, by ingredient: macro expansion (`expand_pure_macro_of` 137 MB, `expand_proc_macro_of`
+47 MB, `macrocallid` 31 MB) 45%; crate definition maps (700 memos) 79 MB, 17%; file texts 36 MB; `direct_facts`
+24 MB. The flatteners' sets total 14.7 MB. Two things follow. The saved state does not contain the largest step
+of the working set: nothing like inference results is in it, so the +1.04 GiB of priming is memory that is held
+and not saved, and finding out what it holds is the next measurement. And macro expansion is the largest saved
+mass, as it was the largest cost to compute, which is what a base layer (workstream C) shares across crates.
+
 **B2. One flatten per save.** The results do not depend on who asks, which the module comment states;
 one exception is read in the code: `owner` stops a fingerprint's own dependencies short of the query it
 fingerprints for. So the cache is keyed by edge and valid for every owner except the fingerprint
