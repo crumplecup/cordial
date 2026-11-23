@@ -219,8 +219,10 @@ impl SavedState {
                 if self.engine.is_some() && segment.file.starts_with("src/") {
                     return Ok(());
                 }
+                let started = std::time::Instant::now();
                 let written = super::state_chunks::write_chunked(part, &mut chunks)
                     .map_err(|error| self.chunking(segment.name, &error))?;
+                let micros = u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX);
                 let entry = SegmentEntry {
                     index: segment.index,
                     name: segment.name.to_owned(),
@@ -235,6 +237,7 @@ impl SavedState {
                     bytes = entry.bytes(),
                     entries = entry.entries,
                     chunks = entry.chunks.len() as u64,
+                    micros,
                     "an ingredient's share of the saved state"
                 );
                 manifest.push(entry);
