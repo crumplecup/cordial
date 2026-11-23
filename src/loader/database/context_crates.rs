@@ -595,6 +595,7 @@ impl SourceDatabase {
             &located,
             pairs,
             context.enabled().iter().any(|atom| atom == "test"),
+            &locals.iter().map(|(_, root)| *root).collect::<Vec<_>>(),
         );
         // The crates this context copies: the ones it changes, and the dependencies on the way to
         // them. A crate it does not change is the ordinary crate, whose maps are built and shared.

@@ -494,6 +494,12 @@ flips or where it has no module in the ordinary build. A fixture with a test fil
 flip copies one crate, not two (`a_cfg_context_does_not_copy_a_crate_for_its_test_files`); I did not run it against
 the old rule. Not measured on amenable.
 
+*D3, no-module files (2026-11-23).* A file with no module in the ordinary build was always changed. It is now changed
+only where a file that can declare it (the files above it, and its crate's root) has a gate the context flips or reads
+the cfg otherwise. A fixture with a hidden file in four crates and two contexts copies three crates in all where the
+old rule copied five (`a_file_with_no_module_changes_only_where_the_gate_that_hides_it_flips`, counted from the
+rule's own arithmetic, not run against the old code). Not measured on amenable.
+
 **D1. Copies keyed by what they differ in.** A copy's identity is the crate and the part of the context's
 cfg change that the crate's files mention (from `gates_of`), not the context's ordinal. Contexts that
 differ in atoms a crate never names then share that crate's copy and its memos, and the copy's path

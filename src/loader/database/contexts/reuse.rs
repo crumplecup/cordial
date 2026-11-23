@@ -176,6 +176,7 @@ impl SourceDatabase {
         files: &[(FileId, PathBuf)],
         pairs: &[(CfgOptions, CfgOptions)],
         reads_leaves: bool,
+        roots: &[FileId],
     ) -> Classified {
         let mut reuse = Reuse {
             files: files.len(),
@@ -183,6 +184,15 @@ impl SourceDatabase {
         };
         let mut changed: BTreeSet<FileId> = BTreeSet::new();
         let sema = Semantics::new(&self.db);
+        let around = Around {
+            by_path: files
+                .iter()
+                .map(|(file, path)| (path.clone(), *file))
+                .collect(),
+            path_of: files.iter().map(|(file, path)| (*file, path)).collect(),
+            roots,
+        };
+        let mut flips: HashMap<FileId, bool> = HashMap::new();
         for (file, path) in files {
             if reads_leaves && is_a_leaf_file(path) {
                 // Counted with the files that read the cfg otherwise: it cannot be taken as unchanged.
@@ -192,7 +202,8 @@ impl SourceDatabase {
                 reuse.flipped += 1;
                 changed.insert(*file);
             } else if reads_cfg_otherwise(&self.db.file_text(*file).text(&self.db), pairs)
-                || sema.file_to_module_defs(*file).next().is_none()
+                || (sema.file_to_module_defs(*file).next().is_none()
+                    && self.declarer_changes(*file, path, &around, pairs, &mut flips))
             {
                 reuse.unsure += 1;
                 changed.insert(*file);
@@ -200,4 +211,43 @@ impl SourceDatabase {
         }
         Classified { changed, reuse }
     }
+
+    /// Whether a file with no module in the ordinary build may have one in the context: a module is
+    /// declared by a file above it (see [`files_above`]) or by the root of its crate, and it is gated off
+    /// in the ordinary build by a gate in that file. So it changes where a candidate declarer has a gate
+    /// the context flips, or reads the cfg otherwise (a `#[path]` can name it from anywhere).
+    #[instrument(level = "trace", skip_all)]
+    fn declarer_changes(
+        &self,
+        file: FileId,
+        path: &Path,
+        around: &Around<'_>,
+        pairs: &[(CfgOptions, CfgOptions)],
+        flips: &mut HashMap<FileId, bool>,
+    ) -> bool {
+        let mut candidates = files_above(path, &around.by_path);
+        candidates.extend(around.roots.iter().copied().filter(|root| {
+            around
+                .path_of
+                .get(root)
+                .and_then(|root| root.parent())
+                .is_some_and(|directory| path.starts_with(directory))
+        }));
+        candidates
+            .into_iter()
+            .filter(|candidate| *candidate != file)
+            .any(|candidate| {
+                *flips.entry(candidate).or_insert_with(|| {
+                    Flips::of_file(&self.db, candidate, pairs, Reach::Written).is_flipped()
+                        || reads_cfg_otherwise(&self.db.file_text(candidate).text(&self.db), pairs)
+                })
+            })
+    }
+}
+
+/// Where the files are, for finding the ones that may declare another.
+struct Around<'a> {
+    by_path: HashMap<PathBuf, FileId>,
+    path_of: HashMap<FileId, &'a PathBuf>,
+    roots: &'a [FileId],
 }

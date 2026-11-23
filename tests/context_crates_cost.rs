@@ -362,3 +362,40 @@ fn a_cfg_context_does_not_copy_a_crate_for_its_test_files() -> Result<()> {
         Ok(())
     })
 }
+
+/// A file with no module in the ordinary build, because the `mod` that declares it is gated off, changes
+/// in a context only where that gate flips: a crate with one gated on something the context leaves alone
+/// is not copied, and one gated on what the context turns on is.
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn a_file_with_no_module_changes_only_where_the_gate_that_hides_it_flips() -> Result<()> {
+    cordial::init_tracing();
+    let scratch = tempfile::tempdir().into_diagnostic()?;
+    let subscriber =
+        tracing_subscriber::registry().with(MetricsLayer.with_filter(metrics_filter_with(true)));
+    tracing::subscriber::with_default(subscriber, || -> Result<()> {
+        let root = independent(4)?;
+        for (krate, feature) in [("c1", "never"), ("c2", "extra")] {
+            let lib = root.path().join(krate).join("src/lib.rs");
+            let text = std::fs::read_to_string(&lib).into_diagnostic()?;
+            std::fs::write(
+                &lib,
+                format!("#[cfg(feature = \"{feature}\")]\nmod hidden;\n{text}"),
+            )
+            .into_diagnostic()?;
+            std::fs::write(lib.with_file_name("hidden.rs"), "pub fn h() -> u32 { 1 }\n")
+                .into_diagnostic()?;
+        }
+        project(root.path(), "c0", false)?;
+        let copied = metrics_of(scratch.path())?
+            .values()
+            .get("semantic.contexts.crates_copied")
+            .copied()
+            .unwrap_or(0);
+        // The gates ask for two contexts, `extra` and `never`. `extra` copies the crate with the gate and the
+        // one whose hidden file it reveals; `never` copies the one it gates. Before, each also copied every
+        // crate with a hidden file: five.
+        assert_eq!(copied, 3, "the crates a context's own gates change");
+        Ok(())
+    })
+}
