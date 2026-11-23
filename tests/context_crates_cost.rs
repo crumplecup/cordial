@@ -608,18 +608,6 @@ fn modules_beside_a_gate(modules: usize) -> Result<tempfile::TempDir> {
     Ok(root)
 }
 
-/// Every kind of query executed under the contexts, with how many: what a context does for a crate.
-fn context_query_counts(metrics: &cordial::RunMetrics) -> std::collections::BTreeMap<String, u64> {
-    let mut counts = std::collections::BTreeMap::new();
-    for (name, count) in metrics.values() {
-        if name.starts_with("steps.") && name.contains("analyse_contexts") {
-            let query = name.rsplit("> ").next().unwrap_or(name).to_owned();
-            *counts.entry(query).or_default() += count;
-        }
-    }
-    counts
-}
-
 /// What a context does for the item trees of a crate it changes in one gate, when the crate has more modules the
 /// gate does not touch: the files it takes as they are are lowered once, for the ordinary crate, and not again for
 /// the copy.
