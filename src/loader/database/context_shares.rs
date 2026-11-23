@@ -86,27 +86,94 @@ impl Borrowed {
     }
 }
 
-/// The directory each local crate's files are under: the one its root file is in, or `None` when the
-/// root file's place is not known.
+/// Which crate each file of the workspace belongs to: the crates whose directory (the one their root file
+/// is in) it is under, except that a file that is another crate's root belongs to that crate alone. The
+/// integration tests of a package are crates that share one directory, `tests`, and each of its files is
+/// the root of a crate of its own: a gate in one of them does not change the others.
+#[derive(Debug, Default)]
+pub(super) struct Owners {
+    /// Each crate, the directory its root file is in (`None` when the root file's place is not known), and
+    /// the root file.
+    entries: Vec<(InputCrate, Option<PathBuf>, Option<PathBuf>)>,
+    roots: std::collections::HashSet<PathBuf>,
+}
+
+impl Owners {
+    /// The crates whose directory is not known: they are taken to be changed.
+    pub(super) fn unplaced(&self) -> impl Iterator<Item = InputCrate> + '_ {
+        self.entries
+            .iter()
+            .filter(|(_, directory, _)| directory.is_none())
+            .map(|(krate, _, _)| *krate)
+    }
+
+    /// Every crate, with whether its root file's place is known.
+    pub(super) fn crates(&self) -> impl Iterator<Item = (InputCrate, bool)> + '_ {
+        self.entries
+            .iter()
+            .map(|(krate, directory, _)| (*krate, directory.is_some()))
+    }
+
+    /// Whether `krate` (an entry of this) owns the file at `path`.
+    fn owns(
+        entry: &(InputCrate, Option<PathBuf>, Option<PathBuf>),
+        roots: &std::collections::HashSet<PathBuf>,
+        path: &std::path::Path,
+    ) -> bool {
+        let (_, directory, root) = entry;
+        root.as_deref().is_some_and(|root| root == path)
+            || (directory
+                .as_deref()
+                .is_some_and(|directory| path.starts_with(directory))
+                && !roots.contains(path))
+    }
+
+    /// The crates the file at `path` belongs to.
+    pub(super) fn owners_of<'a>(
+        &'a self,
+        path: &'a std::path::Path,
+    ) -> impl Iterator<Item = InputCrate> + 'a {
+        self.entries
+            .iter()
+            .filter(move |entry| Self::owns(entry, &self.roots, path))
+            .map(|(krate, _, _)| *krate)
+    }
+
+    /// Whether `krate` owns the file at `path`.
+    pub(super) fn crate_owns(&self, krate: InputCrate, path: &std::path::Path) -> bool {
+        self.entries
+            .iter()
+            .any(|entry| entry.0 == krate && Self::owns(entry, &self.roots, path))
+    }
+}
+
+/// Which crate each file belongs to, for the local crates `locals` (each with its root file) and the
+/// workspace's `files` with their paths.
 #[instrument(level = "trace", skip_all)]
 pub(super) fn directories_of(
     locals: &[(InputCrate, FileId)],
     files: &[(FileId, PathBuf)],
-) -> Vec<(InputCrate, Option<PathBuf>)> {
+) -> Owners {
     let path_of: HashMap<FileId, &PathBuf> =
         files.iter().map(|(file, path)| (*file, path)).collect();
-    locals
+    let entries: Vec<_> = locals
         .iter()
         .map(|(krate, root)| {
+            let root = path_of.get(root).map(|path| (*path).clone());
             (
                 *krate,
-                path_of
-                    .get(root)
+                root.as_ref()
                     .and_then(|path| path.parent())
                     .map(PathBuf::from),
+                root,
             )
         })
-        .collect()
+        .collect();
+    let roots = entries
+        .iter()
+        .filter_map(|(_, _, root)| root.clone())
+        .collect();
+    Owners { entries, roots }
 }
 
 /// Whether rust-analyzer reads an atom without a predicate in the text naming it: `#[test]` is active
@@ -159,29 +226,23 @@ impl SourceDatabase {
     #[instrument(level = "debug", skip_all)]
     pub(super) fn crate_atoms(
         &self,
-        directories: &[(InputCrate, Option<PathBuf>)],
+        directories: &Owners,
         files: &[(FileId, PathBuf)],
     ) -> HashMap<InputCrate, Option<BTreeSet<String>>> {
         let mut atoms: HashMap<InputCrate, Option<BTreeSet<String>>> = directories
-            .iter()
-            .map(|(krate, directory)| (*krate, directory.as_ref().map(|_| BTreeSet::new())))
+            .crates()
+            .map(|(krate, placed)| (krate, placed.then(BTreeSet::new)))
             .collect();
         for (file, path) in files {
-            for (krate, directory) in directories {
-                if !directory
-                    .as_ref()
-                    .is_some_and(|directory| path.starts_with(directory))
-                {
-                    continue;
-                }
+            for krate in directories.owners_of(path) {
                 match atoms_of(&self.db, *file) {
                     Some(named) => {
-                        if let Some(Some(all)) = atoms.get_mut(krate) {
+                        if let Some(Some(all)) = atoms.get_mut(&krate) {
                             all.extend(named.iter().cloned());
                         }
                     }
                     None => {
-                        atoms.insert(*krate, None);
+                        atoms.insert(krate, None);
                     }
                 }
             }

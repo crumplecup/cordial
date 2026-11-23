@@ -575,6 +575,19 @@ bought is false: a context does not expand the macros of a file it takes as it i
 copies and the definition maps of the crates it changes, which is the intrinsic part of D2's finding. Whether the
 rest is large enough on amenable to justify toggling in place is not measured.
 
+*D, why it did not work on amenable, and two corrections (2026-11-23).* The first assessment (release, cold, 10
+crates) copied 108 to 110 of 110 crates in every context and shared 0 to 4. The new `why this context's files are
+changed` event says why: in the leaf-pass contexts (those with `test` on) 101 leaf files in 98 crates were always
+changed, even where the context flips nothing (context 1: 0 flipped, 109 copied); and a file was owned by every crate
+whose directory it is under, so each `tests/*.rs` file, being the root of a crate of its own, made all its siblings
+changed (553 flipped files were 1,508 file-crate pairs). Two changes: a file that is another crate's root belongs to
+that crate alone (`Owners`), and after the first leaf context (`test` alone, which reads every leaf) a leaf file is
+changed only if it flips a gate of its own, reads the cfg otherwise, or mentions a name a flipped gate makes visible.
+Fixtures: `a_gate_in_one_integration_test_changes_that_test_and_not_the_others` (8 crates copied over three
+contexts where directory ownership copied 11). A leaf crate also still depends on the library copies, so where a
+library crate is flipped the key of every dependent differs and nothing shares: that is the cascade D1's key makes
+and a name-aware key (D4's granularity) would not. Not yet measured on amenable after these changes.
+
 **D1. Copies keyed by what they differ in.** A copy's identity is the crate and the part of the context's
 cfg change that the crate's files mention (from `gates_of`), not the context's ordinal. Contexts that
 differ in atoms a crate never names then share that crate's copy and its memos, and the copy's path

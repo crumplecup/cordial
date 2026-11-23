@@ -72,6 +72,9 @@ pub(in crate::loader::database) struct Classified {
     pub(in crate::loader::database) changed: BTreeSet<FileId>,
     /// The counts so far.
     pub(in crate::loader::database) reuse: Reuse,
+    /// Why each changed file is: `flipped`, `leaf`, `reads_cfg` (a `cfg!`, `include!`, `#[path` or a
+    /// `cfg_attr` that flips) or `no_module` (hidden by a gate that flips or reads the cfg otherwise).
+    pub(in crate::loader::database) why: std::collections::BTreeMap<FileId, &'static str>,
 }
 
 impl Classified {
@@ -86,7 +89,9 @@ impl Classified {
             .iter()
             .map(|(file, path)| (path.clone(), *file))
             .collect();
-        let Classified { changed, mut reuse } = self;
+        let Classified {
+            changed, mut reuse, ..
+        } = self;
         let mut spine: BTreeSet<FileId> = roots.difference(&changed).copied().collect();
         for (file, path) in files {
             if changed.contains(file) {
@@ -136,6 +141,27 @@ fn cfg_attr_flips(text: &str, pairs: &[(CfgOptions, CfgOptions)]) -> bool {
         })
 }
 
+/// Which leaf files (tests, benches, examples) a context changes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(in crate::loader::database) enum Leaves {
+    /// None for being a leaf: a context without `test` does not read them.
+    Never,
+    /// All of them: the first context the leaf pass reads, which reads every leaf function once.
+    All,
+    /// The ones that flip a gate of their own, read the cfg otherwise, or mention a name a flipped gate
+    /// makes visible: another leaf context reads only the functions its gates can change, and a file that
+    /// names nothing a gate switched is as the first context had it.
+    Mentioning,
+}
+
+/// Whether `text` has an identifier among `names`.
+fn mentions_any(text: &str, names: &BTreeSet<String>) -> bool {
+    !names.is_empty()
+        && text
+            .split(|character: char| !(character.is_alphanumeric() || character == '_'))
+            .any(|word| !word.is_empty() && names.contains(word))
+}
+
 /// Whether the file is one the leaf pass reads: a test, a bench or an example, which are read
 /// through their copies, in the contexts that have `test` on (the leaf pass's). A context without it
 /// does not read them: they are as the ordinary build has them unless a gate in them flips.
@@ -175,7 +201,7 @@ impl SourceDatabase {
         &self,
         files: &[(FileId, PathBuf)],
         pairs: &[(CfgOptions, CfgOptions)],
-        reads_leaves: bool,
+        leaves: Leaves,
         roots: &[FileId],
     ) -> Classified {
         let mut reuse = Reuse {
@@ -183,6 +209,7 @@ impl SourceDatabase {
             ..Reuse::default()
         };
         let mut changed: BTreeSet<FileId> = BTreeSet::new();
+        let mut why: std::collections::BTreeMap<FileId, &'static str> = Default::default();
         let sema = Semantics::new(&self.db);
         let around = Around {
             by_path: files
@@ -193,23 +220,63 @@ impl SourceDatabase {
             roots,
         };
         let mut flips: HashMap<FileId, bool> = HashMap::new();
+        // The names the gates this context flips make visible, for the leaf files that may mention one.
+        let flipped_names: BTreeSet<String> = if leaves == Leaves::Mentioning {
+            files
+                .iter()
+                .filter(|(_, path)| !is_a_leaf_file(path))
+                .flat_map(|(file, _)| {
+                    Flips::of_file(&self.db, *file, pairs, Reach::Seen)
+                        .names()
+                        .clone()
+                })
+                .collect()
+        } else {
+            BTreeSet::new()
+        };
         for (file, path) in files {
-            if reads_leaves && is_a_leaf_file(path) {
+            let leaf = is_a_leaf_file(path);
+            let leaf_changes = leaf
+                && match leaves {
+                    Leaves::Never => false,
+                    Leaves::All => true,
+                    Leaves::Mentioning => {
+                        Flips::of_file(&self.db, *file, pairs, Reach::Written).is_flipped()
+                            || reads_cfg_otherwise(&self.db.file_text(*file).text(&self.db), pairs)
+                            || mentions_any(
+                                &self.db.file_text(*file).text(&self.db),
+                                &flipped_names,
+                            )
+                    }
+                };
+            if leaf_changes {
                 // Counted with the files that read the cfg otherwise: it cannot be taken as unchanged.
                 reuse.unsure += 1;
                 changed.insert(*file);
+                why.insert(*file, "leaf");
+            } else if leaf && leaves != Leaves::Never {
+                // A leaf file this context reads and finds nothing in is as the first leaf context had it.
             } else if Flips::of_file(&self.db, *file, pairs, Reach::Written).is_flipped() {
                 reuse.flipped += 1;
                 changed.insert(*file);
-            } else if reads_cfg_otherwise(&self.db.file_text(*file).text(&self.db), pairs)
-                || (sema.file_to_module_defs(*file).next().is_none()
-                    && self.declarer_changes(*file, path, &around, pairs, &mut flips))
+                why.insert(*file, "flipped");
+            } else if reads_cfg_otherwise(&self.db.file_text(*file).text(&self.db), pairs) {
+                reuse.unsure += 1;
+                changed.insert(*file);
+                why.insert(*file, "reads_cfg");
+            } else if sema.file_to_module_defs(*file).next().is_none()
+                && self.declarer_changes(*file, path, &around, pairs, &mut flips)
             {
                 reuse.unsure += 1;
                 changed.insert(*file);
+                why.insert(*file, "no_module");
             }
         }
-        Classified { changed, reuse }
+        Classified {
+            changed,
+            reuse,
+            why,
+        }
     }
 
     /// Whether a file with no module in the ordinary build may have one in the context: a module is

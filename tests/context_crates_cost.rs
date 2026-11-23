@@ -471,3 +471,40 @@ fn a_context_expands_no_macro_in_a_file_it_takes_as_it_is() -> Result<()> {
     );
     Ok(())
 }
+
+/// A package's integration tests are crates that share one directory and each file is the root of one: a
+/// gate a context flips in one of them changes that crate and not its siblings.
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn a_gate_in_one_integration_test_changes_that_test_and_not_the_others() -> Result<()> {
+    cordial::init_tracing();
+    let scratch = tempfile::tempdir().into_diagnostic()?;
+    let subscriber =
+        tracing_subscriber::registry().with(MetricsLayer.with_filter(metrics_filter_with(true)));
+    tracing::subscriber::with_default(subscriber, || -> Result<()> {
+        let root = independent(1)?;
+        let tests = root.path().join("c0/tests");
+        std::fs::create_dir_all(&tests).into_diagnostic()?;
+        std::fs::write(
+            tests.join("a.rs"),
+            "#[cfg(feature = \"extra\")]\n#[test]\nfn gated() {}\n#[test]\nfn plain_a() {}\n",
+        )
+        .into_diagnostic()?;
+        for name in ["b", "c", "d"] {
+            std::fs::write(tests.join(format!("{name}.rs")), "#[test]\nfn plain() {}\n")
+                .into_diagnostic()?;
+        }
+        project(root.path(), "c0", false)?;
+        let copied = metrics_of(scratch.path())?
+            .values()
+            .get("semantic.contexts.crates_copied")
+            .copied()
+            .unwrap_or(0);
+        // Three contexts: `extra` copies the library, whose gate it flips, and the test that has one of its
+        // own, not the three that have none (2); the first leaf context reads every test (4); the leaf
+        // context with `extra` on copies the library and the test with a gate, and not the three tests that
+        // name nothing a gate switched (2). A directory-wide ownership copied every test in each (11).
+        assert_eq!(copied, 8, "crates copied over the contexts");
+        Ok(())
+    })
+}

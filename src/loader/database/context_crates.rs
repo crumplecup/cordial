@@ -27,7 +27,7 @@ use super::SourceDatabase;
 use super::context_shares::{
     Borrowed, CopyKey, CrateFiles, SharedCopy, directories_of, restricted,
 };
-use super::contexts::Classified;
+use super::contexts::{Classified, Leaves};
 use super::contexts::{LocalCfgs, atom};
 use crate::{CordialError, CordialResult, FunctionLocation, SemanticContextKey};
 use ra_ap_cfg::CfgDiff;
@@ -261,23 +261,12 @@ impl SourceDatabase {
         let path_of: HashMap<FileId, &PathBuf> =
             files.iter().map(|(file, path)| (*file, path)).collect();
         let directories = directories_of(locals, files);
-        let mut changed_crates: BTreeSet<InputCrate> = directories
-            .iter()
-            .filter(|(_, directory)| directory.is_none())
-            .map(|(krate, _)| *krate)
-            .collect();
+        let mut changed_crates: BTreeSet<InputCrate> = directories.unplaced().collect();
         for file in changed {
             let Some(path) = path_of.get(file) else {
                 continue;
             };
-            for (krate, directory) in &directories {
-                if directory
-                    .as_ref()
-                    .is_some_and(|directory| path.starts_with(directory))
-                {
-                    changed_crates.insert(*krate);
-                }
-            }
+            changed_crates.extend(directories.owners_of(path));
         }
         // The local dependencies of each local crate.
         let analysed: BTreeSet<InputCrate> = locals.iter().map(|(krate, _)| *krate).collect();
@@ -594,7 +583,13 @@ impl SourceDatabase {
         let classified = self.classify_files(
             &located,
             pairs,
-            context.enabled().iter().any(|atom| atom == "test"),
+            if !context.enabled().iter().any(|atom| atom == "test") {
+                Leaves::Never
+            } else if context.enabled().len() == 1 && context.disabled().is_empty() {
+                Leaves::All
+            } else {
+                Leaves::Mentioning
+            },
             &locals.iter().map(|(_, root)| *root).collect::<Vec<_>>(),
         );
         // The crates this context copies: the ones it changes, and the dependencies on the way to
@@ -604,9 +599,49 @@ impl SourceDatabase {
         } else {
             self.crates_to_copy(&locals, &located, &classified.changed)
         };
+        let directories = directories_of(&locals, &located);
+        // Why crates are changed: for each reason a file is changed, how many crates have such a file
+        // under their directory, how many crates each such file is under, and which files say so.
+        {
+            let path_of: HashMap<FileId, &PathBuf> =
+                located.iter().map(|(file, path)| (*file, path)).collect();
+            let mut crates_by: std::collections::BTreeMap<&str, BTreeSet<InputCrate>> =
+                Default::default();
+            let mut files_by: std::collections::BTreeMap<&str, (u64, u64)> = Default::default();
+            let mut examples: std::collections::BTreeMap<&str, Vec<String>> = Default::default();
+            for (file, reason) in &classified.why {
+                let Some(path) = path_of.get(file) else {
+                    continue;
+                };
+                let owners: Vec<InputCrate> = directories.owners_of(path).collect();
+                let entry = files_by.entry(reason).or_default();
+                entry.0 += 1;
+                entry.1 += owners.len() as u64;
+                crates_by.entry(reason).or_default().extend(owners);
+                let shown = examples.entry(reason).or_default();
+                if shown.len() < 3 {
+                    shown.push(path.display().to_string());
+                }
+            }
+            let summary: Vec<String> = files_by
+                .iter()
+                .map(|(reason, (files, owned))| {
+                    format!(
+                        "{reason}: {files} files in {} crates ({owned} file-crate pairs), e.g. {:?}",
+                        crates_by.get(reason).map_or(0, BTreeSet::len),
+                        examples.get(reason).cloned().unwrap_or_default()
+                    )
+                })
+                .collect();
+            tracing::info!(
+                target: "cordial::semantic::contexts",
+                context_index = index,
+                why = %summary.join(" | "),
+                "why this context's files are changed, and how many crates each reaches"
+            );
+        }
         // What of the context's change each copied crate can tell, and which of the copies are ones an
         // earlier context made of the same crate under the same change.
-        let directories = directories_of(&locals, &located);
         let sharing = self.shares_copies();
         let atoms = if sharing {
             self.crate_atoms(&directories, &located)
@@ -665,21 +700,20 @@ impl SourceDatabase {
                 .collect();
             (classified, roots)
         } else {
-            let own_directories: Vec<&PathBuf> = directories
-                .iter()
-                .filter(|(krate, _)| copied.contains(krate) && !shared.contains_key(krate))
-                .filter_map(|(_, directory)| directory.as_ref())
-                .collect();
             let path_of: HashMap<FileId, &PathBuf> =
                 located.iter().map(|(file, path)| (*file, path)).collect();
-            let Classified { changed, reuse } = classified;
+            let Classified {
+                changed,
+                reuse,
+                why,
+            } = classified;
             let changed = changed
                 .into_iter()
                 .filter(|file| {
                     path_of.get(file).is_none_or(|path| {
-                        own_directories
-                            .iter()
-                            .any(|directory| path.starts_with(directory))
+                        directories
+                            .owners_of(path)
+                            .any(|krate| copied.contains(&krate) && !shared.contains_key(&krate))
                     })
                 })
                 .collect();
@@ -688,7 +722,14 @@ impl SourceDatabase {
                 .filter(|(krate, _)| copied.contains(krate) && !shared.contains_key(krate))
                 .map(|(_, root)| *root)
                 .collect();
-            (Classified { changed, reuse }, roots)
+            (
+                Classified {
+                    changed,
+                    reuse,
+                    why,
+                },
+                roots,
+            )
         };
         let copying = classified.copying(&located, &crate_roots);
         tracing::info!(
@@ -768,14 +809,13 @@ impl SourceDatabase {
         // Each crate's files as this context has them, for the contexts that take its copy.
         let mut homes: HashMap<InputCrate, CrateFiles> = HashMap::new();
         if sharing {
-            for (krate, directory) in &directories {
-                if !copied.contains(krate) || shared.contains_key(krate) {
+            for (krate, placed) in directories.crates() {
+                if !placed || !copied.contains(&krate) || shared.contains_key(&krate) {
                     continue;
                 }
-                let Some(directory) = directory else { continue };
-                let entry = homes.entry(*krate).or_default();
+                let entry = homes.entry(krate).or_default();
                 for (file, path) in &located {
-                    if !path.starts_with(directory) {
+                    if !directories.crate_owns(krate, path) {
                         continue;
                     }
                     match copies.get(file) {

@@ -76,6 +76,11 @@ impl Flips {
         flips
     }
 
+    /// The names the flipped gates make relevant.
+    pub(super) fn names(&self) -> &BTreeSet<String> {
+        &self.names
+    }
+
     /// Whether the context flips any gate of the file.
     pub(super) fn is_flipped(&self) -> bool {
         !self.hosts.is_empty()

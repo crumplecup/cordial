@@ -29,7 +29,7 @@ mod reuse;
 pub(super) use gates::atoms_of;
 pub(super) use pass::{ContextsState, FunctionNodes, FunctionNodesState};
 pub(super) use plan::guard;
-pub(super) use reuse::Classified;
+pub(super) use reuse::{Classified, Leaves};
 
 use crate::SemanticContextKey;
 use ra_ap_cfg::{CfgAtom, CfgDiff, CfgOptions};
