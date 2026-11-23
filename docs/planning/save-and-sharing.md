@@ -455,6 +455,24 @@ context has. `copy_every_crate` restores the old behaviour for those tests. Two 
 the leaf files are still copied by every cfg context and read by its harvest (about 16 queries a leaf file,
 under 2% on amenable), and D3 (leaf files in the ordinary graph) is untouched.
 
+*D2 on amenable, and a correction (2026-11-23).* The unit tests hold (copies proportional to the change), but on
+amenable the first version copied all 110 crates in all four contexts. The cause was not what this section said
+earlier ("unsure is the leaf files"): of 1,523 files, 420 contain `cfg_attr` and only 101 are under `tests`,
+`benches` or `examples` (27 `include!`, 11 `#[path`, 4 `cfg!`). A `cfg_attr` made its file unsure whatever its
+predicate, so nearly every crate was changed. A `cfg_attr` is now evaluated like a gate and changes a file only
+where its predicate flips: the leaf contexts went from about 806 unsure files to about 520 and from 641 aliased
+to 972, the leaf pass from 32.4 s to 26.7 s (-18%), queries from 1.756 M to 1.740 M, the run from 129 s to
+126 s. The copy set is still 110 of 110 in every context, and the remaining reasons are visible in the same
+log line: the cfg context flips 524 files of 1,523 (it turns on kani, creusot, verus and a dozen features and
+sets `-unix +windows`), which is legitimate work; and the leaf contexts copy the leaf crates, which they exist
+to read, and about 380 files with no module in the ordinary build (gated off there, so unsure). The last class
+could shrink: such a file changes only where a gate on the path to it flips, which is the flip of the file that
+declares it (found as the candidates `files_above` already names, and the crate roots), but a copy set is then
+only as small as the crates that are leaf targets and flip-heavy allow, and most of amenable's 110 local
+crates are leaf targets (101 leaf files). So this project's context cost is mostly real: D2 does not take it
+to a small fraction, and what would (D4, cfg evaluated per atom inside rust-analyzer so that a crate's memos
+depend on the atoms it tests) is the largest change in this plan and is not started.
+
 **D1. Copies keyed by what they differ in.** A copy's identity is the crate and the part of the context's
 cfg change that the crate's files mention (from `gates_of`), not the context's ordinal. Contexts that
 differ in atoms a crate never names then share that crate's copy and its memos, and the copy's path
