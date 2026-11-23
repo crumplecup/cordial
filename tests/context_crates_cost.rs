@@ -399,3 +399,75 @@ fn a_file_with_no_module_changes_only_where_the_gate_that_hides_it_flips() -> Re
         Ok(())
     })
 }
+
+/// The queries of one name executed under the contexts so far, by the step that asked.
+fn context_queries(metrics: &cordial::RunMetrics, query: &str) -> u64 {
+    metrics
+        .values()
+        .iter()
+        .filter(|(name, _)| {
+            name.starts_with("steps.")
+                && name.ends_with(&format!("> {query}"))
+                && name.contains("analyse_contexts")
+        })
+        .map(|(_, count)| *count)
+        .sum()
+}
+
+/// A crate with a gate a context flips, and a file the context does not change that calls a macro `CALLS`
+/// times: the file is taken from the ordinary build as it is, so what the macro expands to is the ordinary
+/// build's too.
+fn macros_in_an_unchanged_file(calls: usize) -> Result<tempfile::TempDir> {
+    let root = tempfile::tempdir().into_diagnostic()?;
+    write_workspace(root.path(), &["m".to_owned()])?;
+    write_crate(
+        root.path(),
+        "m",
+        &[],
+        "mod calls;\n#[cfg(feature = \"extra\")]\npub fn only_with_extra() -> u32 { 1 }\n",
+    )?;
+    let body: String = (0..calls)
+        .map(|index| format!("pub fn f{index}() -> u32 {{ twice!({index}) }}\n"))
+        .collect();
+    std::fs::write(
+        root.path().join("m/src/calls.rs"),
+        format!("macro_rules! twice {{ ($e:expr) => {{ $e + $e }}; }}\n{body}"),
+    )
+    .into_diagnostic()?;
+    Ok(root)
+}
+
+/// What a context costs for the macro calls of a file it takes as it is: the expansions of the ordinary
+/// build are the same, and are not made again. This says how many are, at two sizes.
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn a_context_expands_no_macro_in_a_file_it_takes_as_it_is() -> Result<()> {
+    cordial::init_tracing();
+    let scratch = tempfile::tempdir().into_diagnostic()?;
+    let subscriber =
+        tracing_subscriber::registry().with(MetricsLayer.with_filter(metrics_filter_with(true)));
+    let (few, many) = tracing::subscriber::with_default(subscriber, || -> Result<_> {
+        project(macros_in_an_unchanged_file(2)?.path(), "m", false)?;
+        let few = context_queries(&metrics_of(scratch.path())?, "expand_pure_macro_of");
+        project(macros_in_an_unchanged_file(12)?.path(), "m", false)?;
+        let many = context_queries(&metrics_of(scratch.path())?, "expand_pure_macro_of") - few;
+        Ok((few, many))
+    })?;
+    // The count is of a query that runs: the ordinary build expands them.
+    let everywhere: u64 = metrics_of(scratch.path())?
+        .values()
+        .iter()
+        .filter(|(name, _)| name.starts_with("steps.") && name.ends_with("> expand_pure_macro_of"))
+        .map(|(_, count)| *count)
+        .sum();
+    assert!(
+        everywhere >= 14,
+        "the ordinary build expands the calls: {everywhere}"
+    );
+    assert_eq!(
+        (few, many),
+        (0, 0),
+        "macro expansions executed under the context, with 2 calls and with 12"
+    );
+    Ok(())
+}

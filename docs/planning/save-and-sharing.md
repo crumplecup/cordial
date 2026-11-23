@@ -563,6 +563,18 @@ rule's own arithmetic, not run against the old code). Not measured on amenable.
 `CORDIAL_BASE=off`; the tests that launch the binary say `off` (each runs in a store of its own, and would build a
 base first), and the base tests say `on` as before.
 
+*D4, first finding (2026-11-23).* Where rust-analyzer reads the cfg: about fifteen places read the whole
+`krate.cfg_options(db)` input (the def-map collector, item-tree lowering and attributes, `cfg_attr` expansion,
+declarative and builtin macros). A context is a copy of the crate with its own cfg input, so the copy's memos are
+separate from the ordinary crate's whatever they depend on: evaluating the cfg per atom would not by itself share
+anything. It would pay only if a context stopped being a copy and toggled atoms of one crate, with memos that name
+the atoms they test, which is a change to how contexts are made and not to the evaluation. One thing it might have
+bought is false: a context does not expand the macros of a file it takes as it is
+(`a_context_expands_no_macro_in_a_file_it_takes_as_it_is`: the ordinary build expands the calls, the context's
+`expand_pure_macro_of` count is 0 at 2 calls and at 12). What a context repeats is therefore the work of the files it
+copies and the definition maps of the crates it changes, which is the intrinsic part of D2's finding. Whether the
+rest is large enough on amenable to justify toggling in place is not measured.
+
 **D1. Copies keyed by what they differ in.** A copy's identity is the crate and the part of the context's
 cfg change that the crate's files mention (from `gates_of`), not the context's ordinal. Contexts that
 differ in atoms a crate never names then share that crate's copy and its memos, and the copy's path
