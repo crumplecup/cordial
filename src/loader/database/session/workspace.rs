@@ -227,7 +227,10 @@ fn load_database(
         proc_macro_processes: 1,
     };
     let (mut db, mut vfs, restored) = match saved.map(SavedState::restore) {
-        Some(Ok(restored)) => {
+        Some(Ok(mut restored)) => {
+            if let Some(saved) = saved {
+                saved.remember(&mut restored);
+            }
             tracing::info!(
                 target: "cordial::cache",
                 paths = restored.paths.len(),

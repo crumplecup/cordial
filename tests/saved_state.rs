@@ -466,3 +466,89 @@ fn a_restored_run_that_computed_nothing_saves_nothing_and_one_that_did_saves() -
     );
     Ok(())
 }
+
+fn copy_directory(from: &Path, to: &Path) -> Result<()> {
+    std::fs::create_dir_all(to).into_diagnostic()?;
+    for entry in std::fs::read_dir(from).into_diagnostic()? {
+        let entry = entry.into_diagnostic()?;
+        let target = to.join(entry.file_name());
+        if entry.file_type().into_diagnostic()?.is_dir() {
+            copy_directory(&entry.path(), &target)?;
+        } else {
+            std::fs::copy(entry.path(), &target).into_diagnostic()?;
+        }
+    }
+    Ok(())
+}
+
+/// A save after an edit keeps the encoding of the ingredients the edit did not reach and encodes the
+/// others, and what it writes is what encoding every ingredient writes: the same files, byte for byte.
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn a_save_that_keeps_the_encoding_of_unchanged_ingredients_restores_as_one_that_encodes_them_all()
+-> Result<()> {
+    cordial::init_tracing();
+    let root = specimen()?;
+    let state = tempfile::tempdir().into_diagnostic()?;
+    let saved = SavedState::at(state.path().join("analysis-state"));
+    run(root.path(), &saved)?;
+    run(root.path(), &saved)?;
+    // The same state, to be saved from the same edit by the encoding that does not keep any.
+    let other = tempfile::tempdir().into_diagnostic()?;
+    copy_directory(
+        &state.path().join("analysis-state"),
+        &other.path().join("analysis-state"),
+    )?;
+    let full = SavedState::at(other.path().join("analysis-state")).without_reuse();
+    std::fs::write(
+        root.path().join("src/first.rs"),
+        "pub fn alpha() {}\n// an edit\npub fn gamma() {}\n",
+    )
+    .into_diagnostic()?;
+    let _ = said();
+    run(root.path(), &saved)?;
+    let kept = said();
+    run(root.path(), &full)?;
+    let encoded = said();
+
+    let taken = |events: &[String]| -> Option<(u64, u64)> {
+        events.iter().find_map(|event| {
+            let rest = event.strip_prefix("analysis state: ")?;
+            let (taken, rest) = rest.split_once(" of ")?;
+            let (all, _) = rest.split_once(" ingredients unchanged")?;
+            Some((taken.parse().ok()?, all.parse().ok()?))
+        })
+    };
+    let (took, all) = taken(&kept).expect("the save says how many it took unchanged");
+    assert!(
+        took > 0,
+        "some ingredient is not reached by the edit: {kept:?}"
+    );
+    assert!(took < all, "and some is: {kept:?}");
+    assert_eq!(
+        taken(&encoded).map(|(taken, _)| taken),
+        Some(0),
+        "{encoded:?}"
+    );
+
+    // What is saved is not compared as bytes: rust-analyzer's inputs hold hash sets, which encode in the order
+    // the process that made them happened to give, so two encodings of one value differ. A run that restores
+    // either state is the same run: it restores, finds what it was saved with, and computes nothing.
+    let _ = said();
+    let (restored, from_kept, kept_types) = run(root.path(), &saved)?;
+    let kept_said = said();
+    let (restored_full, from_full, full_types) = run(root.path(), &full)?;
+    let full_said = said();
+    assert!(restored && restored_full);
+    assert_eq!(from_kept, from_full, "the same identities");
+    assert_eq!(kept_types, full_types);
+    for (which, events) in [("kept", &kept_said), ("encoded", &full_said)] {
+        assert!(
+            events
+                .iter()
+                .any(|event| event == "analysis state: nothing new to save"),
+            "a run from the {which} state computes nothing: {events:?}"
+        );
+    }
+    Ok(())
+}

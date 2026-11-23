@@ -969,12 +969,13 @@ fn what_the_memos_share_is_saved_as_runs_of_positions_not_as_edges() {
     fixture.ask_all(&db);
     let (_, saved) = round_trip(&mut db);
     let sets = saved_sets(&saved);
-    // The two groups' sets: the cells each reads, the first as one run and the second as two (the
-    // common cells, then its own after the first group's), however many cells that is.
+    // The two groups' sets: the cells each reads (hundreds of them, in a few runs of consecutive positions)
+    // and the few other edges they share between them, which fall where the edges' keys put them (the
+    // positions are in the order of the edges themselves, so that an ingredient whose sets have not changed
+    // saves the same bytes however the others were walked). A run for every edge would be hundreds.
     let runs: Vec<usize> = sets.iter().map(Vec::len).collect();
-    assert_eq!(
-        runs,
-        vec![1, 2],
+    assert!(
+        runs.len() == 2 && runs.iter().all(|runs| *runs <= 3),
         "the sets are saved as runs of positions: {sets:?}"
     );
     let edges: u64 = sets.iter().flatten().map(|(_, length)| length).sum();

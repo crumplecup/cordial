@@ -291,6 +291,9 @@ pub struct IngredientImpl<C: Configuration> {
     /// we don't know that we can trust the database to give us the same runtime
     /// everytime and so forth.
     deleted_entries: DeletedEntries<C>,
+
+    /// Set when a memo is inserted, replaced, dropped or spilled (see `generation`).
+    touched: crate::generation::Touched,
 }
 
 impl<C> IngredientImpl<C>
@@ -307,6 +310,7 @@ where
             memo_ingredient_indices,
             eviction: C::Eviction::new(eviction_capacity),
             deleted_entries: Default::default(),
+            touched: Default::default(),
             view_caster: OnceLock::new(),
             sync_table: SyncTable::new(index),
         }
@@ -561,6 +565,14 @@ where
         true
     }
 
+    fn unchanged_since_restore(&self) -> bool {
+        !self.touched.is_touched()
+    }
+
+    fn mark_restored(&self) {
+        self.touched.clear();
+    }
+
     fn reset_for_new_revision(&mut self, table: &mut Table) {
         let (mut nominated, mut dropped, mut no_value, mut refused) = (0_u64, 0_u64, 0_u64, 0_u64);
         self.eviction.for_each_evicted(|evict| {
@@ -575,6 +587,9 @@ where
                 memo::Eviction::Refused => refused += 1,
             }
         });
+        if dropped > 0 {
+            self.touched.touch();
+        }
         if nominated > 0 {
             ::tracing::debug!(
                 target: "salsa::eviction",
@@ -676,6 +691,7 @@ where
         counters: &crate::spill::SpillCounters,
         report: &mut crate::OwnerRetirementReport,
     ) {
+        self.touched.touch();
         // SAFETY: The caller grants exclusive storage access. Unlike public interner
         // iteration, this exact memo-table access cannot refresh a retired key.
         let table = unsafe { zalsa.table().dyn_memos_unchecked(id) };
@@ -739,6 +755,7 @@ where
         counters: &crate::spill::SpillCounters,
         inputs: Option<&FxHashSet<Id>>,
     ) {
+        self.touched.touch();
         #[cfg(feature = "persistence")]
         {
             if !C::PERSIST {

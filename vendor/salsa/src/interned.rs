@@ -109,6 +109,8 @@ pub struct IngredientImpl<C: Configuration> {
 
     memo_table_types: Arc<MemoTableTypes>,
 
+    touched: crate::generation::Touched,
+
     _marker: PhantomData<fn() -> C>,
 }
 
@@ -361,6 +363,7 @@ where
             revision_queue: RevisionQueue::new(C::REVISIONS),
             shift,
             shards,
+            touched: Default::default(),
             _marker: PhantomData,
         }
     }
@@ -572,6 +575,7 @@ where
         //
         // SAFETY: `find_reusable_slot` guarantees that the value is reusable and stale, so no
         // references to its fields remain. We still hold the shard lock.
+        self.touched.touch();
         let old_fields = unsafe { std::mem::replace(&mut *value.fields.get(), new_fields) };
 
         // SAFETY: We hold the shard lock, which protects the ID.
@@ -627,6 +631,7 @@ where
         C::Fields<'db>: HashEqLike<Key>,
         Key: Lookup<C::Fields<'db>>,
     {
+        self.touched.touch();
         let current_revision = zalsa.current_revision();
 
         // Record the durability of the current query on the interned value.
@@ -1199,6 +1204,14 @@ where
 
     fn is_persistable(&self) -> bool {
         C::PERSIST
+    }
+
+    fn unchanged_since_restore(&self) -> bool {
+        !self.touched.is_touched()
+    }
+
+    fn mark_restored(&self) {
+        self.touched.clear();
     }
 
     fn should_serialize(&self, zalsa: &Zalsa) -> bool {

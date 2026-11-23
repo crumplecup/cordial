@@ -39,7 +39,7 @@ const WRITE_BUFFER_BYTES: usize = 1 << 20;
 /// restore has to read them. An ingredient is a map of `entries` entries, kept as chunks in the order
 /// they are read, each said by hash and length so that one cut short is found out before it is
 /// decoded.
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 struct SegmentEntry {
     index: u32,
     name: String,
@@ -68,6 +68,17 @@ pub(super) struct Restored {
     /// Whether this is the base state a project starts from when it has none of its own, and not the
     /// state the project's last run left.
     pub(super) from_base: bool,
+    /// The ingredients the state held, as its manifest says them, and whether it was written with
+    /// canonical stamps: what a save can take unchanged ingredients from without encoding them.
+    segments: Vec<SegmentEntry>,
+    canonical: bool,
+}
+
+/// What a save may take from the state the database was restored from.
+#[derive(Debug, Default)]
+struct Previous {
+    segments: std::collections::HashMap<u32, SegmentEntry>,
+    canonical: bool,
 }
 
 /// Where a database is saved between runs.
@@ -83,9 +94,36 @@ pub struct SavedState {
     /// into any build whose ingredients are numbered as the one that saved it numbered them, and is
     /// checked to be.
     engine: Option<String>,
+    /// What the database restored from a state holds of it, for the save that follows.
+    previous: std::sync::Arc<std::sync::Mutex<Option<Previous>>>,
+    /// Whether a save keeps the encoding of the ingredients that have not changed. Off for the tests that
+    /// compare it with encoding them all.
+    reuses_unchanged: bool,
 }
 
 impl SavedState {
+    /// This state, but a save of it encodes every ingredient, as it did before it kept the encoding of the ones
+    /// that have not changed: for the tests that compare the two.
+    #[must_use]
+    pub fn without_reuse(mut self) -> Self {
+        self.reuses_unchanged = false;
+        self
+    }
+
+    /// Say what the state the database was restored from holds, so that a save can take what has not
+    /// changed from it without encoding it.
+    pub(super) fn remember(&self, restored: &mut Restored) {
+        if let Ok(mut previous) = self.previous.lock() {
+            *previous = Some(Previous {
+                segments: std::mem::take(&mut restored.segments)
+                    .into_iter()
+                    .map(|entry| (entry.index, entry))
+                    .collect(),
+                canonical: restored.canonical,
+            });
+        }
+    }
+
     /// The state kept in `dir`.
     #[instrument(level = "trace", skip(dir))]
     pub fn at(dir: impl Into<PathBuf>) -> Self {
@@ -93,6 +131,8 @@ impl SavedState {
             dir: dir.into(),
             base: None,
             engine: None,
+            previous: Default::default(),
+            reuses_unchanged: true,
         }
     }
 
@@ -127,6 +167,8 @@ impl SavedState {
             dir: dir.into(),
             base: None,
             engine: Some(key.into()),
+            previous: Default::default(),
+            reuses_unchanged: true,
         }
     }
 
@@ -208,6 +250,8 @@ impl SavedState {
         if let Some(base) = self.base.as_ref() {
             chunks = chunks.also_linking_from(base.join(SALSA).join(super::state_chunks::CHUNKS));
         }
+        let previous = self.previous.lock().ok().and_then(|mut held| held.take());
+        let mut taken = 0_u64;
         database.save_segments(
             |header| {
                 header_len = self.write_encoded(&salsa_dir.join(SALSA_HEADER), header)?;
@@ -220,16 +264,40 @@ impl SavedState {
                     return Ok(());
                 }
                 let started = std::time::Instant::now();
-                let written = super::state_chunks::write_chunked(part, &mut chunks)
-                    .map_err(|error| self.chunking(segment.name, &error))?;
-                let micros = u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX);
-                let entry = SegmentEntry {
-                    index: segment.index,
-                    name: segment.name.to_owned(),
-                    file: segment.file.to_owned(),
-                    entries: written.entries,
-                    chunks: written.chunks,
+                // What changed nothing since the state was restored is that state's: its chunks are
+                // linked, and the ingredient is not encoded or hashed again.
+                let reused = if self.reuses_unchanged
+                    && segment.unchanged
+                    && segment.canonical
+                    && previous.as_ref().is_some_and(|previous| previous.canonical)
+                {
+                    previous
+                        .as_ref()
+                        .and_then(|previous| previous.segments.get(&segment.index))
+                        .filter(|entry| entry.name == segment.name && entry.file == segment.file)
+                        .filter(|entry| chunks.reuse(&entry.chunks))
+                        .cloned()
+                } else {
+                    None
                 };
+                let (entry, was_reused) = match reused {
+                    Some(entry) => (entry, true),
+                    None => {
+                        let written = super::state_chunks::write_chunked(part, &mut chunks)
+                            .map_err(|error| self.chunking(segment.name, &error))?;
+                        (
+                            SegmentEntry {
+                                index: segment.index,
+                                name: segment.name.to_owned(),
+                                file: segment.file.to_owned(),
+                                entries: written.entries,
+                                chunks: written.chunks,
+                            },
+                            false,
+                        )
+                    }
+                };
+                let micros = u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX);
                 tracing::debug!(
                     target: "salsa::state_size",
                     ingredient = segment.name,
@@ -237,13 +305,19 @@ impl SavedState {
                     bytes = entry.bytes(),
                     entries = entry.entries,
                     chunks = entry.chunks.len() as u64,
+                    reused = was_reused,
                     micros,
                     "an ingredient's share of the saved state"
                 );
+                taken += u64::from(was_reused);
                 manifest.push(entry);
                 Ok(())
             },
         )?;
+        crate::host::event(format!(
+            "analysis state: {taken} of {} ingredients unchanged since the last state, not encoded again",
+            manifest.len()
+        ));
         let manifest_len = self.write_encoded(&salsa_dir.join(SALSA_MANIFEST), &manifest)?;
         let salsa_len = header_len
             + manifest_len
@@ -315,6 +389,8 @@ impl SavedState {
             dir: base.clone(),
             base: None,
             engine,
+            previous: Default::default(),
+            reuses_unchanged: true,
         })
         .restore_own()
         {
@@ -359,7 +435,7 @@ impl SavedState {
         // goes on without it.
         catch_unwind(AssertUnwindSafe(|| {
             let mut database = RootDatabase::empty();
-            self.decode_salsa(&mut database)?;
+            let (segments, canonical) = self.decode_salsa(&mut database)?;
             database.files().restore(
                 rmp_serde::from_slice(&files)
                     .map_err(|error| format!("files unreadable ({error})"))?,
@@ -391,6 +467,8 @@ impl SavedState {
                 paths,
                 contexts,
                 from_base: false,
+                segments,
+                canonical,
             })
         }))
         .unwrap_or_else(|_| Err("restoring it panicked".to_owned()))
@@ -465,7 +543,10 @@ impl SavedState {
     /// something else is what a restore waits for.
     #[instrument(level = "debug", skip_all)]
     #[hotpath::measure(impl_type = "SavedState")]
-    fn decode_salsa(&self, database: &mut RootDatabase) -> Result<(), String> {
+    fn decode_salsa(
+        &self,
+        database: &mut RootDatabase,
+    ) -> Result<(Vec<SegmentEntry>, bool), String> {
         let started = std::time::Instant::now();
         let dir = self.dir.join(SALSA);
         let read = |name: &str| {
@@ -496,6 +577,7 @@ impl SavedState {
                 .map_err(|error| format!("salsa {} unreadable ({error})", entry.name))?;
             bytes += entry.bytes();
         }
+        let canonical = header.is_canonical();
         target.finish_segments(header);
         tracing::debug!(
             target: "cordial::cache",
@@ -505,7 +587,7 @@ impl SavedState {
             micros = u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX),
             "decoded the saved Salsa memos"
         );
-        Ok(())
+        Ok((manifest, canonical))
     }
 
     /// Remove what a save that never finished left beside the slot: a directory written

@@ -298,6 +298,21 @@ pub trait Ingredient: Any + fmt::Debug + Send + Sync {
         false
     }
 
+    /// Whether what this ingredient would save is what the state it was restored from holds: nothing
+    /// has been inserted, replaced, dropped, made, written or freed in it since. An ingredient that
+    /// does not say is taken to have changed only if it is one that is saved.
+    fn unchanged_since_restore(&self) -> bool {
+        true
+    }
+
+    /// Say that what the ingredient holds is what a state it was restored from holds.
+    fn mark_restored(&self) {}
+
+    /// Whether a write has changed the durability of something in this ingredient since the restore.
+    fn changed_durability(&self) -> bool {
+        false
+    }
+
     /// Whether there is data to serialize for this ingredient.
     ///
     /// If this returns `false`, the ingredient will not be serialized, even if `is_persistable`

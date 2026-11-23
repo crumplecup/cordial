@@ -355,35 +355,49 @@ impl EdgeFlattener {
     }
 
     /// What an ingredient saves of `sets` when the flattener numbers edges for every ingredient of a
-    /// save: the edges they hold, in the order they are numbered, and each set as runs of positions in
-    /// that list. A set's runs are positions among the edges the ingredient's sets hold and not among all
-    /// the edges there are, so what is saved of an ingredient does not grow with the others.
+    /// save: the edges they hold, and each set as runs of positions in that list. A set's runs are
+    /// positions among the edges the ingredient's sets hold and not among all the edges there are, so
+    /// what is saved of an ingredient does not grow with the others. The list is in the order of the
+    /// edges themselves (their ingredient, then their key) and not of the order they were first reached,
+    /// which is the order other ingredients' walks happened to leave: an ingredient whose sets have not
+    /// changed saves the same bytes however the others were walked.
     pub(crate) fn localize(&self, sets: &[LeafSet]) -> (Vec<QueryEdge>, Vec<Vec<(u32, u32)>>) {
         let mut used = RunBuilder::default();
         for set in sets {
             used.or(set);
         }
         let used = used.build();
-        let mut before: Vec<u32> = Vec::with_capacity(used.runs().len());
-        let mut total = 0_u32;
-        for (_, length) in used.runs() {
-            before.push(total);
-            total += length;
-        }
-        let universe: Vec<QueryEdge> = used
+        let identity = |edge: QueryEdge| -> (u8, u32, u64) {
+            if edge.is_watermark() {
+                (1, 0, 0)
+            } else {
+                (0, edge.key().ingredient_index().as_u32(), edge.key().key_index().as_bits())
+            }
+        };
+        let mut members: Vec<((u8, u32, u64), u32)> = used
             .numbers()
-            .map(|number| self.edges[number as usize])
+            .map(|number| (identity(self.edges[number as usize]), number))
+            .collect();
+        members.sort_unstable();
+        let universe: Vec<QueryEdge> = members
+            .iter()
+            .map(|(_, number)| self.edges[*number as usize])
+            .collect();
+        let rank: FxHashMap<u32, u32> = members
+            .iter()
+            .enumerate()
+            .map(|(position, (_, number))| (*number, position as u32))
             .collect();
         let table = sets
             .iter()
             .map(|set| {
-                let mut runs: Vec<(u32, u32)> = Vec::with_capacity(set.runs().len());
-                for (first, length) in set.runs() {
-                    let at = used.runs().partition_point(|(start, _)| start <= first) - 1;
-                    let local = before[at] + (first - used.runs()[at].0);
+                let mut positions: Vec<u32> = set.numbers().map(|number| rank[&number]).collect();
+                positions.sort_unstable();
+                let mut runs: Vec<(u32, u32)> = Vec::new();
+                for position in positions {
                     match runs.last_mut() {
-                        Some((start, span)) if *start + *span == local => *span += length,
-                        _ => runs.push((local, *length)),
+                        Some((first, length)) if *first + *length == position => *length += 1,
+                        _ => runs.push((position, 1)),
                     }
                 }
                 runs

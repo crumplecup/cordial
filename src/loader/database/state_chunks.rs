@@ -133,6 +133,34 @@ impl ChunkDir {
         self
     }
 
+    /// Put the chunks of an ingredient that the state before (or the base) has in this state without
+    /// encoding it: each is linked from there. Returns whether they all were, which is not so when
+    /// the state they were restored from has since been replaced by one without them.
+    #[instrument(level = "trace", skip_all)]
+    pub fn reuse(&mut self, chunks: &[ChunkEntry]) -> bool {
+        for chunk in chunks {
+            let target = self.current.join(&chunk.hash);
+            if target.exists() {
+                self.repeated += 1;
+                continue;
+            }
+            let linked = [Some(&self.previous), self.also.as_ref()]
+                .into_iter()
+                .flatten()
+                .map(|directory| directory.join(&chunk.hash))
+                .any(|before| {
+                    before.is_file()
+                        && (std::fs::hard_link(&before, &target).is_ok() || copy(&before, &target))
+                });
+            if !linked {
+                return false;
+            }
+            self.linked += 1;
+            self.bytes_linked += chunk.bytes;
+        }
+        true
+    }
+
     /// Put the chunk in the state: linked from the state before when that had it, written if not.
     fn store(&mut self, hash: &str, bytes: &[u8]) -> std::io::Result<()> {
         let target = self.current.join(hash);

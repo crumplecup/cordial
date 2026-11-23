@@ -202,6 +202,8 @@ where
     /// Store freed ids
     free_list: SegQueue<Id>,
 
+    touched: crate::generation::Touched,
+
     /// The ids that tracked structs had in the process that saved the database, by the identity
     /// they were created under, until a query that creates one again takes it.
     ///
@@ -512,6 +514,7 @@ where
             ingredient_index: index,
             phantom: PhantomData,
             free_list: Default::default(),
+            touched: Default::default(),
             #[cfg(feature = "persistence")]
             restored: Default::default(),
             #[cfg(feature = "persistence")]
@@ -545,6 +548,7 @@ where
         zalsa_local: &'db ZalsaLocal,
         mut fields: C::Fields<'db>,
     ) -> C::Struct<'db> {
+        self.touched.touch();
         let identity_hash = IdentityHash {
             ingredient_index: self.ingredient_index,
             hash: crate::hash::hash(&C::untracked_fields(&fields)),
@@ -677,6 +681,7 @@ where
         current_deps: &Stamp,
         fields: C::Fields<'db>,
     ) -> Result<Id, C::Fields<'db>> {
+        self.touched.touch();
         let data_raw = Self::data_raw(zalsa.table(), id);
 
         // The protocol is:
@@ -844,6 +849,7 @@ where
             })
         });
 
+        self.touched.touch();
         let data = Self::data_raw(zalsa.table(), id);
 
         // We want to set `updated_at` to `None`, signalling that other field values
@@ -1119,6 +1125,14 @@ where
 
     fn is_persistable(&self) -> bool {
         C::PERSIST
+    }
+
+    fn unchanged_since_restore(&self) -> bool {
+        !self.touched.is_touched()
+    }
+
+    fn mark_restored(&self) {
+        self.touched.clear();
     }
 
     fn should_serialize(&self, zalsa: &Zalsa) -> bool {

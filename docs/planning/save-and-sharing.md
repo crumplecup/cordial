@@ -167,6 +167,32 @@ state); A5 is what removes that.
 or removed and when a struct slot is created, changed or freed, say which chunks cannot have changed, so they are
 neither encoded nor hashed. This needs the flattening's sets to be trusted per memo, so it follows workstream B.
 
+*A5 done, at ingredient grain (2026-11-23).* Each ingredient says whether it has changed since the database was
+restored (`unchanged_since_restore`, set wherever a memo is inserted, replaced, evicted, retired or spilled, an input
+made or written, an interned value made or replaced, a tracked struct made, updated or deleted; cleared when the
+restore ends). A save passes that and whether it writes canonical stamps with each segment; the tool keeps the
+manifest of the state it restored from (`Restored::segments`, held by the `SavedState`), and an ingredient that is
+unchanged, whose previous entry has the same index, name and file, and whose chunks it can still link, is taken
+from there: no encoding, no hashing (`reused` on the `state_size` event, and "analysis state: N of M ingredients
+unchanged since the last state, not encoded again"). A tracked function is unchanged by its own flag: a restored,
+untouched memo's edges are the sets and own edges it was restored with, so what the flatten would give them is what
+was saved, whatever ran elsewhere (non-persisted queries run in every session); the one thing that is not so is the
+watermark, which depends on an input's durability, so a write that changes a durability makes every function's
+memos suspect. Chunk grain (the plan's wording) is not done: an ingredient is all or nothing, and one memo
+inserted in `crate_local_def_map` encodes all of it. B2 changed what had to be true for this to work: the edges an
+ingredient saves are now in the order of the edges themselves (ingredient, then key) and not of the order the walk
+reached them, since the numbering is global and the order the others were walked in would otherwise change the bytes
+of an ingredient that did not change, and A4's chunk linking with it (a set can be a few runs more for it:
+`what_the_memos_share_is_saved_as_runs_of_positions_not_as_edges` says 3 where it said 1). Tests: `salsa_unchanged`
+(a restored database that changed nothing says every ingredient is unchanged and each encodes to the bytes the
+state had; a write changes the input and the memos that ran again and no other; a new interned value changes only
+its ingredient), `saved_state` (a save after an edit takes ingredients unchanged and not all, and a run from that
+state is the run from a state that encoded every ingredient). Not byte-compared with a full encode: rust-analyzer's
+inputs (`Crate`, `SourceRootInput`) hold hash sets, which encode in the order the process gave them, so two
+encodings of one value differ (found by trying), and keeping the old bytes is, if anything, the more stable.
+Not measured on amenable: the share of the 452 MB that is unchanged after an edit decides the saving, and the
+`reused` and `micros` on each `state_size` event will say.
+
 **Safety.** Written to a new directory and renamed, with the manifest last, as today; segments that a
 link still needs are kept until the rename; a missing, truncated or hash-mismatched segment is a cold
 run, never a partial restore. The spill file and the run-in-processes path keep their own state and

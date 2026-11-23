@@ -254,6 +254,7 @@
 
 #[cfg(feature = "accumulator")]
 mod accumulator;
+mod generation;
 mod active_query;
 mod attach;
 mod cancelled;

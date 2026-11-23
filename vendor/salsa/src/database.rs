@@ -421,11 +421,20 @@ mod persistence {
                 .collect::<Vec<_>>();
             // Structs before the tracked functions whose memos refer to them.
             ingredients.sort_by_key(|ingredient| ingredient.jar_kind());
+            // A memo is saved with the edges it was restored with; which of its own edges are saved
+            // as the watermark depends on the durability of what they read, so a write that changed
+            // one makes the memos of every function suspect.
+            let durabilities_held = zalsa
+                .ingredients()
+                .all(|ingredient| !ingredient.changed_durability());
             for ingredient in ingredients {
                 let named = Segment {
                     index: ingredient.ingredient_index().as_u32(),
                     name: ingredient.debug_name(),
                     file: ingredient.location().file,
+                    unchanged: ingredient.unchanged_since_restore()
+                        && (durabilities_held || ingredient.as_function().is_none()),
+                    canonical,
                 };
                 segment(named, &SerializeIngredient(ingredient, zalsa))?;
             }
@@ -482,9 +491,12 @@ mod persistence {
 
         /// Take the runtime's state from the header, once every segment is restored.
         pub fn finish_segments(&mut self, mut header: SegmentHeader) {
-            self.zalsa_mut()
-                .runtime_mut()
-                .deserialize_from(&mut header.runtime);
+            let zalsa = self.zalsa_mut();
+            zalsa.runtime_mut().deserialize_from(&mut header.runtime);
+            // What the ingredients hold now is what the state holds.
+            for ingredient in zalsa.ingredients() {
+                ingredient.mark_restored();
+            }
         }
 
         /// Deserialize the database using a [`serde::Deserializer`].
@@ -538,6 +550,13 @@ mod persistence {
         /// The source file the ingredient is declared in: who it belongs to, for a caller that keeps
         /// what one crate made apart from what another did.
         pub file: &'static str,
+        /// Whether what the ingredient would encode is what the state the database was restored from
+        /// holds: nothing has changed it (and, for a tracked function, whose memos' edges are saved as
+        /// sets of what they read, no write has changed the durability of an input). The encoding is
+        /// then the one that state holds, if it was written with the stamps this save writes: see [`Self::canonical`].
+        pub unchanged: bool,
+        /// Whether this save writes canonical stamps (see `stamps`).
+        pub canonical: bool,
     }
 
     /// What a segmented state says before its ingredients: how its stamps are written and the
@@ -547,6 +566,13 @@ mod persistence {
     pub struct SegmentHeader {
         format: FormatVersion,
         runtime: Runtime,
+    }
+
+    impl SegmentHeader {
+        /// Whether the state was written with canonical stamps.
+        pub fn is_canonical(&self) -> bool {
+            self.format == FormatVersion::Canonical
+        }
     }
 
     #[derive(serde::Serialize)]

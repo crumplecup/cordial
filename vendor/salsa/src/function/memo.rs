@@ -24,6 +24,7 @@ impl<C: Configuration> IngredientImpl<C> {
         memo: NonNull<Memo<C>>,
         memo_ingredient_index: MemoIngredientIndex,
     ) -> Option<NonNull<Memo<C>>> {
+        self.touched.touch();
         // SAFETY: The caller owns the allocation being published. Claims serialize
         // publication for this exact function/key, including provisional replacements.
         let new = unsafe { memo.as_ref() };

@@ -118,6 +118,9 @@ pub struct IngredientImpl<C: Configuration> {
     ingredient_index: IngredientIndex,
     singleton: C::Singleton,
     memo_table_types: Arc<MemoTableTypes>,
+    touched: crate::generation::Touched,
+    /// Set when a write changes the durability of a field: which edges a memo is saved with depends on it.
+    durability_changed: crate::generation::Touched,
     _phantom: std::marker::PhantomData<C::Struct>,
 }
 
@@ -127,6 +130,8 @@ impl<C: Configuration> IngredientImpl<C> {
             ingredient_index: index,
             singleton: Default::default(),
             memo_table_types: Arc::new(MemoTableTypes::default()),
+            touched: Default::default(),
+            durability_changed: Default::default(),
             _phantom: std::marker::PhantomData,
         }
     }
@@ -151,6 +156,7 @@ impl<C: Configuration> IngredientImpl<C> {
         revisions: C::Revisions,
         durabilities: C::Durabilities,
     ) -> C::Struct {
+        self.touched.touch();
         let id = self.singleton.with_scope(|| {
             zalsa_local
                 .allocate(zalsa, self.ingredient_index, |_| Value::<C> {
@@ -188,6 +194,7 @@ impl<C: Configuration> IngredientImpl<C> {
         durability: Option<Durability>,
         setter: impl FnOnce(&mut C::Fields) -> R,
     ) -> R {
+        self.touched.touch();
         let id: Id = id.as_id();
 
         let data_raw = Self::data_raw(runtime.table(), id);
@@ -216,6 +223,9 @@ impl<C: Configuration> IngredientImpl<C> {
         let field_durability = &mut data.durabilities[field_index];
         if *field_durability != Durability::MIN {
             runtime.report_tracked_write(*field_durability);
+        }
+        if durability.is_some_and(|new| new != *field_durability) {
+            self.durability_changed.touch();
         }
         *field_durability = durability.unwrap_or(*field_durability);
 
@@ -381,6 +391,19 @@ impl<C: Configuration> Ingredient for IngredientImpl<C> {
 
     fn is_persistable(&self) -> bool {
         C::PERSIST
+    }
+
+    fn unchanged_since_restore(&self) -> bool {
+        !self.touched.is_touched()
+    }
+
+    fn mark_restored(&self) {
+        self.touched.clear();
+        self.durability_changed.clear();
+    }
+
+    fn changed_durability(&self) -> bool {
+        self.durability_changed.is_touched()
     }
 
     fn should_serialize(&self, zalsa: &Zalsa) -> bool {
