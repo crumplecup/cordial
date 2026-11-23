@@ -65,8 +65,10 @@ fn independent(crates: usize) -> Result<tempfile::TempDir> {
             root.path(),
             &format!("c{index}"),
             &[],
+            // A `cfg_attr` the context does not flip, as most are (a derive under a feature it does not
+            // turn on): it must not make the crate changed.
             &format!(
-                "pub fn f{index}() -> u32 {{ {index} }}\npub fn g{index}() -> u32 {{ f{index}() + 1 }}\n{gated}"
+                "#[cfg_attr(feature = \"serde\", derive(Clone))]\npub struct S{index};\npub fn f{index}() -> u32 {{ {index} }}\npub fn g{index}() -> u32 {{ f{index}() + 1 }}\n{gated}"
             ),
         )?;
     }
@@ -220,6 +222,40 @@ fn a_context_that_copies_only_what_it_changes_finds_what_copying_every_crate_fin
         assert_eq!(
             copied_only, 3,
             "all but the crate that only depends on a changed one"
+        );
+        Ok(())
+    })
+}
+
+/// A `cfg_attr` whose predicate the context flips changes the file's attributes there, so it makes its
+/// crate changed; one it does not flip does not.
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn a_cfg_attr_the_context_flips_makes_its_crate_changed_and_one_it_does_not_flip_does_not()
+-> Result<()> {
+    cordial::init_tracing();
+    let scratch = tempfile::tempdir().into_diagnostic()?;
+    let subscriber =
+        tracing_subscriber::registry().with(MetricsLayer.with_filter(metrics_filter_with(true)));
+    tracing::subscriber::with_default(subscriber, || -> Result<()> {
+        let root = independent(4)?;
+        // The second crate's `cfg_attr` is on the feature the context turns on.
+        let lib = root.path().join("c1/src/lib.rs");
+        let text = std::fs::read_to_string(&lib).into_diagnostic()?;
+        std::fs::write(
+            &lib,
+            text.replace("feature = \"serde\"", "feature = \"extra\""),
+        )
+        .into_diagnostic()?;
+        project(root.path(), "c0", false)?;
+        let copied = metrics_of(scratch.path())?
+            .values()
+            .get("semantic.contexts.crates_copied")
+            .copied()
+            .unwrap_or(0);
+        assert_eq!(
+            copied, 2,
+            "the crate with the gate and the one whose cfg_attr flips: not the other two"
         );
         Ok(())
     })

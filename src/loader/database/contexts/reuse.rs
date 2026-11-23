@@ -10,8 +10,8 @@
 //!
 //! A file is copied when
 //! - a gate in it is flipped by the context (the facts of its functions can differ),
-//! - it reads the cfg some way the gates do not say (`cfg!`, `cfg_attr`, `include!`, `#[path]`), so
-//!   that it cannot be taken to be unchanged,
+//! - it reads the cfg some way the gates do not say (`cfg!`, `include!`, `#[path]`, or a `cfg_attr`
+//!   whose predicate the context flips), so that it cannot be taken to be unchanged,
 //! - it has no module in the ordinary build: its enclosing module may be gated, so there is no
 //!   ordinary scope whose semantic facts it could reuse,
 //! - it is the root of a crate (the context's crates are rooted at copies), or
@@ -102,11 +102,38 @@ impl Classified {
 
 /// Whether the text of a file reads the cfg other than through a `#[cfg]` attribute, or moves where
 /// a module's file is.
-fn reads_cfg_otherwise(text: &str) -> bool {
+///
+/// A `cfg!` and what moves a module's file (`include!`, `#[path]`) are taken as they are: they are
+/// rare, and what they read or load is not a predicate that can be compared. A `cfg_attr` is a
+/// predicate like a gate's: it changes the file's attributes only where it holds, so a file whose
+/// `cfg_attr` predicates hold as they did without the context (a derive under a `serde` feature the
+/// context does not turn on, say) is as it was. It is the commonest of the four by far.
+fn reads_cfg_otherwise(text: &str, pairs: &[(CfgOptions, CfgOptions)]) -> bool {
     text.contains("cfg!")
-        || text.contains("cfg_attr")
         || text.contains("include!")
         || text.contains("#[path")
+        || (text.contains("cfg_attr") && cfg_attr_flips(text, pairs))
+}
+
+/// Whether the predicate of a `cfg_attr` in `text` holds under the context's cfg as it does not under
+/// the ordinary one, or the other way, for any of the `pairs`.
+#[instrument(level = "trace", skip_all)]
+fn cfg_attr_flips(text: &str, pairs: &[(CfgOptions, CfgOptions)]) -> bool {
+    use ra_ap_syntax::{AstNode, Edition, SourceFile, ast};
+    let parse = SourceFile::parse(text, Edition::CURRENT);
+    parse
+        .tree()
+        .syntax()
+        .descendants()
+        .filter_map(ast::CfgAttrMeta::cast)
+        .filter_map(|meta| meta.cfg_predicate())
+        .any(|predicate| {
+            let predicate = ra_ap_cfg::CfgExpr::parse_from_ast(predicate);
+            pairs.iter().any(|(ordinary, context)| {
+                super::flips::predicate_holds(ordinary, &predicate)
+                    != super::flips::predicate_holds(context, &predicate)
+            })
+        })
 }
 
 /// Whether the file is one the leaf pass reads: a test, a bench or an example, which are read
@@ -162,7 +189,7 @@ impl SourceDatabase {
             } else if Flips::of_file(&self.db, *file, pairs, Reach::Written).is_flipped() {
                 reuse.flipped += 1;
                 changed.insert(*file);
-            } else if reads_cfg_otherwise(&self.db.file_text(*file).text(&self.db))
+            } else if reads_cfg_otherwise(&self.db.file_text(*file).text(&self.db), pairs)
                 || sema.file_to_module_defs(*file).next().is_none()
             {
                 reuse.unsure += 1;
