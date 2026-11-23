@@ -27,6 +27,15 @@ pub(crate) struct RunCache {
 }
 
 impl RunCache {
+    /// The store home this entry's store is in: the shared sysroot cache, and the base state in it, are
+    /// beside the projects' stores.
+    pub(crate) fn home(&self) -> PathBuf {
+        self.root
+            .ancestors()
+            .nth(3)
+            .map_or_else(|| self.root.clone(), PathBuf::from)
+    }
+
     /// Where the saved analysis database lives: one slot beside the run cache,
     /// replaced each time a run saves.
     pub(crate) fn state_dir(&self) -> PathBuf {

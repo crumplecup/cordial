@@ -3,6 +3,7 @@
 #![warn(missing_docs)]
 #[cfg(any(feature = "amenable_std", feature = "antipatterns"))]
 mod amenable_dump_registry;
+mod base_state;
 #[cfg(feature = "rustdoc")]
 mod cargo_rustdoc;
 mod clean;
@@ -343,6 +344,9 @@ pub use tracing_init::{
 };
 // `homecoming_std` re-exports live in one block (see docs/planning/cfg-scatter-etiquette.md)
 // even though they source from several internal modules.
+pub use base_state::{
+    BASE_VARIABLE, directory as base_directory, ensure as ensure_base, is_ready as base_is_ready,
+};
 #[cfg(all(feature = "rustdoc", feature = "shadow"))]
 pub use cargo_rustdoc::{
     build_active_shadow_deps, build_all_active_shadow_deps, build_shadow_dep_rustdoc,

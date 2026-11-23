@@ -87,6 +87,14 @@ impl SavedState {
         }
     }
 
+    /// Whether this state was saved by this build of the tool, so that a run can start from it: what a
+    /// project with a state of its own does not need a base for.
+    #[must_use]
+    pub fn is_usable(&self) -> bool {
+        std::fs::read_to_string(self.dir.join(KEY))
+            .is_ok_and(|key| key == crate::run_cache::executable_fingerprint())
+    }
+
     /// This state, started from `base` (a directory a state was saved in) when it has none of its
     /// own that can be used.
     #[must_use]

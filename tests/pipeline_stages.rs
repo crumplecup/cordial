@@ -282,3 +282,64 @@ fn the_priming_says_what_each_chunk_took_and_what_it_took_to_take_it() -> Result
     assert!(values.contains_key("prime.workspace.resident_after_kib"));
     Ok(())
 }
+
+/// Asked for, the first project of a store makes the base state (the sysroot, built and saved once), and
+/// every project with no state of its own after it starts from that and does not make it again; not
+/// asked for, a project starts cold and nothing is made.
+#[test]
+fn a_store_makes_its_base_state_once_and_projects_with_no_state_start_from_it() -> Result<()> {
+    cordial::init_tracing();
+    let scratch = tempfile::tempdir().into_diagnostic()?;
+    let home = scratch.path().join("store");
+    let project = |name: &str| -> Result<Project> {
+        let project = Project {
+            project: scratch.path().join(name),
+            home: home.clone(),
+        };
+        support::mini_workspace::write(&project.project)?;
+        Ok(project)
+    };
+    let said = |output: std::process::Output| String::from_utf8_lossy(&output.stdout).into_owned();
+    let stop = ["open", "--stop-after", "source_ir"];
+
+    // Not asked for: cold, and nothing is made.
+    let cold = said(project("off")?.run(&stop)?);
+    assert!(!cold.contains("base state"), "{cold}");
+    assert!(cold.contains("not used (none saved"), "{cold}");
+    assert!(
+        !home.join("sysroot").exists(),
+        "no base was made: the shared cache was not even made"
+    );
+
+    // The first project that wants one makes it.
+    let first = said(project("first")?.run_with(&stop, cordial::BASE_VARIABLE, "on")?);
+    assert!(
+        first.contains("base state: none yet for this build; making it"),
+        "{first}"
+    );
+    assert!(first.contains("base state: made in"), "{first}");
+    assert!(first.contains("started from the base state"), "{first}");
+    let status =
+        said(project("first")?.run_with(&["base", "status"], cordial::BASE_VARIABLE, "on")?);
+    assert!(status.contains("base state: "), "{status}");
+    assert!(!status.contains("none for this build"), "{status}");
+
+    // A second project in the same store starts from it, and makes nothing.
+    let second = said(project("second")?.run_with(&stop, cordial::BASE_VARIABLE, "on")?);
+    assert!(!second.contains("making it"), "{second}");
+    assert!(second.contains("started from the base state"), "{second}");
+
+    // And a project that has a state of its own of this build uses that.
+    let second_project = project("second")?;
+    let lib = second_project.project.join("src/lib.rs");
+    let text = std::fs::read_to_string(&lib).into_diagnostic()?;
+    std::fs::write(
+        &lib,
+        format!("{text}\n// an edit, so that the run loads the database\n"),
+    )
+    .into_diagnostic()?;
+    let again = said(second_project.run_with(&stop, cordial::BASE_VARIABLE, "on")?);
+    assert!(again.contains("restored from the last run"), "{again}");
+    assert!(!again.contains("started from the base state"), "{again}");
+    Ok(())
+}

@@ -27,6 +27,12 @@ pub enum Commands {
         #[arg(long)]
         dry_run: bool,
     },
+    /// Manage the base analysis state that a project with no state of its own starts from.
+    Base {
+        /// What to do with it.
+        #[command(subcommand)]
+        action: super::base::BaseCommands,
+    },
     /// Measure cordial's own cost and compare runs.
     Perf {
         /// What to do with performance records.
@@ -335,6 +341,7 @@ impl Commands {
                 all,
                 dry_run,
             ),
+            Self::Base { action } => action.act(ctx.store_home.as_deref()),
             Self::Perf { command } => command.act(&ctx),
             #[cfg(feature = "quality")]
             command @ (Self::Open { .. }

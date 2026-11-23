@@ -108,9 +108,18 @@ impl CacheToken {
             crate::host::loaded();
             crate::host::event("database: workspace loaded".to_owned());
             // The run cache's store also keeps the database a run leaves for the next.
-            let saved = locked(&self.cache)
-                .as_ref()
-                .map(|cache| crate::loader::SavedState::at(cache.state_dir()));
+            let saved = locked(&self.cache).as_ref().map(|cache| {
+                let state = crate::loader::SavedState::at(cache.state_dir());
+                // A project with no state of its own to use starts from the base: the sysroot, built
+                // and saved once for every project in the store.
+                if state.is_usable() {
+                    return state;
+                }
+                match crate::ensure_base(&crate::SysrootCache::from_home(cache.home())) {
+                    Some(base) => state.with_base(base),
+                    None => state,
+                }
+            });
             let database = SourceDatabase::load_saved_reporting(
                 &recipe.root,
                 &recipe.options,
