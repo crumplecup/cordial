@@ -22,7 +22,12 @@ fn library_files<'a>(
     vfs.iter().filter_map(move |(file, path)| {
         let roots = libraries?.roots(db);
         let path = path.as_path()?;
-        let root = db.file_source_root(file).source_root_id(db);
+        // A file no root holds is not a library's.
+        let root = db
+            .files()
+            .try_file_source_root(db, file)
+            .ok()?
+            .source_root_id(db);
         roots
             .contains(&root)
             .then(|| std::path::PathBuf::from(path.as_str()))
@@ -39,6 +44,8 @@ pub(super) struct AttachedTexts {
     pub(super) bytes: usize,
     /// Library files that are not on the disk as the analysis read them, whose text is saved.
     pub(super) kept: usize,
+    /// Files in the VFS that no source root holds: not a library's, and not asked for a root.
+    pub(super) unrooted: usize,
 }
 
 /// Say, of every library file that is on the disk with the length of its text, where it is, so that
@@ -55,13 +62,36 @@ pub(super) fn attach_library_sources(db: &RootDatabase, vfs: &Vfs) -> AttachedTe
             attached.kept += 1;
         }
     }
+    let mut unrooted = vfs
+        .iter()
+        .filter(|(file, _)| db.files().try_file_source_root(db, *file).is_err());
+    let examples: Vec<String> = unrooted
+        .by_ref()
+        .take(5)
+        .map(|(file, path)| format!("{}: {path}", file.index()))
+        .collect();
+    attached.unrooted = examples.len() + unrooted.count();
     tracing::debug!(
         target: "cordial::cache",
         files = attached.files,
         bytes = attached.bytes,
         kept = attached.kept,
+        unrooted = attached.unrooted,
+        examples = examples.join("; "),
         "library texts to be saved as references"
     );
+    crate::host::event(format!(
+        "analysis state: {} library texts ({} bytes) saved as references, {} kept, {} files with no source root{}",
+        attached.files,
+        attached.bytes,
+        attached.kept,
+        attached.unrooted,
+        if examples.is_empty() {
+            String::new()
+        } else {
+            format!(" (e.g. {})", examples.join("; "))
+        }
+    ));
     attached
 }
 impl SourceDatabase {

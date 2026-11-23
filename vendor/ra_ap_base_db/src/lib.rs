@@ -249,20 +249,26 @@ impl Files {
         };
     }
 
+    /// The source root of the file, or why it has none: a file no root holds is one the analysis read
+    /// that is in the VFS and was never given a root. Code that asks about every file of the VFS uses
+    /// this; [`Self::file_source_root`] is for rust-analyzer's own callers, which expect a root.
+    pub fn try_file_source_root(
+        &self,
+        db: &dyn SourceDatabase,
+        id: vfs::FileId,
+    ) -> Result<FileSourceRootInput, NoSourceRoot> {
+        self.file_source_roots.get(&id).map(|root| *root).ok_or_else(|| NoSourceRoot {
+            file: id,
+            path: self.path_for_file(db, id).map(|path| path.to_string()),
+        })
+    }
+
     pub fn file_source_root(
         &self,
         db: &dyn SourceDatabase,
         id: vfs::FileId,
     ) -> FileSourceRootInput {
-        let file_source_root = match self.file_source_roots.get(&id) {
-            Some(file_source_root) => file_source_root,
-            None => panic!(
-                "Unable to get `FileSourceRootInput` with `vfs::FileId` ({id:?}, path: {}); this is a bug",
-                self.path_for_file(db, id)
-                    .map_or_else(|| "<unknown>".to_owned(), |path| path.to_string()),
-            ),
-        };
-        *file_source_root
+        self.try_file_source_root(db, id).unwrap_or_else(|error| panic!("{error}"))
     }
 
     fn path_for_file(&self, db: &dyn SourceDatabase, id: vfs::FileId) -> Option<vfs::VfsPath> {
@@ -300,6 +306,28 @@ impl Files {
         };
     }
 }
+
+/// A file that no source root holds.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NoSourceRoot {
+    /// The file.
+    pub file: vfs::FileId,
+    /// Where it is, when the VFS knows.
+    pub path: Option<String>,
+}
+
+impl std::fmt::Display for NoSourceRoot {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "file {:?} (path: {}) has no source root: it is in the VFS and was never given one",
+            self.file,
+            self.path.as_deref().unwrap_or("<unknown>")
+        )
+    }
+}
+
+impl std::error::Error for NoSourceRoot {}
 
 /// The set of roots for crates.io libraries.
 /// Files in libraries are assumed to never change.

@@ -115,3 +115,41 @@ fn library_texts_leave_memory_and_are_read_again_and_the_graph_is_the_same() -> 
     );
     Ok(())
 }
+
+/// The manifest of a virtual workspace is in the VFS with a text and no source root holds it (it is
+/// not Rust, and no package's directory is the root of the workspace): walking the files of the
+/// library roots has to go past it, not ask it for a root it does not have.
+#[test]
+fn a_file_that_no_source_root_holds_does_not_stop_the_library_texts_being_found() -> Result<()> {
+    cordial::init_tracing();
+    let root = tempfile::tempdir().into_diagnostic()?;
+    std::fs::create_dir_all(root.path().join("member/src")).into_diagnostic()?;
+    std::fs::write(
+        root.path().join("Cargo.toml"),
+        "[workspace]\nmembers=['member']\nresolver='2'\n",
+    )
+    .into_diagnostic()?;
+    std::fs::write(
+        root.path().join("member/Cargo.toml"),
+        "[package]\nname='member'\nversion='0.1.0'\nedition='2024'\n",
+    )
+    .into_diagnostic()?;
+    std::fs::write(
+        root.path().join("member/src/lib.rs"),
+        "pub fn caller() -> usize { 1 }\n",
+    )
+    .into_diagnostic()?;
+
+    let mut session =
+        SourceDatabase::load_saved(root.path(), &SemanticCargoOptions::default(), None)
+            .into_diagnostic()?;
+    session
+        .project(
+            &CrateTarget::new("member", root.path().join("member")),
+            &[root.path().join("member/src/lib.rs")],
+        )
+        .into_diagnostic()?;
+    let (files, _) = session.drop_library_texts();
+    assert!(files > 0, "the sysroot's texts are still found: {files}");
+    Ok(())
+}

@@ -229,6 +229,20 @@ chunk names against the pre-B1 state was inconclusive for an unrelated reason: t
 binary differ in about 140 of 1,610 chunk names (parallel id assignment), which is noise to be understood
 separately and does not touch restored-then-saved runs (A4's tests).
 
+**Checkpoint, A+B1 (2026-11-22/23, amenable, release, cold).** The first attempt panicked in the save: A3's walk of
+the library files asked every file in the VFS for its source root, and the root `Cargo.toml` of a virtual
+workspace is in the VFS with none (`FileId 8601`; `drop_library_texts` had the same call, which only runs under
+memory pressure). The lookup is now typed (`Files::try_file_source_root` returns `NoSourceRoot` with the file and
+its path) and a file with no root is skipped; the save says how many there are and names the first few. The
+regression test is a virtual workspace (`cold_texts`), and the diagnostic line confirms such a project has exactly
+one unrooted file. Result: the cold run completes; the state is 467 MB (23,515 chunks) with 7,057 library texts
+(130 MB) kept as references; the save takes 28 s; the run's peak is 2.8 GB with 2.7 GB resident while it saves,
+so the save adds about 0.1 GB, where the last recorded amenable peak was 4.0 GB (before the A and B1 work, with
+the other changes of the period). The unchanged second run did not load or restore (it reused the run's cached
+IR), so it measured nothing; the edit behaviour is the specimen's (A4). The save is therefore no longer what sets
+the peak on amenable, so B2/B3 are now about time (28 s) and not about RSS: what sets the peak is the 2.7 GB
+working set the save starts from.
+
 **B2. One flatten per save.** The results do not depend on who asks, which the module comment states;
 one exception is read in the code: `owner` stops a fingerprint's own dependencies short of the query it
 fingerprints for. So the cache is keyed by edge and valid for every owner except the fingerprint
