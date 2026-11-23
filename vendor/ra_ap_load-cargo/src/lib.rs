@@ -297,6 +297,17 @@ impl ProjectFolders {
             }
         }
 
+        // The sysroot's roots first, in the order they have. A root's id is its place in this list, and
+        // it is what a saved state of the sysroot's files knows them by: sorted by path with the rest,
+        // the sysroot's place moves with every project root and registry crate that sorts before it,
+        // and a state saved from one project is invalid for the sysroot of any other. A stable sort, so
+        // the order among the others is as it was.
+        let sysroot_sources: Vec<&AbsPath> =
+            workspaces.iter().filter_map(|ws| ws.sysroot.rust_lib_src_root()).collect();
+        roots.sort_by_key(|root| {
+            !root.include.iter().any(|path| sysroot_sources.iter().any(|sources| path.starts_with(sources)))
+        });
+
         // Collect workspace roots not already covered by a local PackageRoot
         // (e.g. virtual workspaces where no package lives at the workspace root).
         // We need these to load workspace-root rust-analyzer.toml into a local source root.

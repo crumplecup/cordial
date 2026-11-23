@@ -359,6 +359,21 @@ persisted queries are in it. A rebuild of cordial then discards the project laye
 first need under the existing store lock, published by an atomic rename, removed by `cordial clean
 --all`. A failed or mismatched base is built again, or the run is cold.
 
+*C1, on a real project (2026-11-23).* `elicit_doc` started from the base still executed all 192 definition maps and
+600,732 queries (601,270 without a base): nothing of the sysroot was reused, though the fixtures reused it. A
+debug log of only the input writes showed why: 3,190 writes of `FileSourceRootInput.source_root_id`, one for every
+sysroot file. A source root's id is its index in a list that `ProjectFolders` sorts by path, so the sysroot's id
+moves with every project root and registry crate that sorts before it (registry crates under `~/.cargo` sort
+before `~/.rustup`), and a state saved from one project is invalid for the sysroot of any other; the fixtures
+only matched because everything in `/tmp` sorts after the toolchain. The sysroot's roots are now put first, in
+the order they had, by a stable sort, so their ids are the same for every project. A test with the base and the
+project under `/dev/shm`, which sorts before the toolchain, and a workspace of two packages against the base's
+one reproduced it (22 definition maps executed) and passes with the fix. The watermark change also needed a
+correction found by an existing test: "a crate a tool added" was recognized as crate data that survived the
+watermark, which is no longer a property of the crates the loader made, and is now recognized by its durability.
+Measured on `elicit_doc` before the root fix: the watermark change cost the saved state 0.6% (182.4 MB against
+181.4 MB) and the save no time; the base was made in 7.2 s.
+
 **C0.** Prove 1 and 2 on a fixture by building a "sysroot only" state twice and comparing; measure what
 a one-file project's 102 MB is made of. **C1.** Build, save and restore a base, and load a fixture
 project onto it; the result equals a cold load. **C2.** Delta-save the project over the base. **C3.**

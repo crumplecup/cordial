@@ -113,6 +113,11 @@ where
         value.durabilities[self.field_index] >= crate::flatten::WATERMARK_DURABILITY
     }
 
+    fn is_lowest_durability(&self, zalsa: &Zalsa, input: Id) -> bool {
+        let value = <IngredientImpl<C>>::data(zalsa, input);
+        value.durabilities[self.field_index] == crate::Durability::LOW
+    }
+
     fn debug_name(&self) -> &'static str {
         C::FIELD_DEBUG_NAMES[self.field_index]
     }

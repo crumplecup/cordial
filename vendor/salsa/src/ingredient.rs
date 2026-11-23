@@ -292,6 +292,12 @@ pub trait Ingredient: Any + fmt::Debug + Send + Sync {
         false
     }
 
+    /// Whether this input is of the lowest durability, the one of what is written while the tool
+    /// runs: what a loader writes is of a higher one.
+    fn is_lowest_durability(&self, _zalsa: &Zalsa, _input: Id) -> bool {
+        false
+    }
+
     /// Whether there is data to serialize for this ingredient.
     ///
     /// If this returns `false`, the ingredient will not be serialized, even if `is_persistable`

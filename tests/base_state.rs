@@ -192,3 +192,81 @@ fn a_project_started_from_a_base_finds_what_a_cold_load_finds_without_building_t
         Ok(())
     })
 }
+
+/// A directory whose path sorts before the toolchain's, as the paths of a project under `/dev/shm` or
+/// of the registry's crates do: source roots are numbered in the order of their paths, so a root that
+/// sorts before the sysroot's moves the sysroot's number. `None` where there is no such place.
+fn early_directory() -> Option<tempfile::TempDir> {
+    tempfile::tempdir_in("/dev/shm").ok()
+}
+
+/// The sysroot's source roots have the numbers they had in the base whatever the project's roots are:
+/// a workspace of two packages has more roots than the base's one, all before the sysroot's, and what
+/// was saved of the sysroot is still valid for it.
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn a_project_with_more_roots_than_the_base_still_finds_the_sysroot_it_saved() -> Result<()> {
+    cordial::init_tracing();
+    let Some(early) = early_directory() else {
+        // Without such a place the numbers cannot be made to differ here: nothing to check.
+        return Ok(());
+    };
+    let scratch = tempfile::tempdir().into_diagnostic()?;
+    let subscriber =
+        tracing_subscriber::registry().with(MetricsLayer.with_filter(metrics_filter_with(true)));
+    tracing::subscriber::with_default(subscriber, || -> Result<()> {
+        // The base: one package, in a directory that sorts before the sysroot's.
+        let base_root = early.path().join("base");
+        std::fs::create_dir_all(base_root.join("src")).into_diagnostic()?;
+        std::fs::write(
+            base_root.join("Cargo.toml"),
+            "[package]\nname = \"base_workload\"\nversion = \"0.1.0\"\nedition = \"2024\"\n[workspace]\n",
+        )
+        .into_diagnostic()?;
+        std::fs::write(base_root.join("src/lib.rs"), BASE_LIB).into_diagnostic()?;
+        let base = SavedState::at(scratch.path().join("base"));
+        run(&base_root, &base, "base_workload")?;
+        let made = definition_maps_executed(scratch.path())?;
+        assert!(made >= 20, "the base builds the sysroot's maps: {made}");
+
+        // The project: a workspace of two packages, so two roots before the sysroot's.
+        let root = early.path().join("workspace");
+        for member in ["first", "second"] {
+            std::fs::create_dir_all(root.join(member).join("src")).into_diagnostic()?;
+            std::fs::write(
+                root.join(member).join("Cargo.toml"),
+                format!(
+                    "[package]\nname = \"{member}\"\nversion = \"0.1.0\"\nedition = \"2024\"\n"
+                ),
+            )
+            .into_diagnostic()?;
+            std::fs::write(
+                root.join(member).join("src/lib.rs"),
+                "pub fn f() -> u32 { 1 }\n",
+            )
+            .into_diagnostic()?;
+        }
+        std::fs::write(
+            root.join("Cargo.toml"),
+            "[workspace]\nmembers = [\"first\", \"second\"]\nresolver = \"2\"\n",
+        )
+        .into_diagnostic()?;
+        let state = SavedState::at(scratch.path().join("project")).with_base(base.directory());
+        let mut session =
+            SourceDatabase::load_saved(&root, &SemanticCargoOptions::default(), Some(state))
+                .into_diagnostic()?;
+        assert!(session.restored(), "it started from the base");
+        session
+            .project(
+                &cordial::CrateTarget::new("first", root.join("first")),
+                &[root.join("first/src/lib.rs")],
+            )
+            .into_diagnostic()?;
+        let from_base = definition_maps_executed(scratch.path())? - made;
+        assert!(
+            from_base <= 4,
+            "{from_base} definition maps executed from the base: the sysroot's are valid for a project with more roots"
+        );
+        Ok(())
+    })
+}

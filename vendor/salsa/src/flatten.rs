@@ -891,15 +891,16 @@ pub(crate) fn set_changed_after(
     changed
 }
 
-/// Whether `edge` is a crate's `data` that survived flattening: not the watermark, so an input
-/// of the lowest durability. Crates the loader made are written at a higher one, so these are
-/// the ones a tool added.
+/// Whether `edge` is a crate's `data` of the lowest durability. Crates the loader made are written
+/// at a higher one (and, whether or not that is under the watermark, are edges of their own or
+/// summarized), so these are the ones a tool added.
 pub(crate) fn is_low_crate_data(zalsa: &Zalsa, edge: QueryEdge) -> bool {
     if edge.is_summary() {
         return false;
     }
     let ingredient = zalsa.lookup_ingredient(edge.key().ingredient_index());
-    ingredient.debug_name() == "data" && !ingredient.watermarked(zalsa, edge.key().key_index())
+    ingredient.debug_name() == "data"
+        && ingredient.is_lowest_durability(zalsa, edge.key().key_index())
 }
 
 /// The chain of queries from the memo whose edges are `edges` down to the first crate `data`
