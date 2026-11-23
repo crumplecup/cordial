@@ -137,7 +137,8 @@ fn cfg_attr_flips(text: &str, pairs: &[(CfgOptions, CfgOptions)]) -> bool {
 }
 
 /// Whether the file is one the leaf pass reads: a test, a bench or an example, which are read
-/// through their copies.
+/// through their copies, in the contexts that have `test` on (the leaf pass's). A context without it
+/// does not read them: they are as the ordinary build has them unless a gate in them flips.
 fn is_a_leaf_file(path: &Path) -> bool {
     path.components().any(|part| {
         matches!(
@@ -174,6 +175,7 @@ impl SourceDatabase {
         &self,
         files: &[(FileId, PathBuf)],
         pairs: &[(CfgOptions, CfgOptions)],
+        reads_leaves: bool,
     ) -> Classified {
         let mut reuse = Reuse {
             files: files.len(),
@@ -182,7 +184,7 @@ impl SourceDatabase {
         let mut changed: BTreeSet<FileId> = BTreeSet::new();
         let sema = Semantics::new(&self.db);
         for (file, path) in files {
-            if is_a_leaf_file(path) {
+            if reads_leaves && is_a_leaf_file(path) {
                 // Counted with the files that read the cfg otherwise: it cannot be taken as unchanged.
                 reuse.unsure += 1;
                 changed.insert(*file);

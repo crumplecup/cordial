@@ -333,3 +333,32 @@ fn contexts_that_differ_in_what_a_crate_never_names_share_its_copy() -> Result<(
     );
     Ok(())
 }
+
+/// A test file is read by the leaf pass, in the contexts that have `test` on; a cfg context that does not
+/// flip anything in its crate copies neither it nor the crate.
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn a_cfg_context_does_not_copy_a_crate_for_its_test_files() -> Result<()> {
+    cordial::init_tracing();
+    let scratch = tempfile::tempdir().into_diagnostic()?;
+    let subscriber =
+        tracing_subscriber::registry().with(MetricsLayer.with_filter(metrics_filter_with(true)));
+    tracing::subscriber::with_default(subscriber, || -> Result<()> {
+        let root = independent(3)?;
+        let tests = root.path().join("c1/tests");
+        std::fs::create_dir_all(&tests).into_diagnostic()?;
+        std::fs::write(
+            tests.join("t.rs"),
+            "#[test]\nfn t() { assert_eq!(c1::f1(), 1); }\n",
+        )
+        .into_diagnostic()?;
+        project(root.path(), "c0", false)?;
+        let copied = metrics_of(scratch.path())?
+            .values()
+            .get("semantic.contexts.crates_copied")
+            .copied()
+            .unwrap_or(0);
+        assert_eq!(copied, 1, "only the crate whose gate the context flips");
+        Ok(())
+    })
+}

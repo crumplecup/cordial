@@ -591,7 +591,11 @@ impl SourceDatabase {
             .filter(|(_, _, path)| path.extension().is_some_and(|extension| extension == "rs"))
             .map(|(file, _, path)| (*file, path.clone()))
             .collect();
-        let classified = self.classify_files(&located, pairs);
+        let classified = self.classify_files(
+            &located,
+            pairs,
+            context.enabled().iter().any(|atom| atom == "test"),
+        );
         // The crates this context copies: the ones it changes, and the dependencies on the way to
         // them. A crate it does not change is the ordinary crate, whose maps are built and shared.
         let copied = if self.copies_every_crate() {

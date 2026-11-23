@@ -487,6 +487,13 @@ the context that made it, or the next would build them again; under memory press
 Not measured on amenable or the self-run: the saving there depends on how many contexts differ in atoms a crate
 does not name, and what keeping the memos costs.
 
+*D3, first step (2026-11-23).* A file under `tests`, `benches` or `examples` was changed in every context, so every
+cfg context copied each leaf crate, which on amenable is most of the 110. It is now changed only in a context with
+`test` on (the leaf pass's contexts, which read them); a cfg context treats it as any file, changed where a gate in it
+flips or where it has no module in the ordinary build. A fixture with a test file in a crate the context does not
+flip copies one crate, not two (`a_cfg_context_does_not_copy_a_crate_for_its_test_files`); I did not run it against
+the old rule. Not measured on amenable.
+
 **D1. Copies keyed by what they differ in.** A copy's identity is the crate and the part of the context's
 cfg change that the crate's files mention (from `gates_of`), not the context's ordinal. Contexts that
 differ in atoms a crate never names then share that crate's copy and its memos, and the copy's path
