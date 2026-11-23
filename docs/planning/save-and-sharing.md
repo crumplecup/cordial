@@ -196,6 +196,17 @@ interned sets hold and the entries of `done`, and write a Salsa-level test that 
 wide universe and asserts the bytes. This turns the inference above into a number, and it is the
 baseline for B1.
 
+*B0 done (2026-11-22).* The save's `salsa::persistence` event now carries `universe`, `distinct_sets`,
+`dense_words`, `dense_bytes`, `widest_set_words` and `kept_results` (the flattener's footprint), and
+`tests/salsa_flatten_footprint.rs` pins them on 640 one-edge sets (3,520 words where 640 runs are saved).
+Measured on `elicit_doc` (release, 180 MB state, 179,887 persisted memos): the flatteners' sets add up to
+29.6 M words, 237 MB, where the same sets saved as runs are 364 K runs, a few MB. One ingredient, `direct_facts`
+(6,195 memos), holds 62,768 distinct sets over a universe of 40,377 edges: 19.3 M words, 155 MB, for 198 K runs
+(3.2 runs a set, 1.6 MB), and a flattener lives for the whole ingredient. The size of a dense set follows the
+universe and the number of sets follows the memos, so the cost grows with their product: `elicit_doc`'s 155 MB
+is the small project's number. The queries kept in `done` are 760 K entries across the ingredients, one result
+for each query walked. B1 is therefore the first thing to do in B, and it is a large win by itself.
+
 **B1. Interval sets.** Replace `Bits` by sorted disjoint runs. Union is a merge, equality and hashing
 are over the runs, `runs_of` is the identity, `edges_of` walks runs. A set of a few long runs is a few
 words. Property tests against the dense implementation on random sets (union, equality, edges) and

@@ -1189,6 +1189,7 @@ mod persistence {
 
             if count > 0 {
                 let (stats, elapsed) = flattener.report();
+                let held = flattener.footprint();
                 crate::flatten::note_breadth(C::DEBUG_NAME, flattener.breadth(12));
                 ::tracing::info!(
                     target: "salsa::persistence",
@@ -1201,6 +1202,12 @@ mod persistence {
                     walked = stats.walked,
                     reused = stats.reused,
                     incomplete = stats.incomplete,
+                    universe = held.universe,
+                    distinct_sets = held.sets,
+                    dense_words = held.dense_words,
+                    dense_bytes = held.dense_words * 8,
+                    widest_set_words = held.widest_words,
+                    kept_results = held.kept,
                     breadth = flattener.breadth(8),
                     reads_themselves = flattener.direct(8),
                     kinds = ?by_kind,

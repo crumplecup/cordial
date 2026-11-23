@@ -205,6 +205,22 @@ pub struct EdgeFlattener {
     stats: FlattenStats,
 }
 
+/// What an [`EdgeFlattener`] holds, for the log.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct Footprint {
+    /// The persisted edges numbered: a set is a set of positions among these.
+    pub universe: u64,
+    /// The distinct sets.
+    pub sets: u64,
+    /// The words of 64 bits the distinct sets take between them: one word for every 64 edges up to the
+    /// highest edge in the set, however few it holds.
+    pub dense_words: u64,
+    /// The most words any one set takes.
+    pub widest_words: u64,
+    /// The queries whose result is kept, each with a set and a closure.
+    pub kept: u64,
+}
+
 /// What a flattening did, for the log.
 #[derive(Debug, Default, Clone, Copy)]
 pub(crate) struct FlattenStats {
@@ -372,6 +388,25 @@ impl EdgeFlattener {
             })
             .collect::<Vec<_>>()
             .join(" ")
+    }
+
+    /// What the flattener holds: the edges numbered, the distinct sets and the words they take, and the
+    /// queries whose result is kept. These are what a flattener costs in memory while it is alive, and
+    /// what a set of runs in place of words would change.
+    pub fn footprint(&self) -> Footprint {
+        let (mut dense_words, mut widest_words) = (0_u64, 0_u64);
+        for set in &self.interned {
+            let words = set.0.len() as u64;
+            dense_words += words;
+            widest_words = widest_words.max(words);
+        }
+        Footprint {
+            universe: self.edges.len() as u64,
+            sets: self.interned.len() as u64,
+            dense_words,
+            widest_words,
+            kept: self.done.len() as u64,
+        }
     }
 
     /// What this has done so far, and for how long.
