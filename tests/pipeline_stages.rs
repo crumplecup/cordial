@@ -311,6 +311,11 @@ fn a_store_makes_its_base_state_once_and_projects_with_no_state_start_from_it() 
         "no base was made: the shared cache was not even made"
     );
 
+    // What an earlier build of the tool left in the store is not kept when this build makes its own.
+    let old = home.join("sysroot/cache/base-state/0123456789abcdef");
+    std::fs::create_dir_all(&old).into_diagnostic()?;
+    std::fs::write(old.join("key"), "an older build").into_diagnostic()?;
+
     // The first project that wants one makes it.
     let first = said(project("first")?.run_with(&stop, cordial::BASE_VARIABLE, "on")?);
     assert!(
@@ -319,6 +324,7 @@ fn a_store_makes_its_base_state_once_and_projects_with_no_state_start_from_it() 
     );
     assert!(first.contains("base state: made in"), "{first}");
     assert!(first.contains("started from the base state"), "{first}");
+    assert!(!old.exists(), "the base of another build was removed");
     let status =
         said(project("first")?.run_with(&["base", "status"], cordial::BASE_VARIABLE, "on")?);
     assert!(status.contains("base state: "), "{status}");

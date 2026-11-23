@@ -374,6 +374,23 @@ watermark, which is no longer a property of the crates the loader made, and is n
 Measured on `elicit_doc` before the root fix: the watermark change cost the saved state 0.6% (182.4 MB against
 181.4 MB) and the save no time; the base was made in 7.2 s.
 
+*C1b, C4, C5 (2026-11-23).* `cordial base build` makes the base (a crate that exercises the standard library, saved
+from a session of its own) in a child process under the sysroot cache's lock, in `cache/base-state/<key>`, moved
+into place when whole; a build prunes the bases of other builds and abandoned build directories; `cordial base
+status` says where it is; `CORDIAL_BASE=on` starts a project with no state of its own from it, and it is opt-in
+until the default is changed (about twenty tests build fresh stores and several assert on memory). Measured on
+`elicit_doc` (release, cold, base made in the run, 10.6 s): queries executed 601,270 without a base and 479,062
+with it (-20%); the definition-map phase 11.4 s and 8.3 s; resident after the definition maps 1.02 and 0.78
+GiB, after the evidence 1.48 and 1.24, at the end 1.96 and 1.86; peak 2.01 and 1.90 GiB (-0.11); the whole first
+run 72 s and 73 s including the base's 10.6 s, so a project after the first in a store is about 10 s faster.
+The state is the same size and a save links 1,511 chunks (26 MB) from the base. The effect is a constant, the
+sysroot's, about a tenth of this project's working set and less of a larger one's: it does not change what
+limits the self-run. Not done, on purpose: C3, an engine key that outlives a rebuild of the tool. The base holds
+the tool's own persisted queries beside rust-analyzer's, and Salsa numbers ingredients by registration order,
+so a base saved by one build is not a base for another unless the tool's memos are left out and the numbering
+is stable; that is a change to what is saved, and the gain is only the 10 s a build makes it again. The default
+changes to on once the tests that build stores say `off`, or the plan's remaining step does.
+
 **C0.** Prove 1 and 2 on a fixture by building a "sysroot only" state twice and comparing; measure what
 a one-file project's 102 MB is made of. **C1.** Build, save and restore a base, and load a fixture
 project onto it; the result equals a cold load. **C2.** Delta-save the project over the base. **C3.**

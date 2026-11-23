@@ -219,5 +219,41 @@ pub fn build(sysroot: &SysrootCache) -> CordialResult<PathBuf> {
     let _ = std::fs::remove_dir_all(&directory);
     std::fs::rename(state.directory(), &directory)?;
     let _ = std::fs::remove_dir_all(&building);
+    prune(&parent, &key());
     Ok(directory)
+}
+
+/// How old a directory that a build was making is before it is taken to be abandoned: a process that
+/// died, not one that is still at it (the lock keeps two from building at once, so this is only ever a
+/// dead one's, but a clock that is a little off should not matter).
+const ABANDONED_AFTER: std::time::Duration = std::time::Duration::from_secs(10 * 60);
+
+/// Remove what is in `parent` that is not this build's base: the bases of builds of the tool that are
+/// gone, each as large as a state of a project that is only the sysroot, and what a build that died
+/// left. A build is made under the lock, so nothing else is being made as this runs.
+#[instrument(level = "debug")]
+fn prune(parent: &Path, current: &str) {
+    let Ok(entries) = std::fs::read_dir(parent) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        let abandoned = name.contains(".building-")
+            && entry
+                .metadata()
+                .and_then(|metadata| metadata.modified())
+                .ok()
+                .and_then(|modified| modified.elapsed().ok())
+                .is_some_and(|age| age > ABANDONED_AFTER);
+        let other_build = !name.contains(".building-") && name != current;
+        if abandoned || other_build {
+            tracing::debug!(
+                target: "cordial::cache",
+                name = %name,
+                abandoned,
+                "removing a base state that is not this build's"
+            );
+            let _ = std::fs::remove_dir_all(entry.path());
+        }
+    }
 }
