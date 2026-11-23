@@ -6,8 +6,9 @@ use tracing::instrument;
 mod database;
 mod native_syntax;
 pub use database::{
-    CfgPlanning, ContextCrates, Reporter, SavedState, SemanticCargoOptions, SourceDatabase,
-    SyncOutcome,
+    CHUNKS, CfgPlanning, ChunkDir, ChunkEntry, ChunkError, ChunkReadError, Chunked, ChunkedReader,
+    ContextCrates, Reporter, SavedState, SemanticCargoOptions, SourceDatabase, SyncOutcome,
+    chunked_reader, write_chunked,
 };
 #[cfg(any(
     feature = "tracing",

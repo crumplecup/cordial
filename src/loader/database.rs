@@ -71,6 +71,7 @@ mod session;
 #[cfg(feature = "internal_error_chain")]
 mod signature_queries;
 mod spill;
+mod state_chunks;
 #[cfg(feature = "tracing")]
 mod tracing_queries;
 mod types;
@@ -88,6 +89,10 @@ pub use options::{CfgPlanning, SemanticCargoOptions};
 pub(super) use queries::SemanticDatabase;
 pub use saved::SavedState;
 pub use session::SyncOutcome;
+pub use state_chunks::{
+    CHUNKS, ChunkDir, ChunkEntry, ChunkError, ChunkReadError, Chunked, ChunkedReader,
+    chunked_reader, write_chunked,
+};
 /// Where the loader says what it is doing, for the frontend's progress display.
 #[derive(Clone)]
 pub struct Reporter(std::sync::Arc<dyn Fn(String) + Send + Sync>);

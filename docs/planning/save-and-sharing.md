@@ -147,6 +147,22 @@ linking the previous file otherwise; memory is one chunk. Done when a one-line e
 small, asserted number of chunks. Ids are assigned mostly in creation order, so an edited file's new values land
 in the last chunks.
 
+*A4 done (2026-11-22).* Every ingredient is a top-level map, so the chunking is generic and lives in cordial
+(`state_chunks`), not in Salsa: a serializer that takes the ingredient's map and writes its entries into chunks
+named for their SHA-256, in `salsa/chunks/`. A chunk ends after an entry whose key hashes (FNV-1a) to one in 64,
+or when it passes 1 MiB, so where chunks end depends only on the entries in them and an entry that grows moves
+nothing after it. A chunk the previous state had is hard-linked into the new one. A restore reads an ingredient
+as a map header and then its chunks in order, which is the encoding it had before chunks, after checking each
+chunk's length. Measured on the A0 specimen (release): a cold save is 1,610 chunks, 46.7 MB; after a one-line
+edit a save writes 24 chunks, 1.07 MB (2.3%), and links 1,586; a second edit writes 22. Tests: `state_chunks`
+(a map of 0 to 70,000 entries reads back, including where the header changes length; the last state's chunks
+are linked, none written; a value that grows 50 KB changes at most 3 of 20,000 entries' chunks; large entries
+are their own chunks; a non-map is refused and says what it was; a short chunk is found out first),
+`saved_state` (an edit changes under a quarter of the chunks).
+
+The save still encodes and hashes every chunk to know that it is unchanged (0.47 s here, which grows with the
+state); A5 is what removes that.
+
 **A5. Skip the encoding of clean chunks.** Per-ingredient generations, bumped when a memo is inserted, replaced
 or removed and when a struct slot is created, changed or freed, say which chunks cannot have changed, so they are
 neither encoded nor hashed. This needs the flattening's sets to be trusted per memo, so it follows workstream B.

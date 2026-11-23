@@ -58,17 +58,22 @@ fn a_saved_database_is_restored_and_gives_every_definition_the_same_id() -> Resu
     Ok(())
 }
 
-/// Every file of the saved Salsa state with its bytes, by name.
+/// Every file of the saved Salsa state with its bytes, by name: the header and manifest, and the
+/// chunks, which are named for what they hold.
 fn segments_of(saved: &SavedState) -> Result<std::collections::BTreeMap<String, Vec<u8>>> {
+    let salsa = saved.directory().join("salsa");
     let mut files = std::collections::BTreeMap::new();
-    for entry in std::fs::read_dir(saved.directory().join("salsa")).into_diagnostic()? {
-        let path = entry.into_diagnostic()?.path();
-        let name = path
-            .file_name()
-            .unwrap_or_default()
-            .to_string_lossy()
-            .into_owned();
-        files.insert(name, std::fs::read(&path).into_diagnostic()?);
+    for (prefix, directory) in [("", salsa.clone()), ("chunks/", salsa.join("chunks"))] {
+        for entry in std::fs::read_dir(directory).into_diagnostic()? {
+            let path = entry.into_diagnostic()?.path();
+            if path.is_file() {
+                let name = path.file_name().unwrap_or_default().to_string_lossy();
+                files.insert(
+                    format!("{prefix}{name}"),
+                    std::fs::read(&path).into_diagnostic()?,
+                );
+            }
+        }
     }
     Ok(files)
 }
@@ -104,6 +109,42 @@ fn a_run_that_changes_nothing_saves_the_same_segments() -> Result<()> {
     Ok(())
 }
 
+/// An edit between runs changes some of the chunks of the state and leaves most as they were: the
+/// ones it left are linked from the last state, not written again.
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn an_edit_between_runs_changes_a_small_share_of_the_chunks() -> Result<()> {
+    cordial::init_tracing();
+    let root = specimen()?;
+    let state = tempfile::tempdir().into_diagnostic()?;
+    let saved = SavedState::at(state.path().join("analysis-state"));
+    run(root.path(), &saved)?;
+    run(root.path(), &saved)?;
+    let before = segments_of(&saved)?;
+
+    let second = root.path().join("src/second.rs");
+    std::fs::write(&second, "pub fn alpha() {}\npub fn beta() {}\n").into_diagnostic()?;
+    run(root.path(), &saved)?;
+    let after = segments_of(&saved)?;
+
+    let chunks = |files: &std::collections::BTreeMap<String, Vec<u8>>| -> std::collections::BTreeSet<String> {
+        files
+            .keys()
+            .filter(|name| name.starts_with("chunks/"))
+            .cloned()
+            .collect()
+    };
+    let (kept, now) = (chunks(&before), chunks(&after));
+    let new = now.difference(&kept).count();
+    assert!(
+        new * 4 < now.len(),
+        "{new} of {} chunks are new after one edit",
+        now.len()
+    );
+    assert!(new > 0, "the edit is in some chunk");
+    Ok(())
+}
+
 #[test]
 #[tracing::instrument(level = "debug", err(level = "warn"))]
 fn an_edit_between_runs_keeps_the_ids_of_what_it_left_alone() -> Result<()> {
@@ -123,21 +164,19 @@ fn an_edit_between_runs_keeps_the_ids_of_what_it_left_alone() -> Result<()> {
     Ok(())
 }
 
-/// The largest ingredient's file of a saved Salsa state.
+/// The largest chunk of a saved Salsa state.
 fn largest_segment(salsa: &std::path::Path) -> Result<std::path::PathBuf> {
     let mut files = Vec::new();
-    for entry in std::fs::read_dir(salsa).into_diagnostic()? {
+    for entry in std::fs::read_dir(salsa.join("chunks")).into_diagnostic()? {
         let path = entry.into_diagnostic()?.path();
-        if path.extension().is_some_and(|extension| extension == "seg") {
-            let length = std::fs::metadata(&path).into_diagnostic()?.len();
-            files.push((length, path));
-        }
+        let length = std::fs::metadata(&path).into_diagnostic()?.len();
+        files.push((length, path));
     }
     files
         .into_iter()
         .max()
         .map(|(_, path)| path)
-        .ok_or_else(|| miette::miette!("a saved state has segments"))
+        .ok_or_else(|| miette::miette!("a saved state has chunks"))
 }
 
 #[test]

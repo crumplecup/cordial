@@ -35,23 +35,22 @@ const CONTEXTS: &str = "contexts";
 /// How much of the encoded state is held before it is written to the file.
 const WRITE_BUFFER_BYTES: usize = 1 << 20;
 
-/// How much of the saved Salsa state is buffered while its memos are restored.
-const READ_BUFFER_BYTES: usize = 64 * 1024;
-
 /// An ingredient of the Salsa state as the manifest names it. The manifest lists them in the order a
-/// restore has to read them, and says how long each is so that a file cut short is found out before
-/// it is decoded.
+/// restore has to read them. An ingredient is a map of `entries` entries, kept as chunks in the order
+/// they are read, each said by hash and length so that one cut short is found out before it is
+/// decoded.
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 struct SegmentEntry {
     index: u32,
     name: String,
-    bytes: u64,
+    entries: u64,
+    chunks: Vec<super::state_chunks::ChunkEntry>,
 }
 
 impl SegmentEntry {
-    /// The file the ingredient is in, within the Salsa directory.
-    fn file(&self) -> String {
-        format!("{}.seg", self.index)
+    /// How many bytes the ingredient is.
+    fn bytes(&self) -> u64 {
+        self.chunks.iter().map(|chunk| chunk.bytes).sum()
     }
 }
 
@@ -132,29 +131,35 @@ impl SavedState {
         std::fs::create_dir_all(&salsa_dir)?;
         let mut manifest = Vec::new();
         let mut header_len = 0_usize;
+        // The chunks of the state being replaced are linked into this one when they are the same.
+        let mut chunks = super::state_chunks::ChunkDir::new(
+            self.dir.join(SALSA).join(super::state_chunks::CHUNKS),
+            salsa_dir.join(super::state_chunks::CHUNKS),
+        )?;
         database.save_segments(
             |header| {
                 header_len = self.write_encoded(&salsa_dir.join(SALSA_HEADER), header)?;
                 Ok::<(), CordialError>(())
             },
             |segment, part| {
+                let written = super::state_chunks::write_chunked(part, &mut chunks)
+                    .map_err(|error| self.chunking(segment.name, &error))?;
                 let entry = SegmentEntry {
                     index: segment.index,
                     name: segment.name.to_owned(),
-                    bytes: 0,
+                    entries: written.entries,
+                    chunks: written.chunks,
                 };
-                let bytes = self.write_encoded(&salsa_dir.join(entry.file()), part)?;
                 tracing::debug!(
                     target: "salsa::state_size",
                     ingredient = segment.name,
                     index = segment.index,
-                    bytes,
+                    bytes = entry.bytes(),
+                    entries = entry.entries,
+                    chunks = entry.chunks.len() as u64,
                     "an ingredient's share of the saved state"
                 );
-                manifest.push(SegmentEntry {
-                    bytes: u64::try_from(bytes).unwrap_or(u64::MAX),
-                    ..entry
-                });
+                manifest.push(entry);
                 Ok(())
             },
         )?;
@@ -163,8 +168,22 @@ impl SavedState {
             + manifest_len
             + manifest
                 .iter()
-                .map(|entry| usize::try_from(entry.bytes).unwrap_or(usize::MAX))
+                .map(|entry| usize::try_from(entry.bytes()).unwrap_or(usize::MAX))
                 .sum::<usize>();
+        tracing::debug!(
+            target: "cordial::cache",
+            step = "chunks",
+            chunks_written = chunks.written,
+            chunks_linked = chunks.linked,
+            chunks_repeated = chunks.repeated,
+            chunk_bytes_written = chunks.bytes_written,
+            chunk_bytes_linked = chunks.bytes_linked,
+            "the chunks of the saved state"
+        );
+        crate::host::event(format!(
+            "analysis state: {} chunks written ({} bytes), {} linked from the last state ({} bytes)",
+            chunks.written, chunks.bytes_written, chunks.linked, chunks.bytes_linked
+        ));
         tracing::debug!(
             target: "cordial::cache",
             step = "encoded",
@@ -299,20 +318,11 @@ impl SavedState {
         let expanded_before = salsa::edges_expanded();
         let target: &mut dyn salsa::Database = database;
         let mut bytes = 0_u64;
+        let chunk_dir = dir.join(super::state_chunks::CHUNKS);
         for entry in &manifest {
-            let file = std::fs::File::open(dir.join(entry.file()))
-                .map_err(|error| format!("salsa {} unreadable ({error})", entry.name))?;
-            let length = file
-                .metadata()
-                .map_err(|error| format!("salsa {} unreadable ({error})", entry.name))?
-                .len();
-            if length != entry.bytes {
-                return Err(format!(
-                    "salsa {} is {length} bytes where the manifest says {}",
-                    entry.name, entry.bytes
-                ));
-            }
-            let reader = std::io::BufReader::with_capacity(READ_BUFFER_BYTES, file);
+            let reader =
+                super::state_chunks::chunked_reader(&chunk_dir, entry.entries, &entry.chunks)
+                    .map_err(|error| format!("salsa {} unreadable ({error})", entry.name))?;
             target
                 .restore_segment(
                     &header,
@@ -320,7 +330,7 @@ impl SavedState {
                     &mut rmp_serde::Deserializer::new(reader),
                 )
                 .map_err(|error| format!("salsa {} unreadable ({error})", entry.name))?;
-            bytes += length;
+            bytes += entry.bytes();
         }
         target.finish_segments(header);
         tracing::debug!(
@@ -359,6 +369,14 @@ impl SavedState {
                 let _ = std::fs::remove_dir_all(&path);
             }
         }
+    }
+
+    #[instrument(level = "trace", skip(self, error))]
+    fn chunking(&self, ingredient: &str, error: &super::state_chunks::ChunkError) -> CordialError {
+        CordialError::perf(
+            self.dir.clone(),
+            format!("could not save {ingredient} as chunks: {error}"),
+        )
     }
 
     #[instrument(level = "trace", skip(self, error))]
