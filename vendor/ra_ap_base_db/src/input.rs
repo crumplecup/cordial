@@ -496,6 +496,9 @@ pub struct Crate {
     #[default]
     #[returns(ref)]
     pub affected_files: Vec<FileId>,
+    /// For a copy: whether the modules the context cannot change are taken from the original, with its ids.
+    #[default]
+    pub share_modules: bool,
 }
 
 impl Crate {

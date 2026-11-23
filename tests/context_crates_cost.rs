@@ -738,3 +738,65 @@ fn a_module_that_a_flipped_gate_can_reach_is_the_copys_own() -> Result<()> {
     assert_eq!((affected, shared), (6, 2), "affected and shared modules");
     Ok(())
 }
+
+/// How many of the functions of a context's copy are the ordinary build's own, and how many are the copy's.
+fn function_sharing(root: &std::path::Path, share: bool) -> Result<(usize, usize)> {
+    let options = SemanticCargoOptions::default().with_do_not_share_definition_maps(!share);
+    let mut session = SourceDatabase::load_with(root, &options).into_diagnostic()?;
+    let dir = root.join("m");
+    session
+        .project(&CrateTarget::new("m", &dir), &[dir.join("src/lib.rs")])
+        .into_diagnostic()?;
+    let context = cordial::SemanticContextKey::enabling(["feature=\"extra\""]);
+    let added = session.add_context_crates(&context).into_diagnostic()?;
+    Ok(session.context_function_sharing(&added))
+}
+
+/// A function in a module the context cannot change is the ordinary build's function in the copy too (the same
+/// id), so what is computed for it is computed once: the copy's own functions are only those the gate reaches,
+/// however many modules there are.
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn a_function_in_a_module_the_gate_does_not_reach_is_the_original_s_in_the_copy() -> Result<()> {
+    cordial::init_tracing();
+    let few = function_sharing(modules_beside_a_gate(3)?.path(), true)?;
+    let many = function_sharing(modules_beside_a_gate(30)?.path(), true)?;
+    // With it off, every function of the copy is the copy's own.
+    let off = function_sharing(modules_beside_a_gate(3)?.path(), false)?;
+    assert_eq!(off, (0, 7), "(shared, own) functions with sharing off");
+    // Each module has a method and a function. The gated function in the root is the copy's own.
+    assert_eq!(few, (6, 1), "(shared, own) functions with 3 modules");
+    assert_eq!(many, (60, 1), "(shared, own) functions with 30 modules");
+    Ok(())
+}
+
+/// What a context finds does not depend on whether the modules it cannot change are the original's.
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn what_a_context_finds_is_the_same_whether_or_not_it_takes_modules_from_the_original() -> Result<()>
+{
+    cordial::init_tracing();
+    for (root, target) in [
+        (modules_of_each_kind()?, "m"),
+        (modules_beside_a_gate(6)?, "m"),
+        (nested()?, "both"),
+        (chain()?, "top"),
+    ] {
+        let found = |share: bool| -> Result<String> {
+            let options = SemanticCargoOptions::default().with_do_not_share_definition_maps(!share);
+            let mut session = SourceDatabase::load_with(root.path(), &options).into_diagnostic()?;
+            let dir = root.path().join(target);
+            let graph = session
+                .project(&CrateTarget::new(target, &dir), &[dir.join("src/lib.rs")])
+                .into_diagnostic()?;
+            Ok(format!("{graph:?}"))
+        };
+        let (shared, alone) = (found(true)?, found(false)?);
+        assert_eq!(
+            described(&shared),
+            described(&alone),
+            "the graph of {target}"
+        );
+    }
+    Ok(())
+}

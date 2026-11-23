@@ -149,6 +149,19 @@ affected module whether there are 3 modules beside it or 30) and `a_module_that_
 importing from an unaffected one: shared). A named import of a flipped name is caught by the tool's word test and not
 by the closure, because an import that does not resolve under the ordinary cfg leaves no edge.
 
+*S2 done (2026-11-23).* A copy's collector (`DefCollector::owner_of`) interns the items of a module the copy takes as
+it is with the original's module as their container, found by walking the names from the original's root
+(`SharedWithOriginal`); the copy's own map is still collected in full, with the original's ids in those modules' scopes.
+Switched on per copy by `Crate.share_modules`, set by the tool unless `do_not_share_definition_maps`. Because the id
+is the original's, everything keyed by it is the original's too. Tests: with 3 and with 30 unchanged modules, 6 and 60
+of the copy's functions are the ordinary build's own and 1 is the copy's (the gated one), and with sharing off all
+are its own (`a_function_in_a_module_the_gate_does_not_reach_is_the_original_s_in_the_copy`, measured by the new
+`SourceDatabase::context_function_sharing`); the graph found is the same with sharing on and off on four fixtures
+(`what_a_context_finds_is_the_same_whether_or_not_it_takes_modules_from_the_original`); 88 context, saved-state and base
+tests pass. A risk to look for in S3: a canonical item's own visibility (`pub(crate)`) names the original's root,
+and a check from a module of the copy compares it against the copy's tree. Resolution of paths uses the copy's scope
+entries (collected in the copy's map), so it is not affected; a visibility-filtered lookup might be. Not yet seen in a test.
+
 ## Tests (each stage; the method is the complexity ratchet)
 
 Growth: a fixture with 3 and 30 unchanged modules, asserting what grows under the context (item tree queries,

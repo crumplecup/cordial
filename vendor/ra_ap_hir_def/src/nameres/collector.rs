@@ -88,9 +88,15 @@ pub(super) fn collect_defs(
         Default::default()
     };
 
+    let shared = if tree_id.is_block() || !def_map.krate.share_modules(db) {
+        None
+    } else {
+        SharedWithOriginal::of(db, def_map.krate)
+    };
     let mut collector = DefCollector {
         db,
         def_map,
+        shared,
         local_def_map: LocalDefMap::default(),
         crate_local_def_map,
         deps,
@@ -248,6 +254,8 @@ struct DeferredBuiltinDerive {
 struct DefCollector<'db> {
     db: &'db dyn SourceDatabase,
     def_map: DefMap,
+    /// For a copy of a crate: what the original has that the copy takes as it is.
+    shared: Option<SharedWithOriginal<'db>>,
     local_def_map: LocalDefMap,
     /// Set only in case of blocks.
     crate_local_def_map: Option<&'db LocalDefMap>,
@@ -290,6 +298,16 @@ struct DefCollector<'db> {
 }
 
 impl<'db> DefCollector<'db> {
+    /// The module the items of `module` are interned as being in: the original's for a module the copy takes as
+    /// it is, and `module` for any other.
+    fn owner_of(&mut self, module: ModuleId) -> ModuleId {
+        let db = self.db;
+        self.shared
+            .as_mut()
+            .and_then(|shared| shared.original_of(db, module))
+            .unwrap_or(module)
+    }
+
     fn seed_with_top_level(&mut self) {
         let _p = tracing::info_span!("seed_with_top_level").entered();
 
@@ -1896,6 +1914,49 @@ impl<'db> DefCollector<'db> {
     }
 }
 
+/// What a copy of a crate takes from the original's definition map: the modules the context cannot change, by the
+/// original's own ids. An item in such a module is interned with the original's module as its container, so it is
+/// the original's item: the same id, and everything keyed by it is the original's too.
+struct SharedWithOriginal<'db> {
+    original: &'db DefMap,
+    unaffected: &'db FxHashSet<ModuleId>,
+    /// The original's module for each of the copy's, once found (`None`: the copy's own).
+    found: FxHashMap<ModuleId, Option<ModuleId>>,
+}
+
+impl<'db> SharedWithOriginal<'db> {
+    fn of(db: &'db dyn SourceDatabase, copy: Crate) -> Option<Self> {
+        let shared = super::shared::shared_modules(db, copy).as_ref()?;
+        let original = (*copy.canonical(db))?;
+        Some(Self {
+            original: super::crate_def_map(db, original),
+            unaffected: &shared.unaffected,
+            found: FxHashMap::default(),
+        })
+    }
+
+    /// The original's module at the same place as `module` of the copy, if the copy takes it as it is.
+    fn original_of(&mut self, db: &dyn SourceDatabase, module: ModuleId) -> Option<ModuleId> {
+        if let Some(found) = self.found.get(&module) {
+            return *found;
+        }
+        // The names from the root down to the module.
+        let mut names = Vec::new();
+        let mut at = module;
+        while let Some(parent) = at.containing_module_inside_def_map(db) {
+            names.push(at.name_or_empty(db));
+            at = *parent;
+        }
+        let mut found = Some(self.original.root);
+        for name in names.iter().rev() {
+            found = found.and_then(|module| self.original.modules.get(&module)?.children.get(name).copied());
+        }
+        let found = found.filter(|module| self.unaffected.contains(module));
+        self.found.insert(module, found);
+        found
+    }
+}
+
 /// Walks a single module, populating defs, imports and macros
 struct ModCollector<'a, 'db> {
     def_collector: &'a mut DefCollector<'db>,
@@ -1908,7 +1969,8 @@ struct ModCollector<'a, 'db> {
 
 impl ModCollector<'_, '_> {
     fn collect_in_top_module(&mut self, items: &[ModItemId]) {
-        self.collect(items, self.module_id.into())
+        let owner = self.def_collector.owner_of(self.module_id);
+        self.collect(items, owner.into())
     }
 
     fn collect(&mut self, items: &[ModItemId], container: ItemContainerId) {
@@ -1921,6 +1983,8 @@ impl ModCollector<'_, '_> {
 
         let db = self.def_collector.db;
         let module_id = self.module_id;
+        // The module the items of this one are in: the original's, for a module the copy takes as it is.
+        let owner = self.def_collector.owner_of(module_id);
         let consider_deferred_derives =
             |file_id: HirFileId,
              deferred_derives: &mut FxHashMap<_, Vec<DeferredBuiltinDerive>>,
@@ -2006,7 +2070,7 @@ impl ModCollector<'_, '_> {
                 ModItemKind::Mod(ast_id, module) => self.collect_module(ast_id, module, attrs),
                 ModItemKind::Use(ast_id, use_) => {
                     let id =
-                        UseLoc { container: module_id, id: InFile::new(self.file_id(), ast_id) }
+                        UseLoc { container: owner, id: InFile::new(self.file_id(), ast_id) }
                             .intern(db);
                     let is_prelude = attrs.by_key(sym::prelude_import).exists();
                     Import::from_use(self.item_tree, use_, id, is_prelude, |import| {
@@ -2021,7 +2085,7 @@ impl ModCollector<'_, '_> {
                     let item_tree::ExternCrate { name, visibility, alias } = item;
 
                     let id = ExternCrateLoc {
-                        container: module_id,
+                        container: owner,
                         id: InFile::new(self.tree_id.file_id(), ast_id),
                     }
                     .intern(db);
@@ -2092,7 +2156,7 @@ impl ModCollector<'_, '_> {
                 }
                 ModItemKind::ExternBlock(ast_id, block) => {
                     let extern_block_id = ExternBlockLoc {
-                        container: module_id,
+                        container: owner,
                         id: InFile::new(self.file_id(), ast_id),
                     }
                     .intern(db);
@@ -2112,7 +2176,7 @@ impl ModCollector<'_, '_> {
                 }
                 ModItemKind::Impl(ast_id, imp) => {
                     let impl_id =
-                        ImplLoc { container: module_id, id: InFile::new(self.file_id(), ast_id) }
+                        ImplLoc { container: owner, id: InFile::new(self.file_id(), ast_id) }
                             .intern(db);
                     self.def_collector.def_map.modules[self.module_id]
                         .scope
@@ -2159,7 +2223,7 @@ impl ModCollector<'_, '_> {
                             .fold(None, |a: Option<Visibility>, b| a?.min(db, b, def_map)),
                     };
                     let interned = StructLoc {
-                        container: module_id,
+                        container: owner,
                         id: InFile::new(self.tree_id.file_id(), ast_id),
                     }
                     .intern(db);
@@ -2181,7 +2245,7 @@ impl ModCollector<'_, '_> {
                 ModItemKind::Union(ast_id, it) => {
                     let vis = resolve_vis(def_map, local_def_map, &self.item_tree[it.visibility]);
                     let interned = UnionLoc {
-                        container: module_id,
+                        container: owner,
                         id: InFile::new(self.tree_id.file_id(), ast_id),
                     }
                     .intern(db);
@@ -2196,7 +2260,7 @@ impl ModCollector<'_, '_> {
                 }
                 ModItemKind::Enum(ast_id, it) => {
                     let enum_ = EnumLoc {
-                        container: module_id,
+                        container: owner,
                         id: InFile::new(self.tree_id.file_id(), ast_id),
                     }
                     .intern(db);
@@ -2246,7 +2310,7 @@ impl ModCollector<'_, '_> {
                     let vis = resolve_vis(def_map, local_def_map, &self.item_tree[it.visibility]);
                     update_def(
                         self.def_collector,
-                        TraitLoc { container: module_id, id: InFile::new(self.file_id(), ast_id) }
+                        TraitLoc { container: owner, id: InFile::new(self.file_id(), ast_id) }
                             .intern(db)
                             .into(),
                         &it.name,

@@ -617,6 +617,7 @@ impl SourceDatabase {
             let workspace = krate.workspace_data(&self.db).clone();
             let env = krate.env(&self.db).clone();
             let affected = affected_files.get(krate).cloned().unwrap_or_default();
+            let share_modules = self.shares_copies() && !self.shares_no_definition_maps();
             let kept = previous.and_then(|kept| {
                 kept.crates
                     .iter()
@@ -651,11 +652,13 @@ impl SourceDatabase {
                 write_if_different!(env, set_env, env);
                 write_if_different!(canonical, set_canonical, Some(*krate));
                 write_if_different!(affected_files, set_affected_files, affected);
+                write_if_different!(share_modules, set_share_modules, share_modules);
                 copy
             } else {
                 InputCrate::builder(data, extra, workspace, changed, env)
                     .canonical(Some(*krate))
                     .affected_files(affected)
+                    .share_modules(share_modules)
                     .durability(Durability::LOW)
                     .new(&self.db)
             };
@@ -1098,6 +1101,35 @@ impl SourceDatabase {
     pub fn ordinary_functions(&self) -> BTreeSet<FunctionLocation> {
         let shadows = self.shadow_crates();
         self.locations(|krate| !shadows.contains(&krate.base()), &HashMap::new())
+    }
+
+    /// How many of the functions declared in the crates `context` added are the ordinary build's own functions
+    /// (the same id, because they are in modules the context cannot change) and how many are its own: the
+    /// context's work is the second number, and what is shared is everything downstream of the first.
+    #[instrument(level = "debug", skip(self, context))]
+    pub fn context_function_sharing(&self, context: &ContextCrates) -> (usize, usize) {
+        use std::collections::HashSet;
+        let shadows = self.shadow_crates();
+        let mine: BTreeSet<InputCrate> = context.shadows().collect();
+        attach_db(&self.db, || {
+            let ordinary: HashSet<Function> = Crate::all(&self.db)
+                .into_iter()
+                .filter(|krate| {
+                    krate.origin(&self.db).is_local() && !shadows.contains(&krate.base())
+                })
+                .flat_map(|krate| functions_of(&self.db, krate))
+                .collect();
+            let copies: Vec<Function> = Crate::all(&self.db)
+                .into_iter()
+                .filter(|krate| mine.contains(&krate.base()))
+                .flat_map(|krate| functions_of(&self.db, krate))
+                .collect();
+            let shared = copies
+                .iter()
+                .filter(|function| ordinary.contains(function))
+                .count();
+            (shared, copies.len() - shared)
+        })
     }
 
     /// The functions declared in the crates `context` added: those active under
