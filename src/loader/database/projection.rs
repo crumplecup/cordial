@@ -124,6 +124,7 @@ impl SourceDatabase {
             self.audit_reused_evidence();
             self.evict_regenerable("evidence");
             crate::process_memory::log("function evidence primed");
+            super::footprint::log(&mut self.db, "function evidence primed");
             #[cfg(any(
                 feature = "error_sites",
                 feature = "error_chain",
@@ -220,6 +221,7 @@ impl SourceDatabase {
                 self.stage_done(graph, None, "leaves");
             }
             crate::process_memory::log("leaf functions done");
+            super::footprint::log(&mut self.db, "leaf functions done");
             self.project_observability_calls(outline, graph)?;
             crate::process_memory::log("observability calls done");
         }

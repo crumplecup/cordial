@@ -235,33 +235,46 @@ impl SourceDatabase {
             let end = (at + taken).min(items.len());
             index += 1;
             let held_before = crate::memory_limit::meter_kib();
+            let chunk_started = std::time::Instant::now();
             // Under pressure the workers stop early and the rest of the chunk waits for the next.
             let done = match self.prime_round(&items, at..end, &one, true) {
                 // No worker started: the projection evaluates what was not, as it says it will.
                 0 => end - at,
                 done => done,
             };
-            if let (Some(before), Some(after)) = (held_before, crate::memory_limit::meter_kib()) {
-                let observed =
-                    after.saturating_sub(before) / u64::try_from(done).unwrap_or(1).max(1);
-                // What was seen, but not less than half of what was before: one cheap chunk is not
-                // a reason to take a chunk that is not.
-                growth = observed.max(growth / 2).max(1);
-            }
-            tracing::debug!(
-                target: "cordial::prime",
-                label,
-                chunk = index,
-                files = end - at,
-                done,
-                remaining = items.len() - at - done,
-                "priming a chunk"
-            );
+            let micros = u64::try_from(chunk_started.elapsed().as_micros()).unwrap_or(u64::MAX);
+            let grown_kib = match (held_before, crate::memory_limit::meter_kib()) {
+                (Some(before), Some(after)) => {
+                    let observed =
+                        after.saturating_sub(before) / u64::try_from(done).unwrap_or(1).max(1);
+                    // What was seen, but not less than half of what was before: one cheap chunk is
+                    // not a reason to take a chunk that is not.
+                    growth = observed.max(growth / 2).max(1);
+                    after.saturating_sub(before)
+                }
+                _ => 0,
+            };
             at += done;
             if stores_results {
                 crate::memory_limit::note_remaining(u64::try_from(items.len() - at).unwrap_or(0));
             }
-            size = if self.evict_between_chunks(stores_results) {
+            let evicted = self.evict_between_chunks(stores_results);
+            // What a chunk took, what it took to do it, and what is resident once eviction has
+            // given back what it could: the growth of a pass is what stays.
+            tracing::debug!(
+                target: "cordial::prime",
+                label,
+                chunk = index,
+                files = end - at + done,
+                done,
+                remaining = items.len() - at,
+                grown_kib,
+                micros,
+                resident_after_kib = crate::memory_limit::meter_kib().unwrap_or(0),
+                evicted = u64::from(evicted),
+                "priming a chunk"
+            );
+            size = if evicted {
                 (size / 2).max(least_at(crate::memory_limit::pressure()))
             } else {
                 // Relieved: back to the usual step, doubling so that one calm sample does not.
@@ -489,6 +502,10 @@ impl SourceDatabase {
             "every chosen definition map was built"
         );
         crate::process_memory::log(&format!("definition maps built (call {call})"));
+        super::footprint::log(
+            &mut self.db,
+            &format!("definition maps built (call {call})"),
+        );
     }
 }
 

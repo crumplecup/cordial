@@ -40,6 +40,7 @@ mod external;
     feature = "cli_layout"
 ))]
 mod file_scans;
+mod footprint;
 mod identity;
 #[cfg(feature = "tracing")]
 mod islands;

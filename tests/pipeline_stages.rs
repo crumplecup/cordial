@@ -6,6 +6,7 @@ mod support {
     pub mod mini_workspace;
     pub mod process_project;
 }
+use cordial::{FOOTPRINT_VARIABLE, StoreLayout, read_run_metrics};
 use miette::{IntoDiagnostic, Result};
 use support::process_project::{Project, Row};
 
@@ -165,5 +166,119 @@ fn an_unknown_stage_is_refused_and_names_the_choices() -> Result<()> {
         text.contains("source_ir") && text.contains("call_graph"),
         "{text}"
     );
+    Ok(())
+}
+
+fn project_in(scratch: &std::path::Path, name: &str) -> Result<Project> {
+    let project = Project {
+        project: scratch.join(name).join("mini"),
+        home: scratch.join(name).join("store"),
+    };
+    support::mini_workspace::write(&project.project)?;
+    Ok(project)
+}
+
+fn metrics_of(project: &Project) -> cordial::RunMetrics {
+    read_run_metrics(&StoreLayout::from_root(
+        project.home.join("mini"),
+        "mini".to_owned(),
+    ))
+}
+
+#[test]
+fn a_run_asked_for_the_footprint_says_what_the_database_holds_as_it_grows() -> Result<()> {
+    cordial::init_tracing();
+    let scratch = tempfile::tempdir().into_diagnostic()?;
+    let project = project_in(scratch.path(), "asked")?;
+    project.run_with(
+        &["open", "--stop-after", "source_ir"],
+        FOOTPRINT_VARIABLE,
+        "1",
+    )?;
+    let metrics = metrics_of(&project);
+    let values = metrics.values();
+    let value = |name: &str| values.get(name).copied().unwrap_or(0);
+
+    let loaded = value("footprint.workspace_loaded_query_total.metadata_bytes")
+        + value("footprint.workspace_loaded_query_total.fields_bytes");
+    let primed = value("footprint.function_evidence_primed_query_total.metadata_bytes")
+        + value("footprint.function_evidence_primed_query_total.fields_bytes");
+    assert!(
+        primed > loaded,
+        "the queries hold more once the evidence is primed: {loaded} then {primed}"
+    );
+    assert!(
+        value("footprint.function_evidence_primed_query_total.memos")
+            > value("footprint.workspace_loaded_query_total.memos")
+    );
+    assert!(
+        value("footprint.function_evidence_primed_query_total.micros") > 0,
+        "the walk is timed"
+    );
+    assert!(
+        value("footprint.function_evidence_primed_struct_total.fields_bytes") > 0,
+        "and the structs are counted"
+    );
+    // The kinds that hold the most are named: the evidence is a persisted query of the tool's.
+    assert!(
+        values.keys().any(
+            |name| name.starts_with("footprint.function_evidence_primed_query_")
+                && !name.contains("_total.")
+        ),
+        "{:?}",
+        values
+            .keys()
+            .filter(|name| name.starts_with("footprint."))
+            .take(8)
+            .collect::<Vec<_>>()
+    );
+    assert!(
+        values
+            .keys()
+            .any(|name| name.starts_with("footprint.definition_maps_built_call_first_")),
+        "the definition maps' point is there too"
+    );
+    Ok(())
+}
+
+#[test]
+fn a_run_not_asked_does_not_walk_the_database() -> Result<()> {
+    cordial::init_tracing();
+    let scratch = tempfile::tempdir().into_diagnostic()?;
+    let project = project_in(scratch.path(), "unasked")?;
+    project.run(&["open", "--stop-after", "source_ir"])?;
+    let metrics = metrics_of(&project);
+    assert!(
+        !metrics
+            .values()
+            .keys()
+            .any(|name| name.starts_with("footprint.")),
+        "no footprint was asked for"
+    );
+    Ok(())
+}
+
+#[test]
+fn the_priming_says_what_each_chunk_took_and_what_it_took_to_take_it() -> Result<()> {
+    cordial::init_tracing();
+    let scratch = tempfile::tempdir().into_diagnostic()?;
+    let project = project_in(scratch.path(), "chunks")?;
+    project.run(&["open", "--stop-after", "source_ir"])?;
+    let metrics = metrics_of(&project);
+    let values = metrics.values();
+    assert!(
+        values.get("prime.workspace.done").copied().unwrap_or(0) > 0,
+        "{:?}",
+        values
+            .keys()
+            .filter(|name| name.starts_with("prime."))
+            .collect::<Vec<_>>()
+    );
+    assert!(
+        values.get("prime.workspace.micros").copied().unwrap_or(0) > 0,
+        "the chunk is timed"
+    );
+    assert!(values.contains_key("prime.workspace.grown_kib"));
+    assert!(values.contains_key("prime.workspace.resident_after_kib"));
     Ok(())
 }

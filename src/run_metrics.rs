@@ -26,6 +26,10 @@ use crate::{CordialResult, StoreLayout};
 /// that asked: it turns on cordial's own spans, which costs what a profile does.
 pub const QUERY_STEPS_VARIABLE: &str = "CORDIAL_QUERY_STEPS";
 
+/// The environment variable that asks a run for what the Salsa database holds, by query and struct,
+/// at the points where it grows. It walks every memo each time, so it is for a measurement.
+pub const FOOTPRINT_VARIABLE: &str = "CORDIAL_FOOTPRINT";
+
 /// How many of the steps of cordial that ran a query are kept with it, from the innermost out: enough
 /// that the step of the run that asked (a projection, the priming) is among them when the query is
 /// run by a helper of a helper.
@@ -41,7 +45,15 @@ const FILE: &str = "metrics.json";
 const LIMIT: usize = 4_000;
 
 /// The fields that say what an event is about, in the order they are looked for.
-const QUALIFIERS: &[&str] = &["ingredient", "phase", "step", "part", "what", "krate"];
+const QUALIFIERS: &[&str] = &[
+    "ingredient",
+    "phase",
+    "step",
+    "part",
+    "what",
+    "krate",
+    "label",
+];
 
 /// The text fields kept as notes.
 const NOTES: &[&str] = &[
@@ -147,7 +159,9 @@ pub fn metrics_filter_with(steps: bool) -> Targets {
         .with_target("cordial::cache", tracing::Level::DEBUG)
         .with_target("salsa::persistence", tracing::Level::DEBUG)
         .with_target("salsa::database", tracing::Level::DEBUG)
-        .with_target("salsa::state_size", tracing::Level::DEBUG);
+        .with_target("salsa::state_size", tracing::Level::DEBUG)
+        .with_target("cordial::footprint", tracing::Level::DEBUG)
+        .with_target("cordial::prime", tracing::Level::DEBUG);
     if steps {
         // Salsa's execution events, and cordial's spans to say which step ran them.
         targets

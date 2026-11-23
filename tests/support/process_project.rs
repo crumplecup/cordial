@@ -40,6 +40,21 @@ impl Project {
         Ok(output)
     }
 
+    /// Run `args` in a process of its own, with the environment variable `name` set to `value`.
+    pub(crate) fn run_with(&self, args: &[&str], name: &str, value: &str) -> Result<Output> {
+        let output = self
+            .cordial(args)
+            .env(name, value)
+            .output()
+            .into_diagnostic()?;
+        assert!(
+            output.status.success(),
+            "cordial {args:?} failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        Ok(output)
+    }
+
     /// The last run the store logged.
     pub(crate) fn last(&self) -> Result<Row> {
         let log = self.home.join("mini/perf/runs.csv");

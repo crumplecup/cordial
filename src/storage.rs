@@ -91,7 +91,6 @@ pub(crate) fn record_context_copy(context: &str, files: usize, bytes: usize, cra
 
 /// What the Salsa database holds for one query (its memoised results) or one struct ingredient
 /// (an input, an interned identity or a tracked struct).
-#[cfg(feature = "hotpath")]
 #[derive(Debug, Clone, PartialEq, Eq, derive_getters::Getters, derive_new::new)]
 pub struct SalsaUsage {
     /// The query or struct's name.
@@ -118,7 +117,6 @@ pub struct SalsaUsage {
 }
 
 /// What the Salsa database holds, per query and per struct ingredient.
-#[cfg(feature = "hotpath")]
 #[derive(Debug, Clone, PartialEq, Eq, derive_getters::Getters, derive_new::new)]
 pub struct SalsaFootprint {
     queries: Vec<SalsaUsage>,
@@ -127,7 +125,6 @@ pub struct SalsaFootprint {
 
 /// What `db` holds. It needs the database exclusively and walks every memo, so it is for a profile
 /// or a measurement, not a hot path.
-#[cfg(feature = "hotpath")]
 #[instrument(level = "debug", skip(db))]
 #[hotpath::measure]
 pub(crate) fn salsa_footprint(db: &mut dyn salsa::Database) -> SalsaFootprint {

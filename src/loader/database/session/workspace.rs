@@ -85,7 +85,7 @@ impl SourceDatabase {
         let external_packages = packages::collect_external(&workspace);
         reporter.say("Loading the workspace into rust-analyzer");
         let Loaded {
-            db,
+            mut db,
             vfs,
             server,
             kept,
@@ -93,6 +93,7 @@ impl SourceDatabase {
         crate::process_memory::log("rust-analyzer database loaded");
         let context = context.finish(&db, &vfs, server.as_ref())?;
         crate::process_memory::log("workspace loaded");
+        super::super::footprint::log(&mut db, "workspace loaded");
         Ok(Self {
             db,
             vfs,
