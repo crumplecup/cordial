@@ -108,15 +108,31 @@ pub(super) fn collect_defs(
         is_proc_macro: krate.is_proc_macro,
         deferred_builtin_derives: Default::default(),
     };
+    let started = std::time::Instant::now();
     if tree_id.is_block() {
         collector.seed_with_inner(tree_id);
     } else {
         collector.seed_with_top_level();
     }
+    let seeded = started.elapsed();
     collector.collect();
+    let collected = started.elapsed();
     let (mut def_map, mut local_def_map) = collector.finish();
     def_map.shrink_to_fit();
     local_def_map.shrink_to_fit();
+    if !tree_id.is_block() {
+        let micros = |duration: std::time::Duration| u64::try_from(duration.as_micros()).unwrap_or(u64::MAX);
+        tracing::info!(
+            target: "cordial::def_map",
+            copy = def_map.krate.canonical(db).is_some(),
+            root = ?def_map.krate.data(db).root_file_id,
+            modules = def_map.modules.len() as u64,
+            seed_micros = micros(seeded),
+            resolve_micros = micros(collected - seeded),
+            finish_micros = micros(started.elapsed() - collected),
+            "built a crate's definition map"
+        );
+    }
     (def_map, local_def_map)
 }
 
