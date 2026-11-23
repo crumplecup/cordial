@@ -54,6 +54,7 @@ pub mod diagnostics;
 mod mod_resolution;
 mod path_resolution;
 pub mod proc_macro;
+pub mod shared;
 pub mod stable;
 
 #[cfg(test)]

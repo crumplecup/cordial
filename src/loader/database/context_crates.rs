@@ -232,11 +232,20 @@ struct CopiedFiles {
     homes: HashMap<InputCrate, CrateFiles>,
     /// The dependencies a crate follows to the context's copy of them: (crate, dependency).
     follows: HashSet<(InputCrate, InputCrate)>,
+    /// For each crate this context copies itself, the files of the original it cannot take as they are.
+    affected_files: HashMap<InputCrate, Vec<FileId>>,
 }
 
 impl SourceDatabase {
     /// Whether every local crate is copied for a context, as its options say, and not only the ones the
     /// context changes. For the tests of what the pass does.
+    /// Whether the options turn off working out which modules a copy takes from the original.
+    fn shares_no_definition_maps(&self) -> bool {
+        self.cargo_options
+            .as_ref()
+            .is_some_and(|options| *options.do_not_share_definition_maps())
+    }
+
     pub(super) fn copies_every_crate(&self) -> bool {
         self.cargo_options
             .as_ref()
@@ -320,22 +329,18 @@ impl SourceDatabase {
         copied
     }
 
-    /// The dependencies each crate follows to the context's copy of them, as (crate, dependency): those
-    /// where the crate mentions a name that a gate the context flips makes visible, in the dependency or in
-    /// what the dependency depends on. A crate that mentions none sees the dependency as the ordinary build
-    /// has it, whatever the context switched there, so it is not made to depend on a copy of it: that is
-    /// what lets crates that differ in nothing they use share a copy across contexts.
-    #[instrument(level = "debug", skip_all)]
-    fn follows_of(
+    /// The names that a flip in each crate, or in what it depends on, makes visible to a crate that depends
+    /// on it (see [`Self::follows_of`]).
+    fn visible_names(
         &self,
         locals: &[(InputCrate, FileId)],
         owners: &Owners,
         files: &[(FileId, PathBuf)],
         pairs: &[(ra_ap_cfg::CfgOptions, ra_ap_cfg::CfgOptions)],
         classified: &Classified,
-    ) -> HashSet<(InputCrate, InputCrate)> {
+        dependencies: &HashMap<InputCrate, Vec<InputCrate>>,
+    ) -> HashMap<InputCrate, BTreeSet<String>> {
         use super::contexts::{Reach, flipped_names_of};
-        let dependencies = self.local_dependencies(locals);
         // The names the gates the context flips in each crate make visible.
         let mut flipped: HashMap<InputCrate, BTreeSet<String>> = HashMap::new();
         for (file, path) in files {
@@ -369,13 +374,72 @@ impl SourceDatabase {
             names
         }
         let mut memo: HashMap<InputCrate, BTreeSet<String>> = HashMap::new();
-        let visible_through: HashMap<InputCrate, BTreeSet<String>> = locals
+        locals
             .iter()
-            .map(|(krate, _)| (*krate, visible(*krate, &flipped, &dependencies, &mut memo)))
-            .collect();
+            .map(|(krate, _)| (*krate, visible(*krate, &flipped, dependencies, &mut memo)))
+            .collect()
+    }
+
+    /// For each crate this context copies, the files of the original that the copy cannot take as they are:
+    /// the files the context copies, and the files it takes from the ordinary build that nevertheless mention
+    /// a name a gate it flips defines, in the crate or in what it depends on. The copy's module closure starts
+    /// from these (see `hir_def::nameres::shared`).
+    fn affected_files_of(
+        &self,
+        owners: &Owners,
+        files: &[(FileId, PathBuf)],
+        copied_files: &BTreeSet<FileId>,
+        crates: &BTreeSet<InputCrate>,
+        visible_through: &HashMap<InputCrate, BTreeSet<String>>,
+    ) -> HashMap<InputCrate, Vec<FileId>> {
+        let mut affected: HashMap<InputCrate, Vec<FileId>> = HashMap::new();
+        for (file, path) in files {
+            for krate in owners
+                .owners_of(path)
+                .filter(|krate| crates.contains(krate))
+            {
+                let sensitive = !copied_files.contains(file)
+                    && visible_through.get(&krate).is_some_and(|names| {
+                        !names.is_empty() && {
+                            let text = self.db.file_text(*file).text(&self.db).clone();
+                            // A glob import brings in whatever the module it names has: nothing yet, under the
+                            // ordinary cfg, if what the context switches is all it has.
+                            text.contains("::*")
+                                || text.contains("use *")
+                                || text
+                                    .split(|character: char| {
+                                        !(character.is_alphanumeric() || character == '_')
+                                    })
+                                    .any(|word| names.contains(word))
+                        }
+                    });
+                if copied_files.contains(file) || sensitive {
+                    affected.entry(krate).or_default().push(*file);
+                }
+            }
+        }
+        for files in affected.values_mut() {
+            files.sort_by_key(|file| file.index());
+        }
+        affected
+    }
+
+    /// The dependencies each crate follows to the context's copy of them, as (crate, dependency): those
+    /// where the crate mentions a name that a gate the context flips makes visible, in the dependency or in
+    /// what the dependency depends on. A crate that mentions none sees the dependency as the ordinary build
+    /// has it, whatever the context switched there, so it is not made to depend on a copy of it: that is
+    /// what lets crates that differ in nothing they use share a copy across contexts.
+    #[instrument(level = "debug", skip_all)]
+    fn follows_of(
+        &self,
+        owners: &Owners,
+        files: &[(FileId, PathBuf)],
+        dependencies: &HashMap<InputCrate, Vec<InputCrate>>,
+        visible_through: &HashMap<InputCrate, BTreeSet<String>>,
+    ) -> HashSet<(InputCrate, InputCrate)> {
         // The words each crate's files hold, for the crates that depend on something that can differ.
         let mut words: HashMap<InputCrate, HashSet<String>> = HashMap::new();
-        for (krate, below) in &dependencies {
+        for (krate, below) in dependencies {
             if below.iter().all(|dependency| {
                 visible_through
                     .get(dependency)
@@ -400,7 +464,7 @@ impl SourceDatabase {
             words.insert(*krate, held);
         }
         let mut follows = HashSet::new();
-        for (krate, below) in &dependencies {
+        for (krate, below) in dependencies {
             // A crate whose files are not known may use anything.
             let unplaced = owners.unplaced().any(|unplaced| unplaced == *krate);
             for dependency in below {
@@ -507,6 +571,7 @@ impl SourceDatabase {
             shared,
             mut homes,
             follows,
+            affected_files,
         } = self.copy_local_files(index, previous.map(|kept| &kept.files), &pairs, context)?;
         let mut shadows: Vec<(InputCrate, InputCrate)> = Vec::new();
         let mut borrowed = Borrowed::default();
@@ -551,6 +616,7 @@ impl SourceDatabase {
             let extra = krate.extra_data(&self.db).clone();
             let workspace = krate.workspace_data(&self.db).clone();
             let env = krate.env(&self.db).clone();
+            let affected = affected_files.get(krate).cloned().unwrap_or_default();
             let kept = previous.and_then(|kept| {
                 kept.crates
                     .iter()
@@ -584,14 +650,20 @@ impl SourceDatabase {
                 write_if_different!(cfg_options, set_cfg_options, changed);
                 write_if_different!(env, set_env, env);
                 write_if_different!(canonical, set_canonical, Some(*krate));
+                write_if_different!(affected_files, set_affected_files, affected);
                 copy
             } else {
                 InputCrate::builder(data, extra, workspace, changed, env)
                     .canonical(Some(*krate))
+                    .affected_files(affected)
                     .durability(Durability::LOW)
                     .new(&self.db)
             };
             shadows.push((*krate, copy));
+            if self.shares_copies() && !self.shares_no_definition_maps() {
+                // Which of the copy's modules it takes from the original (see `hir_def::nameres::shared`).
+                let _ = ra_ap_hir_def::nameres::shared::shared_modules(&self.db, copy);
+            }
             if self.shares_copies()
                 && let Some(change) = changes.get(krate)
             {
@@ -721,6 +793,15 @@ impl SourceDatabase {
         let directories = directories_of(&locals, &located);
         // Which dependency each crate follows to the context's copy of it: only where it can tell the
         // difference, by mentioning a name a flip there (or in what it depends on) makes visible.
+        let dependencies = self.local_dependencies(&locals);
+        let visible = self.visible_names(
+            &locals,
+            &directories,
+            &located,
+            pairs,
+            &classified,
+            &dependencies,
+        );
         let follows = if self.copies_every_crate() {
             self.local_dependencies(&locals)
                 .into_iter()
@@ -729,7 +810,7 @@ impl SourceDatabase {
                 })
                 .collect()
         } else {
-            self.follows_of(&locals, &directories, &located, pairs, &classified)
+            self.follows_of(&directories, &located, &dependencies, &visible)
         };
         // The crates this context copies: the ones it changes, and the dependencies on the way to
         // them. A crate it does not change is the ordinary crate, whose maps are built and shared.
@@ -967,6 +1048,16 @@ impl SourceDatabase {
                 }
             }
         }
+        let own: BTreeSet<InputCrate> = copied
+            .iter()
+            .filter(|krate| !shared.contains_key(krate))
+            .copied()
+            .collect();
+        let affected_files = if sharing {
+            self.affected_files_of(&directories, &located, &copying.copy, &own, &visible)
+        } else {
+            HashMap::new()
+        };
         Ok(CopiedFiles {
             copies,
             aliased,
@@ -975,6 +1066,7 @@ impl SourceDatabase {
             shared,
             homes,
             follows,
+            affected_files,
         })
     }
 

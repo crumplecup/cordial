@@ -491,6 +491,11 @@ pub struct Crate {
     /// What the two share (the expansion of a macro call in a file both take as it is) is keyed by this one.
     #[default]
     pub canonical: Option<Crate>,
+    /// For a copy: the files of the original (by their ids) that the copy cannot take as they are, because the
+    /// tool copied them or because they mention a name a gate the cfg flips defines. Empty for any other crate.
+    #[default]
+    #[returns(ref)]
+    pub affected_files: Vec<FileId>,
 }
 
 impl Crate {

@@ -134,6 +134,21 @@ a tracked struct is allocated in the identity map of the query that makes it
 (`tracked_struct.rs`: `disambiguate`, `take_restored` by identity within the creating query), so a copy's query cannot
 make the original's `ModuleId`; S2 reads it from the original's map.
 
+*S1 done (2026-11-23).* The tool computes, for each copy it makes itself, the files of the original it cannot take as
+they are (`affected_files_of`: the files it copied; the files it took from the ordinary build that mention a name a
+flipped gate defines, in the crate or in what it depends on; and, when the crate has any flipped name, the files with
+a glob import, since a glob from a module that has only flipped names brings in nothing under the ordinary cfg and so
+leaves no edge in the original's map). It sets them on the copy (`Crate.affected_files`) and
+`hir_def::nameres::shared::shared_modules(copy)` closes them over the original's finished map: parents of affected
+modules, modules importing from an affected module (the module each imported definition lives in), modules that define
+a macro or inherit macro scope from an affected parent, and a proc-macro crate whole. The query is persisted (a
+restored run executes none) and says `affected_modules` and `shared_modules` per copy on `cordial::def_map`. Nothing
+uses it yet. Tests: `a_copy_takes_the_modules_its_gate_does_not_reach_from_the_original` (the root is the only
+affected module whether there are 3 modules beside it or 30) and `a_module_that_a_flipped_gate_can_reach_is_the_copys_own`
+(a named import of the flipped name, a glob import, a macro, the parent of an affected module: affected; a module
+importing from an unaffected one: shared). A named import of a flipped name is caught by the tool's word test and not
+by the closure, because an import that does not resolve under the ordinary cfg leaves no edge.
+
 ## Tests (each stage; the method is the complexity ratchet)
 
 Growth: a fixture with 3 and 30 unchanged modules, asserting what grows under the context (item tree queries,

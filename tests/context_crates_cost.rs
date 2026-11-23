@@ -631,3 +631,110 @@ fn a_contexts_item_trees_do_not_grow_with_the_modules_its_gate_does_not_touch() 
     );
     Ok(())
 }
+
+/// The sum of a numeric field of the events that say which modules a copy takes from the original.
+fn sharing_field(metrics: &cordial::RunMetrics, field: &str) -> u64 {
+    metrics
+        .values()
+        .iter()
+        .filter(|(name, _)| name.ends_with(&format!("def_map.{field}")))
+        .map(|(_, count)| *count)
+        .sum()
+}
+
+/// Which of a copy's modules are the original's: with the gate in the root the only module the context affects, the
+/// modules beside it are all taken from the original, however many there are.
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn a_copy_takes_the_modules_its_gate_does_not_reach_from_the_original() -> Result<()> {
+    cordial::init_tracing();
+    let scratch = tempfile::tempdir().into_diagnostic()?;
+    let subscriber =
+        tracing_subscriber::registry().with(MetricsLayer.with_filter(metrics_filter_with(true)));
+    let (affected_few, shared_few, affected_many, shared_many) =
+        tracing::subscriber::with_default(subscriber, || -> Result<_> {
+            project(modules_beside_a_gate(3)?.path(), "m", false)?;
+            let metrics = metrics_of(scratch.path())?;
+            let few = (
+                sharing_field(&metrics, "affected_modules"),
+                sharing_field(&metrics, "shared_modules"),
+            );
+            project(modules_beside_a_gate(30)?.path(), "m", false)?;
+            let metrics = metrics_of(scratch.path())?;
+            let many = (
+                sharing_field(&metrics, "affected_modules") - few.0,
+                sharing_field(&metrics, "shared_modules") - few.1,
+            );
+            Ok((few.0, few.1, many.0, many.1))
+        })?;
+    assert_eq!(
+        (affected_few, shared_few),
+        (1, 3),
+        "the root is affected, and the three modules beside it are the original's"
+    );
+    assert_eq!(
+        (affected_many, shared_many),
+        (1, 30),
+        "and the thirty are, with the root still the only one affected"
+    );
+    Ok(())
+}
+
+/// A crate whose root has a gate the context flips, and modules that are or are not made of it.
+fn modules_of_each_kind() -> Result<tempfile::TempDir> {
+    let root = tempfile::tempdir().into_diagnostic()?;
+    write_workspace(root.path(), &["m".to_owned()])?;
+    write_crate(
+        root.path(),
+        "m",
+        &[],
+        "mod plain;\nmod plain_too;\nmod named;\nmod globby;\nmod mac;\nmod outer;\n#[cfg(feature = \"extra\")]\npub fn only_with_extra() -> u32 { 1 }\n",
+    )?;
+    let src = root.path().join("m/src");
+    std::fs::create_dir_all(src.join("outer")).into_diagnostic()?;
+    for (file, text) in [
+        ("plain.rs", "pub struct P;\n"),
+        (
+            "plain_too.rs",
+            "use crate::plain::P;\npub fn q(_: P) -> u32 { 1 }\n",
+        ),
+        (
+            "named.rs",
+            "use crate::only_with_extra;\npub fn f() -> u32 { only_with_extra() }\n",
+        ),
+        ("globby.rs", "use crate::*;\npub struct G;\n"),
+        ("mac.rs", "macro_rules! m { () => {}; }\npub struct M;\n"),
+        ("outer/mod.rs", "mod inner;\npub struct O;\n"),
+        (
+            "outer/inner.rs",
+            "use crate::only_with_extra;\npub fn g() -> u32 { only_with_extra() }\n",
+        ),
+    ] {
+        std::fs::write(src.join(file), text).into_diagnostic()?;
+    }
+    Ok(root)
+}
+
+/// What makes a module the copy's own: an import of a name the gate defines, a glob import, a macro it defines,
+/// and being the parent of one of those. The root is the copy's. What none of them reaches is the original's, and
+/// that includes a module that imports from one of those.
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn a_module_that_a_flipped_gate_can_reach_is_the_copys_own() -> Result<()> {
+    cordial::init_tracing();
+    let scratch = tempfile::tempdir().into_diagnostic()?;
+    let subscriber =
+        tracing_subscriber::registry().with(MetricsLayer.with_filter(metrics_filter_with(true)));
+    let (affected, shared) = tracing::subscriber::with_default(subscriber, || -> Result<_> {
+        project(modules_of_each_kind()?.path(), "m", false)?;
+        let metrics = metrics_of(scratch.path())?;
+        Ok((
+            sharing_field(&metrics, "affected_modules"),
+            sharing_field(&metrics, "shared_modules"),
+        ))
+    })?;
+    // Affected: the root, `named`, `globby`, `mac`, `outer` (its child `inner` is) and `inner`. Shared: `plain`
+    // and `plain_too`, which imports from it.
+    assert_eq!((affected, shared), (6, 2), "affected and shared modules");
+    Ok(())
+}

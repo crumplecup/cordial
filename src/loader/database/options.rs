@@ -57,6 +57,9 @@ pub struct SemanticCargoOptions {
     /// Give every context its own copy of each crate it changes, and not the one an earlier context
     /// made when the two differ in nothing the crate names. For the tests of what the pass does.
     do_not_share_context_copies: bool,
+    /// Do not work out which modules of a crate a context's copy takes from the original (see
+    /// `docs/planning/definition-map-sharing.md`). For the tests of what the pass does.
+    do_not_share_definition_maps: bool,
 }
 
 impl SemanticCargoOptions {
