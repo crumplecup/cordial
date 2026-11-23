@@ -272,8 +272,14 @@ fn a_project_with_more_roots_than_the_base_still_finds_the_sysroot_it_saved() ->
 }
 
 /// One ingredient of a saved Salsa state as its manifest lists it: index, name, source file, entries and
-/// the chunks.
-type Entry = (u32, String, String, u64, Vec<(String, u64)>);
+/// the chunks, each as its hash, bytes, entries, first key and digest of their keys.
+type Entry = (
+    u32,
+    String,
+    String,
+    u64,
+    Vec<(String, u64, u64, String, u64)>,
+);
 
 fn manifest(state: &SavedState) -> Result<Vec<Entry>> {
     let bytes = std::fs::read(state.directory().join("salsa/manifest")).into_diagnostic()?;

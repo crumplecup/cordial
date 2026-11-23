@@ -21,7 +21,7 @@ fn save(
     state: &std::path::Path,
 ) -> (cordial::Chunked, ChunkDir) {
     let mut chunks = ChunkDir::new(previous.join(CHUNKS), state.join(CHUNKS)).expect("a directory");
-    let written = write_chunked(table, &mut chunks).expect("a map is chunked");
+    let written = write_chunked(table, &mut chunks, &[]).expect("a map is chunked");
     (written, chunks)
 }
 
@@ -96,7 +96,7 @@ fn something_that_is_not_a_map_is_refused_and_says_what_it_was() {
     let dir = tempfile::tempdir().expect("a directory");
     let mut chunks =
         ChunkDir::new(dir.path().join("none"), dir.path().join(CHUNKS)).expect("a directory");
-    let error = write_chunked(&vec![1_u8, 2, 3], &mut chunks).expect_err("a sequence");
+    let error = write_chunked(&vec![1_u8, 2, 3], &mut chunks, &[]).expect_err("a sequence");
     assert!(
         matches!(error, ChunkError::NotAMap { found: "sequence" }),
         "{error}"

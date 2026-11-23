@@ -196,6 +196,10 @@ pub struct Zalsa {
     /// What a save has worked out of the dependencies of the memos so far, kept from one ingredient
     /// to the next while the save lasts (see `flatten`), and dropped when the next save begins.
     save_flattener: std::sync::Mutex<Option<crate::flatten::EdgeFlattener>>,
+
+    /// How the state this database was restored from cut each ingredient into chunks, by ingredient
+    /// index, for the save that follows (see `chunks`).
+    chunk_plan: std::sync::Mutex<crate::hash::FxHashMap<u32, std::sync::Arc<Vec<crate::chunks::PlannedChunk>>>>,
 }
 
 /// All fields on Zalsa are locked behind [`Mutex`]es and [`RwLock`]s and cannot enter
@@ -224,6 +228,7 @@ impl Zalsa {
             ownership_resolvers: Default::default(),
             cutoffs: std::sync::RwLock::new(Vec::new()),
             save_flattener: std::sync::Mutex::new(None),
+            chunk_plan: std::sync::Mutex::new(Default::default()),
             #[cfg(not(feature = "inventory"))]
             nonce: NONCE.nonce(),
         };
@@ -334,6 +339,29 @@ impl Zalsa {
             .unwrap_or_else(|poisoned| poisoned.into_inner())
             .iter()
             .any(|(_, fingerprint)| *fingerprint == ingredient)
+    }
+
+    /// Say how the state this database was restored from cut the ingredients into chunks.
+    pub(crate) fn set_chunk_plan(&self, plan: Vec<(u32, Vec<crate::chunks::PlannedChunk>)>) {
+        *self
+            .chunk_plan
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = plan
+            .into_iter()
+            .map(|(index, chunks)| (index, std::sync::Arc::new(chunks)))
+            .collect();
+    }
+
+    /// How the last state cut the ingredient `index`, if it is said.
+    pub(crate) fn chunk_plan_of(
+        &self,
+        index: IngredientIndex,
+    ) -> Option<std::sync::Arc<Vec<crate::chunks::PlannedChunk>>> {
+        self.chunk_plan
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .get(&index.as_u32())
+            .cloned()
     }
 
     /// Begin a save: what an earlier one worked out is dropped.

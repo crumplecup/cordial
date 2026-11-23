@@ -193,6 +193,21 @@ encodings of one value differ (found by trying), and keeping the old bytes is, i
 Not measured on amenable: the share of the 452 MB that is unchanged after an edit decides the saving, and the
 `reused` and `micros` on each `state_size` event will say.
 
+*A5 at chunk grain (2026-11-23).* Inside an ingredient the edit did reach, the memos it did not touch are not
+flattened or encoded either. The manifest says how each chunk was cut (entries, first key, a digest of the keys); a
+save gives that to Salsa as a plan (`set_chunk_plan`); a memo knows whether it is as a restore made it (its value
+still the bytes it was saved as: a memo that is replaced, or whose value is dropped or spilled, is not); and where a
+run of memos is a chunk of the plan, all as restored and with the keys the chunk had, the ingredient writes one entry
+whose key says `\0reused:<n>` and the chunker links chunk `n` of the last state (a boundary is forced there, which is
+only less tidy: a restore concatenates the chunks). What makes a restored memo's bytes the same is its set numbers,
+which are positions in the ingredient's table of sets: with a plan the table starts with the sets the last state had,
+in the order it had them (an unreferenced one stays, so the table only grows until a save without a plan), then the
+new ones. The first chunk (the universe, the sets table, the first memos) is always encoded. The save says how many
+chunks it took this way (`chunks_taken`, and in the analysis-state line). Test: `saved_state` (a save after an edit
+takes chunks as they were, and a run from that state computes nothing, as does one from a state that encoded
+everything). Salsa's side adds a byte to nothing (the flag is in `Spilled`, as `Memo` is held to 48 bytes). Not
+measured on amenable.
+
 **Safety.** Written to a new directory and renamed, with the manifest last, as today; segments that a
 link still needs are kept until the rename; a missing, truncated or hash-mismatched segment is a cold
 run, never a partial restore. The spill file and the run-in-processes path keep their own state and

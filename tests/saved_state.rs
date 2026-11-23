@@ -530,6 +530,19 @@ fn a_save_that_keeps_the_encoding_of_unchanged_ingredients_restores_as_one_that_
         Some(0),
         "{encoded:?}"
     );
+    // Inside the ingredients the edit did reach, the chunks of entries it left alone are taken as they were.
+    let chunks_taken = |events: &[String]| -> Option<u64> {
+        events.iter().find_map(|event| {
+            let (_, rest) = event.split_once(" linked from the last state (")?;
+            let (_, rest) = rest.split_once("), ")?;
+            rest.split_once(" of them taken")?.0.parse().ok()
+        })
+    };
+    assert!(
+        chunks_taken(&kept).is_some_and(|taken| taken > 0),
+        "chunks of the ingredients the edit reached are taken without encoding: {kept:?}"
+    );
+    assert_eq!(chunks_taken(&encoded), Some(0), "{encoded:?}");
 
     // What is saved is not compared as bytes: rust-analyzer's inputs hold hash sets, which encode in the order
     // the process that made them happened to give, so two encodings of one value differ. A run that restores

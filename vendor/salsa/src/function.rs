@@ -294,6 +294,10 @@ pub struct IngredientImpl<C: Configuration> {
 
     /// Set when a memo is inserted, replaced, dropped or spilled (see `generation`).
     touched: crate::generation::Touched,
+
+    /// The first of the sets a restore gave this ingredient's memos, among all those restored, and how many
+    /// there were: what a save that keeps the chunks of the last state numbers its sets from (see `chunks`).
+    restored_sets: Option<(u32, u32)>,
 }
 
 impl<C> IngredientImpl<C>
@@ -311,6 +315,7 @@ where
             eviction: C::Eviction::new(eviction_capacity),
             deleted_entries: Default::default(),
             touched: Default::default(),
+            restored_sets: None,
             view_caster: OnceLock::new(),
             sync_table: SyncTable::new(index),
         }
@@ -1110,14 +1115,29 @@ mod persistence {
                 }
             };
 
+            // How the last state cut this ingredient, when it said. The memos it saved are written with set
+            // numbers that are positions in its table of sets, so a table that starts with the sets it had,
+            // in the order it had them, leaves those memos' bytes as they were.
+            let plan = zalsa.chunk_plan_of(ingredient.index);
+            let keeping = plan.as_ref().and(ingredient.restored_sets);
+
             // First pass: which distinct sets the memos refer to, and how many memos there are. The
             // flattened memos are not kept: the second pass flattens each again, which is a lookup of
             // what the shared flattener found.
             let mut numbers: FxHashMap<*const Runs, u32> = FxHashMap::default();
             let mut distinct: Vec<LeafSet> = Vec::new();
+            if let Some((base, count)) = keeping {
+                for index in 0..count {
+                    let set = flattener.restored_set(base + index);
+                    numbers.entry(Arc::as_ptr(&set)).or_insert(index);
+                    distinct.push(set);
+                }
+            }
             let mut by_kind: std::collections::BTreeMap<&'static str, u64> = Default::default();
             let mut own_edges: u64 = 0;
             let mut count = 0_usize;
+            // With a plan, the memos as they are saved, to find the runs of them that are a chunk of it.
+            let mut items: Vec<(String, &Memo<C>, bool)> = Vec::new();
             // Asked for by the `salsa::explain` target: for the first few memos that depend on a
             // crate the tool added, the chain of queries that leads there. The memos of the lowest
             // keys are the ones made first.
@@ -1128,6 +1148,22 @@ mod persistence {
                     continue;
                 };
                 count += 1;
+                // A memo as the state held it keeps its bytes whatever else changed: not flattened.
+                let clean = keeping.is_some() && memo.is_from_state();
+                if keeping.is_some() {
+                    items.push((
+                        format!(
+                            "{}:{}",
+                            entry.ingredient_index().as_u32(),
+                            entry.key_index().as_bits()
+                        ),
+                        memo,
+                        clean,
+                    ));
+                }
+                if clean {
+                    continue;
+                }
                 let flat = flat_of(memo, &mut flattener);
                 let (Flat::Derived(sets, own) | Flat::DerivedUntracked(sets, own)) = &flat else {
                     continue;
@@ -1187,11 +1223,11 @@ mod persistence {
             // The list of edges the sets are positions in, then the sets.
             map.serialize_entry("universe", &universe)?;
             map.serialize_entry("sets", &table)?;
-            // Second pass: each memo, with its origin as the sets are numbered.
-            for entry in <C::SalsaStruct<'_> as SalsaStructInDb>::entries(zalsa) {
-                let Some(memo) = memo_of(&entry) else {
-                    continue;
-                };
+            // Second pass: each memo, with its origin as the sets are numbered, and for each run of
+            // memos that is a chunk of the last state and as it was, the chunk and not the memos.
+            let mut reused_chunks = 0_u64;
+            let mut reused_memos = 0_u64;
+            let mut write = |map: &mut S::SerializeMap, key: &str, memo: &Memo<C>| -> Result<(), S::Error> {
                 let number = |set: &LeafSet| numbers[&Arc::as_ptr(set)];
                 let origin = match flat_of(memo, &mut flattener) {
                     Flat::Assigned(key) => PersistentQueryOrigin::assigned(key),
@@ -1206,12 +1242,51 @@ mod persistence {
                         )
                     }
                 };
-                let key = format!(
-                    "{}:{}",
-                    entry.ingredient_index().as_u32(),
-                    entry.key_index().as_bits()
-                );
-                map.serialize_entry(&key, &memo.with_origin(origin))?;
+                map.serialize_entry(key, &memo.with_origin(origin))
+            };
+            if let Some(plan) = plan.as_ref().filter(|_| keeping.is_some()) {
+                let first: FxHashMap<&str, (usize, &crate::chunks::PlannedChunk)> = plan
+                    .iter()
+                    .enumerate()
+                    .map(|(index, chunk)| (chunk.first_key.as_str(), (index, chunk)))
+                    .collect();
+                let mut at = 0;
+                while at < items.len() {
+                    let (key, memo, clean) = &items[at];
+                    if *clean
+                        && let Some((index, chunk)) = first.get(key.as_str())
+                    {
+                        let end = at.saturating_add(usize::try_from(chunk.entries).unwrap_or(usize::MAX));
+                        if end <= items.len()
+                            && items[at..end].iter().all(|item| item.2)
+                            && crate::chunks::key_digest(items[at..end].iter().map(|item| item.0.as_str()))
+                                == chunk.keys
+                        {
+                            map.serialize_entry(
+                                &format!("{}{index}", crate::chunks::REUSED_PREFIX),
+                                &(),
+                            )?;
+                            reused_chunks += 1;
+                            reused_memos += chunk.entries;
+                            at = end;
+                            continue;
+                        }
+                    }
+                    write(&mut map, key, memo)?;
+                    at += 1;
+                }
+            } else {
+                for entry in <C::SalsaStruct<'_> as SalsaStructInDb>::entries(zalsa) {
+                    let Some(memo) = memo_of(&entry) else {
+                        continue;
+                    };
+                    let key = format!(
+                        "{}:{}",
+                        entry.ingredient_index().as_u32(),
+                        entry.key_index().as_bits()
+                    );
+                    write(&mut map, &key, memo)?;
+                }
             }
 
             if count > 0 {
@@ -1235,6 +1310,8 @@ mod persistence {
                     held_bytes = held_runs * 8,
                     widest_set_runs = table.iter().map(|set| set.len() as u64).max().unwrap_or(0),
                     kept_results = flattener.kept(),
+                    reused_chunks,
+                    reused_memos,
                     breadth = flattener.breadth(8),
                     reads_themselves = flattener.direct(8),
                     kinds = ?by_kind,
@@ -1447,6 +1524,7 @@ mod persistence {
 
             // The sets the memos' dependencies are saved as, until the last memo is read.
             let mut _sets = None;
+            let mut restored_sets = None;
             let mut universe: Vec<QueryEdge> = Vec::new();
 
             while let Some(IngredientKey(key)) = access.next_key()? {
@@ -1455,10 +1533,13 @@ mod persistence {
                     continue;
                 }
                 if key == "sets" {
+                    let sets: Vec<Vec<(u32, u32)>> = access.next_value()?;
+                    let count = u32::try_from(sets.len()).expect("fewer than 2^32 sets");
                     _sets = Some(crate::flatten::SavedSets::install(
                         std::mem::take(&mut universe),
-                        access.next_value()?,
+                        sets,
                     ));
+                    restored_sets = Some((crate::flatten::saved_base(), count));
                     continue;
                 }
                 let memo: Memo<C> = access.next_value()?;
@@ -1496,6 +1577,7 @@ mod persistence {
                 }
             }
 
+            ingredient.restored_sets = restored_sets;
             Ok(())
         }
     }

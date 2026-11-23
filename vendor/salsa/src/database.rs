@@ -388,6 +388,14 @@ mod persistence {
                 .collect()
         }
 
+        /// Say how the state this database was restored from cut each ingredient into chunks (by
+        /// ingredient index), so that a save can leave to it the entries nothing has changed (see
+        /// [`PlannedChunk`](crate::PlannedChunk)). It is used by the next [`Self::save_segments`] that writes
+        /// canonical stamps, as the state it describes was.
+        pub fn set_chunk_plan(&mut self, plan: Vec<(u32, Vec<crate::chunks::PlannedChunk>)>) {
+            self.zalsa_mut().set_chunk_plan(plan);
+        }
+
         /// Save the database as a header and then one serialization per ingredient, in the order a
         /// restore has to read them, so that each can be written (and later reused or read) by
         /// itself and only one is encoded at a time. `header` is given what [`SegmentHeader`]
@@ -414,6 +422,9 @@ mod persistence {
                 },
                 runtime: zalsa.runtime(),
             })?;
+            if !canonical {
+                zalsa.set_chunk_plan(Vec::new());
+            }
             let _canonical = crate::stamps::Canonical::enter(canonical);
             let mut ingredients = zalsa
                 .ingredients()

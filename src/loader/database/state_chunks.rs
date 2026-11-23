@@ -40,6 +40,17 @@ pub struct ChunkEntry {
     pub hash: String,
     /// How long the chunk is.
     pub bytes: u64,
+    /// How many entries the chunk has, the key of the first and a digest of their keys: how the chunk
+    /// was cut, which a save that finds the entries as they were takes the chunk by (none for a state
+    /// that did not say).
+    #[serde(default)]
+    pub entries: u64,
+    /// The key of the chunk's first entry.
+    #[serde(default)]
+    pub first_key: String,
+    /// The digest of the keys of its entries (see [`salsa::key_digest`]).
+    #[serde(default)]
+    pub keys: u64,
 }
 
 /// What was written of an ingredient: how many entries its map has, and the chunks they are in.
@@ -74,6 +85,18 @@ pub enum ChunkError {
         /// Why.
         source: std::io::Error,
     },
+    /// An entry stood for a chunk of the last state that it did not have.
+    #[display("an entry stands for chunk {index} of the last state, which has no such chunk")]
+    NoSuchChunk {
+        /// Which.
+        index: usize,
+    },
+    /// An entry stood for a chunk of the last state that is no longer there.
+    #[display("chunk {hash} of the last state is gone")]
+    Gone {
+        /// The chunk.
+        hash: String,
+    },
     /// The value being saved said it could not be.
     #[display("{message}")]
     Serializing {
@@ -107,6 +130,8 @@ pub struct ChunkDir {
     pub bytes_written: u64,
     /// How many bytes were linked and not written.
     pub bytes_linked: u64,
+    /// How many chunks an ingredient left to the last state, entry by entry, without encoding their entries.
+    pub taken: u64,
 }
 
 impl ChunkDir {
@@ -123,6 +148,7 @@ impl ChunkDir {
             repeated: 0,
             bytes_written: 0,
             bytes_linked: 0,
+            taken: 0,
         })
     }
 
@@ -131,6 +157,17 @@ impl ChunkDir {
     pub fn also_linking_from(mut self, other: PathBuf) -> Self {
         self.also = Some(other);
         self
+    }
+
+    /// Whether every chunk of `chunks` is in the state before or the base: an ingredient can be left to them.
+    #[must_use]
+    pub fn has_all(&self, chunks: &[ChunkEntry]) -> bool {
+        chunks.iter().all(|chunk| {
+            [Some(&self.previous), self.also.as_ref()]
+                .into_iter()
+                .flatten()
+                .any(|directory| directory.join(&chunk.hash).is_file())
+        })
     }
 
     /// Put the chunks of an ingredient that the state before (or the base) has in this state without
@@ -207,16 +244,21 @@ fn key_hash(key: &[u8]) -> u64 {
 
 /// Save `part`, an ingredient, as chunks in `store`.
 #[instrument(level = "trace", skip_all)]
+///
+/// `previous` is how the last state cut the ingredient: an entry whose key says it stands for chunk `n` of
+/// it (see [`salsa::REUSED_PREFIX`]) is that chunk, linked as it was and not written.
 pub fn write_chunked<T: serde::Serialize + ?Sized>(
     part: &T,
     store: &mut ChunkDir,
+    previous: &[ChunkEntry],
 ) -> Result<Chunked, ChunkError> {
-    part.serialize(MapChunker { store })
+    part.serialize(MapChunker { store, previous })
 }
 
 /// A serializer that takes a map and writes its entries as chunks.
 struct MapChunker<'a> {
     store: &'a mut ChunkDir,
+    previous: &'a [ChunkEntry],
 }
 
 macro_rules! not_a_map {
@@ -329,8 +371,11 @@ impl<'a> serde::Serializer for MapChunker<'a> {
     fn serialize_map(self, _: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
         Ok(MapChunks {
             store: self.store,
+            previous: self.previous,
             chunk: Vec::new(),
             key_hash: 0,
+            keys: Vec::new(),
+            reusing: None,
             done: Chunked::default(),
         })
     }
@@ -359,10 +404,38 @@ impl<'a> serde::Serializer for MapChunker<'a> {
 /// The entries of a map, encoded one after another into the chunk being made.
 struct MapChunks<'a> {
     store: &'a mut ChunkDir,
+    previous: &'a [ChunkEntry],
     chunk: Vec<u8>,
     /// The hash of the key of the entry being written.
     key_hash: u64,
+    /// The keys of the entries in the chunk being made.
+    keys: Vec<String>,
+    /// The chunk of the last state the entry being written stands for.
+    reusing: Option<usize>,
     done: Chunked,
+}
+
+/// The text of a key that was written as a MessagePack string.
+fn key_text(bytes: &[u8]) -> Option<&str> {
+    let (length, offset) = match *bytes.first()? {
+        marker @ 0xa0..=0xbf => (usize::from(marker & 0x1f), 1),
+        0xd9 => (usize::from(*bytes.get(1)?), 2),
+        0xda => (
+            usize::from(u16::from_be_bytes([*bytes.get(1)?, *bytes.get(2)?])),
+            3,
+        ),
+        0xdb => (
+            u32::from_be_bytes([
+                *bytes.get(1)?,
+                *bytes.get(2)?,
+                *bytes.get(3)?,
+                *bytes.get(4)?,
+            ]) as usize,
+            5,
+        ),
+        _ => return None,
+    };
+    std::str::from_utf8(bytes.get(offset..offset + length)?).ok()
 }
 
 impl MapChunks<'_> {
@@ -380,7 +453,11 @@ impl MapChunks<'_> {
         self.done.chunks.push(ChunkEntry {
             hash,
             bytes: self.chunk.len() as u64,
+            entries: self.keys.len() as u64,
+            first_key: self.keys.first().cloned().unwrap_or_default(),
+            keys: salsa::key_digest(self.keys.iter().map(String::as_str)),
         });
+        self.keys.clear();
         self.chunk.clear();
         Ok(())
     }
@@ -395,6 +472,19 @@ impl SerializeMap for MapChunks<'_> {
         rmp_serde::encode::write(&mut self.chunk, key)
             .map_err(|source| ChunkError::Encoding { source })?;
         self.key_hash = key_hash(&self.chunk[start..]);
+        let text = key_text(&self.chunk[start..]).map(str::to_owned);
+        if let Some(index) = text
+            .as_deref()
+            .and_then(|text| text.strip_prefix(salsa::REUSED_PREFIX))
+            .and_then(|index| index.parse::<usize>().ok())
+        {
+            // The entry stands for a chunk of the last state: what came before it is a chunk of its own.
+            self.chunk.truncate(start);
+            self.flush()?;
+            self.reusing = Some(index);
+        } else {
+            self.keys.push(text.unwrap_or_default());
+        }
         Ok(())
     }
 
@@ -402,6 +492,20 @@ impl SerializeMap for MapChunks<'_> {
         &mut self,
         value: &T,
     ) -> Result<(), ChunkError> {
+        if let Some(index) = self.reusing.take() {
+            let chunk = self
+                .previous
+                .get(index)
+                .ok_or(ChunkError::NoSuchChunk { index })?
+                .clone();
+            if !self.store.reuse(std::slice::from_ref(&chunk)) {
+                return Err(ChunkError::Gone { hash: chunk.hash });
+            }
+            self.store.taken += 1;
+            self.done.entries += chunk.entries;
+            self.done.chunks.push(chunk);
+            return Ok(());
+        }
         rmp_serde::encode::write(&mut self.chunk, value)
             .map_err(|source| ChunkError::Encoding { source })?;
         self.done.entries += 1;

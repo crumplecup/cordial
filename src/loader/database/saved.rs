@@ -252,6 +252,36 @@ impl SavedState {
         }
         let previous = self.previous.lock().ok().and_then(|mut held| held.take());
         let mut taken = 0_u64;
+        // How the state restored from cut each ingredient, for the ones that can be left to it where
+        // nothing in a chunk changed: those it has every chunk of, and that say how they were cut.
+        if self.reuses_unchanged
+            && let Some(previous) = previous.as_ref().filter(|previous| previous.canonical)
+        {
+            let plan: Vec<(u32, Vec<salsa::PlannedChunk>)> = previous
+                .segments
+                .values()
+                .filter(|entry| {
+                    !entry.chunks.is_empty()
+                        && entry.chunks.iter().all(|chunk| chunk.entries > 0)
+                        && chunks.has_all(&entry.chunks)
+                })
+                .map(|entry| {
+                    (
+                        entry.index,
+                        entry
+                            .chunks
+                            .iter()
+                            .map(|chunk| salsa::PlannedChunk {
+                                first_key: chunk.first_key.clone(),
+                                entries: chunk.entries,
+                                keys: chunk.keys,
+                            })
+                            .collect(),
+                    )
+                })
+                .collect();
+            database.set_chunk_plan(plan);
+        }
         database.save_segments(
             |header| {
                 header_len = self.write_encoded(&salsa_dir.join(SALSA_HEADER), header)?;
@@ -283,7 +313,14 @@ impl SavedState {
                 let (entry, was_reused) = match reused {
                     Some(entry) => (entry, true),
                     None => {
-                        let written = super::state_chunks::write_chunked(part, &mut chunks)
+                        let before = previous
+                            .as_ref()
+                            .and_then(|previous| previous.segments.get(&segment.index))
+                            .filter(|entry| {
+                                entry.name == segment.name && entry.file == segment.file
+                            })
+                            .map_or(&[][..], |entry| entry.chunks.as_slice());
+                        let written = super::state_chunks::write_chunked(part, &mut chunks, before)
                             .map_err(|error| self.chunking(segment.name, &error))?;
                         (
                             SegmentEntry {
@@ -333,11 +370,12 @@ impl SavedState {
             chunks_repeated = chunks.repeated,
             chunk_bytes_written = chunks.bytes_written,
             chunk_bytes_linked = chunks.bytes_linked,
+            chunks_taken = chunks.taken,
             "the chunks of the saved state"
         );
         crate::host::event(format!(
-            "analysis state: {} chunks written ({} bytes), {} linked from the last state ({} bytes)",
-            chunks.written, chunks.bytes_written, chunks.linked, chunks.bytes_linked
+            "analysis state: {} chunks written ({} bytes), {} linked from the last state ({} bytes), {} of them taken without encoding their entries",
+            chunks.written, chunks.bytes_written, chunks.linked, chunks.bytes_linked, chunks.taken
         ));
         tracing::debug!(
             target: "cordial::cache",

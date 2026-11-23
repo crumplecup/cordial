@@ -142,6 +142,10 @@ pub struct Memo<C: Configuration> {
 /// of it that was decoded, if any.
 #[derive(Debug)]
 pub(super) struct Spilled<C: Configuration> {
+    /// Whether this is the memo a restored state held, as it was restored: the value as the bytes it was
+    /// saved as. A memo that is replaced is another, and one whose value is dropped or spilled has another
+    /// `Spilled` or none (see [`crate::chunks`]).
+    pub(super) from_state: bool,
     pub(super) at: SpilledAt,
     pub(super) restored: std::sync::OnceLock<C::Output<'static>>,
 }
@@ -409,6 +413,15 @@ impl<C: Configuration> Memo<C> {
         }
     }
 
+    /// Whether this is the memo a restored state held, as it was restored (see [`Spilled::from_state`]).
+    pub(super) fn is_from_state(&self) -> bool {
+        self.value.is_none()
+            && self
+                .spilled
+                .as_ref()
+                .is_some_and(|spilled| spilled.from_state && matches!(spilled.at, SpilledAt::Held(_)))
+    }
+
     /// The value, read back from the store if it was spilled.
     pub(super) fn value(&self) -> Option<&C::Output<'_>> {
         let value = match self.value.as_ref() {
@@ -501,6 +514,7 @@ impl<C: Configuration> Memo<C> {
             counters.wrote(C::DEBUG_NAME, bytes.len() as u64);
             self.value = None;
             self.spilled = Some(Box::new(Spilled {
+                from_state: false,
                 at: SpilledAt::Stored(key),
                 restored: std::sync::OnceLock::new(),
             }));
@@ -760,9 +774,13 @@ mod persistence {
             let verified_at = crate::stamps::restored_current().unwrap_or_else(|| memo.verified_at.load());
             let mut restored = Memo::<C>::new(None, verified_at, memo.revisions);
             restored.spilled = Some(Box::new(super::Spilled {
+                from_state: false,
                 at: super::SpilledAt::Held(memo.value.0.into_boxed_slice()),
                 restored: std::sync::OnceLock::new(),
             }));
+            if let Some(spilled) = restored.spilled.as_mut() {
+                spilled.from_state = true;
+            }
             Ok(restored)
         }
     }

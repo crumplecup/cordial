@@ -730,6 +730,11 @@ thread_local! {
     static SAVED_BASE: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
 }
 
+/// The number the first set of the ingredient last restored was given among all those restored.
+pub(crate) fn saved_base() -> u32 {
+    SAVED_BASE.with(std::cell::Cell::get)
+}
+
 /// A restored set: runs of positions in the list of edges its ingredient saved. It is as long as
 /// the runs are, not as the set is, so the sets of a crate of a thousand files are a few numbers each.
 pub(crate) struct RestoredSet {
