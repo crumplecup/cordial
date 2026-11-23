@@ -600,6 +600,17 @@ found is the one copying every crate finds, and in `nested` `b` and `d` are each
 `creusot` on (`d` depends on `a`, whose copies differ per context). The soundness is the file-local rule's: a use of
 a flipped name that is not written in the crate's files (a macro that makes it up) is not seen.
 
+*D, amenable after the ownership, leaf-name, name-aware-dependency and defined-names changes (2026-11-23).* Copies
+fell again (context 2: 109 to 24 crates, context 5: 109 to 49, context 4: 109 to 64) and sharing now happens (22 to 27 shared
+in some contexts), but the run is the same: 298 s against 307 s, peak 4.2 against 4.3 GB, and the leaf reads total 113 s
+as before. What this shows is that the cost of a leaf context is not proportional to the crates it copies: the
+`+feature="creusot" +test` context read for 6.1 s with 49 copies and for 6.1 s with 24, and `+feature="chrono" +test` for
+17.7 s with 62 and 17.3 s with 49. The earlier estimate of 0.2 to 0.3 s a copied crate was a correlation across contexts
+that flip different crates, and it is false. The cost is nearly fixed for a context and follows what it flips (chrono,
+jiff and verus, 8 to 17 files in 6 to 14 crates): the few large crates whose definition maps and evidence are rebuilt
+under the changed cfg, which no copy count touches. That is the part of D4 that is real and not started: rebuilding a
+big crate's definition map for each cfg variant. Not known: which crates, since the leaf read does not say per crate.
+
 **D1. Copies keyed by what they differ in.** A copy's identity is the crate and the part of the context's
 cfg change that the crate's files mention (from `gates_of`), not the context's ordinal. Contexts that
 differ in atoms a crate never names then share that crate's copy and its memos, and the copy's path
