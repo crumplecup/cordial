@@ -43,6 +43,9 @@ const WRITE_BUFFER_BYTES: usize = 1 << 20;
 struct SegmentEntry {
     index: u32,
     name: String,
+    /// The source file the ingredient is declared in, which says whose it is: the tool's own are under
+    /// `src/`, and what the engine (rust-analyzer, Salsa) made is not.
+    file: String,
     entries: u64,
     chunks: Vec<super::state_chunks::ChunkEntry>,
 }
@@ -75,6 +78,11 @@ pub struct SavedState {
     /// (the toolchain's sysroot, built and saved once) and not what one project's last run left. It is
     /// read and never written, and the chunks this state saves that it already has are linked from it.
     base: Option<PathBuf>,
+    /// For a base: the key it is made and used under, which stands for the engine and not for the build
+    /// of the tool. A base holds only what the engine made (see [`crate::base_state`]), is restored
+    /// into any build whose ingredients are numbered as the one that saved it numbered them, and is
+    /// checked to be.
+    engine: Option<String>,
 }
 
 impl SavedState {
@@ -84,6 +92,41 @@ impl SavedState {
         Self {
             dir: dir.into(),
             base: None,
+            engine: None,
+        }
+    }
+
+    /// A digest of how this build numbers the ingredients the engine made (rust-analyzer's and Salsa's,
+    /// not the tool's own): their index, name and source file, in index order. A base made by one build
+    /// is for another that has the same digest, whatever else changed.
+    #[must_use]
+    pub fn engine_layout_digest() -> String {
+        use sha2::{Digest, Sha256};
+        let mut database = super::scan_queries::empty_database();
+        let target: &mut dyn salsa::Database = &mut database;
+        let mut layout = target.ingredient_layout();
+        layout.retain(|(_, _, file)| !file.starts_with("src/"));
+        layout.sort_unstable();
+        let mut hasher = Sha256::new();
+        for (index, name, file) in layout {
+            hasher.update(format!("{index}:{name}:{file};").as_bytes());
+        }
+        hasher
+            .finalize()
+            .iter()
+            .take(8)
+            .map(|byte| format!("{byte:02x}"))
+            .collect()
+    }
+
+    /// A base state kept in `dir` under `key`: saved with only what the engine made, and restored
+    /// by any build that numbers the engine's ingredients as it did.
+    #[must_use]
+    pub fn base_at(dir: impl Into<PathBuf>, key: impl Into<String>) -> Self {
+        Self {
+            dir: dir.into(),
+            base: None,
+            engine: Some(key.into()),
         }
     }
 
@@ -171,11 +214,17 @@ impl SavedState {
                 Ok::<(), CordialError>(())
             },
             |segment, part| {
+                // A base holds what the engine made, and not the tool's own memos, which are of the
+                // build that made them and mean nothing to a project's.
+                if self.engine.is_some() && segment.file.starts_with("src/") {
+                    return Ok(());
+                }
                 let written = super::state_chunks::write_chunked(part, &mut chunks)
                     .map_err(|error| self.chunking(segment.name, &error))?;
                 let entry = SegmentEntry {
                     index: segment.index,
                     name: segment.name.to_owned(),
+                    file: segment.file.to_owned(),
                     entries: written.entries,
                     chunks: written.chunks,
                 };
@@ -231,7 +280,9 @@ impl SavedState {
         std::fs::write(writing.join(CONTEXTS), &contexts)?;
         std::fs::write(
             writing.join(KEY),
-            crate::run_cache::executable_fingerprint(),
+            self.engine
+                .clone()
+                .unwrap_or_else(crate::run_cache::executable_fingerprint),
         )?;
         match std::fs::remove_dir_all(&self.dir) {
             Err(error) if error.kind() != std::io::ErrorKind::NotFound => return Err(error.into()),
@@ -253,9 +304,14 @@ impl SavedState {
             return Err(own);
         };
         let started = std::time::Instant::now();
+        // A base is named for its key.
+        let engine = base
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned());
         match (Self {
             dir: base.clone(),
             base: None,
+            engine,
         })
         .restore_own()
         {
@@ -279,8 +335,16 @@ impl SavedState {
     fn restore_own(&self) -> Result<Restored, String> {
         let key = std::fs::read_to_string(self.dir.join(KEY))
             .map_err(|error| format!("none saved ({error})"))?;
-        if key != crate::run_cache::executable_fingerprint() {
-            return Err("saved by another build of cordial".to_owned());
+        let expected = self
+            .engine
+            .clone()
+            .unwrap_or_else(crate::run_cache::executable_fingerprint);
+        if key != expected {
+            return Err(if self.engine.is_some() {
+                "a base state of another engine".to_owned()
+            } else {
+                "saved by another build of cordial".to_owned()
+            });
         }
         let (files, crates, paths, contexts) = (
             self.read_part(FILES)?,
@@ -361,6 +425,38 @@ impl SavedState {
         Ok(bytes)
     }
 
+    /// Whether this build numbers the ingredients a base saved as the build that saved it did: each has
+    /// the index, the name and the source file it had. A base made by another build of the tool is
+    /// restored only when this holds; one that does not is a base for no one, and a run starts cold.
+    fn verify_layout(
+        manifest: &[SegmentEntry],
+        database: &mut dyn salsa::Database,
+    ) -> Result<(), String> {
+        let layout: std::collections::HashMap<u32, (&'static str, &'static str)> = database
+            .ingredient_layout()
+            .into_iter()
+            .map(|(index, name, file)| (index, (name, file)))
+            .collect();
+        for entry in manifest {
+            match layout.get(&entry.index) {
+                Some((name, file)) if *name == entry.name && *file == entry.file => {}
+                Some((name, file)) => {
+                    return Err(format!(
+                        "the base saved ingredient {} ({}, {}) where this build has {name} ({file})",
+                        entry.index, entry.name, entry.file
+                    ));
+                }
+                None => {
+                    return Err(format!(
+                        "the base saved ingredient {} ({}) which this build does not have",
+                        entry.index, entry.name
+                    ));
+                }
+            }
+        }
+        Ok(())
+    }
+
     /// Rebuild the Salsa memos from their saved segments, in the order the manifest gives. The events
     /// give each ingredient's bytes and time and then the whole, so the rate shows whether decoding or
     /// something else is what a restore waits for.
@@ -379,6 +475,9 @@ impl SavedState {
             .map_err(|error| format!("salsa {SALSA_HEADER} unreadable ({error})"))?;
         let expanded_before = salsa::edges_expanded();
         let target: &mut dyn salsa::Database = database;
+        if self.engine.is_some() {
+            Self::verify_layout(&manifest, target)?;
+        }
         let mut bytes = 0_u64;
         let chunk_dir = dir.join(super::state_chunks::CHUNKS);
         for entry in &manifest {

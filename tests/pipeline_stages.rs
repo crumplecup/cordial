@@ -335,6 +335,16 @@ fn a_store_makes_its_base_state_once_and_projects_with_no_state_start_from_it() 
     assert!(!second.contains("making it"), "{second}");
     assert!(second.contains("started from the base state"), "{second}");
 
+    // Another build of the tool (this one, under another path: another executable) uses the base this
+    // one made, since the engine and how it numbers its ingredients are what the base is for.
+    let copy = scratch.path().join("another-build-of-cordial");
+    if std::fs::hard_link(env!("CARGO_BIN_EXE_cordial"), &copy).is_err() {
+        std::fs::copy(env!("CARGO_BIN_EXE_cordial"), &copy).into_diagnostic()?;
+    }
+    let third = said(project("third")?.run_as(&copy, &stop, cordial::BASE_VARIABLE, "on")?);
+    assert!(!third.contains("making it"), "{third}");
+    assert!(third.contains("started from the base state"), "{third}");
+
     // And a project that has a state of its own of this build uses that.
     let second_project = project("second")?;
     let lib = second_project.project.join("src/lib.rs");

@@ -385,10 +385,17 @@ GiB, after the evidence 1.48 and 1.24, at the end 1.96 and 1.86; peak 2.01 and 1
 run 72 s and 73 s including the base's 10.6 s, so a project after the first in a store is about 10 s faster.
 The state is the same size and a save links 1,511 chunks (26 MB) from the base. The effect is a constant, the
 sysroot's, about a tenth of this project's working set and less of a larger one's: it does not change what
-limits the self-run. Not done, on purpose: C3, an engine key that outlives a rebuild of the tool. The base holds
-the tool's own persisted queries beside rust-analyzer's, and Salsa numbers ingredients by registration order,
-so a base saved by one build is not a base for another unless the tool's memos are left out and the numbering
-is stable; that is a change to what is saved, and the gain is only the 10 s a build makes it again. The default
+limits the self-run. *C3 (2026-11-23).* The base now outlives a rebuild of the tool. It holds only what the engine made: a segment is
+kept out of it when the ingredient's declaring file is under `src/` (Salsa's `Ingredient::location`, now in
+`Segment`), and the check that matters, that rust-analyzer's memos do not depend on the tool's ingredients, holds
+(the base tests pass with the tool's segments absent; the cutoff fingerprints the tool can register are not
+used in the base's session). A base is keyed by the engine (a hash of `vendor/` and `Cargo.lock`, taken by
+`build.rs`), the workload's version, the toolchain, and a digest of how this build numbers the engine's
+ingredients, since a state is restored by index. It is restored only when each ingredient it saved has the index,
+name and source file it had in the running build: otherwise the run starts cold. Tests: a base has no
+ingredient of `src/`; a base whose layout is altered is refused and the run equals the cold run; a copy of the
+executable under another path, which is another build to the project layer, uses the base the first made.
+The default
 changes to on once the tests that build stores say `off`, or the plan's remaining step does.
 
 **C0.** Prove 1 and 2 on a fixture by building a "sysroot only" state twice and comparing; measure what

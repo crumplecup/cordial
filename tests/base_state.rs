@@ -133,7 +133,7 @@ fn a_project_started_from_a_base_finds_what_a_cold_load_finds_without_building_t
     tracing::subscriber::with_default(subscriber, || -> Result<()> {
         // The base: saved once, from a workspace that is not the project.
         let base_root = base_project()?;
-        let base = SavedState::at(scratch.path().join("base"));
+        let base = SavedState::base_at(scratch.path().join("base"), "base");
         let first = run(base_root.path(), &base, "base_workload")?;
         assert!(!first.restored, "nothing was saved before the base");
         let made = definition_maps_executed(scratch.path())?;
@@ -224,7 +224,7 @@ fn a_project_with_more_roots_than_the_base_still_finds_the_sysroot_it_saved() ->
         )
         .into_diagnostic()?;
         std::fs::write(base_root.join("src/lib.rs"), BASE_LIB).into_diagnostic()?;
-        let base = SavedState::at(scratch.path().join("base"));
+        let base = SavedState::base_at(scratch.path().join("base"), "base");
         run(&base_root, &base, "base_workload")?;
         let made = definition_maps_executed(scratch.path())?;
         assert!(made >= 20, "the base builds the sysroot's maps: {made}");
@@ -269,4 +269,72 @@ fn a_project_with_more_roots_than_the_base_still_finds_the_sysroot_it_saved() ->
         );
         Ok(())
     })
+}
+
+/// One ingredient of a saved Salsa state as its manifest lists it: index, name, source file, entries and
+/// the chunks.
+type Entry = (u32, String, String, u64, Vec<(String, u64)>);
+
+fn manifest(state: &SavedState) -> Result<Vec<Entry>> {
+    let bytes = std::fs::read(state.directory().join("salsa/manifest")).into_diagnostic()?;
+    rmp_serde::from_slice(&bytes).into_diagnostic()
+}
+
+/// A base holds what the engine made and none of the tool's own memos, which are of the build that made
+/// them; and a base that does not number the engine's ingredients as this build does is not used, and
+/// the run starts cold and correct.
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn a_base_holds_only_the_engines_ingredients_and_is_refused_by_a_build_that_numbers_them_otherwise()
+-> Result<()> {
+    cordial::init_tracing();
+    let scratch = tempfile::tempdir().into_diagnostic()?;
+    let base_root = base_project()?;
+    let base = SavedState::base_at(scratch.path().join("base"), "base");
+    run(base_root.path(), &base, "base_workload")?;
+
+    let entries = manifest(&base)?;
+    assert!(
+        entries.len() > 20,
+        "the engine's ingredients are in it: {}",
+        entries.len()
+    );
+    let tools: Vec<_> = entries
+        .iter()
+        .filter(|(_, _, file, ..)| file.starts_with("src/"))
+        .map(|(_, name, ..)| name.as_str())
+        .collect();
+    assert!(
+        tools.is_empty(),
+        "the tool's own ingredients are not: {tools:?}"
+    );
+
+    // As a build that numbered an ingredient differently would find it.
+    let root = specimen()?;
+    let honest = SavedState::at(scratch.path().join("honest")).with_base(base.directory());
+    assert!(
+        run(root.path(), &honest, "specimen")?.restored,
+        "the base is used as saved"
+    );
+
+    let mut altered = entries;
+    altered[0].1 = "an ingredient this build does not number so".to_owned();
+    std::fs::write(
+        base.directory().join("salsa/manifest"),
+        rmp_serde::to_vec(&altered).into_diagnostic()?,
+    )
+    .into_diagnostic()?;
+    let refused = SavedState::at(scratch.path().join("refused")).with_base(base.directory());
+    let cold = run(root.path(), &refused, "specimen")?;
+    assert!(
+        !cold.restored,
+        "a base that numbers an ingredient otherwise is not used"
+    );
+    let reference = run(
+        root.path(),
+        &SavedState::at(scratch.path().join("reference")),
+        "specimen",
+    )?;
+    assert_eq!(cold.graph, reference.graph, "and the run is the cold run");
+    Ok(())
 }

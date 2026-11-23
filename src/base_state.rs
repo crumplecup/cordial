@@ -89,21 +89,43 @@ pub fn run(records: Vec<Record>) -> Result<usize, Box<dyn std::error::Error>> {
 }
 ";
 
-/// The key of the base this build of the tool makes and uses: its executable and the workload's version.
+/// The engine this build carries: a fingerprint of the vendored crates and the lock file, taken when it
+/// was built.
+const ENGINE: &str = env!("CORDIAL_ENGINE_FINGERPRINT");
+
+/// The toolchain the base is made for: what `rustc -vV` says in a directory of no project's.
+fn toolchain() -> String {
+    std::process::Command::new("rustc")
+        .arg("-vV")
+        .current_dir(std::env::temp_dir())
+        .output()
+        .map(|output| String::from_utf8_lossy(&output.stdout).into_owned())
+        .unwrap_or_else(|error| format!("unknown:{error}"))
+}
+
+/// The key of the base this build makes and uses. It stands for the engine and not for the build of the
+/// tool: the engine's own work does not change when the tool's does. It is the engine that is vendored
+/// here, the version of the workload, the toolchain, and how this build numbers the engine's
+/// ingredients (a base is restored by number). A rebuild that changes none of those keeps its base.
 #[instrument(level = "trace")]
 pub fn key() -> String {
-    let digest = Sha256::digest(
-        format!(
-            "{}:{WORKLOAD_VERSION}",
-            crate::run_cache::executable_fingerprint()
-        )
-        .as_bytes(),
-    );
-    digest
-        .iter()
-        .take(8)
-        .map(|byte| format!("{byte:02x}"))
-        .collect()
+    static KEY: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    KEY.get_or_init(|| {
+        let digest = Sha256::digest(
+            format!(
+                "{ENGINE}:{WORKLOAD_VERSION}:{}:{}",
+                crate::SavedState::engine_layout_digest(),
+                toolchain()
+            )
+            .as_bytes(),
+        );
+        digest
+            .iter()
+            .take(8)
+            .map(|byte| format!("{byte:02x}"))
+            .collect()
+    })
+    .clone()
 }
 
 /// Where this build's base is, whether or not it has been made yet.
@@ -204,7 +226,7 @@ pub fn build(sysroot: &SysrootCache) -> CordialResult<PathBuf> {
     )?;
     std::fs::write(project.join("src/lib.rs"), WORKLOAD)?;
 
-    let state = crate::SavedState::at(building.join("state"));
+    let state = crate::SavedState::base_at(building.join("state"), key());
     let mut session = crate::SourceDatabase::load_saved(
         &project,
         &crate::SemanticCargoOptions::default(),

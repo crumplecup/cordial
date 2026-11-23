@@ -646,6 +646,9 @@ opt-level = 2
 [profile.test]
 debug = "line-tables-only"
 
+[build-dependencies]
+sha2 = "0.11"
+
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = [
   'cfg(kani)',

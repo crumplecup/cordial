@@ -423,10 +423,29 @@ mod persistence {
                 let named = Segment {
                     index: ingredient.ingredient_index().as_u32(),
                     name: ingredient.debug_name(),
+                    file: ingredient.location().file,
                 };
                 segment(named, &SerializeIngredient(ingredient, zalsa))?;
             }
             Ok(())
+        }
+
+        /// Every ingredient that is saved when it has something to save, or not, by index: its name and
+        /// the file it is declared in. What a state restores into has to number its ingredients as the
+        /// one that saved it did, and this is how that is checked.
+        pub fn ingredient_layout(&mut self) -> Vec<(u32, &'static str, &'static str)> {
+            let zalsa = self.zalsa_mut();
+            let zalsa: &Zalsa = zalsa;
+            zalsa
+                .ingredients()
+                .map(|ingredient| {
+                    (
+                        ingredient.ingredient_index().as_u32(),
+                        ingredient.debug_name(),
+                        ingredient.location().file,
+                    )
+                })
+                .collect()
         }
 
         /// Restore one ingredient that [`Self::save_segments`] wrote, from `deserializer`. Segments
@@ -514,6 +533,9 @@ mod persistence {
     pub struct Segment {
         pub index: u32,
         pub name: &'static str,
+        /// The source file the ingredient is declared in: who it belongs to, for a caller that keeps
+        /// what one crate made apart from what another did.
+        pub file: &'static str,
     }
 
     /// What a segmented state says before its ingredients: how its stamps are written and the

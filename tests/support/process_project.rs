@@ -55,6 +55,34 @@ impl Project {
         Ok(output)
     }
 
+    /// Run `args` with the executable at `executable`, which is this build's under another path, and the
+    /// environment variable `name` set to `value`.
+    pub(crate) fn run_as(
+        &self,
+        executable: &std::path::Path,
+        args: &[&str],
+        name: &str,
+        value: &str,
+    ) -> Result<Output> {
+        let mut command = Command::new(executable);
+        command
+            .arg("--project")
+            .arg(&self.project)
+            .arg("--store-home")
+            .arg(&self.home)
+            .args(args)
+            .env("CORDIAL_NO_PROGRESS", "1")
+            .env(name, value)
+            .stdin(Stdio::null());
+        let output = command.output().into_diagnostic()?;
+        assert!(
+            output.status.success(),
+            "cordial {args:?} failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        Ok(output)
+    }
+
     /// The last run the store logged.
     pub(crate) fn last(&self) -> Result<Row> {
         let log = self.home.join("mini/perf/runs.csv");
