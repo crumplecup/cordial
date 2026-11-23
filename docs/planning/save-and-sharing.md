@@ -297,6 +297,35 @@ save before and after, on every fixture. The cutoff rule is the subtle part of B
 
 ## C. Base layers, the sysroot first
 
+**Status (2026-11-23): C0 and C1 done at the mechanism level; the discovery that made C work is below.**
+
+*C0.* A crate with no code saves a 40.2 MB state in 72 ingredients, almost all the sysroot (`crate_local_def_map`
+23.4 MB, `expand_pure_macro_of` 11.8 MB), and a cold run of it takes 5 s and 0.46 GiB resident (3.9 s for 21
+definition maps): that is what a base holds and saves. Two cold runs differ in 4 or 5 ingredients and mildly
+(a few chunks of `MacroCallId`, `EditionedFileId` and `FileText`, and the one `SourceRootInput` chunk): racy id
+assignment and a hash map's order, so determinism needs the base built on one thread.
+
+*C1.* `SavedState::with_base(dir)` starts a project from a base when its own state is missing or cannot be used;
+the base is only read, and a save links the chunks the base already holds. The first test failed in an
+instructive way: the project restored from the base and then executed every sysroot query again (22 definition
+maps, 35,161 attribute queries, 13,741 impl signatures), the same as cold, while the same project from its own
+state executed none. The salsa stale events said why: every memo went stale on its `<watermark>` edge. A persisted
+memo summarizes its rarely-changing inputs as one edge, "out of date if any input of this durability or higher
+changed", and the watermark was `MEDIUM`, which includes the crate graph and the list of all crates: loading a
+project with other crates than the state's wrote `AllCrates.crates` and invalidated everything, for any
+different project, and for any edit that adds a crate. The watermark is now `HIGH` (the library's file texts),
+the medium inputs are edges of their own, and `source_root_crates`, the one query that reads the list of
+crates, is persisted so that memos depend on its answer, which is unchanged for the sysroot's root, and not on
+the list. The same project now executes 1 definition map, 30 attribute queries and 6 impl signatures, and the
+stale events name exactly what depends on the local root and the crate list. The saved state is the same size
+(40.24 MB against 40.20 MB). `tests/base_state.rs` pins: the same graph as a cold load, under a quarter of the
+definition maps, more than half of the project's chunks the base's, the base unchanged, and the next run
+restoring the project's own state with the identities the first handed out. A crate that already is in the
+database and whose data is written, or one that is new, is now an event (`ra_ap_base_db::crates`) with the field
+and the crate. What is still to do: C1b, build the base on first need and wire it into the CLI's runs; C3, the
+keys; C4, the lifecycle; C5, the measurement on `elicit_doc`, which the watermark change also affects (it
+changes what every restored run finds out of date) and which is therefore run once, before anything else.
+
 **Goal.** What belongs to the toolchain's sysroot is built and saved once, not once per project, and
 survives a rebuild of cordial.
 

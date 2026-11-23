@@ -30,7 +30,7 @@ use crate::zalsa_local::QueryEdge;
 /// Inputs of this durability or higher are summarized by one edge in a persisted memo (see
 /// [`QueryEdge::watermark`]): they are the library's and the crate graph's, thousands for a
 /// memo that reads a definition map, and they change together and rarely.
-pub(crate) const WATERMARK_DURABILITY: Durability = Durability::MEDIUM;
+pub(crate) const WATERMARK_DURABILITY: Durability = Durability::HIGH;
 
 static PERSISTED_EXECUTIONS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 

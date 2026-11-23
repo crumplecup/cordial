@@ -605,7 +605,7 @@ pub fn all_crates(db: &dyn salsa::Database) -> std::sync::Arc<[Crate]> {
 
 // FIXME: VFS rewrite should allow us to get rid of this wrapper
 #[doc(hidden)]
-#[salsa::interned(revisions = usize::MAX)]
+#[salsa::interned(revisions = usize::MAX, persist)]
 pub struct InternedSourceRootId {
     #[returns(copy)]
     pub id: SourceRootId,
@@ -613,7 +613,11 @@ pub struct InternedSourceRootId {
 
 /// Crates whose root file is in `id`.
 pub fn source_root_crates(db: &dyn SourceDatabase, id: SourceRootId) -> &[Crate] {
-    #[salsa::tracked(returns(deref))]
+    // Persisted, so that what is saved of a memo that asks which crates a file is in depends on this
+    // answer and not on the list of every crate it is made from: a project with other crates than the
+    // one a state was saved from has the same answer for the files of the sysroot, and what read it
+    // is not invalidated for a list that changed elsewhere.
+    #[salsa::tracked(returns(deref), persist)]
     pub fn source_root_crates<'db>(
         db: &'db dyn SourceDatabase,
         id: InternedSourceRootId<'db>,

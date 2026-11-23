@@ -544,6 +544,13 @@ impl Crate {
     }
 }
 
+/// The root file of the crate a vacant entry is for, as a number for the log.
+fn unique_root_file(
+    entry: &dashmap::mapref::entry::VacantEntry<'_, UniqueCrateData, Crate>,
+) -> u64 {
+    u64::from(entry.key().root_file_id.index())
+}
+
 /// The mapping from [`UniqueCrateData`] to their [`Crate`] input.
 #[derive(Debug, Default)]
 pub struct CratesMap(DashMap<UniqueCrateData, Crate, BuildHasherDefault<FxHasher>>);
@@ -711,28 +718,47 @@ impl CrateGraphBuilder {
             let crate_input = match crates_map.0.entry(unique_crate_data) {
                 Entry::Occupied(entry) => {
                     let old_crate = *entry.get();
+                    // A crate the database already held, whose data is written because it differs:
+                    // what read it is invalidated, so which field differs is said, and for which crate.
+                    let named = |field: &'static str| {
+                        tracing::debug!(
+                            target: "ra_ap_base_db::crates",
+                            field,
+                            krate = %krate
+                                .extra
+                                .display_name
+                                .as_ref()
+                                .map_or_else(|| "<unnamed>".to_owned(), |name| name.to_string()),
+                            "a crate the database held has other data now"
+                        );
+                    };
                     if crate_data != *old_crate.data(db) {
+                        named("data");
                         old_crate.set_data(db).with_durability(Durability::MEDIUM).to(crate_data);
                     }
                     if krate.extra != *old_crate.extra_data(db) {
+                        named("extra_data");
                         old_crate
                             .set_extra_data(db)
                             .with_durability(Durability::MEDIUM)
                             .to(krate.extra.clone());
                     }
                     if krate.cfg_options != *old_crate.cfg_options(db) {
+                        named("cfg_options");
                         old_crate
                             .set_cfg_options(db)
                             .with_durability(Durability::MEDIUM)
                             .to(krate.cfg_options.clone());
                     }
                     if krate.env != *old_crate.env(db) {
+                        named("env");
                         old_crate
                             .set_env(db)
                             .with_durability(Durability::MEDIUM)
                             .to(krate.env.clone());
                     }
                     if krate.ws_data != *old_crate.workspace_data(db) {
+                        named("workspace_data");
                         old_crate
                             .set_workspace_data(db)
                             .with_durability(Durability::MEDIUM)
@@ -741,6 +767,17 @@ impl CrateGraphBuilder {
                     old_crate
                 }
                 Entry::Vacant(entry) => {
+                    tracing::debug!(
+                        target: "ra_ap_base_db::crates",
+                        field = "new",
+                        root_file = unique_root_file(&entry),
+                        krate = %krate
+                            .extra
+                            .display_name
+                            .as_ref()
+                            .map_or_else(|| "<unnamed>".to_owned(), |name| name.to_string()),
+                        "a crate the database did not hold"
+                    );
                     let input = Crate::builder(
                         crate_data,
                         krate.extra.clone(),

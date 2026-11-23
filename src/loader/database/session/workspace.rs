@@ -234,8 +234,12 @@ fn load_database(
                 "the saved analysis state was restored"
             );
             crate::host::event(
-                "analysis state: restored from the last run; the workspace is loaded onto it"
-                    .to_owned(),
+                if restored.from_base {
+                    "analysis state: started from the base state; the workspace is loaded onto it"
+                } else {
+                    "analysis state: restored from the last run; the workspace is loaded onto it"
+                }
+                .to_owned(),
             );
             // Hand out the ids the saved database was built with: the same path, the same
             // id, in whatever order the loader's threads deliver the files.

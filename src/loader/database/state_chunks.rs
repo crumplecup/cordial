@@ -94,6 +94,8 @@ impl serde::ser::Error for ChunkError {
 #[derive(Debug)]
 pub struct ChunkDir {
     previous: PathBuf,
+    /// Another state whose chunks are linked when the one before has none: a base.
+    also: Option<PathBuf>,
     current: PathBuf,
     /// How many chunks were written.
     pub written: u64,
@@ -114,6 +116,7 @@ impl ChunkDir {
         std::fs::create_dir_all(&current)?;
         Ok(Self {
             previous,
+            also: None,
             current,
             written: 0,
             linked: 0,
@@ -121,6 +124,13 @@ impl ChunkDir {
             bytes_written: 0,
             bytes_linked: 0,
         })
+    }
+
+    /// Link the chunks of `other` too, when the state before has not got them.
+    #[must_use]
+    pub fn also_linking_from(mut self, other: PathBuf) -> Self {
+        self.also = Some(other);
+        self
     }
 
     /// Put the chunk in the state: linked from the state before when that had it, written if not.
@@ -131,11 +141,16 @@ impl ChunkDir {
             self.repeated += 1;
             return Ok(());
         }
-        let before = self.previous.join(hash);
         // A copy when the filesystem cannot link, which is still no encoding or hashing to do again.
-        if before.is_file()
-            && (std::fs::hard_link(&before, &target).is_ok() || copy(&before, &target))
-        {
+        let have = [Some(&self.previous), self.also.as_ref()]
+            .into_iter()
+            .flatten()
+            .map(|directory| directory.join(hash))
+            .find(|before| {
+                before.is_file()
+                    && (std::fs::hard_link(before, &target).is_ok() || copy(before, &target))
+            });
+        if have.is_some() {
             self.linked += 1;
             self.bytes_linked += length;
             return Ok(());

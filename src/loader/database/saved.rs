@@ -62,19 +62,37 @@ pub(super) struct Restored {
     pub(super) paths: Vec<VfsPath>,
     /// The cfg contexts the saved run had added, as that run left them.
     pub(super) contexts: Vec<super::ContextCrates>,
+    /// Whether this is the base state a project starts from when it has none of its own, and not the
+    /// state the project's last run left.
+    pub(super) from_base: bool,
 }
 
 /// Where a database is saved between runs.
 #[derive(Debug, Clone)]
 pub struct SavedState {
     dir: PathBuf,
+    /// A state to start from when this one is missing or cannot be used: what is common to projects
+    /// (the toolchain's sysroot, built and saved once) and not what one project's last run left. It is
+    /// read and never written, and the chunks this state saves that it already has are linked from it.
+    base: Option<PathBuf>,
 }
 
 impl SavedState {
     /// The state kept in `dir`.
     #[instrument(level = "trace", skip(dir))]
     pub fn at(dir: impl Into<PathBuf>) -> Self {
-        Self { dir: dir.into() }
+        Self {
+            dir: dir.into(),
+            base: None,
+        }
+    }
+
+    /// This state, started from `base` (a directory a state was saved in) when it has none of its
+    /// own that can be used.
+    #[must_use]
+    pub fn with_base(mut self, base: impl Into<PathBuf>) -> Self {
+        self.base = Some(base.into());
+        self
     }
 
     /// Where this run's spilled values go: a file named for the process, in a directory beside the
@@ -136,6 +154,9 @@ impl SavedState {
             self.dir.join(SALSA).join(super::state_chunks::CHUNKS),
             salsa_dir.join(super::state_chunks::CHUNKS),
         )?;
+        if let Some(base) = self.base.as_ref() {
+            chunks = chunks.also_linking_from(base.join(SALSA).join(super::state_chunks::CHUNKS));
+        }
         database.save_segments(
             |header| {
                 header_len = self.write_encoded(&salsa_dir.join(SALSA_HEADER), header)?;
@@ -216,6 +237,38 @@ impl SavedState {
     #[instrument(level = "debug", skip(self))]
     #[hotpath::measure(impl_type = "SavedState")]
     pub(super) fn restore(&self) -> Result<Restored, String> {
+        let own = match self.restore_own() {
+            Ok(restored) => return Ok(restored),
+            Err(reason) => reason,
+        };
+        let Some(base) = self.base.as_ref() else {
+            return Err(own);
+        };
+        let started = std::time::Instant::now();
+        match (Self {
+            dir: base.clone(),
+            base: None,
+        })
+        .restore_own()
+        {
+            Ok(mut restored) => {
+                tracing::info!(
+                    target: "cordial::cache",
+                    own = %own,
+                    micros = u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX),
+                    "no state of the project's own to use: started from the base state"
+                );
+                restored.from_base = true;
+                Ok(restored)
+            }
+            Err(from_base) => Err(format!("{own}; and the base state: {from_base}")),
+        }
+    }
+
+    /// The state this one saved last, if it can be used.
+    #[instrument(level = "debug", skip(self))]
+    #[hotpath::measure(impl_type = "SavedState")]
+    fn restore_own(&self) -> Result<Restored, String> {
         let key = std::fs::read_to_string(self.dir.join(KEY))
             .map_err(|error| format!("none saved ({error})"))?;
         if key != crate::run_cache::executable_fingerprint() {
@@ -262,6 +315,7 @@ impl SavedState {
                 database,
                 paths,
                 contexts,
+                from_base: false,
             })
         }))
         .unwrap_or_else(|_| Err("restoring it panicked".to_owned()))
