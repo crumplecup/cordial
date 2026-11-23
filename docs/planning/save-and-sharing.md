@@ -420,6 +420,23 @@ by reason (flipped, leaf, cfg reader, outside the module tree), and the per-crat
 for the totals; add the per-crate split, and a unit fixture that counts `crate_local_def_map` executions
 per context, so each step below moves a number a test asserts.
 
+*D0, what is known (2026-11-23).* On amenable, one cfg context and its leaf passes: 6,092 files, of which a
+context copies 536 flipped, 285 spine and 2,902 *unsure* and aliases 2,369. The unsure class is the leaf files:
+`is_a_leaf_file` counts every test, bench and example as unsure, so it is always copied, which is D3's
+question. The leaf pass reads 493 files and 1,427 functions in 32.4 s (66 ms a file, about 23 ms a function,
+twice an ordinary function's cost); the context itself executes 536 K queries (a third of the ordinary run's
+1.76 M) and adds 0.03 GiB. On a fixture the leaf cost is linear and proportionate (a library and N test files,
+run at two sizes: about 124 queries for each file added, two test functions each, dominated by each test's own
+macro expansions and the file's item tree and definition map: intrinsic, since an expansion site is unique to
+its file). One hypothesis about it is false and is not to be tried again: that the leaf pass is slow because it
+reads full evidence, which walks everything a function reaches through the context's copy of the library,
+when it uses only a function's own calls (which `direct_facts` holds, identically). Reading calls from
+`direct_facts` finds the same leaf functions and executes the same number of queries (163,231 against 163,226,
+with the library's chain of 40 functions behind the test): by the time the leaf pass reads, the copy's facts
+are primed and the walk is memo lookups. What is not known is the split of the 66 ms a file between the copy
+(a new file id, its parse and item tree), the leaf crate's definition map, and its functions' evidence, and how
+much of it a leaf in the ordinary graph (D3) would not repeat. The per-crate split D0 asks for is not done.
+
 **D1. Copies keyed by what they differ in.** A copy's identity is the crate and the part of the context's
 cfg change that the crate's files mention (from `gates_of`), not the context's ordinal. Contexts that
 differ in atoms a crate never names then share that crate's copy and its memos, and the copy's path
