@@ -1048,68 +1048,91 @@ mod persistence {
         {
             let Self { ingredient, zalsa } = self;
 
-            let mut flattener = EdgeFlattener::default();
-            flattener.owner = Some(ingredient.index);
-            let mut pending: Vec<(String, &Memo<C>, Flat)> = Vec::new();
+            // What a query reaches does not depend on which ingredient asks, except for a fingerprint,
+            // whose walk goes through the query it fingerprints: every other ingredient of the save shares
+            // one flattener, and its numbering, and walks each query once.
+            let shares = !zalsa.is_fingerprint(ingredient.index);
+            let mut flattener = if shares {
+                zalsa.take_save_flattener()
+            } else {
+                EdgeFlattener::default()
+            };
+            flattener.owner = if shares { None } else { Some(ingredient.index) };
+            let started = std::time::Instant::now();
+            let before = flattener.stats();
 
-            for entry in <C::SalsaStruct<'_> as SalsaStructInDb>::entries(zalsa) {
+            // The memos that are saved, as the key each is saved under.
+            let memo_of = |entry: &crate::key::DatabaseKeyIndex| {
                 let memo_ingredient_index = ingredient
                     .memo_ingredient_indices
                     .get(entry.ingredient_index());
+                ingredient
+                    .get_memo_from_table_for(zalsa, entry.key_index(), memo_ingredient_index)
+                    .filter(|memo| memo.should_serialize())
+            };
+            // Flatten the dependencies of a query down to the base inputs.
+            let flat_of = |memo: &Memo<C>, flattener: &mut EdgeFlattener| match memo.header.origin() {
+                QueryOriginRef::Derived(edges) => {
+                    // SAFETY: Serialization's exclusive storage access prevents database writes.
+                    let (sets, own, _) = unsafe { flatten_memo(zalsa, edges, flattener) };
+                    Flat::Derived(sets, own)
+                }
+                QueryOriginRef::DerivedUntracked(edges) => {
+                    // SAFETY: Serialization's exclusive storage access prevents database writes.
+                    let (sets, own, _) = unsafe { flatten_memo(zalsa, edges, flattener) };
+                    Flat::DerivedUntracked(sets, own)
+                }
+                QueryOriginRef::Assigned(key) => {
+                    let dependency = zalsa.lookup_ingredient(key.ingredient_index());
+                    assert!(
+                        dependency.is_persistable(),
+                        "specified query `{}` must be persistable",
+                        dependency.debug_name()
+                    );
+                    Flat::Assigned(key)
+                }
+            };
 
-                let memo = ingredient.get_memo_from_table_for(
-                    zalsa,
-                    entry.key_index(),
-                    memo_ingredient_index,
-                );
-
-                let Some(memo) = memo.filter(|memo| memo.should_serialize()) else {
-                    continue;
-                };
-
-                // Flatten the dependencies of this query down to the base inputs.
-                let flat = match memo.header.origin() {
-                    QueryOriginRef::Derived(edges) => {
-                        // SAFETY: Serialization's exclusive storage access prevents database writes.
-                        let (sets, own, _) = unsafe { flatten_memo(zalsa, edges, &mut flattener) };
-                        Flat::Derived(sets, own)
-                    }
-                    QueryOriginRef::DerivedUntracked(edges) => {
-                        // SAFETY: Serialization's exclusive storage access prevents database writes.
-                        let (sets, own, _) = unsafe { flatten_memo(zalsa, edges, &mut flattener) };
-                        Flat::DerivedUntracked(sets, own)
-                    }
-                    QueryOriginRef::Assigned(key) => {
-                        let dependency = zalsa.lookup_ingredient(key.ingredient_index());
-                        assert!(
-                            dependency.is_persistable(),
-                            "specified query `{}` must be persistable",
-                            dependency.debug_name()
-                        );
-
-                        Flat::Assigned(key)
-                    }
-                };
-
-                // TODO: Group structs by ingredient index into a nested map.
-                let key = format!(
-                    "{}:{}",
-                    entry.ingredient_index().as_u32(),
-                    entry.key_index().as_bits()
-                );
-                pending.push((key, memo, flat));
-            }
-
+            // First pass: which distinct sets the memos refer to, and how many memos there are. The
+            // flattened memos are not kept: the second pass flattens each again, which is a lookup of
+            // what the shared flattener found.
+            let mut numbers: FxHashMap<*const Runs, u32> = FxHashMap::default();
+            let mut distinct: Vec<LeafSet> = Vec::new();
+            let mut by_kind: std::collections::BTreeMap<&'static str, u64> = Default::default();
+            let mut own_edges: u64 = 0;
+            let mut count = 0_usize;
             // Asked for by the `salsa::explain` target: for the first few memos that depend on a
             // crate the tool added, the chain of queries that leads there. The memos of the lowest
             // keys are the ones made first.
-            if ::tracing::enabled!(target: "salsa::explain", ::tracing::Level::DEBUG) {
-                let mut shown = 0;
-                for (key, memo, flat) in &pending {
-                    let (Flat::Derived(sets, own) | Flat::DerivedUntracked(sets, own)) = flat
-                    else {
-                        continue;
-                    };
+            let mut explain = ::tracing::enabled!(target: "salsa::explain", ::tracing::Level::DEBUG);
+            let mut shown = 0;
+            for entry in <C::SalsaStruct<'_> as SalsaStructInDb>::entries(zalsa) {
+                let Some(memo) = memo_of(&entry) else {
+                    continue;
+                };
+                count += 1;
+                let flat = flat_of(memo, &mut flattener);
+                let (Flat::Derived(sets, own) | Flat::DerivedUntracked(sets, own)) = &flat else {
+                    continue;
+                };
+                own_edges += own.len() as u64;
+                for set in sets {
+                    numbers.entry(Arc::as_ptr(set)).or_insert_with(|| {
+                        for edge in flattener.edges_of(set) {
+                            let name = if edge.is_watermark() {
+                                "<watermark>"
+                            } else {
+                                zalsa
+                                    .lookup_ingredient(edge.key().ingredient_index())
+                                    .debug_name()
+                            };
+                            *by_kind.entry(name).or_default() += 1;
+                        }
+                        distinct.push(Arc::clone(set));
+                        u32::try_from(distinct.len() - 1).expect("fewer than 2^32 sets")
+                    });
+                }
+                if explain {
                     let reaches = sets
                         .iter()
                         .flat_map(|set| flattener.edges_of(set))
@@ -1124,72 +1147,59 @@ mod persistence {
                         ::tracing::debug!(
                             target: "salsa::explain",
                             ingredient = C::DEBUG_NAME,
-                            memo = key.as_str(),
+                            memo = format!("{}:{}", entry.ingredient_index().as_u32(), entry.key_index().as_bits()).as_str(),
                             path = path.as_str(),
                             "a memo depends on a crate the tool added through"
                         );
                         shown += 1;
                         if shown >= 5 {
-                            break;
+                            explain = false;
                         }
                     }
                 }
             }
+            let (universe, table) = flattener.localize(&distinct);
+            let set_edges: u64 = table
+                .iter()
+                .flatten()
+                .map(|(_, length)| u64::from(*length))
+                .sum();
 
-            // Each distinct set the memos refer to, once.
-            let mut numbers: FxHashMap<*const Runs, u32> = FxHashMap::default();
-            let mut table: Vec<Vec<(u32, u32)>> = Vec::new();
-            let mut by_kind: std::collections::BTreeMap<&'static str, u64> = Default::default();
-            let mut own_edges: u64 = 0;
-            let mut set_edges: u64 = 0;
-            let mut numbered = |set: &LeafSet, flattener: &EdgeFlattener| -> u32 {
-                *numbers.entry(Arc::as_ptr(set)).or_insert_with(|| {
-                    for edge in flattener.edges_of(set) {
-                        let name = if edge.is_watermark() {
-                            "<watermark>"
-                        } else {
-                            zalsa
-                                .lookup_ingredient(edge.key().ingredient_index())
-                                .debug_name()
-                        };
-                        *by_kind.entry(name).or_default() += 1;
-                    }
-                    let runs = flattener.runs_of(set);
-                    set_edges += runs.iter().map(|(_, length)| u64::from(*length)).sum::<u64>();
-                    table.push(runs);
-                    u32::try_from(table.len() - 1).expect("fewer than 2^32 sets")
-                })
-            };
-            let mut origins: Vec<PersistentQueryOrigin> = Vec::with_capacity(pending.len());
-            for (_, _, flat) in &pending {
-                origins.push(match flat {
-                    Flat::Assigned(key) => PersistentQueryOrigin::assigned(*key),
-                    Flat::Derived(sets, own) => {
-                        own_edges += own.len() as u64;
-                        let sets = sets.iter().map(|set| numbered(set, &flattener)).collect();
-                        PersistentQueryOrigin::shared_derived(sets, own.clone())
-                    }
-                    Flat::DerivedUntracked(sets, own) => {
-                        own_edges += own.len() as u64;
-                        let sets = sets.iter().map(|set| numbered(set, &flattener)).collect();
-                        PersistentQueryOrigin::shared_derived_untracked(sets, own.clone())
-                    }
-                });
-            }
-
-            let count = pending.len();
             // The memos, and the list of edges and the sets they refer to.
             let mut map = serializer.serialize_map(Some(count + 2))?;
             // The list of edges the sets are positions in, then the sets.
-            map.serialize_entry("universe", flattener.universe())?;
+            map.serialize_entry("universe", &universe)?;
             map.serialize_entry("sets", &table)?;
-            for ((key, memo, _), origin) in pending.into_iter().zip(origins) {
+            // Second pass: each memo, with its origin as the sets are numbered.
+            for entry in <C::SalsaStruct<'_> as SalsaStructInDb>::entries(zalsa) {
+                let Some(memo) = memo_of(&entry) else {
+                    continue;
+                };
+                let number = |set: &LeafSet| numbers[&Arc::as_ptr(set)];
+                let origin = match flat_of(memo, &mut flattener) {
+                    Flat::Assigned(key) => PersistentQueryOrigin::assigned(key),
+                    Flat::Derived(sets, own) => PersistentQueryOrigin::shared_derived(
+                        sets.iter().map(number).collect(),
+                        own,
+                    ),
+                    Flat::DerivedUntracked(sets, own) => {
+                        PersistentQueryOrigin::shared_derived_untracked(
+                            sets.iter().map(number).collect(),
+                            own,
+                        )
+                    }
+                };
+                let key = format!(
+                    "{}:{}",
+                    entry.ingredient_index().as_u32(),
+                    entry.key_index().as_bits()
+                );
                 map.serialize_entry(&key, &memo.with_origin(origin))?;
             }
 
             if count > 0 {
-                let (stats, elapsed) = flattener.report();
-                let held = flattener.footprint();
+                let stats = flattener.stats();
+                let held_runs: u64 = table.iter().map(|set| set.len() as u64).sum();
                 crate::flatten::note_breadth(C::DEBUG_NAME, flattener.breadth(12));
                 ::tracing::info!(
                     target: "salsa::persistence",
@@ -1197,23 +1207,26 @@ mod persistence {
                     memos = count,
                     sets = table.len(),
                     set_edges,
-                    set_runs = table.iter().map(|set| set.len() as u64).sum::<u64>(),
+                    set_runs = held_runs,
                     own_edges,
-                    walked = stats.walked,
-                    reused = stats.reused,
-                    incomplete = stats.incomplete,
-                    universe = held.universe,
-                    distinct_sets = held.sets,
-                    held_runs = held.runs,
-                    held_bytes = held.runs * 8,
-                    widest_set_runs = held.widest_runs,
-                    kept_results = held.kept,
+                    walked = stats.walked - before.walked,
+                    reused = stats.reused - before.reused,
+                    incomplete = stats.incomplete - before.incomplete,
+                    universe = universe.len() as u64,
+                    distinct_sets = table.len(),
+                    held_runs,
+                    held_bytes = held_runs * 8,
+                    widest_set_runs = table.iter().map(|set| set.len() as u64).max().unwrap_or(0),
+                    kept_results = flattener.kept(),
                     breadth = flattener.breadth(8),
                     reads_themselves = flattener.direct(8),
                     kinds = ?by_kind,
-                    micros = u64::try_from(elapsed.as_micros()).unwrap_or(u64::MAX),
+                    micros = u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX),
                     "flattened the dependencies of the persisted memos"
                 );
+            }
+            if shares {
+                zalsa.return_save_flattener(flattener);
             }
 
             map.end()

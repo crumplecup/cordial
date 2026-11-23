@@ -192,6 +192,10 @@ pub struct Zalsa {
     /// memo that read the first is saved as depending on the second instead of on everything the
     /// first read (see `flatten::cutoff_edge`).
     cutoffs: std::sync::RwLock<Vec<(IngredientIndex, IngredientIndex)>>,
+
+    /// What a save has worked out of the dependencies of the memos so far, kept from one ingredient
+    /// to the next while the save lasts (see `flatten`), and dropped when the next save begins.
+    save_flattener: std::sync::Mutex<Option<crate::flatten::EdgeFlattener>>,
 }
 
 /// All fields on Zalsa are locked behind [`Mutex`]es and [`RwLock`]s and cannot enter
@@ -219,6 +223,7 @@ impl Zalsa {
             owner_index: Default::default(),
             ownership_resolvers: Default::default(),
             cutoffs: std::sync::RwLock::new(Vec::new()),
+            save_flattener: std::sync::Mutex::new(None),
             #[cfg(not(feature = "inventory"))]
             nonce: NONCE.nonce(),
         };
@@ -319,6 +324,42 @@ impl Zalsa {
             .unwrap_or_else(|poisoned| poisoned.into_inner())
             .iter()
             .find_map(|(known, fingerprint)| (*known == query).then_some(*fingerprint))
+    }
+
+    /// Whether some query's value is saved as the value of `ingredient`: its own walk goes through the
+    /// query it fingerprints, so what it reaches is not what every other ingredient's does.
+    pub(crate) fn is_fingerprint(&self, ingredient: IngredientIndex) -> bool {
+        self.cutoffs
+            .read()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .iter()
+            .any(|(_, fingerprint)| *fingerprint == ingredient)
+    }
+
+    /// Begin a save: what an earlier one worked out is dropped.
+    pub(crate) fn begin_save(&self) {
+        *self
+            .save_flattener
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = None;
+    }
+
+    /// The flattener the save in progress shares among the ingredients whose walk does not depend on
+    /// which of them it is for, taken (so it is not shared with itself) and to be given back with
+    /// [`Self::return_save_flattener`].
+    pub(crate) fn take_save_flattener(&self) -> crate::flatten::EdgeFlattener {
+        self.save_flattener
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .take()
+            .unwrap_or_default()
+    }
+
+    pub(crate) fn return_save_flattener(&self, flattener: crate::flatten::EdgeFlattener) {
+        *self
+            .save_flattener
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(flattener);
     }
 
     /// Say that the value of `fingerprint` stands for the value of `query`.

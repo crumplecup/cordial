@@ -19,7 +19,6 @@
 //! all call each other is walked along every path through it, K! times.
 
 use std::collections::HashSet;
-use std::time::Instant;
 
 use crate::durability::Durability;
 use crate::hash::{FxHashMap, FxIndexSet};
@@ -212,8 +211,9 @@ impl RunBuilder {
     }
 }
 
-/// The persisted edges reached from each query that is not persisted, kept for one
-/// ingredient's memos while they are serialized.
+/// The persisted edges reached from each query that is not persisted, kept while the memos of one ingredient
+/// are serialized, or of every ingredient but the fingerprints while a save lasts (what a query reaches
+/// does not depend on which ingredient asks).
 #[doc(hidden)]
 pub struct EdgeFlattener {
     /// The number of each persisted edge seen, and the edge of each number.
@@ -258,7 +258,6 @@ pub struct EdgeFlattener {
     scratch: FxIndexSet<QueryEdge>,
     /// The set of each restored set a memo refers to, made once.
     restored: FxHashMap<u32, LeafSet>,
-    started: Instant,
     stats: FlattenStats,
 }
 
@@ -311,7 +310,6 @@ impl Default for EdgeFlattener {
             lowlink: usize::MAX,
             scratch: FxIndexSet::default(),
             restored: FxHashMap::default(),
-            started: Instant::now(),
             stats: FlattenStats::default(),
         }
     }
@@ -356,15 +354,42 @@ impl EdgeFlattener {
         set
     }
 
-    /// Every persisted edge numbered so far, by number: what a set is a set of positions in.
-    pub(crate) fn universe(&self) -> &[QueryEdge] {
-        &self.edges
-    }
-
-    /// The positions in [`Self::universe`] of the edges of `set`, as runs of consecutive positions:
-    /// `(first, how many)`. A set is these runs, so this is the set as it is saved.
-    pub(crate) fn runs_of(&self, set: &Runs) -> Vec<(u32, u32)> {
-        set.runs().to_vec()
+    /// What an ingredient saves of `sets` when the flattener numbers edges for every ingredient of a
+    /// save: the edges they hold, in the order they are numbered, and each set as runs of positions in
+    /// that list. A set's runs are positions among the edges the ingredient's sets hold and not among all
+    /// the edges there are, so what is saved of an ingredient does not grow with the others.
+    pub(crate) fn localize(&self, sets: &[LeafSet]) -> (Vec<QueryEdge>, Vec<Vec<(u32, u32)>>) {
+        let mut used = RunBuilder::default();
+        for set in sets {
+            used.or(set);
+        }
+        let used = used.build();
+        let mut before: Vec<u32> = Vec::with_capacity(used.runs().len());
+        let mut total = 0_u32;
+        for (_, length) in used.runs() {
+            before.push(total);
+            total += length;
+        }
+        let universe: Vec<QueryEdge> = used
+            .numbers()
+            .map(|number| self.edges[number as usize])
+            .collect();
+        let table = sets
+            .iter()
+            .map(|set| {
+                let mut runs: Vec<(u32, u32)> = Vec::with_capacity(set.runs().len());
+                for (first, length) in set.runs() {
+                    let at = used.runs().partition_point(|(start, _)| start <= first) - 1;
+                    let local = before[at] + (first - used.runs()[at].0);
+                    match runs.last_mut() {
+                        Some((start, span)) if *start + *span == local => *span += length,
+                        _ => runs.push((local, *length)),
+                    }
+                }
+                runs
+            })
+            .collect();
+        (universe, table)
     }
 
     /// The edges in `set`.
@@ -438,9 +463,14 @@ impl EdgeFlattener {
         }
     }
 
-    /// What this has done so far, and for how long.
-    pub(crate) fn report(&self) -> (FlattenStats, std::time::Duration) {
-        (self.stats, self.started.elapsed())
+    /// What this has done so far.
+    pub(crate) fn stats(&self) -> FlattenStats {
+        self.stats
+    }
+
+    /// How many queries have a result kept.
+    pub(crate) fn kept(&self) -> u64 {
+        self.done.len() as u64
     }
 }
 

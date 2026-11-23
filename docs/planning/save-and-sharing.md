@@ -290,6 +290,24 @@ the parts running at once by a memory budget, not the thread count.
 **B4. Restore.** The code counts the edges a restore gives memos of their own, one copy of each shared set
 per memo (`flatten.rs`); keep the sets shared. A0 of workstream A says whether this is already so.
 
+*B2 and B3 done (2026-11-23).* A save keeps one flattener for the whole save (on the database, begun with the
+save): every ingredient but the fingerprints (whose walk goes through the query they fingerprint, so they keep a
+flattener of their own with its owner) takes it, so a query that two ingredients' memos read is walked once and found
+by the next. Edges are numbered across the save; an ingredient writes only the edges its own sets hold, as positions
+in that list (`localize`), so the saved format is the one it was and a restore reads it unchanged. The memos are
+written in two passes, the distinct sets first and the memos after, each flattened again as it is written (a lookup of
+what the first pass found), so the flattened memos are not held between the passes (`pending` is gone). Test:
+`salsa_flatten_shared` (two persisted queries over one non-persisted query walk it once between them, 50 walks where
+there were 100, and each saves the edges of its own sets), with every salsa, saved-state, chunk and context test
+passing. Not measured on amenable: the save's 24 s is where it should show, in the per-ingredient `micros` of the
+`salsa::persistence` and `state_size` events. A save's flatten time and the verification's (which keeps a flattener
+per thread and is a separate pass) are not the same thing; the verification was left as it was.
+
+*B4 (2026-11-23).* Already so: a restored memo holds one edge for each saved set it refers to, plus its own
+(`refer_to_saved`), and the set is checked once for all the memos that share it, so what a restore gives a memo does
+not grow with the files of its crate (`restoring_gives_memos_edges_in_proportion_to_the_files_of_the_crate`, passing).
+`edges_expanded` counts those edges. Nothing to change.
+
 **Checkpoint.** After B2: the amenable run's peak against its pre-save working set.
 
 **Risks.** This is the vendored Salsa. Format compatibility is a test, not a hope: byte equality of the

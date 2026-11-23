@@ -377,6 +377,7 @@ mod persistence {
         ) -> Vec<(&'static str, usize)> {
             let zalsa = self.zalsa_mut();
             let zalsa: &Zalsa = zalsa;
+            zalsa.begin_save();
             zalsa
                 .ingredients()
                 .filter(|ingredient| ingredient.should_serialize(zalsa))
@@ -400,6 +401,7 @@ mod persistence {
         ) -> Result<(), E> {
             let zalsa = self.zalsa_mut();
             let zalsa: &Zalsa = zalsa;
+            zalsa.begin_save();
             let canonical = zalsa
                 .ingredients()
                 .filter(|ingredient| ingredient.should_serialize(zalsa))
@@ -565,6 +567,7 @@ mod persistence {
         /// Acquires exclusive storage access for the lifetime of the serializer.
         fn new(db: &'db mut dyn Database) -> Self {
             let zalsa = db.zalsa_mut();
+            zalsa.begin_save();
             // Canonical stamps only when no memo could be out of date: see `stamps`.
             let canonical = zalsa
                 .ingredients()
