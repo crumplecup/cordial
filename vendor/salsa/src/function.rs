@@ -1008,7 +1008,7 @@ where
 #[cfg(feature = "persistence")]
 mod persistence {
     use super::{Configuration, IngredientImpl, Memo};
-    use crate::flatten::{Bits, EdgeFlattener, LeafSet};
+    use crate::flatten::{EdgeFlattener, LeafSet, Runs};
     use crate::hash::{FxHashMap, FxIndexSet};
     use crate::sync::Arc;
     use crate::plumbing::{MemoIngredientMap, SalsaStructInDb};
@@ -1137,7 +1137,7 @@ mod persistence {
             }
 
             // Each distinct set the memos refer to, once.
-            let mut numbers: FxHashMap<*const Bits, u32> = FxHashMap::default();
+            let mut numbers: FxHashMap<*const Runs, u32> = FxHashMap::default();
             let mut table: Vec<Vec<(u32, u32)>> = Vec::new();
             let mut by_kind: std::collections::BTreeMap<&'static str, u64> = Default::default();
             let mut own_edges: u64 = 0;
@@ -1204,9 +1204,9 @@ mod persistence {
                     incomplete = stats.incomplete,
                     universe = held.universe,
                     distinct_sets = held.sets,
-                    dense_words = held.dense_words,
-                    dense_bytes = held.dense_words * 8,
-                    widest_set_words = held.widest_words,
+                    held_runs = held.runs,
+                    held_bytes = held.runs * 8,
+                    widest_set_runs = held.widest_runs,
                     kept_results = held.kept,
                     breadth = flattener.breadth(8),
                     reads_themselves = flattener.direct(8),
@@ -1314,7 +1314,7 @@ mod persistence {
         flattener.owner = Some(ingredient.index);
         // Whether each set has an edge that may have changed after a revision: found once for all
         // the memos that share the set.
-        let mut unchanged: FxHashMap<(*const Bits, crate::Revision), bool> = FxHashMap::default();
+        let mut unchanged: FxHashMap<(*const Runs, crate::Revision), bool> = FxHashMap::default();
         let (mut memos, mut by_closure) = (0u64, 0u64);
         for entry in <C::SalsaStruct<'_> as SalsaStructInDb>::entries(zalsa) {
             let memo_ingredient_index = ingredient

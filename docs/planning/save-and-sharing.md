@@ -213,6 +213,22 @@ words. Property tests against the dense implementation on random sets (union, eq
 against the saved bytes of every existing persistence test, which must not change: the saved form is
 already runs. This is small, independent of A, and can be done when convenient.
 
+*B1 done (2026-11-22).* `Bits` is `Runs`: sorted, disjoint, non-adjacent `(first, length)` runs, built by a
+`RunBuilder` that collects runs and puts them in order and merges them when asked and now and then while it
+grows (so joining one large set many times does not hold it many times). Equal sets are equal runs; `runs_of`
+is the identity; `edges_of` walks runs. The footprint event now says `held_runs`, `held_bytes` and
+`widest_set_runs`. Measured on `elicit_doc` (release, cold): the sets the flatteners hold are 4.1 MB (515 K
+runs) where they were 237 MB, and `direct_facts` is 2 MB where it was 155 MB; the save adds 55 MiB to the
+run's peak (1.949 to 2.003 GiB). The flatten's time is unchanged (7.4 s summed over the parallel parts): it
+is the walk, which B2 is for. Tests: `salsa_flatten_sets` (500 random clustered sets hold exactly their
+numbers as the maximal runs a plain implementation gives; equal sets are equal and hash equal whatever order
+and repetition; unions; 400 joins of overlapping sets; one number at 4,000,000,000 is one run),
+`salsa_flatten_footprint`, and every existing flatten and persistence test unchanged. Saved bytes are the same
+by construction (`runs()` is the old maximal-run extraction, `numbers()` ascends as the bits did); a check by
+chunk names against the pre-B1 state was inconclusive for an unrelated reason: two cold runs of the *same*
+binary differ in about 140 of 1,610 chunk names (parallel id assignment), which is noise to be understood
+separately and does not touch restored-then-saved runs (A4's tests).
+
 **B2. One flatten per save.** The results do not depend on who asks, which the module comment states;
 one exception is read in the code: `owner` stops a fingerprint's own dependencies short of the query it
 fingerprints for. So the cache is keyed by edge and valid for every owner except the fingerprint

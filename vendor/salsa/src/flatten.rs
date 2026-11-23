@@ -94,12 +94,39 @@ pub(crate) fn stale_event(zalsa: &Zalsa, edge: QueryEdge, memo: crate::key::Data
     );
 }
 
-/// A set of persisted edges, as the bits of the edges' numbers in one [`EdgeFlattener`].
-#[derive(PartialEq, Eq, Hash)]
-pub(crate) struct Bits(Box<[u64]>);
+/// A set of persisted edges, as the runs of consecutive numbers the edges have in one
+/// [`EdgeFlattener`]: `(first, how many)`, sorted, and neither overlapping nor adjacent, so a set has
+/// one form and equal sets are equal runs. The edges of a crate's files are numbered one after another
+/// as they are first reached, so a set is a few long runs, and it takes what it holds and not how
+/// wide the universe it is among is: a set of one edge numbered a million is one run.
+#[doc(hidden)]
+#[derive(Clone, PartialEq, Eq, Hash, Debug, Default)]
+pub struct Runs(Box<[(u32, u32)]>);
+
+impl Runs {
+    /// The runs, in order.
+    pub fn runs(&self) -> &[(u32, u32)] {
+        &self.0
+    }
+
+    /// How many numbers are in the set.
+    pub fn len(&self) -> u64 {
+        self.0.iter().map(|(_, length)| u64::from(*length)).sum()
+    }
+
+    /// Whether the set has no numbers.
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    /// The numbers in the set, in order.
+    pub fn numbers(&self) -> impl Iterator<Item = u32> + '_ {
+        self.0.iter().flat_map(|(first, length)| *first..*first + *length)
+    }
+}
 
 /// A set shared by every query that reaches exactly these edges.
-pub(crate) type LeafSet = Arc<Bits>;
+pub(crate) type LeafSet = Arc<Runs>;
 
 /// What the queries a walk passes through say about the set it found: the latest revision any of
 /// them changed at, and whether the walk can be trusted to have seen everything they read.
@@ -132,26 +159,56 @@ impl Closure {
 
 }
 
-/// A set being built.
+/// A set being built: the runs of the numbers put in it and of the sets joined to it, in no order and
+/// possibly overlapping, put in order and merged when the set is asked for and now and then while it
+/// grows, so that joining the same large set many times does not hold it many times.
+#[doc(hidden)]
 #[derive(Default)]
-pub(crate) struct Builder(Vec<u64>);
+pub struct RunBuilder {
+    runs: Vec<(u32, u32)>,
+    /// How many runs there were when they were last put in order.
+    ordered: usize,
+}
 
-impl Builder {
-    fn set(&mut self, bit: u32) {
-        let (word, bit) = ((bit / 64) as usize, bit % 64);
-        if self.0.len() <= word {
-            self.0.resize(word + 1, 0);
+impl RunBuilder {
+    /// Put `number` in the set.
+    pub fn set(&mut self, number: u32) {
+        match self.runs.last_mut() {
+            Some((first, length)) if *first + *length == number => *length += 1,
+            _ => self.runs.push((number, 1)),
         }
-        self.0[word] |= 1 << bit;
     }
 
-    fn or(&mut self, other: &Bits) {
-        if self.0.len() < other.0.len() {
-            self.0.resize(other.0.len(), 0);
+    /// Put every number of `other` in the set.
+    pub fn or(&mut self, other: &Runs) {
+        self.runs.extend_from_slice(&other.0);
+        if self.runs.len() > 64 && self.runs.len() > 2 * self.ordered {
+            self.normalize();
         }
-        for (mine, theirs) in self.0.iter_mut().zip(other.0.iter()) {
-            *mine |= theirs;
+    }
+
+    /// The runs in order, overlapping and adjacent ones merged.
+    fn normalize(&mut self) {
+        self.runs.sort_unstable();
+        let mut merged: Vec<(u32, u32)> = Vec::with_capacity(self.runs.len());
+        for &(first, length) in &self.runs {
+            match merged.last_mut() {
+                Some((before, span)) if u64::from(first) <= u64::from(*before) + u64::from(*span) => {
+                    let end = (u64::from(first) + u64::from(length))
+                        .max(u64::from(*before) + u64::from(*span));
+                    *span = u32::try_from(end - u64::from(*before)).expect("fewer than 2^32 edges");
+                }
+                _ => merged.push((first, length)),
+            }
         }
+        self.ordered = merged.len();
+        self.runs = merged;
+    }
+
+    /// The set of exactly the numbers put in.
+    pub fn build(mut self) -> Runs {
+        self.normalize();
+        Runs(self.runs.into_boxed_slice())
     }
 }
 
@@ -212,11 +269,11 @@ pub struct Footprint {
     pub universe: u64,
     /// The distinct sets.
     pub sets: u64,
-    /// The words of 64 bits the distinct sets take between them: one word for every 64 edges up to the
-    /// highest edge in the set, however few it holds.
-    pub dense_words: u64,
-    /// The most words any one set takes.
-    pub widest_words: u64,
+    /// The runs the distinct sets hold between them, each 8 bytes. A set held as the bits of its
+    /// numbers took a word for every 64 up to its highest, however few it held.
+    pub runs: u64,
+    /// The most runs any one set holds.
+    pub widest_runs: u64,
     /// The queries whose result is kept, each with a set and a closure.
     pub kept: u64,
 }
@@ -272,12 +329,8 @@ impl EdgeFlattener {
     }
 
     /// The set of exactly the edges in `builder`, shared with any equal set made before.
-    fn intern(&mut self, builder: Builder) -> LeafSet {
-        let mut words = builder.0;
-        while words.last() == Some(&0) {
-            words.pop();
-        }
-        let bits = Bits(words.into_boxed_slice());
+    fn intern(&mut self, builder: RunBuilder) -> LeafSet {
+        let bits = builder.build();
         if let Some(existing) = self.interned.get(&bits) {
             return Arc::clone(existing);
         }
@@ -293,7 +346,7 @@ impl EdgeFlattener {
         if let Some(set) = self.restored.get(&number) {
             return Arc::clone(set);
         }
-        let mut builder = Builder::default();
+        let mut builder = RunBuilder::default();
         for edge in shared_set(number).edges() {
             let bit = self.number(edge);
             builder.set(bit);
@@ -309,38 +362,14 @@ impl EdgeFlattener {
     }
 
     /// The positions in [`Self::universe`] of the edges of `set`, as runs of consecutive positions:
-    /// `(first, how many)`. The edges of a crate's files are numbered one after another as they
-    /// are first reached, so a set is a few long runs, and saved as runs it is a few numbers.
-    pub(crate) fn runs_of(&self, set: &Bits) -> Vec<(u32, u32)> {
-        let mut runs: Vec<(u32, u32)> = Vec::new();
-        for (index, word) in set.0.iter().enumerate() {
-            let mut word = *word;
-            while word != 0 {
-                let bit = word.trailing_zeros();
-                word &= word - 1;
-                let position = u32::try_from(index * 64).expect("fewer than 2^32 edges") + bit;
-                match runs.last_mut() {
-                    Some((first, length)) if *first + *length == position => *length += 1,
-                    _ => runs.push((position, 1)),
-                }
-            }
-        }
-        runs
+    /// `(first, how many)`. A set is these runs, so this is the set as it is saved.
+    pub(crate) fn runs_of(&self, set: &Runs) -> Vec<(u32, u32)> {
+        set.runs().to_vec()
     }
 
     /// The edges in `set`.
-    pub(crate) fn edges_of<'a>(&'a self, set: &'a Bits) -> impl Iterator<Item = QueryEdge> + 'a {
-        set.0.iter().enumerate().flat_map(move |(index, word)| {
-            let mut word = *word;
-            std::iter::from_fn(move || {
-                if word == 0 {
-                    return None;
-                }
-                let bit = word.trailing_zeros();
-                word &= word - 1;
-                Some(self.edges[index * 64 + bit as usize])
-            })
-        })
+    pub(crate) fn edges_of<'a>(&'a self, set: &'a Runs) -> impl Iterator<Item = QueryEdge> + 'a {
+        set.numbers().map(|number| self.edges[number as usize])
     }
 
     /// The kinds of query that read the most leaf edges themselves, most first, as `name=walked
@@ -394,17 +423,17 @@ impl EdgeFlattener {
     /// queries whose result is kept. These are what a flattener costs in memory while it is alive, and
     /// what a set of runs in place of words would change.
     pub fn footprint(&self) -> Footprint {
-        let (mut dense_words, mut widest_words) = (0_u64, 0_u64);
+        let (mut runs, mut widest_runs) = (0_u64, 0_u64);
         for set in &self.interned {
-            let words = set.0.len() as u64;
-            dense_words += words;
-            widest_words = widest_words.max(words);
+            let held = set.runs().len() as u64;
+            runs += held;
+            widest_runs = widest_runs.max(held);
         }
         Footprint {
             universe: self.edges.len() as u64,
             sets: self.interned.len() as u64,
-            dense_words,
-            widest_words,
+            runs,
+            widest_runs,
             kept: self.done.len() as u64,
         }
     }
@@ -466,7 +495,7 @@ pub(crate) unsafe fn leaves_of(
     // A query whose value has a saved fingerprint is reached as that fingerprint, however it is
     // reached: read by a memo, or through a tracked struct it made.
     if let Some(fingerprint) = cutoff_edge(zalsa, flattener.owner, edge) {
-        let mut found = Builder::default();
+        let mut found = RunBuilder::default();
         found.set(flattener.number(fingerprint));
         let result = flattener.intern(found);
         let closure = Closure::nothing();
@@ -502,7 +531,7 @@ pub(crate) unsafe fn leaves_of(
     flattener.stats.walked += 1;
     let outer = std::mem::replace(&mut flattener.lowlink, usize::MAX);
 
-    let mut found = Builder::default();
+    let mut found = RunBuilder::default();
     let mut direct = 0u32;
     let mut direct_leaves: Vec<QueryEdge> = Vec::new();
     let mut closure = memo.header().closure();
@@ -565,24 +594,19 @@ pub(crate) unsafe fn leaves_of(
 
     let result = flattener.intern(found);
     {
-        let size: u32 = result.0.iter().map(|word| word.count_ones()).sum();
+        let size = u32::try_from(result.len()).unwrap_or(u32::MAX);
         if flattener.widest_mix.get(ingredient.debug_name()).is_none_or(|(widest, _)| size > *widest) {
             let mut mix: FxHashMap<&'static str, u32> = FxHashMap::default();
-            for (index, word) in result.0.iter().enumerate() {
-                let mut bits = *word;
-                while bits != 0 {
-                    let bit = bits.trailing_zeros() as usize;
-                    bits &= bits - 1;
-                    let leaf = flattener.edges[index * 64 + bit];
-                    let kind = if leaf.is_watermark() {
-                        "<watermark>"
-                    } else if leaf.is_set() {
-                        "<set>"
-                    } else {
-                        zalsa.lookup_ingredient(leaf.key().ingredient_index()).debug_name()
-                    };
-                    *mix.entry(kind).or_default() += 1;
-                }
+            for number in result.numbers() {
+                let leaf = flattener.edges[number as usize];
+                let kind = if leaf.is_watermark() {
+                    "<watermark>"
+                } else if leaf.is_set() {
+                    "<set>"
+                } else {
+                    zalsa.lookup_ingredient(leaf.key().ingredient_index()).debug_name()
+                };
+                *mix.entry(kind).or_default() += 1;
             }
             let mut mix: Vec<_> = mix.into_iter().collect();
             mix.sort_by_key(|(kind, count)| (std::cmp::Reverse(*count), *kind));

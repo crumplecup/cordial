@@ -1,7 +1,8 @@
-//! What a flattening holds while it runs: a set is as many words as the highest edge it holds needs,
-//! however few edges it holds, so many small sets over a wide universe take a great deal more than
-//! the runs they are saved as. The save says how much, so that a change to the sets can be judged by
-//! the numbers and not by a guess.
+//! What a flattening holds while it runs: a set takes the runs of the numbers it holds, and not the
+//! width of the universe it is among, so many small sets over a wide universe take what they hold. (They
+//! were bits of every number up to the highest in the set: these 640 single-edge sets took 3,520 words
+//! of 64 bits, and `elicit_doc`'s 62,768 sets over 40,377 edges 155 MB.) The save says how much, so that
+//! a change to the sets can be judged by the numbers and not by a guess.
 
 use std::sync::{Arc, Mutex};
 
@@ -45,9 +46,9 @@ struct Footprint {
     set_runs: u64,
     universe: u64,
     distinct_sets: u64,
-    dense_words: u64,
-    dense_bytes: u64,
-    widest_set_words: u64,
+    held_runs: u64,
+    held_bytes: u64,
+    widest_set_runs: u64,
     kept_results: u64,
 }
 
@@ -73,9 +74,9 @@ impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for Reports {
                     "set_runs" => footprint.set_runs = value,
                     "universe" => footprint.universe = value,
                     "distinct_sets" => footprint.distinct_sets = value,
-                    "dense_words" => footprint.dense_words = value,
-                    "dense_bytes" => footprint.dense_bytes = value,
-                    "widest_set_words" => footprint.widest_set_words = value,
+                    "held_runs" => footprint.held_runs = value,
+                    "held_bytes" => footprint.held_bytes = value,
+                    "widest_set_runs" => footprint.widest_set_runs = value,
                     "kept_results" => footprint.kept_results = value,
                     _ => {}
                 }
@@ -122,15 +123,14 @@ fn a_save_says_what_its_flattening_holds() {
         held.sets, CELLS,
         "and the table the memos refer to holds them all"
     );
-    // The cells are numbered in the order they are reached, so the set of the k-th is the bit k, and
-    // takes the words up to it: 1 for the first 64, 2 for the next, and so on to 10.
-    let expected: u64 = (0..CELLS).map(|cell| cell / 64 + 1).sum();
+    // The cells are numbered in the order they are reached, so the set of the k-th is the number k:
+    // one run of one, wherever k is among the 640.
     assert_eq!(
-        held.dense_words, expected,
-        "words of 64 bits for {CELLS} sets of one edge"
+        held.held_runs, CELLS,
+        "a run for every set, and nothing for the width of the universe"
     );
-    assert_eq!(held.dense_bytes, expected * 8);
-    assert_eq!(held.widest_set_words, CELLS / 64);
+    assert_eq!(held.held_bytes, CELLS * 8);
+    assert_eq!(held.widest_set_runs, 1);
     // Saved as runs, each set is one run: the cost is the edges, not the universe they are among.
     assert_eq!(held.set_runs, CELLS, "a run for every set");
     assert!(
