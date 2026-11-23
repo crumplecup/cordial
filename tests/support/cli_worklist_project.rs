@@ -6,16 +6,20 @@ use std::path::Path;
 use std::process::{Command, Output};
 
 pub fn run(root: &Path, home: &Path, args: &[&str]) -> miette::Result<Output> {
-    Command::new(env!("CARGO_BIN_EXE_cordial"))
-        .arg("--project")
-        .arg(root)
-        .arg("--store-home")
-        .arg(home)
-        .args(args)
-        .env("CORDIAL_NO_PROGRESS", "1")
-        .output()
-        .into_diagnostic()
-        .wrap_err_with(|| format!("cordial {}", args.join(" ")))
+    ({
+        let mut command = Command::new(env!("CARGO_BIN_EXE_cordial"));
+        command.env(cordial::BASE_VARIABLE, "off");
+        command
+    })
+    .arg("--project")
+    .arg(root)
+    .arg("--store-home")
+    .arg(home)
+    .args(args)
+    .env("CORDIAL_NO_PROGRESS", "1")
+    .output()
+    .into_diagnostic()
+    .wrap_err_with(|| format!("cordial {}", args.join(" ")))
 }
 
 pub fn fixture() -> miette::Result<(tempfile::TempDir, tempfile::TempDir, cordial::StoreLayout)> {

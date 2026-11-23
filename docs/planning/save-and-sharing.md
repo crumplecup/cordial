@@ -500,6 +500,10 @@ the cfg otherwise. A fixture with a hidden file in four crates and two contexts 
 old rule copied five (`a_file_with_no_module_changes_only_where_the_gate_that_hides_it_flips`, counted from the
 rule's own arithmetic, not run against the old code). Not measured on amenable.
 
+*Base default-on (2026-11-23).* A project with no state of its own now starts from the store's base unless
+`CORDIAL_BASE=off`; the tests that launch the binary say `off` (each runs in a store of its own, and would build a
+base first), and the base tests say `on` as before.
+
 **D1. Copies keyed by what they differ in.** A copy's identity is the crate and the part of the context's
 cfg change that the crate's files mention (from `gates_of`), not the context's ordinal. Contexts that
 differ in atoms a crate never names then share that crate's copy and its memos, and the copy's path

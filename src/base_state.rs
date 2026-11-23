@@ -18,9 +18,9 @@ use tracing::instrument;
 
 use crate::{CordialError, CordialResult, SysrootCache};
 
-/// Set to `on` to start a project that has no state of its own from the store's base state, made when it
-/// is first wanted. Until it has been measured on a large project it is not the default: a run with
-/// nothing saved loads cold.
+/// Set to `off` to load a project that has no state of its own cold. By default it starts from the store's
+/// base state, made when it is first wanted: it was measured on amenable at 20% fewer queries and 0.11 GiB
+/// less peak, for a first run that costs about what a cold one does with the base's own build in it.
 pub const BASE_VARIABLE: &str = "CORDIAL_BASE";
 
 /// Changes when what the base is saved from changes, so that a base made of the old workload is not used.
@@ -140,10 +140,10 @@ pub fn is_ready(directory: &Path) -> bool {
     directory.join("key").is_file()
 }
 
-/// Whether the environment asks for a base.
+/// Whether the environment allows a base: it does unless it says `off`.
 #[must_use]
 pub fn enabled() -> bool {
-    std::env::var_os(BASE_VARIABLE).is_some_and(|value| value == "on")
+    std::env::var_os(BASE_VARIABLE).is_none_or(|value| value != "off")
 }
 
 /// The base for this build of the tool, made if there is none: `None` when none is asked for or it could

@@ -152,14 +152,18 @@ fn an_unknown_stage_is_refused_and_names_the_choices() -> Result<()> {
         home: scratch.path().join("store"),
     };
     support::mini_workspace::write(&project.project)?;
-    let output = std::process::Command::new(env!("CARGO_BIN_EXE_cordial"))
-        .arg("--project")
-        .arg(&project.project)
-        .arg("--store-home")
-        .arg(&project.home)
-        .args(["open", "--stop-after", "nope"])
-        .output()
-        .into_diagnostic()?;
+    let output = ({
+        let mut command = std::process::Command::new(env!("CARGO_BIN_EXE_cordial"));
+        command.env(cordial::BASE_VARIABLE, "off");
+        command
+    })
+    .arg("--project")
+    .arg(&project.project)
+    .arg("--store-home")
+    .arg(&project.home)
+    .args(["open", "--stop-after", "nope"])
+    .output()
+    .into_diagnostic()?;
     assert!(!output.status.success());
     let text = String::from_utf8_lossy(&output.stderr);
     assert!(

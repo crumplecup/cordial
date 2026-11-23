@@ -23,7 +23,11 @@ fn distributed_apply_claims_exact_findings_in_both_strategies() -> miette::Resul
     let slug = cordial::project_slug_from_path(root.path());
     let store = cordial::StoreLayout::from_root(home.path().join(&slug), slug);
     let run = |apply: bool| -> miette::Result<String> {
-        let mut command = Command::new(env!("CARGO_BIN_EXE_cordial"));
+        let mut command = {
+            let mut command = Command::new(env!("CARGO_BIN_EXE_cordial"));
+            command.env(cordial::BASE_VARIABLE, "off");
+            command
+        };
         command
             .arg("--project")
             .arg(root.path())

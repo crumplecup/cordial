@@ -325,15 +325,19 @@ fn list(store: &StoreLayout) -> miette::Result<Worklist> {
 }
 
 fn run(root: &Path, home: &Path, args: &[&str]) -> miette::Result<Output> {
-    let result = Command::new(env!("CARGO_BIN_EXE_cordial"))
-        .arg("--project")
-        .arg(root)
-        .arg("--store-home")
-        .arg(home)
-        .args(args)
-        .env("CORDIAL_NO_PROGRESS", "1")
-        .output()
-        .into_diagnostic()?;
+    let result = ({
+        let mut command = Command::new(env!("CARGO_BIN_EXE_cordial"));
+        command.env(cordial::BASE_VARIABLE, "off");
+        command
+    })
+    .arg("--project")
+    .arg(root)
+    .arg("--store-home")
+    .arg(home)
+    .args(args)
+    .env("CORDIAL_NO_PROGRESS", "1")
+    .output()
+    .into_diagnostic()?;
     assert!(
         result.status.success(),
         "stdout: {}\nstderr: {}",

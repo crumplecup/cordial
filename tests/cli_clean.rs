@@ -8,16 +8,20 @@ use miette::IntoDiagnostic;
 use cordial::{StoreLayout, SysrootCache, SysrootLock, WorklistLock, noop_progress};
 
 fn run(project: &Path, home: &Path, args: &[&str]) -> miette::Result<Output> {
-    Command::new(env!("CARGO_BIN_EXE_cordial"))
-        .arg("--project")
-        .arg(project)
-        .arg("--store-home")
-        .arg(home)
-        .arg("clean")
-        .args(args)
-        .env("CORDIAL_NO_PROGRESS", "1")
-        .output()
-        .into_diagnostic()
+    ({
+        let mut command = Command::new(env!("CARGO_BIN_EXE_cordial"));
+        command.env(cordial::BASE_VARIABLE, "off");
+        command
+    })
+    .arg("--project")
+    .arg(project)
+    .arg("--store-home")
+    .arg(home)
+    .arg("clean")
+    .args(args)
+    .env("CORDIAL_NO_PROGRESS", "1")
+    .output()
+    .into_diagnostic()
 }
 
 #[test]
@@ -102,17 +106,21 @@ fn single_project_clean_waits_for_store_lock() -> miette::Result<()> {
     let store = StoreLayout::from_root(home.path().join(&slug), slug);
     store.ensure_dirs().into_diagnostic()?;
     let lock = WorklistLock::exclusive(&store, "test gate", noop_progress()).into_diagnostic()?;
-    let mut child = Command::new(env!("CARGO_BIN_EXE_cordial"))
-        .arg("--project")
-        .arg(project.path())
-        .arg("--store-home")
-        .arg(home.path())
-        .arg("clean")
-        .env("CORDIAL_NO_PROGRESS", "1")
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .into_diagnostic()?;
+    let mut child = ({
+        let mut command = Command::new(env!("CARGO_BIN_EXE_cordial"));
+        command.env(cordial::BASE_VARIABLE, "off");
+        command
+    })
+    .arg("--project")
+    .arg(project.path())
+    .arg("--store-home")
+    .arg(home.path())
+    .arg("clean")
+    .env("CORDIAL_NO_PROGRESS", "1")
+    .stdout(Stdio::piped())
+    .stderr(Stdio::piped())
+    .spawn()
+    .into_diagnostic()?;
     std::thread::sleep(Duration::from_millis(300));
     assert!(child.try_wait().into_diagnostic()?.is_none());
     assert!(store.cache_dir().exists());

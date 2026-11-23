@@ -80,14 +80,18 @@ pub mod pending;
     fs::write(&pending, "pub fn run(data: &str) -> usize { data.len() }\n").into_diagnostic()?;
     let store_home = tempfile::tempdir().into_diagnostic()?;
     let run = |args: &[&str]| -> miette::Result<std::process::Output> {
-        let output = Command::new(env!("CARGO_BIN_EXE_cordial"))
-            .arg("--project")
-            .arg(&fixture.workspace)
-            .arg("--store-home")
-            .arg(store_home.path())
-            .args(args)
-            .output()
-            .into_diagnostic()?;
+        let output = ({
+            let mut command = Command::new(env!("CARGO_BIN_EXE_cordial"));
+            command.env(cordial::BASE_VARIABLE, "off");
+            command
+        })
+        .arg("--project")
+        .arg(&fixture.workspace)
+        .arg("--store-home")
+        .arg(store_home.path())
+        .args(args)
+        .output()
+        .into_diagnostic()?;
         assert!(
             output.status.success(),
             "{}",
@@ -137,15 +141,19 @@ fn default_apply_selects_current_ir_instead_of_stale_checklist() -> miette::Resu
     .into_diagnostic()
     .wrap_err("stale checklist")?;
 
-    let output = Command::new(env!("CARGO_BIN_EXE_cordial"))
-        .arg("--project")
-        .arg(&fixture.workspace)
-        .arg("--store-home")
-        .arg(store_home.path())
-        .args(["quality", "--apply", "--etiquette", "tracing"])
-        .output()
-        .into_diagnostic()
-        .wrap_err("default tracing apply")?;
+    let output = ({
+        let mut command = Command::new(env!("CARGO_BIN_EXE_cordial"));
+        command.env(cordial::BASE_VARIABLE, "off");
+        command
+    })
+    .arg("--project")
+    .arg(&fixture.workspace)
+    .arg("--store-home")
+    .arg(store_home.path())
+    .args(["quality", "--apply", "--etiquette", "tracing"])
+    .output()
+    .into_diagnostic()
+    .wrap_err("default tracing apply")?;
     assert!(
         output.status.success(),
         "stderr: {}",
@@ -183,15 +191,19 @@ fn default_apply_respects_tracing_exception() -> miette::Result<()> {
     .into_diagnostic()
     .wrap_err("tracing exception")?;
 
-    let output = Command::new(env!("CARGO_BIN_EXE_cordial"))
-        .arg("--project")
-        .arg(&fixture.workspace)
-        .arg("--store-home")
-        .arg(store_home.path())
-        .args(["quality", "--apply", "--etiquette", "tracing"])
-        .output()
-        .into_diagnostic()
-        .wrap_err("default tracing apply")?;
+    let output = ({
+        let mut command = Command::new(env!("CARGO_BIN_EXE_cordial"));
+        command.env(cordial::BASE_VARIABLE, "off");
+        command
+    })
+    .arg("--project")
+    .arg(&fixture.workspace)
+    .arg("--store-home")
+    .arg(store_home.path())
+    .args(["quality", "--apply", "--etiquette", "tracing"])
+    .output()
+    .into_diagnostic()
+    .wrap_err("default tracing apply")?;
     assert!(
         output.status.success(),
         "stderr: {}",
@@ -214,15 +226,19 @@ fn apply_checks_off_written_tracing_findings_but_not_dry_runs() -> miette::Resul
     let slug = cordial::project_slug_from_path(&fixture.workspace);
     let store = cordial::StoreLayout::from_root(store_home.path().join(&slug), slug);
     let run = |args: &[&str]| -> miette::Result<std::process::Output> {
-        Command::new(env!("CARGO_BIN_EXE_cordial"))
-            .arg("--project")
-            .arg(&fixture.workspace)
-            .arg("--store-home")
-            .arg(store_home.path())
-            .args(args)
-            .env("CORDIAL_NO_PROGRESS", "1")
-            .output()
-            .into_diagnostic()
+        ({
+            let mut command = Command::new(env!("CARGO_BIN_EXE_cordial"));
+            command.env(cordial::BASE_VARIABLE, "off");
+            command
+        })
+        .arg("--project")
+        .arg(&fixture.workspace)
+        .arg("--store-home")
+        .arg(store_home.path())
+        .args(args)
+        .env("CORDIAL_NO_PROGRESS", "1")
+        .output()
+        .into_diagnostic()
     };
 
     let gate = run(&["quality", "--etiquette", "tracing"])?;

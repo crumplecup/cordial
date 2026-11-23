@@ -42,7 +42,11 @@ fn write_crate(root: &Path) -> Result<()> {
 
 /// One process of `cordial open`: its exit code and what it printed.
 fn open(project: &Path, store: &Path, resumable: Option<&str>) -> Result<(Option<i32>, String)> {
-    let mut command = std::process::Command::new(env!("CARGO_BIN_EXE_cordial"));
+    let mut command = {
+        let mut command = std::process::Command::new(env!("CARGO_BIN_EXE_cordial"));
+        command.env(cordial::BASE_VARIABLE, "off");
+        command
+    };
     command
         .arg("--project")
         .arg(project)
@@ -100,18 +104,22 @@ fn the_driver_runs_the_children_and_ends_with_what_one_run_gives() -> Result<()>
     let (code, whole) = open(&project, &scratch.path().join("whole"), None)?;
     assert_eq!(code, Some(0), "an ordinary run finishes: {whole}");
 
-    let output = std::process::Command::new(env!("CARGO_BIN_EXE_cordial"))
-        .arg("--project")
-        .arg(&project)
-        .arg("--store-home")
-        .arg(scratch.path().join("driven"))
-        .arg("--memory-isolation")
-        .arg("open")
-        .env("CORDIAL_NO_PROGRESS", "1")
-        .env("RUST_LOG", "warn,cordial::results=info")
-        .env(CHECKPOINT_AFTER_CHUNKS_VARIABLE, "1")
-        .output()
-        .into_diagnostic()?;
+    let output = ({
+        let mut command = std::process::Command::new(env!("CARGO_BIN_EXE_cordial"));
+        command.env(cordial::BASE_VARIABLE, "off");
+        command
+    })
+    .arg("--project")
+    .arg(&project)
+    .arg("--store-home")
+    .arg(scratch.path().join("driven"))
+    .arg("--memory-isolation")
+    .arg("open")
+    .env("CORDIAL_NO_PROGRESS", "1")
+    .env("RUST_LOG", "warn,cordial::results=info")
+    .env(CHECKPOINT_AFTER_CHUNKS_VARIABLE, "1")
+    .output()
+    .into_diagnostic()?;
     let printed = String::from_utf8_lossy(&output.stdout).into_owned();
     let said = String::from_utf8_lossy(&output.stderr).into_owned();
     assert_eq!(output.status.code(), Some(0), "the run finishes: {said}");
@@ -186,17 +194,21 @@ fn a_process_to_take_a_run_up_that_has_no_state_to_use_stops_and_says_so() -> Re
     let scratch = tempfile::tempdir().into_diagnostic()?;
     let project = scratch.path().join("ckpt");
     write_crate(&project)?;
-    let output = std::process::Command::new(env!("CARGO_BIN_EXE_cordial"))
-        .arg("--project")
-        .arg(&project)
-        .arg("--store-home")
-        .arg(scratch.path().join("empty"))
-        .arg("open")
-        .env("CORDIAL_NO_PROGRESS", "1")
-        .env(RESUMABLE_VARIABLE, "1")
-        .env(RESUMES_VARIABLE, "1")
-        .output()
-        .into_diagnostic()?;
+    let output = ({
+        let mut command = std::process::Command::new(env!("CARGO_BIN_EXE_cordial"));
+        command.env(cordial::BASE_VARIABLE, "off");
+        command
+    })
+    .arg("--project")
+    .arg(&project)
+    .arg("--store-home")
+    .arg(scratch.path().join("empty"))
+    .arg("open")
+    .env("CORDIAL_NO_PROGRESS", "1")
+    .env(RESUMABLE_VARIABLE, "1")
+    .env(RESUMES_VARIABLE, "1")
+    .output()
+    .into_diagnostic()?;
     let said = String::from_utf8_lossy(&output.stderr).into_owned();
     assert_eq!(
         output.status.code(),
@@ -263,7 +275,7 @@ fn a_run_whose_processes_end_after_every_stage_gives_what_one_run_gives() -> Res
     let (code, whole) = open(&project, &scratch.path().join("whole"), None)?;
     assert_eq!(code, Some(0), "an ordinary run finishes: {whole}");
 
-    let output = std::process::Command::new(env!("CARGO_BIN_EXE_cordial"))
+    let output = ({ let mut command = std::process::Command::new(env!("CARGO_BIN_EXE_cordial")); command.env(cordial::BASE_VARIABLE, "off"); command })
         .arg("--project")
         .arg(&project)
         .arg("--store-home")
@@ -354,7 +366,11 @@ fn driven(
     store: &Path,
     stages: Option<&str>,
 ) -> Result<(Option<i32>, String, Vec<String>)> {
-    let mut command = std::process::Command::new(env!("CARGO_BIN_EXE_cordial"));
+    let mut command = {
+        let mut command = std::process::Command::new(env!("CARGO_BIN_EXE_cordial"));
+        command.env(cordial::BASE_VARIABLE, "off");
+        command
+    };
     command
         .arg("--project")
         .arg(project)
@@ -444,19 +460,23 @@ fn a_budget_too_small_for_any_process_is_said_so_with_what_it_was_too_small_for(
     let scratch = tempfile::tempdir().into_diagnostic()?;
     let project = scratch.path().join("ckpt");
     write_crate(&project)?;
-    let output = std::process::Command::new(env!("CARGO_BIN_EXE_cordial"))
-        .arg("--project")
-        .arg(&project)
-        .arg("--store-home")
-        .arg(scratch.path().join("store"))
-        .arg("--memory-isolation")
-        // Loading a workspace takes far more than this.
-        .arg("--memory-limit")
-        .arg("16M")
-        .arg("open")
-        .env("CORDIAL_NO_PROGRESS", "1")
-        .output()
-        .into_diagnostic()?;
+    let output = ({
+        let mut command = std::process::Command::new(env!("CARGO_BIN_EXE_cordial"));
+        command.env(cordial::BASE_VARIABLE, "off");
+        command
+    })
+    .arg("--project")
+    .arg(&project)
+    .arg("--store-home")
+    .arg(scratch.path().join("store"))
+    .arg("--memory-isolation")
+    // Loading a workspace takes far more than this.
+    .arg("--memory-limit")
+    .arg("16M")
+    .arg("open")
+    .env("CORDIAL_NO_PROGRESS", "1")
+    .output()
+    .into_diagnostic()?;
     let said = String::from_utf8_lossy(&output.stderr).into_owned();
     assert_eq!(
         output.status.code(),
@@ -481,19 +501,23 @@ fn a_budget_with_no_room_above_the_floor_is_said_so_at_once_and_not_after_many_p
     let project = scratch.path().join("ckpt");
     write_crate(&project)?;
     let started = std::time::Instant::now();
-    let output = std::process::Command::new(env!("CARGO_BIN_EXE_cordial"))
-        .arg("--project")
-        .arg(&project)
-        .arg("--store-home")
-        .arg(scratch.path().join("store"))
-        .arg("--memory-isolation")
-        // Less than a process holds once the workspace is loaded: its checkpoint line is below that.
-        .arg("--memory-target")
-        .arg("64M")
-        .arg("open")
-        .env("CORDIAL_NO_PROGRESS", "1")
-        .output()
-        .into_diagnostic()?;
+    let output = ({
+        let mut command = std::process::Command::new(env!("CARGO_BIN_EXE_cordial"));
+        command.env(cordial::BASE_VARIABLE, "off");
+        command
+    })
+    .arg("--project")
+    .arg(&project)
+    .arg("--store-home")
+    .arg(scratch.path().join("store"))
+    .arg("--memory-isolation")
+    // Less than a process holds once the workspace is loaded: its checkpoint line is below that.
+    .arg("--memory-target")
+    .arg("64M")
+    .arg("open")
+    .env("CORDIAL_NO_PROGRESS", "1")
+    .output()
+    .into_diagnostic()?;
     let said = String::from_utf8_lossy(&output.stderr).into_owned();
     assert_eq!(
         output.status.code(),

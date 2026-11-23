@@ -27,16 +27,20 @@ fn project() -> miette::Result<tempfile::TempDir> {
 }
 
 fn run(project: &Path, home: &Path, args: &[&str]) -> miette::Result<Output> {
-    Command::new(env!("CARGO_BIN_EXE_cordial"))
-        .arg("--project")
-        .arg(project)
-        .arg("--store-home")
-        .arg(home)
-        .args(args)
-        .env("CORDIAL_NO_PROGRESS", "1")
-        .output()
-        .into_diagnostic()
-        .wrap_err_with(|| format!("cordial {}", args.join(" ")))
+    ({
+        let mut command = Command::new(env!("CARGO_BIN_EXE_cordial"));
+        command.env(cordial::BASE_VARIABLE, "off");
+        command
+    })
+    .arg("--project")
+    .arg(project)
+    .arg("--store-home")
+    .arg(home)
+    .args(args)
+    .env("CORDIAL_NO_PROGRESS", "1")
+    .output()
+    .into_diagnostic()
+    .wrap_err_with(|| format!("cordial {}", args.join(" ")))
 }
 
 fn store(project: &Path, home: &Path) -> StoreLayout {

@@ -518,15 +518,19 @@ fn run_open(arguments: &[&str], config: Option<&str>) -> Result<(Option<i32>, St
     if let Some(config) = config {
         std::fs::write(project.join("cordial.toml"), config).into_diagnostic()?;
     }
-    let output = std::process::Command::new(env!("CARGO_BIN_EXE_cordial"))
-        .arg("--project")
-        .arg(&project)
-        .arg("--store-home")
-        .arg(&store)
-        .args(arguments)
-        .arg("open")
-        .output()
-        .into_diagnostic()?;
+    let output = ({
+        let mut command = std::process::Command::new(env!("CARGO_BIN_EXE_cordial"));
+        command.env(cordial::BASE_VARIABLE, "off");
+        command
+    })
+    .arg("--project")
+    .arg(&project)
+    .arg("--store-home")
+    .arg(&store)
+    .args(arguments)
+    .arg("open")
+    .output()
+    .into_diagnostic()?;
     Ok((
         output.status.code(),
         String::from_utf8_lossy(&output.stderr).into_owned(),

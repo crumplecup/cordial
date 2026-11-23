@@ -17,7 +17,11 @@ pub(crate) struct Project {
 
 impl Project {
     fn cordial(&self, args: &[&str]) -> Command {
-        let mut command = Command::new(env!("CARGO_BIN_EXE_cordial"));
+        let mut command = {
+            let mut command = Command::new(env!("CARGO_BIN_EXE_cordial"));
+            command.env(cordial::BASE_VARIABLE, "off");
+            command
+        };
         command
             .arg("--project")
             .arg(&self.project)

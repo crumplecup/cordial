@@ -445,7 +445,11 @@ fn test_fixture_with_args(root: &Path, args: &[&str]) -> miette::Result<()> {
 }
 
 fn run_cli(root: &Path, home: &Path, apply: bool, dry: bool) -> miette::Result<String> {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_cordial"));
+    let mut command = {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_cordial"));
+        command.env(cordial::BASE_VARIABLE, "off");
+        command
+    };
     command
         .arg("--project")
         .arg(root)

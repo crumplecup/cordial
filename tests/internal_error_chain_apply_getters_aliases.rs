@@ -13,16 +13,20 @@ mod error_getters_fixture;
 use error_getters_fixture::{ORIGINAL, check, configure, fixture};
 
 fn run_cli(root: &Path, home: &Path, args: &[&str]) -> miette::Result<String> {
-    let output = Command::new(env!("CARGO_BIN_EXE_cordial"))
-        .arg("--project")
-        .arg(root)
-        .arg("--store-home")
-        .arg(home)
-        .args(["quality", "--etiquette", "internal_error_chain"])
-        .args(args)
-        .env("CORDIAL_NO_PROGRESS", "1")
-        .output()
-        .into_diagnostic()?;
+    let output = ({
+        let mut command = Command::new(env!("CARGO_BIN_EXE_cordial"));
+        command.env(cordial::BASE_VARIABLE, "off");
+        command
+    })
+    .arg("--project")
+    .arg(root)
+    .arg("--store-home")
+    .arg(home)
+    .args(["quality", "--etiquette", "internal_error_chain"])
+    .args(args)
+    .env("CORDIAL_NO_PROGRESS", "1")
+    .output()
+    .into_diagnostic()?;
     assert!(
         output.status.success(),
         "{}",
