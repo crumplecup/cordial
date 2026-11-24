@@ -393,7 +393,10 @@ impl Capture {
         let Some(guard) = self.guard.take() else {
             return Ok(());
         };
-        drop(guard);
+        // The guard stops the profile as it leaves this scope.
+        {
+            let _stopped = guard;
+        }
         self.manifest.completion = Some(reason);
         self.manifest.finished_ns = Some(now());
         let published = if cfg!(feature = "hotpath") {
