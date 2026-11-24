@@ -227,6 +227,13 @@ impl ContextCrates {
             .copied()
     }
 
+    /// The file this context reads for `original`: the original itself when the crates are flipped in place, and
+    /// the context's copy of it, if it has one, when they are copies.
+    #[instrument(level = "trace", skip(self))]
+    pub(super) fn file_for(&self, original: FileId) -> Option<FileId> {
+        if self.in_place { Some(original) } else { self.copy_of(original) }
+    }
+
     /// Whether this context takes `original` as it is, and not as a copy.
     #[instrument(level = "trace", skip(self))]
     pub(super) fn is_aliased(&self, original: FileId) -> bool {

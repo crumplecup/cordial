@@ -33,6 +33,24 @@ pub(super) struct Ordinary {
     modules: Option<HashMap<InputCrate, HashMap<u64, u64>>>,
 }
 
+/// A pass over the contexts that flips the ordinary crates: what they were, what only the contexts so far have,
+/// and the revision it began at. The cfg is written from one context straight to the next, so what a context
+/// computed stays for the one after it; the ordinary cfg is written back, and what the flips changed is forgotten,
+/// once, when the pass is done.
+pub(super) struct FlipRun {
+    ordinary: Ordinary,
+    /// The items the contexts so far have and the ordinary build does not.
+    only: std::collections::HashSet<salsa::Id>,
+    start: salsa::Revision,
+}
+
+impl FlipRun {
+    /// What each module of each local crate said in the ordinary build, when that was recorded.
+    pub(super) fn modules(&self) -> Option<&HashMap<InputCrate, HashMap<u64, u64>>> {
+        self.ordinary.modules()
+    }
+}
+
 impl Ordinary {
     /// What each module of each local crate said, when that was recorded.
     pub(super) fn modules(&self) -> Option<&HashMap<InputCrate, HashMap<u64, u64>>> {
@@ -180,6 +198,62 @@ impl SourceDatabase {
             "what the flipped crates declare that the ordinary build does not"
         );
         only
+    }
+
+    /// Whether a context is analysed by flipping the ordinary crates' cfg, as the options say.
+    pub(super) fn flips_contexts(&self) -> bool {
+        self.cargo_options
+            .as_ref()
+            .is_some_and(|options| *options.cfg_context_mode() == crate::CfgContextMode::Flips)
+    }
+
+    /// A pass over the contexts begins: the local crates as they are are the ordinary build, when the contexts are
+    /// flipped.
+    pub(super) fn begin_flips(&mut self, cfgs: &LocalCfgs) -> Option<FlipRun> {
+        self.flips_contexts().then(|| FlipRun {
+            start: self.revision(),
+            ordinary: self.ordinary_state(cfgs),
+            only: std::collections::HashSet::new(),
+        })
+    }
+
+    /// A context is finished. For a flip, what only it has is told before eviction takes the values its members
+    /// are read from, and kept for the end of the pass: the cfg stays as it is, and the next context is written
+    /// over it.
+    #[instrument(level = "debug", skip(self, added, cfgs, run))]
+    pub(super) fn end_context(
+        &mut self,
+        added: &ContextCrates,
+        after: &str,
+        cfgs: &LocalCfgs,
+        run: Option<&mut FlipRun>,
+    ) {
+        if let Some(run) = run {
+            let only_here = self.declared_only_when_flipped(cfgs, &run.ordinary);
+            run.only.extend(only_here);
+        }
+        self.finish_context(added, after);
+    }
+
+    /// The contexts are all done: the ordinary cfg is written back, what the flips changed and what only they had
+    /// is forgotten, and the maps are made again for what is verified next.
+    #[instrument(level = "debug", skip(self, cfgs, run))]
+    pub(super) fn finish_flips(&mut self, cfgs: &LocalCfgs, run: FlipRun) {
+        self.restore_cfgs(cfgs);
+        let only: Vec<salsa::Id> = run.only.into_iter().collect();
+        self.forget_flipped(&only);
+        self.forget_changed_since(run.start);
+        self.settle_flipped_crates(cfgs);
+    }
+
+    /// The flipped contexts are all done: the maps first, so that the modules the flips added are deleted and a
+    /// block's module that is gone can be told; what is not declared is forgotten, which starts a revision; and
+    /// the maps again in it, so that what is verified next reads only what has been made in the revision it is
+    /// read in.
+    pub(super) fn settle_flipped_crates(&mut self, cfgs: &LocalCfgs) {
+        self.settle_ordinary(cfgs);
+        self.forget_undeclared_roots();
+        self.settle_ordinary(cfgs);
     }
 
     /// The database's revision now, which a context's flips are measured from.

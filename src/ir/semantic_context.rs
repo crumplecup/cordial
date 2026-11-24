@@ -74,6 +74,18 @@ impl SemanticContextKey {
         Self { enabled, disabled }
     }
 
+    /// How many atoms this context and `other` set differently: what the cfg changes by when one is written over
+    /// the other.
+    #[instrument(level = "trace", skip(self, other))]
+    #[must_use]
+    pub fn atoms_apart(&self, other: &Self) -> usize {
+        let apart = |left: &[String], right: &[String]| {
+            left.iter().filter(|atom| !right.contains(atom)).count()
+                + right.iter().filter(|atom| !left.contains(atom)).count()
+        };
+        apart(self.enabled(), other.enabled()) + apart(self.disabled(), other.disabled())
+    }
+
     /// A context enabling `atoms` and disabling nothing.
     #[instrument(level = "debug", skip(atoms))]
     #[hotpath::measure]

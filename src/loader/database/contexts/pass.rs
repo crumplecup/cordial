@@ -86,6 +86,23 @@ impl Wanted {
     }
 }
 
+impl Wanted {
+    /// The next context to analyse. When the crates are flipped, the one that is the fewest atoms away from
+    /// `current`, the context the cfg is as of, so that the contexts share the most; otherwise the first.
+    fn next_after(&mut self, current: Option<&SemanticContextKey>) -> Option<Pending> {
+        let Some(current) = current else {
+            return self.queue.pop_front();
+        };
+        let nearest = self
+            .queue
+            .iter()
+            .enumerate()
+            .min_by_key(|(_, pending)| current.atoms_apart(pending.key()))
+            .map(|(index, _)| index)?;
+        self.queue.remove(nearest)
+    }
+}
+
 /// The graph node of every function item, by file and source range.
 #[derive(Debug, Default)]
 pub(in crate::loader::database) struct FunctionNodes {
@@ -263,8 +280,12 @@ impl SourceDatabase {
             ));
             crate::process_memory::log("planning scan done");
         }
-        let ordinary_state = if in_place { Some(self.ordinary_state(cfgs)) } else { None };
-        while let Some(pending) = wanted.queue.pop_front() {
+        let mut run = self.begin_flips(cfgs);
+        let mut failure = None;
+        // The context the cfg is as of: a flip is written over it, so the nearest one is taken next.
+        let mut current = ordinary.clone();
+        while let Some(pending) = wanted.next_after(in_place.then_some(&current)) {
+            current = pending.key().clone();
             let context = pending.key().clone();
             self.reporter.say(format!(
                 "Analysing cfg context {} ({} queued): {context}",
@@ -274,7 +295,6 @@ impl SourceDatabase {
             let watch =
                 crate::process_memory::Watch::start(format!("cfg context {}", analysed.len() + 1));
             let stage = std::time::Instant::now();
-            let revision_before = self.revision();
             let added = match if in_place {
                 Ok(self.flip_context(cfgs, &context))
             } else {
@@ -312,7 +332,7 @@ impl SourceDatabase {
             let stage = std::time::Instant::now();
             let outcome = self.harvest(&context, index, &pairs, &files, graph);
             let harvested = stage.elapsed();
-            if let Some(modules) = ordinary_state.as_ref().and_then(|state| state.modules()) {
+            if let Some(modules) = run.as_ref().and_then(|run| run.modules()) {
                 self.audit_flip(modules, &context);
             }
             crate::process_memory::log("cfg context harvested");
@@ -337,22 +357,19 @@ impl SourceDatabase {
             // Observability and gate discovery still read this context after harvesting.
             // Ask for eviction only once those consumers have finished.
             let stage = std::time::Instant::now();
-            // What only this context has, before eviction takes the values it reads the members from.
-            let only_here = ordinary_state
-                .as_ref()
-                .map(|ordinary_state| self.declared_only_when_flipped(cfgs, ordinary_state));
-            self.finish_context(&added, "cfg context");
-            if let Some(only_here) = &only_here {
-                self.restore_cfgs(cfgs);
-                self.forget_flipped(only_here);
-                self.forget_changed_since(revision_before);
-            }
+            self.end_context(&added, "cfg context", cfgs, run.as_mut());
             if crate::memory_limit::pressured() {
                 graph.drop_decoded_attrs();
             }
             let finished = stage.elapsed();
             drop(watch);
-            let (merged, planned) = outcome?;
+            let (merged, planned) = match outcome {
+                Ok(done) => done,
+                Err(error) => {
+                    failure = Some(error);
+                    break;
+                }
+            };
             // What a process that takes up the run needs to go on from here is kept, and the process
             // ends here if it is the kind that does.
             let state = self.contexts_state(analysed, &wanted, &covered);
@@ -371,13 +388,11 @@ impl SourceDatabase {
             );
             crate::process_memory::log("cfg context analysed");
         }
-        if ordinary_state.is_some() {
-            // The maps first, so that the modules the flip added are deleted and a block's module that is gone
-            // can be told; what is not declared is forgotten, which starts a revision; and the maps again in it, so
-            // that what is verified next reads only what has been made in the revision it is read in.
-            self.settle_ordinary(cfgs);
-            self.forget_undeclared_roots();
-            self.settle_ordinary(cfgs);
+        if let Some(run) = run {
+            self.finish_flips(cfgs, run);
+        }
+        if let Some(error) = failure {
+            return Err(error);
         }
         Ok(wanted.queue.is_empty())
     }
@@ -463,8 +478,7 @@ impl SourceDatabase {
                     continue;
                 }
                 // The context's copy of the file, which has the same text.
-                let Some(file) = (if in_place { Some(original) } else { files.context.copy_of(original) })
-                else {
+                let Some(file) = files.context.file_for(original) else {
                     continue;
                 };
                 // The functions of the copy as the last run saved them, when every one of them can

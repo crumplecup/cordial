@@ -138,9 +138,17 @@ impl SourceDatabase {
             });
         }
         let mut outcome = Ok(());
-        while let Some(context) = queue.pop_front() {
+        let flips = self.flips_contexts();
+        let mut run = self.begin_flips(&cfgs);
+        let mut current = SemanticContextKey::ordinary();
+        while let Some(context) = next_leaf_context(&mut queue, flips.then_some(&current)) {
+            current = context.clone();
             let stage = std::time::Instant::now();
-            let added = match self.add_context_crates(&context) {
+            let added = match if flips {
+                Ok(self.flip_context(&cfgs, &context))
+            } else {
+                self.add_context_crates(&context)
+            } {
                 Ok(added) => added,
                 Err(error) => {
                     self.evict_regenerable("failed leaf context registration");
@@ -172,7 +180,7 @@ impl SourceDatabase {
             );
             merge(leaves, found);
             if outcome.is_err() {
-                self.finish_context(&added, "failed leaf context");
+                self.end_context(&added, "failed leaf context", &cfgs, run.as_mut());
                 break;
             }
             for next in asked(
@@ -189,7 +197,7 @@ impl SourceDatabase {
                 }
             }
             // Planning and persistence preparation finish before eviction.
-            self.finish_context(&added, "leaf context");
+            self.end_context(&added, "leaf context", &cfgs, run.as_mut());
             // What a process that takes up the run needs to go on from here is kept, and the
             // process ends here if it is the kind that does.
             let state = LeavesState {
@@ -205,6 +213,9 @@ impl SourceDatabase {
                     &format!("leaf-context-{}", seen.len() - queue.len()),
                 );
             }
+        }
+        if let Some(run) = run {
+            self.finish_flips(&cfgs, run);
         }
         outcome
     }
@@ -233,10 +244,12 @@ impl SourceDatabase {
             let mut saved = Vec::new();
             let mut every = true;
             for path in files {
-                let Some(file) = context.copy_of(self.file_id(path)?) else {
+                let Some(file) = context.file_for(self.file_id(path)?) else {
                     continue;
                 };
-                match copy_functions(&self.db, file) {
+                // The functions of a copy were listed when it was saved; flipped crates have no copy to list.
+                let listed = if context.is_in_place() { None } else { copy_functions(&self.db, file) };
+                match listed {
                     Some(records) if records.iter().all(|record| *record.found()) => {
                         saved.push((path, records));
                     }
@@ -337,7 +350,7 @@ impl SourceDatabase {
             // evaluate the leaf functions together, then read them below.
             let mut definitions = Vec::new();
             for path in files {
-                let Some(file) = context.copy_of(self.file_id(path)?) else {
+                let Some(file) = context.file_for(self.file_id(path)?) else {
                     continue;
                 };
                 let tree = sema.parse(sema.attach_first_edition(file));
@@ -353,7 +366,7 @@ impl SourceDatabase {
             }
             self.prime_functions("leaf files", &definitions);
             for path in files {
-                let Some(file) = context.copy_of(self.file_id(path)?) else {
+                let Some(file) = context.file_for(self.file_id(path)?) else {
                     continue;
                 };
                 let tree = sema.parse(sema.attach_first_edition(file));
@@ -397,6 +410,22 @@ impl SourceDatabase {
             Ok(())
         })
     }
+}
+
+/// The next leaf context: the one fewest atoms from `current` when the crates are flipped, else the first.
+fn next_leaf_context(
+    queue: &mut VecDeque<SemanticContextKey>,
+    current: Option<&SemanticContextKey>,
+) -> Option<SemanticContextKey> {
+    let Some(current) = current else {
+        return queue.pop_front();
+    };
+    let nearest = queue
+        .iter()
+        .enumerate()
+        .min_by_key(|(_, context)| current.atoms_apart(context))
+        .map(|(index, _)| index)?;
+    queue.remove(nearest)
 }
 
 /// Add `found` to `leaves`, joining a function seen in more than one context.

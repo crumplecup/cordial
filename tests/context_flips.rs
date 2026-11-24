@@ -466,3 +466,96 @@ fn an_impl_in_a_block_inside_a_function_only_a_flipped_context_has_leaves_a_stat
     assert!(restored);
     Ok(())
 }
+
+/// Counts the item trees that execute: one a file, again for a file that tests an atom that was flipped, and
+/// says how many there were when each context was done.
+#[derive(Clone, Default)]
+struct ItemTrees(Arc<AtomicUsize>, Arc<Mutex<Vec<usize>>>, Arc<Mutex<Vec<usize>>>);
+
+impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for ItemTrees {
+    fn on_event(&self, event: &tracing::Event<'_>, _: tracing_subscriber::layer::Context<'_, S>) {
+        struct Message(String);
+        impl tracing::field::Visit for Message {
+            fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
+                if field.name() == "message" {
+                    self.0 = format!("{value:?}");
+                }
+            }
+        }
+        let mut message = Message(String::new());
+        event.record(&mut message);
+        if message.0.contains("cfg context analysed") {
+            self.1.lock().unwrap().push(self.0.load(Ordering::SeqCst));
+        }
+        if message.0.contains("cfg is written into the ordinary crates") {
+            self.2.lock().unwrap().push(self.0.load(Ordering::SeqCst));
+        }
+    }
+
+    fn on_new_span(
+        &self,
+        attrs: &tracing::span::Attributes<'_>,
+        _: &tracing::Id,
+        _: tracing_subscriber::layer::Context<'_, S>,
+    ) {
+        if attrs.metadata().name() == "file_item_tree_query" {
+            self.0.fetch_add(1, Ordering::SeqCst);
+        }
+    }
+}
+
+fn two_gated_files() -> Result<tempfile::TempDir> {
+    let root = fixture_with("mod a;\nmod b;\npub fn ordinary() {}\n")?;
+    std::fs::write(
+        root.path().join("src/a.rs"),
+        "#[cfg(feature = \"a\")]\npub fn only_a() {}\n",
+    )
+    .into_diagnostic()?;
+    std::fs::write(
+        root.path().join("src/b.rs"),
+        "#[cfg(feature = \"b\")]\npub fn only_b() {}\n",
+    )
+    .into_diagnostic()?;
+    Ok(root)
+}
+
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn a_context_that_keeps_the_atoms_of_the_one_before_does_not_lower_their_files_again() -> Result<()> {
+    let _serial = SERIAL.lock().unwrap();
+    cordial::init_tracing();
+    let root = two_gated_files()?;
+    let a = SemanticContextKey::enabling(["feature=\"a\""]);
+    let ab = SemanticContextKey::enabling(["feature=\"a\"", "feature=\"b\""]);
+    let options = SemanticCargoOptions::default()
+        .with_cfg_contexts(vec![a, ab])
+        .with_cfg_planning(CfgPlanning::Explicit)
+        .with_cfg_context_mode(CfgContextMode::Flips);
+    let trees = ItemTrees::default();
+    let subscriber = tracing_subscriber::registry().with(trees.clone());
+    tracing::subscriber::with_default(subscriber, || -> Result<()> {
+        let mut session = SourceDatabase::load_with(root.path(), &options).into_diagnostic()?;
+        session
+            .project(&CrateTarget::new("gated", root.path()), &[root.path().join("src/lib.rs")])
+            .into_diagnostic()?;
+        Ok(())
+    })?;
+    // The second context turns on `b` and leaves `a` as the first had it: only `b.rs` is lowered for it.
+    let done = trees.1.lock().unwrap().clone();
+    assert_eq!(done.len(), 2, "two contexts: {done:?}");
+    assert_eq!(done[1] - done[0], 1, "`b.rs` and not `a.rs` again: {done:?}");
+    Ok(())
+}
+
+#[test]
+fn contexts_say_how_many_atoms_apart_they_are() {
+    let ordinary = SemanticContextKey::ordinary();
+    let a = SemanticContextKey::enabling(["feature=\"a\""]);
+    let ab = SemanticContextKey::enabling(["feature=\"a\"", "feature=\"b\""]);
+    let b = SemanticContextKey::enabling(["feature=\"b\""]);
+    assert_eq!(ordinary.atoms_apart(&a), 1);
+    assert_eq!(a.atoms_apart(&ab), 1, "one more atom on");
+    assert_eq!(ordinary.atoms_apart(&ab), 2);
+    assert_eq!(a.atoms_apart(&b), 2, "one off and one on");
+    assert_eq!(ab.atoms_apart(&ab), 0);
+}
