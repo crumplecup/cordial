@@ -66,23 +66,35 @@ impl SourceDatabase {
         ContextCrates::in_place(context.clone(), crates)
     }
 
-    /// Make the local crates' definition maps again under the ordinary cfg, on this thread. A map made again
-    /// deletes the modules the flip added, and the threads that verify what is saved would otherwise make it
-    /// again among themselves, deleting a module that another is reading.
+    /// Make the local crates' definition maps again under the ordinary cfg, and the maps of the blocks that
+    /// remain, on this thread. A map made again deletes the modules the flip added and makes the others again, and
+    /// the threads that verify what is saved would otherwise do it among themselves, one deleting or updating a
+    /// module that another is reading: a tracked struct must be made again in a revision before it is read in it.
     #[instrument(level = "debug", skip(self, cfgs))]
     #[hotpath::measure(impl_type = "SourceDatabase")]
-    pub(super) fn settle_ordinary(&self, cfgs: &LocalCfgs) {
+    pub(super) fn settle_ordinary(&mut self, cfgs: &LocalCfgs) {
+        use ra_ap_hir_def::BlockId;
+        use ra_ap_hir_def::declaration::settle_block_map;
+        use salsa::plumbing::FromId as _;
         let started = std::time::Instant::now();
-        attach_db(&self.db, || {
+        let blocks = salsa::Database::memo_keys(&mut self.db, &["block_def_map"]);
+        let db = &self.db;
+        let mut remade = 0u64;
+        attach_db(db, || {
             for (krate, _) in cfgs.cfgs() {
-                let _ = ra_ap_hir_def::nameres::crate_def_map(&self.db, *krate);
+                let _ = ra_ap_hir_def::nameres::crate_def_map(db, *krate);
+            }
+            for key in blocks {
+                settle_block_map(db, BlockId::from_id(key));
+                remade += 1;
             }
         });
         tracing::info!(
             target: "cordial::def_map",
             crates = cfgs.cfgs().count() as u64,
+            blocks = remade,
             micros = u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX),
-            "the definition maps of the local crates are made again under the ordinary cfg"
+            "the definition maps of the local crates and of the blocks that remain are made again under the ordinary cfg"
         );
     }
 

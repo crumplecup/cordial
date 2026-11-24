@@ -726,10 +726,16 @@ impl super::SourceDatabase {
             salsa::deep_verifications(),
             crate::LiveStatus::global().counts(),
         );
+        tracing::info!(
+            target: "cordial::cache",
+            step = "verifying",
+            threads = std::thread::available_parallelism().map_or(1, usize::from) as u64,
+            "persisted memos are about to be verified before the save"
+        );
         self.verify_persisted_in_parallel();
         let (memos_after, edges_after) = salsa::deep_verifications();
         crate::process_memory::log("save: persisted memos verified");
-        tracing::debug!(
+        tracing::info!(
             target: "cordial::cache",
             step = "verified",
             micros = u64::try_from(verifying.elapsed().as_micros()).unwrap_or(u64::MAX),

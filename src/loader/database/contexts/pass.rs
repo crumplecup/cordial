@@ -372,8 +372,12 @@ impl SourceDatabase {
             crate::process_memory::log("cfg context analysed");
         }
         if ordinary_state.is_some() {
+            // The maps first, so that the modules the flip added are deleted and a block's module that is gone
+            // can be told; what is not declared is forgotten, which starts a revision; and the maps again in it, so
+            // that what is verified next reads only what has been made in the revision it is read in.
             self.settle_ordinary(cfgs);
             self.forget_undeclared_roots();
+            self.settle_ordinary(cfgs);
         }
         Ok(wanted.queue.is_empty())
     }
