@@ -15,7 +15,8 @@ pub enum CfgPlanning {
 }
 
 /// How a cfg context is analysed beside the ordinary build.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum CfgContextMode {
     /// Add a copy of each crate the context changes, with its own files, and read the context from the copies.
     #[default]

@@ -84,6 +84,12 @@ pub struct CordialConfig {
     /// until it has run on enough code to be trusted.
     #[serde(default)]
     reuse_across_edits: bool,
+    /// How a cfg context is analysed beside the ordinary build: `copies` adds a copy of each crate the
+    /// context changes with files of its own, `flips` writes the context's cfg into the ordinary crates,
+    /// reads it from them and writes the ordinary cfg back, so that only what read a flipped atom runs
+    /// again (see `docs/planning/contexts-as-flips.md`). `copies` until `flips` has run on enough code.
+    #[serde(default)]
+    cfg_context_mode: crate::CfgContextMode,
     /// Shared enable and path policy, keyed by etiquette configuration identity.
     #[serde(default)]
     lints: std::collections::BTreeMap<String, LintPolicy>,

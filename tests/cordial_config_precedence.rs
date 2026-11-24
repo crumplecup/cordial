@@ -170,3 +170,24 @@ enabled = false
     );
     Ok(())
 }
+
+#[test]
+fn a_cfg_context_is_analysed_from_copies_unless_the_workspace_says_flips() -> miette::Result<()> {
+    cordial::init_tracing();
+    let workspace = tempfile::tempdir().into_diagnostic()?;
+    let store = tempfile::tempdir().into_diagnostic()?;
+    assert_eq!(
+        *load_cordial_config(workspace.path(), store.path()).cfg_context_mode(),
+        cordial::CfgContextMode::Copies
+    );
+    fs::write(
+        workspace.path().join("cordial.toml"),
+        "cfg_context_mode = \"flips\"\n",
+    )
+    .into_diagnostic()?;
+    assert_eq!(
+        *load_cordial_config(workspace.path(), store.path()).cfg_context_mode(),
+        cordial::CfgContextMode::Flips
+    );
+    Ok(())
+}
