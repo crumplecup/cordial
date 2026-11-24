@@ -115,3 +115,25 @@ the incremental path cannot reproduce.
 Tests first and red until the change; no `#[allow]`; no unsafe in new code; typed errors; library tracing and measures
 rather than probes; one run on a large workspace with the answering events confirmed recorded first; the report leads
 with whether it works.
+
+## Progress
+
+*2026-11-24, Phase 0 folded into Phase 1.* The audit planned for Phase 0 compared a copy's modules with the
+original's; that cannot be done honestly, because a copy's ids contain the copy's crate (equality and the stable hash
+both differ for identical modules). In place the ids are the same, so the audit is exact and is part of the flip
+(`audit_flip`, event `cordial::def_map`: `modules`, `modules_changed`, `modules_added`, `modules_removed`,
+`crates_changed`).
+
+Done, each with its test, all green in `Copies` mode too:
+
+* 1a/1b. `CfgContextMode::{Copies, Flips}` (option, and `cfg_context_mode` in `cordial.toml`). `Flips` writes the
+  context's cfg into the local crates, harvests from the same crates and files, and writes the ordinary cfg back
+  (`contexts/flip.rs`; `ContextCrates::in_place`; nothing is retired after it). `tests/cfg_contexts.rs` runs every
+  test in both modes (14 tests), and `tests/context_flips.rs` asserts that the cfg is written once per context and
+  no file or crate is copied.
+* 1c (relevance). A flipped context keeps a function's facts when they are not the ordinary ones, an exact
+  comparison, instead of when its words match a gate's names (`a_function_keeps_a_contexts_facts_only_when_...`).
+* The audit event, tested on a 7-module crate with one gated module: 7 modules, 1 changed.
+
+Not done: ordering contexts by the atoms between neighbours (each context now restores the ordinary cfg first);
+memory after a flip back (1d); save and restore with flips (1e); the amenable measurement (below); Phase 2 and 3.

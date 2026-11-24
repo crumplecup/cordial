@@ -1360,7 +1360,7 @@ impl SourceDatabase {
 /// methods of each impl.
 #[instrument(level = "debug", skip(db))]
 #[hotpath::measure]
-fn functions_of(db: &RootDatabase, krate: Crate) -> Vec<Function> {
+pub(in crate::loader::database) fn functions_of(db: &RootDatabase, krate: Crate) -> Vec<Function> {
     let mut functions = Vec::new();
     for module in krate.modules(db) {
         for declaration in module.declarations(db) {

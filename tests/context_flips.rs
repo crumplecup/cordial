@@ -299,3 +299,50 @@ fn a_flip_says_how_many_modules_of_the_crate_it_changed() -> Result<()> {
     assert_eq!(*flipped.audit.lock().unwrap(), vec![[7, 1, 0, 0, 1]]);
     Ok(())
 }
+
+const A_GATED_MODULE: &str = "\
+pub fn ordinary() -> u32 { 1 }
+
+#[cfg(kani)]
+pub mod proofs {
+    pub fn harness() -> u32 { crate::ordinary() }
+    pub struct Witness(pub u32);
+    impl Witness { pub fn get(&self) -> u32 { self.0 } }
+}
+";
+
+/// One run of a flipped kani context that saves its state, and takes up the state a run before it saved.
+fn run_saving(root: &Path, saved: &cordial::SavedState) -> Result<(bool, CrateIr)> {
+    let options = SemanticCargoOptions::default()
+        .with_cfg_contexts(vec![kani()])
+        .with_cfg_planning(CfgPlanning::Explicit)
+        .with_cfg_context_mode(CfgContextMode::Flips);
+    let mut session =
+        SourceDatabase::load_saved(root, &options, Some(saved.clone())).into_diagnostic()?;
+    let restored = session.restored();
+    let graph = session
+        .project(&CrateTarget::new("gated", root), &[root.join("src/lib.rs")])
+        .into_diagnostic()?;
+    Ok((restored, graph))
+}
+
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn a_module_only_a_flipped_context_has_does_not_stop_the_state_from_being_saved() -> Result<()> {
+    let _serial = SERIAL.lock().unwrap();
+    cordial::init_tracing();
+    let root = fixture_with(A_GATED_MODULE)?;
+    let state = tempfile::tempdir().into_diagnostic()?;
+    let saved = cordial::SavedState::at(state.path().join("analysis-state"));
+
+    let (restored, cold) = run_saving(root.path(), &saved)?;
+    assert!(!restored);
+    assert_eq!(active(&cold, only(&cold, "harness")?)?, vec![kani()]);
+
+    // The next run starts from what the first saved, and finds the same.
+    let (restored, warm) = run_saving(root.path(), &saved)?;
+    assert!(restored, "the second run starts from the first's state");
+    assert_eq!(active(&warm, only(&warm, "harness")?)?, vec![kani()]);
+    assert_eq!(active(&warm, only(&warm, "ordinary")?)?.len(), 2);
+    Ok(())
+}

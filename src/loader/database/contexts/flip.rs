@@ -12,15 +12,33 @@ use crate::loader::database::SourceDatabase;
 use crate::loader::database::context_crates::ContextCrates;
 use ra_ap_cfg::CfgOptions;
 use ra_ap_ide_db::base_db::Crate as InputCrate;
-use ra_ap_hir::attach_db;
+use crate::loader::database::context_crates::functions_of;
+use crate::loader::database::item_key::key_of;
+use crate::loader::database::queries::FunctionKey;
+use ra_ap_hir::{Crate, Function, ModuleDef, attach_db};
+use salsa::plumbing::AsId as _;
+use ra_ap_hir_def::nameres::crate_declared_query_keys;
 use ra_ap_hir_def::nameres::stable::module_fingerprints;
 use salsa::Durability;
 use salsa::Setter as _;
 use std::collections::HashMap;
 use tracing::instrument;
 
-/// What each module of each local crate said in the ordinary build, to say how many a context's cfg changed.
-pub(super) struct Baseline(HashMap<InputCrate, HashMap<u64, u64>>);
+/// What the local crates were in the ordinary build: the items each declared, and (when the run records what a
+/// definition map cost) what each module said, so that a context can be told from it.
+pub(super) struct Ordinary {
+    /// Every function the local crates declare.
+    functions: std::collections::HashSet<Function>,
+    declared: HashMap<InputCrate, std::collections::HashSet<salsa::Id>>,
+    modules: Option<HashMap<InputCrate, HashMap<u64, u64>>>,
+}
+
+impl Ordinary {
+    /// What each module of each local crate said, when that was recorded.
+    pub(super) fn modules(&self) -> Option<&HashMap<InputCrate, HashMap<u64, u64>>> {
+        self.modules.as_ref()
+    }
+}
 
 impl SourceDatabase {
     /// Give each local crate the cfg `context` makes of its ordinary one, and say which crates they are.
@@ -57,16 +75,91 @@ impl SourceDatabase {
         }
     }
 
-    /// What the modules of the local crates say now, when the run records what a definition map cost.
+    /// The local crates as they are now, which is the ordinary build.
     #[instrument(level = "debug", skip(self, cfgs))]
-    pub(super) fn module_baseline(&self, cfgs: &LocalCfgs) -> Option<Baseline> {
-        tracing::enabled!(target: "cordial::def_map", tracing::Level::INFO).then(|| {
-            Baseline(
-                cfgs.cfgs()
-                    .map(|(krate, _)| (*krate, self.module_hashes(*krate)))
-                    .collect(),
-            )
+    pub(super) fn ordinary_state(&mut self, cfgs: &LocalCfgs) -> Ordinary {
+        let declared = cfgs
+            .cfgs()
+            .map(|(krate, _)| {
+                let keys = crate_declared_query_keys(&mut self.db, *krate);
+                (*krate, keys.into_iter().collect())
+            })
+            .collect();
+        let modules = tracing::enabled!(target: "cordial::def_map", tracing::Level::INFO).then(|| {
+            cfgs.cfgs()
+                .map(|(krate, _)| (*krate, self.module_hashes(*krate)))
+                .collect()
+        });
+        let functions = self.local_functions(cfgs);
+        Ordinary { functions, declared, modules }
+    }
+
+    /// Every function the local crates declare now.
+    fn local_functions(&self, cfgs: &LocalCfgs) -> std::collections::HashSet<Function> {
+        let locals: std::collections::HashSet<InputCrate> =
+            cfgs.cfgs().map(|(krate, _)| *krate).collect();
+        attach_db(&self.db, || {
+            Crate::all(&self.db)
+                .into_iter()
+                .filter(|krate| locals.contains(&krate.base()))
+                .flat_map(|krate| functions_of(&self.db, krate))
+                .collect()
         })
+    }
+
+    /// What the flipped crates declare that the ordinary build does not: items that exist only in this context.
+    /// A memo keyed by one runs against a module or an item that the ordinary cfg does not have, so it is not
+    /// left to be verified when the state is saved (see `Database::forget_memos_for_inputs`).
+    #[instrument(level = "debug", skip(self, ordinary))]
+    pub(super) fn declared_only_when_flipped(
+        &mut self,
+        cfgs: &LocalCfgs,
+        ordinary: &Ordinary,
+    ) -> Vec<salsa::Id> {
+        let (mut only, mut now, mut before_total) = (Vec::new(), 0u64, 0u64);
+        for (krate, before) in &ordinary.declared {
+            let declared = crate_declared_query_keys(&mut self.db, *krate);
+            now += declared.len() as u64;
+            before_total += before.len() as u64;
+            only.extend(declared.into_iter().filter(|key| !before.contains(key)));
+        }
+        // What the tool saved of those functions is keyed by the function and by its description, which a saved
+        // state would verify against an ordinary cfg that has no such function.
+        let functions_only_here: Vec<Function> = self
+            .local_functions(cfgs)
+            .into_iter()
+            .filter(|function| !ordinary.functions.contains(function))
+            .collect();
+        let keys = attach_db(&self.db, || {
+            let mut keys = Vec::new();
+            for function in &functions_only_here {
+                keys.push(FunctionKey::new(&self.db, *function).as_id());
+                keys.push(key_of(&self.db, ModuleDef::Function(*function)).as_id());
+            }
+            keys
+        });
+        only.extend(keys);
+        tracing::info!(
+            target: "cordial::eviction",
+            functions_only_flipped = functions_only_here.len() as u64,
+            declared_flipped = now,
+            declared_ordinary = before_total,
+            only_flipped = only.len() as u64,
+            "what the flipped crates declare that the ordinary build does not"
+        );
+        only
+    }
+
+    /// Forget what was computed for `items`, which the ordinary cfg does not have.
+    #[instrument(level = "debug", skip(self, items))]
+    pub(super) fn forget_flipped(&mut self, items: &[salsa::Id]) {
+        let forgotten = salsa::Database::forget_memos_for_inputs(&mut self.db, items);
+        tracing::info!(
+            target: "cordial::eviction",
+            items = items.len() as u64,
+            forgotten,
+            "memos of items only a flipped context has are forgotten"
+        );
     }
 
     fn module_hashes(&self, krate: InputCrate) -> HashMap<u64, u64> {
@@ -76,9 +169,9 @@ impl SourceDatabase {
     /// Say how many modules of the local crates the flipped cfg changed, added and removed against the ordinary
     /// ones: the definition work that was needed, whatever was done.
     #[instrument(level = "debug", skip(self, baseline))]
-    pub(super) fn audit_flip(&self, baseline: &Baseline, context: &SemanticContextKey) {
+    pub(super) fn audit_flip(&self, baseline: &HashMap<InputCrate, HashMap<u64, u64>>, context: &SemanticContextKey) {
         let (mut modules, mut changed, mut added, mut removed, mut crates) = (0u64, 0u64, 0u64, 0u64, 0u64);
-        for (krate, before) in &baseline.0 {
+        for (krate, before) in baseline {
             let after = self.module_hashes(*krate);
             let different = after
                 .iter()

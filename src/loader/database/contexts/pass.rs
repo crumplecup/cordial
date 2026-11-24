@@ -263,7 +263,7 @@ impl SourceDatabase {
             ));
             crate::process_memory::log("planning scan done");
         }
-        let baseline = if in_place { self.module_baseline(cfgs) } else { None };
+        let ordinary_state = if in_place { Some(self.ordinary_state(cfgs)) } else { None };
         while let Some(pending) = wanted.queue.pop_front() {
             let context = pending.key().clone();
             self.reporter.say(format!(
@@ -311,8 +311,8 @@ impl SourceDatabase {
             let stage = std::time::Instant::now();
             let outcome = self.harvest(&context, index, &pairs, &files, graph);
             let harvested = stage.elapsed();
-            if let Some(baseline) = &baseline {
-                self.audit_flip(baseline, &context);
+            if let Some(modules) = ordinary_state.as_ref().and_then(|state| state.modules()) {
+                self.audit_flip(modules, &context);
             }
             crate::process_memory::log("cfg context harvested");
             let outcome = outcome.and_then(|()| {
@@ -336,9 +336,14 @@ impl SourceDatabase {
             // Observability and gate discovery still read this context after harvesting.
             // Ask for eviction only once those consumers have finished.
             let stage = std::time::Instant::now();
+            // What only this context has, before eviction takes the values it reads the members from.
+            let only_here = ordinary_state
+                .as_ref()
+                .map(|ordinary_state| self.declared_only_when_flipped(cfgs, ordinary_state));
             self.finish_context(&added, "cfg context");
-            if in_place {
+            if let Some(only_here) = &only_here {
                 self.restore_cfgs(cfgs);
+                self.forget_flipped(only_here);
             }
             if crate::memory_limit::pressured() {
                 graph.drop_decoded_attrs();

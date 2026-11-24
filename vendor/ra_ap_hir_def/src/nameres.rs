@@ -567,6 +567,13 @@ fn def_map_declared_query_keys(
         )
         .into_iter()
         .collect();
+    tracing::debug!(
+        target: "cordial::eviction",
+        owners = owners.len() as u64,
+        enums = enums.len() as u64,
+        members_cached = cached.len() as u64,
+        "the traits, impls and enums of a crate, and how many of them have their members cached"
+    );
     for owner in owners {
         let (items, calls) = match owner {
             Either::Left(id) if cached.contains(&id.as_id()) => {
