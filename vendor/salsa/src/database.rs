@@ -78,6 +78,17 @@ pub trait Database: Send + ZalsaDatabase + AsDynDatabase {
         self.zalsa_mut_for_inspection().tracked_output_keys(inputs)
     }
 
+    /// Forget every memo keyed directly by these ids: the memo is removed, with the tracked structs it made, and
+    /// whatever read it finds "no memo, so changed" and does not run it. For ids of things that no longer
+    /// exist, such as the items of a module a cfg flipped away: a memo keyed by one runs against a module that is
+    /// gone, which is a panic. Returns how many memos were forgotten.
+    ///
+    /// **WARNING:** Cancels other database handles if any exist, like a write.
+    #[doc(hidden)]
+    fn forget_memos_for_inputs(&mut self, inputs: &[crate::Id]) -> u64 {
+        self.zalsa_mut().forget_memos_for_inputs(inputs)
+    }
+
     /// Return exact input keys with a value in one of the named queries, verified
     /// and final in the current revision. Encoded values count; empty `only` matches
     /// all queries. Does not execute, validate or decode queries, or follow edges.

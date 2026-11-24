@@ -500,6 +500,24 @@ impl MemoTableWithTypesMut<'_> {
         f(unsafe { MemoEntryType::from_dummy(memo).as_mut() });
     }
 
+    /// Takes the memo at `memo_ingredient_index` out of the table, if there is one.
+    ///
+    /// # Safety
+    ///
+    /// The caller needs to make sure not to call this until no more references into the database exist, as
+    /// there may be outstanding borrows into the memo.
+    pub(crate) unsafe fn take_memo(
+        self,
+        memo_ingredient_index: MemoIngredientIndex,
+    ) -> Option<Box<dyn Memo>> {
+        let entry = self.memos.memos.get_mut(memo_ingredient_index.as_usize())?;
+        // SAFETY: Any indices that are in-bounds for the `MemoTable` are also in-bounds for its
+        // corresponding `MemoTableTypes`, by construction.
+        let type_ = unsafe { self.types.types.get_unchecked(memo_ingredient_index.as_usize()) };
+        // SAFETY: The types match as per our constructor invariant.
+        unsafe { entry.take(type_) }
+    }
+
     /// To drop an entry, we need its type, so we don't implement `Drop`, and instead have this method.
     ///
     /// Note that calling this multiple times is safe, dropping an uninitialized entry is a no-op.

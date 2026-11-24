@@ -181,6 +181,11 @@ impl<'db> FunctionIngredientRef<'db> {
         self.ingredient.sync_table()
     }
 
+    /// Where this query's memo for `input` is in the memo table of `input`.
+    pub(crate) fn memo_index_for(&self, zalsa: &Zalsa, input: Id) -> MemoIngredientIndex {
+        self.ingredient.memo_index_for(zalsa, input)
+    }
+
     /// Returns the cached memo for `input`, relying on the caller to prevent its storage from
     /// being reused or freed (unlike [`Self::memo`], which asserts that an interned key was
     /// interned in the latest revision, and so fails for the memos of keys that have been idle).
@@ -227,6 +232,9 @@ pub(crate) trait FunctionIngredient: Send + Sync {
     ) -> Option<ErasedMemo<'db>>;
 
     fn sync_table(&self) -> &SyncTable;
+
+    /// Where this query's memo for `input` is in the memo table of `input`.
+    fn memo_index_for(&self, zalsa: &Zalsa, input: Id) -> MemoIngredientIndex;
 
     /// Returns information about the current provisional status of `input`.
     ///
@@ -458,6 +466,10 @@ where
 
     fn sync_table(&self) -> &SyncTable {
         &self.sync_table
+    }
+
+    fn memo_index_for(&self, zalsa: &Zalsa, input: Id) -> MemoIngredientIndex {
+        self.memo_ingredient_index(zalsa, input)
     }
 
     /// Returns `final` if the memo has the `verified_final` flag set.

@@ -13,7 +13,7 @@ use crate::table::Table;
 use crate::table::memo::MemoTableWithTypes;
 use crate::views::Views;
 use crate::zalsa_local::ZalsaLocal;
-use crate::{Database, Durability, Id, Revision};
+use crate::{Database, DatabaseKeyIndex, Durability, Id, Revision};
 
 /// Internal plumbing trait.
 ///
@@ -635,6 +635,43 @@ impl Zalsa {
             cursor += 1;
         }
         keys
+    }
+
+    /// Remove every memo keyed directly by these ids (see `Database::forget_memos_for_inputs`).
+    #[doc(hidden)]
+    pub fn forget_memos_for_inputs(&mut self, inputs: &[Id]) -> u64 {
+        let mut planned = Vec::new();
+        for &key in inputs {
+            let index = self.ingredient_index(key).as_u32() as usize;
+            for &ingredient in self.memo_ingredient_indices.get(index).into_iter().flatten() {
+                let Some(function) = self.lookup_ingredient(ingredient).as_function() else {
+                    continue;
+                };
+                planned.push((
+                    DatabaseKeyIndex::new(ingredient, key),
+                    function.memo_index_for(self, key),
+                ));
+            }
+        }
+        let mut taken = Vec::new();
+        for (executor, memo_index) in planned {
+            // SAFETY: `&mut self` is exclusive access to the storage: no query runs and nothing
+            // borrows a memo.
+            let memo = unsafe {
+                self.runtime
+                    .table_mut()
+                    .memos_mut(executor.key_index())
+                    .take_memo(memo_index)
+            };
+            if let Some(memo) = memo {
+                taken.push((executor, memo));
+            }
+        }
+        // What a memo made goes with it, as when the query runs again without making it.
+        for (executor, memo) in &taken {
+            memo.remove_outputs(self, *executor);
+        }
+        taken.len() as u64
     }
 
     /// Exact keys with an already verified, final value in one of the named queries.
