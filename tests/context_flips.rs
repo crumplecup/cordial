@@ -405,7 +405,7 @@ fn an_attribute_macro_only_a_flipped_context_applies_does_not_stop_the_state_fro
 
 /// What the state is saved with when a flipped context made each of these, in one fixture each. A save verifies
 /// every persisted memo, so each is a shape that a memo of the flipped state can be in when the cfg is back.
-const SHAPES: [(&str, &str); 5] = [
+const SHAPES: [(&str, &str); 7] = [
     (
         "an impl in a block inside a function only the context has",
         "pub fn ordinary() -> u32 { 1 }\n#[cfg(kani)]\npub fn harness() -> u32 {\n    struct Local(u32);\n    impl Local { #[kani::proof] fn get(&self) -> u32 { self.0 } }\n    Local(ordinary()).get()\n}\n",
@@ -421,6 +421,14 @@ const SHAPES: [(&str, &str); 5] = [
     (
         "an enum, a trait and their members only the context has",
         "pub fn ordinary() {}\n#[cfg(kani)]\npub enum Choice { A, B(u32) }\n#[cfg(kani)]\npub trait Prove { fn go(&self) -> u32; fn also(&self) -> u32 { 1 } }\n#[cfg(kani)]\nimpl Prove for Choice { fn go(&self) -> u32 { 2 } }\n#[cfg(kani)]\npub fn harness() -> u32 { Choice::A.go() }\n",
+    ),
+    (
+        "a block-local struct in a function that is there without the context, whose facts the context does not change",
+        "pub fn alive() -> u32 {\n    #[cfg(kani)]\n    {\n        struct OnlyHere<T>(T);\n        let _ = OnlyHere(1u8);\n    }\n    1\n}\n#[cfg(kani)]\npub fn harness() -> u32 { alive() }\n",
+    ),
+    (
+        "a function that is there without the context and uses a generic struct of a module only the context has",
+        "pub fn alive() -> u32 {\n    #[cfg(kani)]\n    {\n        let _ = crate::proofs::W(1u8);\n    }\n    1\n}\n#[cfg(kani)]\npub mod proofs { pub struct W<T>(pub T); }\n#[cfg(kani)]\npub fn harness() -> u32 { alive() }\n",
     ),
     (
         "a function whose body has closures, blocks and a macro call, only the context has",
@@ -672,5 +680,104 @@ fn the_bodies_a_flip_changed_are_made_again_before_anything_runs_in_parallel() -
             "no body executes after the last settle ({settles:?})"
         );
     }
+    Ok(())
+}
+
+/// Records the reads of tracked structs that are gone: a read of one whose slot was reused does not fail, it
+/// returns another struct's fields, so a save that does not panic is not a save that read nothing it should not.
+#[derive(Clone, Default)]
+struct DeadReads(Arc<Mutex<Vec<String>>>);
+
+impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for DeadReads {
+    fn on_event(&self, event: &tracing::Event<'_>, _: tracing_subscriber::layer::Context<'_, S>) {
+        struct Fields(String);
+        impl tracing::field::Visit for Fields {
+            fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
+                if matches!(field.name(), "struct_kind" | "state") {
+                    self.0.push_str(&format!("{}={value:?} ", field.name()));
+                }
+            }
+        }
+        if event.metadata().target() == "salsa::dead_read" {
+            let mut fields = Fields(String::new());
+            event.record(&mut fields);
+            self.0.lock().unwrap().push(fields.0);
+        }
+    }
+}
+
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn no_shape_of_what_only_a_flipped_context_has_is_read_after_it_is_gone() -> Result<()> {
+    let _serial = SERIAL.lock().unwrap();
+    cordial::init_tracing();
+    let mut found = Vec::new();
+    for (shape, source) in SHAPES {
+        let root = fixture_with(source)?;
+        let state = tempfile::tempdir().into_diagnostic()?;
+        let saved = cordial::SavedState::at(state.path().join("analysis-state"));
+        let reads = DeadReads::default();
+        let subscriber = tracing_subscriber::registry().with(reads.clone());
+        tracing::subscriber::with_default(subscriber, || {
+            for _ in 0..2 {
+                if run_saving(root.path(), &saved).is_err() {
+                    found.push(format!("{shape}: the run failed"));
+                }
+            }
+        });
+        for read in reads.0.lock().unwrap().iter() {
+            found.push(format!("{shape}: {read}"));
+        }
+    }
+    assert!(found.is_empty(), "{found:#?}");
+    Ok(())
+}
+
+/// Two contexts that each add a module and take it away again, so that the slot of the first one's module is the
+/// second one's, with a function that is there without either and touches both and whose facts neither changes.
+const TWO_CONTEXTS_EACH_WITH_A_MODULE: &str = "\
+pub fn alive() -> u32 {
+    #[cfg(kani)]
+    {
+        let _ = crate::proofs_k::K(1u8);
+    }
+    #[cfg(creusot)]
+    {
+        let _ = crate::proofs_c::C(1u8);
+    }
+    1
+}
+#[cfg(kani)]
+pub mod proofs_k { pub struct K<T>(pub T); pub fn helper() {} }
+#[cfg(creusot)]
+pub mod proofs_c { pub struct C<T>(pub T); pub fn helper() {} }
+";
+
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn what_two_contexts_add_in_turn_is_not_read_after_it_is_gone() -> Result<()> {
+    let _serial = SERIAL.lock().unwrap();
+    cordial::init_tracing();
+    let root = fixture_with(TWO_CONTEXTS_EACH_WITH_A_MODULE)?;
+    let state = tempfile::tempdir().into_diagnostic()?;
+    let saved = cordial::SavedState::at(state.path().join("analysis-state"));
+    let reads = DeadReads::default();
+    let subscriber = tracing_subscriber::registry().with(reads.clone());
+    let options = SemanticCargoOptions::default()
+        .with_cfg_contexts(vec![kani(), creusot()])
+        .with_cfg_planning(CfgPlanning::Explicit)
+        .with_cfg_context_mode(CfgContextMode::Flips);
+    tracing::subscriber::with_default(subscriber, || -> Result<()> {
+        for _ in 0..2 {
+            let mut session =
+                SourceDatabase::load_saved(root.path(), &options, Some(saved.clone())).into_diagnostic()?;
+            session
+                .project(&CrateTarget::new("gated", root.path()), &[root.path().join("src/lib.rs")])
+                .into_diagnostic()?;
+        }
+        Ok(())
+    })?;
+    let found = reads.0.lock().unwrap().clone();
+    assert!(found.is_empty(), "{found:#?}");
     Ok(())
 }

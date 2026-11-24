@@ -183,6 +183,8 @@ impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for DeadReads {
                 match field.name() {
                     "struct_kind" => self.0 = format!("{value:?}"),
                     "state" => self.1 = format!("{value:?}"),
+                    // The queries that were running, which says who read it.
+                    "queries" => self.1.push_str(&format!(" in {value:?}")),
                     _ => {}
                 }
             }
@@ -201,17 +203,29 @@ fn a_read_of_a_tracked_struct_that_is_gone_says_which_before_it_fails() {
     use tracing_subscriber::layer::SubscriberExt;
     let mut db = Db::default();
     let switch = Switch::new(&db, true);
-    let b = modules(&db, switch)[1].as_id();
+    // An item of the module that will be gone, which nothing has asked about yet.
+    let (b, item) = {
+        let all = modules(&db, switch);
+        (all[1].as_id(), Item::new(&db, all[1], 9).as_id())
+    };
     switch.set_on(&mut db).to(false);
     assert_eq!(modules(&db, switch).len(), 1);
     assert_eq!(<dyn Database>::existence(&db, b), salsa::Existence::Deleted);
 
     let reads = DeadReads::default();
     let subscriber = tracing_subscriber::registry().with(reads.clone());
-    // The read of what is gone is a panic, as it always was; what is new is that the log says what it was.
+    // The read of what is gone is a panic, as it always was; what is new is that the log says what it was, and
+    // which query was reading it.
     let failed = tracing::subscriber::with_default(subscriber, || {
-        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| Module::from_id(b).name(&db))).is_err()
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            describe(&db, Item::from_id(item)).clone()
+        }))
+        .is_err()
     });
     assert!(failed);
-    assert_eq!(*reads.0.lock().unwrap(), vec![("\"Module\"".to_owned(), "Deleted".to_owned())]);
+    let said = reads.0.lock().unwrap().clone();
+    assert_eq!(said.len(), 1, "{said:?}");
+    assert_eq!(said[0].0, "\"Module\"");
+    assert!(said[0].1.starts_with("Deleted"), "{said:?}");
+    assert!(said[0].1.contains("describe"), "the query that read it is named: {said:?}");
 }

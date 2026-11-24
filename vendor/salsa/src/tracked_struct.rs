@@ -951,6 +951,7 @@ where
                 id = id.as_bits(),
                 state = ?state,
                 revision = ?zalsa.current_revision(),
+                queries = %crate::Backtrace::capture().map(|stack| stack.to_string()).unwrap_or_default(),
                 "the fields of a tracked struct that is gone are read"
             );
         }
