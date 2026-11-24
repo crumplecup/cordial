@@ -234,6 +234,9 @@ struct CopiedFiles {
     follows: HashSet<(InputCrate, InputCrate)>,
     /// For each crate this context copies itself, the files of the original it cannot take as they are.
     affected_files: HashMap<InputCrate, Vec<FileId>>,
+    /// The crates with a file that can move where a module's file is (`#[path]`, `include!`, a `cfg_attr` that
+    /// flips): a module declared there may not be the original's module of the same name.
+    moving: HashSet<InputCrate>,
 }
 
 impl SourceDatabase {
@@ -572,6 +575,7 @@ impl SourceDatabase {
             mut homes,
             follows,
             affected_files,
+            moving,
         } = self.copy_local_files(index, previous.map(|kept| &kept.files), &pairs, context)?;
         let mut shadows: Vec<(InputCrate, InputCrate)> = Vec::new();
         let mut borrowed = Borrowed::default();
@@ -617,7 +621,9 @@ impl SourceDatabase {
             let workspace = krate.workspace_data(&self.db).clone();
             let env = krate.env(&self.db).clone();
             let affected = affected_files.get(krate).cloned().unwrap_or_default();
-            let share_modules = self.shares_copies() && !self.shares_no_definition_maps();
+            let share_modules = self.shares_copies()
+                && !self.shares_no_definition_maps()
+                && !moving.contains(krate);
             let kept = previous.and_then(|kept| {
                 kept.crates
                     .iter()
@@ -1056,6 +1062,14 @@ impl SourceDatabase {
             .filter(|krate| !shared.contains_key(krate))
             .copied()
             .collect();
+        let mut moving: HashSet<InputCrate> = HashSet::new();
+        if sharing {
+            for (file, path) in &located {
+                if super::contexts::moves_modules(&self.db.file_text(*file).text(&self.db), pairs) {
+                    moving.extend(directories.owners_of(path));
+                }
+            }
+        }
         let affected_files = if sharing {
             self.affected_files_of(&directories, &located, &copying.copy, &own, &visible)
         } else {
@@ -1070,6 +1084,7 @@ impl SourceDatabase {
             homes,
             follows,
             affected_files,
+            moving,
         })
     }
 

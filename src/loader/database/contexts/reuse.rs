@@ -123,7 +123,10 @@ fn reads_cfg_otherwise(text: &str, pairs: &[(CfgOptions, CfgOptions)]) -> bool {
 /// Whether the text of a file can move where a module's file is: an `include!`, a `#[path]`, or a `cfg_attr`
 /// whose predicate the context flips (it may add a `path`). A `cfg!` cannot: it is an expression, and no `mod`
 /// is hidden behind one.
-fn moves_modules(text: &str, pairs: &[(CfgOptions, CfgOptions)]) -> bool {
+pub(in crate::loader::database) fn moves_modules(
+    text: &str,
+    pairs: &[(CfgOptions, CfgOptions)],
+) -> bool {
     text.contains("include!")
         || text.contains("#[path")
         || (text.contains("cfg_attr") && cfg_attr_flips(text, pairs))

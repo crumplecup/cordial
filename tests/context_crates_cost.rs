@@ -781,6 +781,7 @@ fn what_a_context_finds_is_the_same_whether_or_not_it_takes_modules_from_the_ori
         (modules_beside_a_gate(6)?, "m"),
         (nested()?, "both"),
         (chain()?, "top"),
+        (private_across_modules()?, "m"),
     ] {
         let found = |share: bool| -> Result<String> {
             let options = SemanticCargoOptions::default().with_do_not_share_definition_maps(!share);
@@ -798,5 +799,53 @@ fn what_a_context_finds_is_the_same_whether_or_not_it_takes_modules_from_the_ori
             "the graph of {target}"
         );
     }
+    Ok(())
+}
+
+/// A module the gate reaches that calls a `pub(crate)` function of one it does not.
+fn private_across_modules() -> Result<tempfile::TempDir> {
+    let root = tempfile::tempdir().into_diagnostic()?;
+    write_workspace(root.path(), &["m".to_owned()])?;
+    write_crate(
+        root.path(),
+        "m",
+        &[],
+        "mod shared;\nmod uses;\n#[cfg(feature = \"extra\")]\npub fn only_with_extra() -> u32 { 1 }\n",
+    )?;
+    let src = root.path().join("m/src");
+    std::fs::write(
+        src.join("shared.rs"),
+        "pub(crate) fn helper() -> u32 { 1 }\npub(super) fn nearby() -> u32 { 2 }\npub struct Shared;\nimpl Shared { pub(crate) fn method(&self) -> u32 { 3 } }\n",
+    )
+    .into_diagnostic()?;
+    std::fs::write(
+        src.join("uses.rs"),
+        "use crate::shared::Shared;\npub fn call() -> u32 { crate::shared::helper() + crate::shared::nearby() + Shared.method() + crate::only_with_extra() }\n",
+    )
+    .into_diagnostic()?;
+    Ok(root)
+}
+
+/// What is taken from the original is not collected: a copy's map holds the modules the gate reaches and is given the
+/// others, however many there are.
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn a_copy_collects_none_of_the_modules_it_takes_from_the_original() -> Result<()> {
+    cordial::init_tracing();
+    let scratch = tempfile::tempdir().into_diagnostic()?;
+    let subscriber =
+        tracing_subscriber::registry().with(MetricsLayer.with_filter(metrics_filter_with(true)));
+    let (few, many) = tracing::subscriber::with_default(subscriber, || -> Result<_> {
+        project(modules_beside_a_gate(3)?.path(), "m", false)?;
+        let few = sharing_field(&metrics_of(scratch.path())?, "taken_from_original");
+        project(modules_beside_a_gate(30)?.path(), "m", false)?;
+        let many = sharing_field(&metrics_of(scratch.path())?, "taken_from_original") - few;
+        Ok((few, many))
+    })?;
+    assert_eq!(
+        (few, many),
+        (3, 30),
+        "modules the copy was given and did not collect"
+    );
     Ok(())
 }

@@ -393,7 +393,7 @@ impl ModuleOrigin {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ModuleData {
     /// Where does this module come from?
     pub origin: ModuleOrigin,

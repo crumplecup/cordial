@@ -97,6 +97,7 @@ pub(super) fn collect_defs(
         db,
         def_map,
         shared,
+        shared_modules_taken: 0,
         local_def_map: LocalDefMap::default(),
         crate_local_def_map,
         deps,
@@ -123,6 +124,7 @@ pub(super) fn collect_defs(
     let seeded = started.elapsed();
     collector.collect();
     let collected = started.elapsed();
+    let taken = collector.shared_modules_taken;
     let (mut def_map, mut local_def_map) = collector.finish();
     def_map.shrink_to_fit();
     local_def_map.shrink_to_fit();
@@ -133,6 +135,7 @@ pub(super) fn collect_defs(
             copy = def_map.krate.canonical(db).is_some(),
             root = ?def_map.krate.data(db).root_file_id,
             modules = def_map.modules.len() as u64,
+            taken_from_original = taken,
             seed_micros = micros(seeded),
             resolve_micros = micros(collected - seeded),
             finish_micros = micros(started.elapsed() - collected),
@@ -256,6 +259,8 @@ struct DefCollector<'db> {
     def_map: DefMap,
     /// For a copy of a crate: what the original has that the copy takes as it is.
     shared: Option<SharedWithOriginal<'db>>,
+    /// How many of the original's modules (each with all that is under it) the copy took instead of collecting.
+    shared_modules_taken: u64,
     local_def_map: LocalDefMap,
     /// Set only in case of blocks.
     crate_local_def_map: Option<&'db LocalDefMap>,
@@ -300,6 +305,10 @@ struct DefCollector<'db> {
 impl<'db> DefCollector<'db> {
     /// The module the items of `module` are interned as being in: the original's for a module the copy takes as
     /// it is, and `module` for any other.
+    fn shared_child(&self, module: ModuleId, name: &Name) -> Option<ModuleId> {
+        self.shared.as_ref()?.child(self.db, module, name)
+    }
+
     fn owner_of(&mut self, module: ModuleId) -> ModuleId {
         let db = self.db;
         self.shared
@@ -1940,6 +1949,13 @@ impl<'db> SharedWithOriginal<'db> {
         if let Some(found) = self.found.get(&module) {
             return *found;
         }
+        let found = self.original_at(db, module).filter(|module| self.unaffected.contains(module));
+        self.found.insert(module, found);
+        found
+    }
+
+    /// The original's module at the same place as `module` of the copy, whether or not it is taken as it is.
+    fn original_at(&self, db: &dyn SourceDatabase, module: ModuleId) -> Option<ModuleId> {
         // The names from the root down to the module.
         let mut names = Vec::new();
         let mut at = module;
@@ -1951,8 +1967,26 @@ impl<'db> SharedWithOriginal<'db> {
         for name in names.iter().rev() {
             found = found.and_then(|module| self.original.modules.get(&module)?.children.get(name).copied());
         }
-        let found = found.filter(|module| self.unaffected.contains(module));
-        self.found.insert(module, found);
+        found
+    }
+
+    /// The original's child `name` of the copy's module `parent`, when the copy takes it, and everything under it,
+    /// as it is.
+    fn child(&self, db: &dyn SourceDatabase, parent: ModuleId, name: &Name) -> Option<ModuleId> {
+        let original_parent = self.original_at(db, parent)?;
+        let child = *self.original.modules.get(&original_parent)?.children.get(name)?;
+        self.unaffected.contains(&child).then_some(child)
+    }
+
+    /// The original's `module` and every module under it, with their data.
+    fn subtree(&self, module: ModuleId) -> Vec<(ModuleId, ModuleData)> {
+        let mut found = Vec::new();
+        let mut pending = vec![module];
+        while let Some(module) = pending.pop() {
+            let data = &self.original.modules[module];
+            pending.extend(data.children.values().copied());
+            found.push((module, data.clone()));
+        }
         found
     }
 }
@@ -2393,6 +2427,14 @@ impl ModCollector<'_, '_> {
     ) {
         let path_attr = attrs.by_key(sym::path).string_value_unescape();
         let is_macro_use = attrs.by_key(sym::macro_use).exists();
+        // A module the copy takes from the original as it is, with all that is under it, is not collected: it
+        // is what the original has, with the original's ids, and nothing the context changes reaches it.
+        if path_attr.is_none()
+            && let Some(original_child) = self.def_collector.shared_child(self.module_id, &module.name)
+        {
+            self.take_shared_child(module.name.clone(), original_child, &self.item_tree[module.visibility]);
+            return;
+        }
         match &module.kind {
             // inline module, just recurse
             ModKind::Inline { items } => {
@@ -2480,6 +2522,51 @@ impl ModCollector<'_, '_> {
                 };
             }
         }
+    }
+
+    /// Declare the original's module `original` as the child `name` of this module, with the modules under it,
+    /// and collect none of it.
+    fn take_shared_child(
+        &mut self,
+        name: Name,
+        original: ModuleId,
+        visibility: &crate::visibility::RawVisibility,
+    ) {
+        let vis = self
+            .def_collector
+            .def_map
+            .resolve_visibility(
+                self.def_collector.crate_local_def_map.unwrap_or(&self.def_collector.local_def_map),
+                self.def_collector.db,
+                self.module_id,
+                visibility,
+                false,
+            )
+            .unwrap_or(Visibility::Public);
+        let subtree = self
+            .def_collector
+            .shared
+            .as_ref()
+            .map(|shared| shared.subtree(original))
+            .unwrap_or_default();
+        let def_map = &mut self.def_collector.def_map;
+        for (id, mut data) in subtree {
+            // The root of the part taken is under this module in the copy; what is under it is as it was.
+            if id == original {
+                data.parent = Some(self.module_id);
+            }
+            def_map.modules.insert(id, data);
+        }
+        self.def_collector.shared_modules_taken += 1;
+        def_map.modules[self.module_id].children.insert(name.clone(), original);
+        let def = ModuleDefId::from(original);
+        def_map.modules[self.module_id].scope.declare(def);
+        self.def_collector.update(
+            self.module_id,
+            &[(Some(name), PerNs::from_def(def, vis, None, None))],
+            vis,
+            None,
+        );
     }
 
     fn push_child_module(

@@ -162,6 +162,21 @@ tests pass. A risk to look for in S3: a canonical item's own visibility (`pub(cr
 and a check from a module of the copy compares it against the copy's tree. Resolution of paths uses the copy's scope
 entries (collected in the copy's map), so it is not affected; a visibility-filtered lookup might be. Not yet seen in a test.
 
+*S3 done (2026-11-23).* A copy's collector does not collect a child module the original's closure says is unaffected (with
+everything under it, which is unaffected too): `take_shared_child` declares the original's `ModuleId` as the child in
+the parent's scope and in `children`, and puts clones of the original's `ModuleData` for the whole subtree in the
+copy's `modules` keyed by the original's ids (the subtree root's `parent` is the copy's own parent), so every
+iteration of a crate's modules (`Crate::modules`, the impl tables, lang items, the tool's function listing) sees them
+and none had to change; resolution into them goes to the original's map by the `ModuleId`'s crate, as a path into
+another crate does. A module declared with `#[path]` is not taken, and a crate with a file that can move where a
+module's file is (`#[path]`, `include!`, a `cfg_attr` that flips) shares no modules (`moves_modules`, so a module
+of the same name is not the original's by accident). `ModuleData`, `ItemScope` and `DeriveMacroInvocation` are
+`Clone` for it. The map's event says `taken_from_original`. Tests: 3 and 30 modules beside the gate are taken, none
+collected (`a_copy_collects_none_of_the_modules_it_takes_from_the_original`); the graph found is the same with
+sharing on and off on five fixtures, now including an affected module that calls `pub(crate)` and `pub(super)`
+functions and a `pub(crate)` method of a shared module (the visibility risk of S2: not seen); 90 context,
+saved-state, base and cfg-etiquette tests pass. Not measured on amenable.
+
 ## Tests (each stage; the method is the complexity ratchet)
 
 Growth: a fixture with 3 and 30 unchanged modules, asserting what grows under the context (item tree queries,
