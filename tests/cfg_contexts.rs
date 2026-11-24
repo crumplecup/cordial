@@ -1,7 +1,6 @@
 //! The same files are analysed in each requested cfg context inside one database.
-
 use cordial::{
-    CfgPlanning, CrateIr, CrateTarget, EdgeKind, IrView, NodeId, SemanticCargoOptions,
+    CfgContextMode, CfgPlanning, CrateIr, CrateTarget, EdgeKind, IrView, NodeId, SemanticCargoOptions,
     SemanticContextKey, SourceDatabase,
 };
 use miette::{IntoDiagnostic, Result};
@@ -65,15 +64,20 @@ fn fixture_with(library: &str) -> Result<tempfile::TempDir> {
 }
 
 /// Only the named contexts, with no planning.
-fn project(contexts: Vec<SemanticContextKey>, root: &Path) -> Result<CrateIr> {
+fn project(mode: CfgContextMode, contexts: Vec<SemanticContextKey>, root: &Path) -> Result<CrateIr> {
     let options = SemanticCargoOptions::default()
         .with_cfg_contexts(contexts)
         .with_cfg_planning(CfgPlanning::Explicit);
-    project_with(&options, root)
+    project_with(mode, &options, root)
 }
 
-fn project_with(options: &SemanticCargoOptions, root: &Path) -> Result<CrateIr> {
-    let mut session = SourceDatabase::load_with(root, options).into_diagnostic()?;
+fn project_with(
+    mode: CfgContextMode,
+    options: &SemanticCargoOptions,
+    root: &Path,
+) -> Result<CrateIr> {
+    let options = options.clone().with_cfg_context_mode(mode);
+    let mut session = SourceDatabase::load_with(root, &options).into_diagnostic()?;
     session
         .project(&CrateTarget::new("gated", root), &[root.join("src/lib.rs")])
         .into_diagnostic()
@@ -114,12 +118,10 @@ fn plan(graph: &CrateIr) -> Result<cordial::SemanticContextPlan> {
         .ok_or_else(|| miette::miette!("missing context plan"))
 }
 
-#[test]
-#[tracing::instrument(level = "debug", err(level = "warn"))]
-fn ordinary_load_leaves_gated_code_explicitly_inactive() -> Result<()> {
+fn ordinary_load_leaves_gated_code_explicitly_inactive(mode: CfgContextMode) -> Result<()> {
     cordial::init_tracing();
     let root = fixture()?;
-    let graph = project(Vec::new(), root.path())?;
+    let graph = project(mode, Vec::new(), root.path())?;
     let plan = plan(&graph)?;
     assert!(plan.contexts().is_empty() && *plan.complete(), "{plan:?}");
     let ordinary = vec![SemanticContextKey::ordinary()];
@@ -136,12 +138,10 @@ fn ordinary_load_leaves_gated_code_explicitly_inactive() -> Result<()> {
     Ok(())
 }
 
-#[test]
-#[tracing::instrument(level = "debug", err(level = "warn"))]
-fn a_context_resolves_gated_code_and_its_calls_without_touching_ordinary_edges() -> Result<()> {
+fn a_context_resolves_gated_code_and_its_calls_without_touching_ordinary_edges(mode: CfgContextMode) -> Result<()> {
     cordial::init_tracing();
     let root = fixture()?;
-    let graph = project(vec![kani()], root.path())?;
+    let graph = project(mode, vec![kani()], root.path())?;
     let plan = plan(&graph)?;
     assert_eq!(plan.contexts(), &[kani()]);
     assert!(*plan.complete());
@@ -188,12 +188,10 @@ fn a_context_resolves_gated_code_and_its_calls_without_touching_ordinary_edges()
     Ok(())
 }
 
-#[test]
-#[tracing::instrument(level = "debug", err(level = "warn"))]
-fn exclusive_verifier_cfgs_get_separate_contexts() -> Result<()> {
+fn exclusive_verifier_cfgs_get_separate_contexts(mode: CfgContextMode) -> Result<()> {
     cordial::init_tracing();
     let root = fixture()?;
-    let graph = project(vec![kani(), creusot()], root.path())?;
+    let graph = project(mode, vec![kani(), creusot()], root.path())?;
     let helper = only(&graph, "helper")?;
 
     // `exclusive` is defined twice, once per verifier; neither context sees both.
@@ -224,12 +222,10 @@ fn exclusive_verifier_cfgs_get_separate_contexts() -> Result<()> {
     Ok(())
 }
 
-#[test]
-#[tracing::instrument(level = "debug", err(level = "warn"))]
-fn planning_finds_verifier_contexts_without_being_told() -> Result<()> {
+fn planning_finds_verifier_contexts_without_being_told(mode: CfgContextMode) -> Result<()> {
     cordial::init_tracing();
     let root = fixture()?;
-    let graph = project_with(&SemanticCargoOptions::default(), root.path())?;
+    let graph = project_with(mode, &SemanticCargoOptions::default(), root.path())?;
     let helper = only(&graph, "helper")?;
     assert_eq!(active(&graph, only(&graph, "harness")?)?, vec![kani()]);
     assert_eq!(
@@ -248,12 +244,10 @@ fn planning_finds_verifier_contexts_without_being_told() -> Result<()> {
     Ok(())
 }
 
-#[test]
-#[tracing::instrument(level = "debug", err(level = "warn"))]
-fn planning_composes_nested_gates_and_key_value_atoms() -> Result<()> {
+fn planning_composes_nested_gates_and_key_value_atoms(mode: CfgContextMode) -> Result<()> {
     cordial::init_tracing();
     let root = fixture_with(NESTED)?;
-    let graph = project_with(&SemanticCargoOptions::default(), root.path())?;
+    let graph = project_with(mode, &SemanticCargoOptions::default(), root.path())?;
     let ab = SemanticContextKey::enabling(["feature=\"a\"", "feature=\"b\""]);
 
     // `deep` needs both features at once; neither alone reaches it. The two
@@ -286,12 +280,10 @@ pub fn same() {}
 pub fn same() {}
 ";
 
-#[test]
-#[tracing::instrument(level = "debug", err(level = "warn"))]
-fn compatible_requests_share_contexts_and_exclusive_ones_never_do() -> Result<()> {
+fn compatible_requests_share_contexts_and_exclusive_ones_never_do(mode: CfgContextMode) -> Result<()> {
     cordial::init_tracing();
     let root = fixture_with(INDEPENDENT)?;
-    let graph = project_with(&SemanticCargoOptions::default(), root.path())?;
+    let graph = project_with(mode, &SemanticCargoOptions::default(), root.path())?;
     let analysed = plan(&graph)?.contexts().to_vec();
     let enables = |context: &SemanticContextKey, atom: &str| {
         context.enabled().iter().any(|enabled| enabled == atom)
@@ -328,13 +320,11 @@ fn compatible_requests_share_contexts_and_exclusive_ones_never_do() -> Result<()
     Ok(())
 }
 
-#[test]
-#[tracing::instrument(level = "debug", err(level = "warn"))]
-fn a_contexts_facts_name_the_ordinary_functions_they_call_by_their_ordinary_identity() -> Result<()>
+fn a_contexts_facts_name_the_ordinary_functions_they_call_by_their_ordinary_identity(mode: CfgContextMode) -> Result<()>
 {
     cordial::init_tracing();
     let root = fixture()?;
-    let graph = project(vec![kani()], root.path())?;
+    let graph = project(mode, vec![kani()], root.path())?;
     let (helper, harness) = (only(&graph, "helper")?, only(&graph, "harness")?);
     let ordinary = graph
         .semantic_function(helper)
@@ -356,4 +346,32 @@ fn a_contexts_facts_name_the_ordinary_functions_they_call_by_their_ordinary_iden
         "the context's call target is the copy's identity, which nothing else knows"
     );
     Ok(())
+}
+
+/// Each of the above, as the copies of the crates give it and as the crates' own cfg flipped gives it: what a
+/// context finds is the same.
+macro_rules! in_both_modes {
+    ($($name:ident => ($copies:ident, $flips:ident)),* $(,)?) => {$(
+        #[test]
+        #[tracing::instrument(level = "debug", err(level = "warn"))]
+        fn $copies() -> Result<()> {
+            $name(CfgContextMode::Copies)
+        }
+
+        #[test]
+        #[tracing::instrument(level = "debug", err(level = "warn"))]
+        fn $flips() -> Result<()> {
+            $name(CfgContextMode::Flips)
+        }
+    )*};
+}
+
+in_both_modes! {
+    ordinary_load_leaves_gated_code_explicitly_inactive => (ordinary_load_leaves_gated_code_explicitly_inactive_by_copies, ordinary_load_leaves_gated_code_explicitly_inactive_by_flips),
+    a_context_resolves_gated_code_and_its_calls_without_touching_ordinary_edges => (a_context_resolves_gated_code_and_its_calls_without_touching_ordinary_edges_by_copies, a_context_resolves_gated_code_and_its_calls_without_touching_ordinary_edges_by_flips),
+    exclusive_verifier_cfgs_get_separate_contexts => (exclusive_verifier_cfgs_get_separate_contexts_by_copies, exclusive_verifier_cfgs_get_separate_contexts_by_flips),
+    planning_finds_verifier_contexts_without_being_told => (planning_finds_verifier_contexts_without_being_told_by_copies, planning_finds_verifier_contexts_without_being_told_by_flips),
+    planning_composes_nested_gates_and_key_value_atoms => (planning_composes_nested_gates_and_key_value_atoms_by_copies, planning_composes_nested_gates_and_key_value_atoms_by_flips),
+    compatible_requests_share_contexts_and_exclusive_ones_never_do => (compatible_requests_share_contexts_and_exclusive_ones_never_do_by_copies, compatible_requests_share_contexts_and_exclusive_ones_never_do_by_flips),
+    a_contexts_facts_name_the_ordinary_functions_they_call_by_their_ordinary_identity => (a_contexts_facts_name_the_ordinary_functions_they_call_by_their_ordinary_identity_by_copies, a_contexts_facts_name_the_ordinary_functions_they_call_by_their_ordinary_identity_by_flips),
 }
