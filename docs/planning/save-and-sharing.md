@@ -633,6 +633,21 @@ across runs. The owner index already allows several owners of a memo; retirement
 copies is the ordinary crate: no copy, no definition map to build. Its dependents follow to copies only
 where a dependency is one.
 
+*D4, cfg asked one atom at a time (2026-11-24).* Every read of a crate's cfg in rust-analyzer now goes through
+`Crate::cfg(db)`, a `CrateCfg` that answers by a query per crate and atom (`cfg_atom_enabled`, persisted, keyed by an
+immortal interned `CfgAtomKey`; a key with two arguments of its own was not re-interned after a restore and
+panicked). The closures that carried `&CfgOptions` through attribute lowering, the item tree, the collector, macro
+expansion and bodies carry `&dyn CfgCheck`; a diagnostic that reports the options reads them whole
+(`CfgCheck::options`), which is only where it is made. Measured on a fixture that flips one atom of one crate in
+place (`tests/cfg_atoms.rs`): the item trees executed again are the one that tests the atom (1 in 4 modules and 1 in
+40; 2 before), and none where no file tests it. Two limits show in the same fixture. The definition map is built
+again whole (its input changed), and every function body is executed again (4 of 4 and 40 of 40): a body depends on
+the whole `DefMap` value, so any change to the map runs every reader before it can be found equal. A flip in place
+therefore costs the crate's bodies and not only what the atom reaches, which is what copies and the module sharing
+(S1 to S4) avoid for the modules the gate does not reach. What would remove it is a definition map whose readers
+depend on a module's data and not on the whole map: not started, and the largest change in this plan. A saved
+state that held the old `cfg_options` reads is unaffected: the atoms are queries and are persisted.
+
 **D3. The leaf pass.** Leaf files are always copied. Question for a test: could the ordinary graph give
 integration-test crates the `test` cfg, so the first leaf context is the ordinary one and later contexts
 copy only what a flipped gate reaches? And a cheaper extraction for leaf functions, which need call

@@ -9,7 +9,9 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use ra_ap_cfg::CfgOptions;
+use ra_ap_hir_def::expr_store::body::Body;
 use ra_ap_hir_def::nameres::crate_def_map;
+use ra_ap_hir_def::{DefWithBodyId, ModuleDefId};
 use ra_ap_hir_expand::intern::Symbol;
 use ra_ap_ide_db::RootDatabase;
 use ra_ap_ide_db::base_db::{
@@ -136,4 +138,100 @@ fn flipping_an_atom_no_file_tests_runs_no_item_tree_again() {
             "no item tree asked about the atom, so none is executed again"
         );
     });
+}
+
+/// Every function's body, as an analysis of the crate reads them.
+fn read_bodies(db: &RootDatabase, krate: Crate) -> usize {
+    let functions: Vec<_> = crate_def_map(db, krate)
+        .modules()
+        .flat_map(|(_, module)| module.scope.declarations().collect::<Vec<_>>())
+        .filter_map(|def| match def {
+            ModuleDefId::FunctionId(id) => Some(DefWithBodyId::from(id)),
+            _ => None,
+        })
+        .collect();
+    for &function in &functions {
+        let _ = Body::with_source_map(db, function);
+    }
+    functions.len()
+}
+
+/// Counts every query that executes, by name.
+#[derive(Clone, Default)]
+struct Executed(Arc<Mutex<std::collections::BTreeMap<String, usize>>>);
+
+impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for Executed {
+    fn on_new_span(
+        &self,
+        attrs: &tracing::span::Attributes<'_>,
+        _: &tracing::Id,
+        _: tracing_subscriber::layer::Context<'_, S>,
+    ) {
+        *self
+            .0
+            .lock()
+            .unwrap()
+            .entry(attrs.metadata().name().to_owned())
+            .or_default() += 1;
+    }
+}
+
+/// `modules` files, each with a function whose body calls a macro, and one of them gated by `a`.
+fn many(modules: usize) -> Vec<(String, String)> {
+    let mut files = vec![(
+        "lib.rs".to_owned(),
+        (0..modules)
+            .map(|m| format!("mod m{m};\n"))
+            .collect::<String>()
+            + "macro_rules! twice { ($e:expr) => { $e + $e }; }\n",
+    )];
+    for m in 0..modules {
+        let gate = if m == 0 { "#[cfg(feature = \"a\")]\n" } else { "" };
+        files.push((
+            format!("m{m}.rs"),
+            format!("{gate}pub fn f{m}() -> u32 {{ 1 + 1 }}\npub struct S{m}(pub u32);\n"),
+        ));
+    }
+    files
+}
+
+fn executed_by_flipping(modules: usize) -> std::collections::BTreeMap<String, usize> {
+    let executed = Executed::default();
+    let subscriber = tracing_subscriber::registry().with(executed.clone());
+    tracing::subscriber::with_default(subscriber, || {
+        let files = many(modules);
+        let borrowed: Vec<(&str, &str)> = files
+            .iter()
+            .map(|(name, text)| (name.as_str(), text.as_str()))
+            .collect();
+        let (mut db, krate) = crate_of(&borrowed, CfgOptions::default());
+        let _ = read_bodies(&db, krate);
+        let before = executed.0.lock().unwrap().clone();
+
+        let mut cfg = CfgOptions::default();
+        flag(&mut cfg, "a");
+        krate.set_cfg_options(&mut db).to(cfg);
+        let _ = read_bodies(&db, krate);
+        let after = executed.0.lock().unwrap().clone();
+        after
+            .into_iter()
+            .filter_map(|(name, n)| {
+                let delta = n - before.get(&name).copied().unwrap_or(0);
+                (delta > 0).then_some((name, delta))
+            })
+            .collect()
+    })
+}
+
+#[test]
+fn what_a_flip_runs_again_does_not_grow_with_the_files_it_does_not_reach() {
+    let _serial = SERIAL.lock().unwrap();
+    let small = executed_by_flipping(4);
+    let large = executed_by_flipping(40);
+    tracing::info!(?small, ?large, "what flipping an atom executed again, in 4 and in 40 modules");
+    assert_eq!(
+        small.get("file_item_tree_query"),
+        large.get("file_item_tree_query"),
+        "the item trees executed again are the ones that test the atom"
+    );
 }
