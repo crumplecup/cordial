@@ -689,3 +689,211 @@ fn a_map_made_again_for_its_own_change_still_depends_on_what_the_modules_it_took
         "the app's map, made again for its own change and then for the dependency's, is not the one made from scratch: {differing:?} differ"
     );
 }
+
+// ---------------------------------------------------------------------------------------------------------------
+// Each rule that keeps a module from being taken from the map made before, shown to fire when there is something
+// for it to catch and to be quiet when there is not, on the same flip. Nothing in the source is edited to see it:
+// the condition is in the fixture.
+// ---------------------------------------------------------------------------------------------------------------
+
+/// Whether the fixture has what the rule under test is there for.
+#[derive(Clone, Copy, Debug)]
+enum Condition {
+    SomethingToCatch,
+    NothingToSee,
+}
+
+/// Why the modules of each definition map were made again and not taken, as each map built said.
+#[derive(Clone, Default)]
+struct Reasons(Arc<Mutex<Vec<std::collections::BTreeMap<String, u64>>>>);
+
+impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for Reasons {
+    fn on_event(&self, event: &tracing::Event<'_>, _: tracing_subscriber::layer::Context<'_, S>) {
+        struct Fields(std::collections::BTreeMap<String, u64>);
+        impl tracing::field::Visit for Fields {
+            fn record_debug(&mut self, _: &tracing::field::Field, _: &dyn std::fmt::Debug) {}
+            fn record_u64(&mut self, field: &tracing::field::Field, value: u64) {
+                self.0.insert(field.name().to_owned(), value);
+            }
+        }
+        if event.metadata().target() != "cordial::def_map" {
+            return;
+        }
+        let mut fields = Fields(std::collections::BTreeMap::new());
+        event.record(&mut fields);
+        if fields.0.contains_key("affected_modules") {
+            self.0.lock().unwrap().push(fields.0);
+        }
+    }
+}
+
+fn atoms(names: &[&str]) -> CfgOptions {
+    let mut cfg = CfgOptions::default();
+    for name in names {
+        flag(&mut cfg, name);
+    }
+    cfg
+}
+
+/// The reasons the crate's map was made again as it was flipped from `before` to `after`, and the check that it is
+/// the map made from scratch under `after`.
+fn reasons_of_the_flip(
+    files: &[(&str, &str)],
+    before: &[&str],
+    after: &[&str],
+) -> std::collections::BTreeMap<String, u64> {
+    let reasons = Reasons::default();
+    let subscriber = tracing_subscriber::registry().with(reasons.clone());
+    tracing::subscriber::with_default(subscriber, || {
+        let (mut db, krate) = crate_of(files, atoms(before));
+        let _ = crate_def_map(&db, krate);
+        reasons.0.lock().unwrap().clear();
+        krate.set_cfg_options(&mut db).to(atoms(after));
+        let again = what_the_map_says(&db, krate);
+        let (fresh_db, fresh) = crate_of(files, atoms(after));
+        assert_eq!(
+            again,
+            what_the_map_says(&fresh_db, fresh),
+            "the map made again for {after:?} is not the one made from scratch"
+        );
+    });
+    let maps = reasons.0.lock().unwrap();
+    maps.first().cloned().expect("the map was made again, and said why")
+}
+
+#[test]
+fn a_module_with_something_unresolved_is_made_again_when_a_file_changes_and_not_otherwise() {
+    let _serial = SERIAL.lock().unwrap();
+    for condition in [Condition::SomethingToCatch, Condition::NothingToSee] {
+        let subject = match condition {
+            Condition::SomethingToCatch => "use crate::nowhere::Thing;\n",
+            Condition::NothingToSee => "use crate::stable::Stable;\n",
+        };
+        let files = [
+            ("lib.rs", "mod trigger;\nmod stable;\nmod subject;\n"),
+            ("trigger.rs", "#[cfg(feature = \"a\")]\npub fn f() {}\n"),
+            ("stable.rs", "pub struct Stable;\n"),
+            ("subject.rs", subject),
+        ];
+        let reasons = reasons_of_the_flip(&files, &[], &["a"]);
+        match condition {
+            Condition::SomethingToCatch => assert_eq!(reasons["affected_by_unresolved"], 1, "{reasons:?}"),
+            Condition::NothingToSee => {
+                assert_eq!(reasons["affected_by_unresolved"], 0, "{reasons:?}");
+                assert!(reasons["shared_modules"] >= 2, "`stable` and `subject` are taken: {reasons:?}");
+            }
+        }
+    }
+}
+
+#[test]
+fn a_module_that_globs_from_one_that_changes_is_made_again_even_if_the_glob_took_nothing() {
+    let _serial = SERIAL.lock().unwrap();
+    for condition in [Condition::SomethingToCatch, Condition::NothingToSee] {
+        let subject = match condition {
+            // Imports everything from a module that has nothing yet, and gets something when `a` is on.
+            Condition::SomethingToCatch => "pub use crate::empty::*;\n",
+            Condition::NothingToSee => "pub use crate::stable::*;\n",
+        };
+        let files = [
+            ("lib.rs", "mod empty;\nmod stable;\nmod subject;\n"),
+            ("empty.rs", "#[cfg(feature = \"a\")]\npub fn appears() {}\n"),
+            ("stable.rs", "pub fn s() {}\n"),
+            ("subject.rs", subject),
+        ];
+        let reasons = reasons_of_the_flip(&files, &[], &["a"]);
+        match condition {
+            Condition::SomethingToCatch => assert!(reasons["affected_by_import"] >= 1, "{reasons:?}"),
+            Condition::NothingToSee => assert_eq!(reasons["affected_by_import"], 0, "{reasons:?}"),
+        }
+    }
+}
+
+#[test]
+fn a_module_that_calls_macros_is_made_again_when_a_file_that_defines_one_changes_and_not_otherwise() {
+    let _serial = SERIAL.lock().unwrap();
+    for condition in [Condition::SomethingToCatch, Condition::NothingToSee] {
+        // The macro is there until `a` is on, which changes the root's file; or it is always there.
+        let root = match condition {
+            Condition::SomethingToCatch => {
+                "mod caller;\nmod trigger;\n#[cfg(not(feature = \"a\"))]\n#[macro_export]\nmacro_rules! make { () => { pub fn made() {} }; }\n"
+            }
+            Condition::NothingToSee => {
+                "mod caller;\nmod trigger;\n#[macro_export]\nmacro_rules! make { () => { pub fn made() {} }; }\n"
+            }
+        };
+        let files = [
+            ("lib.rs", root),
+            ("caller.rs", "crate::make!();\n"),
+            ("trigger.rs", "#[cfg(feature = \"a\")]\npub fn f() {}\n"),
+        ];
+        let reasons = reasons_of_the_flip(&files, &[], &["a"]);
+        match condition {
+            Condition::SomethingToCatch => assert_eq!(reasons["affected_by_macro_call"], 1, "{reasons:?}"),
+            Condition::NothingToSee => assert_eq!(reasons["affected_by_macro_call"], 0, "{reasons:?}"),
+        }
+    }
+}
+
+#[test]
+fn a_module_that_imports_from_one_that_is_no_longer_declared_is_made_again() {
+    let _serial = SERIAL.lock().unwrap();
+    for condition in [Condition::SomethingToCatch, Condition::NothingToSee] {
+        let files = [
+            ("lib.rs", "#[cfg(feature = \"a\")]\nmod gated;\nmod subject;\n"),
+            ("gated.rs", "pub struct G;\n"),
+            ("subject.rs", "use crate::gated::G;\n"),
+        ];
+        // Turning `a` off takes `gated` away; turning it on only adds it.
+        let (before, after): (&[&str], &[&str]) = match condition {
+            Condition::SomethingToCatch => (&["a"], &[]),
+            Condition::NothingToSee => (&[], &["a"]),
+        };
+        let reasons = reasons_of_the_flip(&files, before, after);
+        match condition {
+            Condition::SomethingToCatch => {
+                assert!(reasons["affected_by_gone"] >= 1, "{reasons:?}");
+                assert!(reasons["affected_by_import"] >= 1, "`subject` imports from it: {reasons:?}");
+            }
+            Condition::NothingToSee => assert_eq!(reasons["affected_by_gone"], 0, "{reasons:?}"),
+        }
+    }
+}
+
+#[test]
+fn a_module_that_reads_another_crate_is_made_again_when_what_it_read_changes_and_not_otherwise() {
+    let _serial = SERIAL.lock().unwrap();
+    for condition in [Condition::SomethingToCatch, Condition::NothingToSee] {
+        let dep = [("lib.rs", "#[cfg(feature = \"a\")]\npub fn gated() {}\npub fn always() {}\n")];
+        let app = [
+            ("lib.rs", "mod uses;\n#[cfg(feature = \"x\")]\npub fn mine() {}\n"),
+            ("uses.rs", "pub use dep::always;\n"),
+        ];
+        // The app's own cfg changes, so its map is made again; the dependency's changes only when `a` does.
+        let dependency: &[&str] = match condition {
+            Condition::SomethingToCatch => &["a"],
+            Condition::NothingToSee => &["unrelated"],
+        };
+        let reasons = Reasons::default();
+        let subscriber = tracing_subscriber::registry().with(reasons.clone());
+        tracing::subscriber::with_default(subscriber, || {
+            let (mut db, dep_crate, app_crate) = two_crates(&dep, &app, atoms(&[]), atoms(&[]));
+            let _ = crate_def_map(&db, app_crate);
+            reasons.0.lock().unwrap().clear();
+            dep_crate.set_cfg_options(&mut db).to(atoms(dependency));
+            app_crate.set_cfg_options(&mut db).to(atoms(&["x"]));
+            let again = what_the_map_says(&db, app_crate);
+            let (fresh_db, _, fresh) = two_crates(&dep, &app, atoms(dependency), atoms(&["x"]));
+            assert_eq!(again, what_the_map_says(&fresh_db, fresh), "{condition:?}");
+        });
+        let maps = reasons.0.lock().unwrap();
+        let last = maps.last().cloned().expect("the app's map was made again, and said why");
+        match condition {
+            Condition::SomethingToCatch => assert!(last["affected_by_external"] >= 1, "{last:?}"),
+            Condition::NothingToSee => {
+                assert_eq!(last["affected_by_external"], 0, "{last:?}");
+                assert!(last["shared_modules"] >= 1, "`uses` is taken: {last:?}");
+            }
+        }
+    }
+}
