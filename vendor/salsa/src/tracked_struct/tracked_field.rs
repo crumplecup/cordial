@@ -75,12 +75,15 @@ where
     unsafe fn collect_minimum_serialized_edges(
         &self,
         _zalsa: &Zalsa,
-        _edge: QueryEdge,
-        _serialized_edges: &mut FxIndexSet<QueryEdge>,
+        edge: QueryEdge,
+        serialized_edges: &mut FxIndexSet<QueryEdge>,
         _flattener: &mut crate::flatten::EdgeFlattener,
     ) {
-        // Tracked fields do not have transitive dependencies, and their dependencies are covered by
-        // the base inputs.
+        // A tracked field has no transitive dependencies, but it is not covered by the inputs of the
+        // query that made it: that query can run again to a value that is equal as a whole (the ids of
+        // its structs) while this field changed, and then it is the field that says so. A reader that
+        // is saved keeps its edge to the field.
+        serialized_edges.insert(edge);
     }
 
     fn flatten_cycle_head_dependencies(

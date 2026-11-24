@@ -911,23 +911,33 @@ pub(crate) fn set_changed_after(
     }
     SET_COMPUTED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let mut changed = None;
-    for edge in shared_set(number).edges() {
-        SET_MEMBERS_CHECKED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        if edge.is_watermark() {
-            if zalsa.last_changed_revision(WATERMARK_DURABILITY) > since {
-                changed = Some(edge);
-                break;
+    // The queries first, then the rest: a tracked field is set when the query that made its struct
+    // has run, and that query is among the edges. A set holds its edges in the order they were first
+    // seen, which can put a field before the query that makes it, and a field read first says it
+    // has not changed because its query has not yet run again.
+    'passes: for queries in [true, false] {
+        for edge in shared_set(number).edges() {
+            SET_MEMBERS_CHECKED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            if edge.is_watermark() {
+                if !queries && zalsa.last_changed_revision(WATERMARK_DURABILITY) > since {
+                    changed = Some(edge);
+                    break 'passes;
+                }
+                continue;
             }
-            continue;
-        }
-        if edge.kind() == crate::zalsa_local::QueryEdgeKind::Input
-            && matches!(
-                edge.key().maybe_changed_after(db, zalsa, since),
-                crate::function::VerifyResult::Changed
-            )
-        {
-            changed = Some(edge);
-            break;
+            let is_query = zalsa.lookup_ingredient(edge.key().ingredient_index()).as_function().is_some();
+            if is_query != queries {
+                continue;
+            }
+            if edge.kind() == crate::zalsa_local::QueryEdgeKind::Input
+                && matches!(
+                    edge.key().maybe_changed_after(db, zalsa, since),
+                    crate::function::VerifyResult::Changed
+                )
+            {
+                changed = Some(edge);
+                break 'passes;
+            }
         }
     }
     let mut kept = SET_ANSWERS.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
