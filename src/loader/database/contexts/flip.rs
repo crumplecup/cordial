@@ -340,7 +340,12 @@ impl SourceDatabase {
     }
 
     fn module_hashes(&self, krate: InputCrate) -> HashMap<u64, u64> {
-        attach_db(&self.db, || module_fingerprints(&self.db, krate).into_iter().collect())
+        attach_db(&self.db, || {
+            module_fingerprints(&self.db, krate)
+                .into_iter()
+                .map(|module| (module.key, module.data))
+                .collect()
+        })
     }
 
     /// Say how many modules of the local crates the flipped cfg changed, added and removed against the ordinary

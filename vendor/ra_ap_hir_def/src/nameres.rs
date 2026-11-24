@@ -54,6 +54,7 @@ pub mod diagnostics;
 mod mod_resolution;
 mod path_resolution;
 pub mod proc_macro;
+mod previous;
 pub mod shared;
 pub mod stable;
 
@@ -322,23 +323,29 @@ impl DefMap {
         id: ModuleIdLt<'_>,
     ) -> Option<&'a ModuleData> {
         let id = unsafe { id.to_static() };
+        previous::note_read(self.krate, id);
         if self.cells.is_empty() {
             self.modules.get(&id)
         } else {
-            self.cells.get(&id).map(|cell| cell.data(db))
+            self.cells.get(&id).map(|cell| &**cell.data(db))
         }
     }
 
-    /// Makes the finished map's modules cells, so that what reads one depends on that one.
-    pub(crate) fn freeze(&mut self, db: &dyn SourceDatabase) {
+    /// Makes the finished map's modules cells, so that what reads one depends on that one, and says what each
+    /// holds.
+    pub(crate) fn freeze(&mut self, db: &dyn SourceDatabase) -> FxHashMap<ModuleId, Arc<ModuleData>> {
         let diagnostics = std::mem::take(&mut self.diagnostics);
         let cell = DiagnosticsCellLt::new(db, self.root, diagnostics);
         self.diagnostics_cell = Some(unsafe { cell.to_static() });
         let modules = std::mem::replace(&mut self.modules, ModulesMap::new());
+        let mut held = FxHashMap::default();
         for (id, data) in modules.inner {
+            let data = Arc::new(data);
+            held.insert(id, Arc::clone(&data));
             let cell = ModuleCellLt::new(db, id, data);
             self.cells.insert(id, unsafe { cell.to_static() });
         }
+        held
     }
 }
 
@@ -440,9 +447,10 @@ pub struct ModuleData {
 pub struct ModuleCellLt<'db> {
     #[returns(copy)]
     pub module: ModuleIdLt<'db>,
+    /// Shared with what remembers the map (see `previous`), so that remembering it does not copy it.
     #[tracked]
     #[returns(ref)]
-    pub data: ModuleData,
+    pub data: Arc<ModuleData>,
 }
 pub type ModuleCell = ModuleCellLt<'static>;
 
@@ -650,12 +658,21 @@ pub(crate) fn crate_local_def_map(db: &dyn SourceDatabase, crate_id: Crate) -> D
         module_data,
         None,
     );
-    let (def_map, local_def_map) =
+    let collecting = previous::Collecting::begin(crate_id);
+    let (def_map, local_def_map, reads) =
         collector::collect_defs(db, def_map, TreeId::new(root_file_id.into(), None), None);
+    let read = collecting.end();
 
     let mut def_map = def_map;
-    def_map.freeze(db);
-    DefMapPair { def_map: Arc::new(def_map), local: Arc::new(local_def_map) }
+    // What the map said of each module, kept before the cells take it.
+    let mut said: FxHashMap<ModuleId, Vec<diagnostics::DefDiagnostic>> = FxHashMap::default();
+    for diagnostic in &def_map.diagnostics {
+        said.entry(diagnostic.in_module).or_default().push(diagnostic.clone());
+    }
+    let held = def_map.freeze(db);
+    let def_map = Arc::new(def_map);
+    previous::remember(db, crate_id, &def_map, held, reads, said, read);
+    DefMapPair { def_map, local: Arc::new(local_def_map) }
 }
 
 #[salsa::tracked(returns(ref), persist)]
@@ -685,14 +702,14 @@ pub fn block_def_map<'db>(db: &'db dyn SourceDatabase, block_id: BlockIdLt<'db>)
         Some(BlockInfo { block: block_id, parent: module }),
     );
 
-    let (def_map, _) = collector::collect_defs(
+    let (def_map, _, _) = collector::collect_defs(
         db,
         def_map,
         TreeId::new(ast_id.file_id, Some(block_id)),
         Some(&local_def_map.local),
     );
     let mut def_map = def_map;
-    def_map.freeze(db);
+    let _ = def_map.freeze(db);
     def_map
 }
 
@@ -784,7 +801,7 @@ impl DefMap {
         &'a self,
         db: &'a dyn SourceDatabase,
     ) -> impl Iterator<Item = (ModuleId, &'a ModuleData)> + 'a {
-        let cells = self.cells.iter().map(move |(&id, cell)| (id, cell.data(db)));
+        let cells = self.cells.iter().map(move |(&id, cell)| (id, &**cell.data(db)));
         self.modules.iter().chain(cells)
     }
 

@@ -22,7 +22,7 @@
 use base_db::{Crate, SourceDatabase};
 use rustc_hash::FxHashSet;
 
-use crate::{ModuleDefId, ModuleId, nameres::crate_def_map, per_ns::PerNs};
+use crate::{ModuleDefId, ModuleId, nameres::{ModuleData, crate_def_map}, per_ns::PerNs};
 
 /// The modules of the original that a copy shares and those it does not.
 #[derive(Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -35,7 +35,7 @@ pub struct SharedModules {
 
 /// Why a module is affected, as the first rule that reached it found it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Reason {
+pub(super) enum Reason {
     /// Its file is one the tool says the copy cannot take as it is, or it is defined by a macro expansion.
     File,
     /// It defines a macro.
@@ -48,6 +48,14 @@ enum Reason {
     Parent(ModuleId),
     /// It inherits textual macro scope from an affected parent.
     InheritedMacros,
+    /// It calls macros, and a module that defines one is in a file that changed.
+    MacroCall,
+    /// It has something unresolved, which a name that is new in the crate may resolve.
+    Unresolved,
+    /// It no longer exists, so what the map made before holds of it cannot be read.
+    Gone,
+    /// It read a module of another crate that is not what it was.
+    External,
 }
 
 /// The modules of the crate that `copy` is a copy of that it takes as they are, or `None` when `copy` is not a copy.
@@ -55,16 +63,52 @@ enum Reason {
 pub fn shared_modules(db: &dyn SourceDatabase, copy: Crate) -> Option<SharedModules> {
     let original = (*copy.canonical(db))?;
     let map = crate_def_map(db, original);
+    let directly: FxHashSet<_> = copy.affected_files(db).iter().copied().collect();
+    let modules: rustc_hash::FxHashMap<ModuleId, &ModuleData> = map.modules(db).collect();
+    let why = close_over(db, &modules, &directly, copy.data(db).is_proc_macro, &super::previous::Reads::default(), &FxHashSet::default());
+    Some(split(db, &modules, why))
+}
+
+/// The modules of `map` that are affected and those that are not, given the ones the closure reached.
+pub(super) fn split(
+    db: &dyn SourceDatabase,
+    modules: &rustc_hash::FxHashMap<ModuleId, &ModuleData>,
+    why: rustc_hash::FxHashMap<ModuleId, Reason>,
+) -> SharedModules {
+    let affected: FxHashSet<ModuleId> = why.keys().copied().collect();
+    let unaffected: FxHashSet<ModuleId> =
+        modules.keys().copied().filter(|id| !affected.contains(id)).collect();
+    report(db, modules.len(), &why, unaffected.len(), &|module| path_of(db, module));
+    SharedModules { affected, unaffected }
+}
+
+/// Close what is affected over what `map` is made of: from the modules in the files in `directly`, through the
+/// imports, the parents and the macros of the finished map.
+pub(super) fn close_over(
+    db: &dyn SourceDatabase,
+    modules: &rustc_hash::FxHashMap<ModuleId, &ModuleData>,
+    directly: &FxHashSet<base_db::FileId>,
+    is_proc_macro: bool,
+    reads: &super::previous::Reads,
+    gone: &FxHashSet<ModuleId>,
+) -> rustc_hash::FxHashMap<ModuleId, Reason> {
     let mut why: rustc_hash::FxHashMap<ModuleId, Reason> = rustc_hash::FxHashMap::default();
-    if copy.data(db).is_proc_macro {
-        for (id, _) in map.modules(db) {
-            why.entry(id).or_insert(Reason::ProcMacro);
+    for id in gone {
+        why.insert(*id, Reason::Gone);
+    }
+    for id in &reads.external_changed {
+        why.entry(*id).or_insert(Reason::External);
+    }
+    if is_proc_macro {
+        for id in modules.keys() {
+            why.entry(*id).or_insert(Reason::ProcMacro);
         }
     }
-    let directly: FxHashSet<_> = copy.affected_files(db).iter().copied().collect();
     // What each module imports from.
     let mut imports: Vec<(ModuleId, Vec<ModuleId>)> = Vec::new();
-    for (id, data) in map.modules(db) {
+    let mut macro_definition_changed = false;
+    let mut calls_macros: Vec<ModuleId> = Vec::new();
+    for (&id, &data) in modules {
         let own_file = data.definition_source_file_id().file_id().map(|file| file.file_id(db));
         if own_file.is_none_or(|file| directly.contains(&file)) {
             why.entry(id).or_insert(Reason::File);
@@ -72,14 +116,18 @@ pub fn shared_modules(db: &dyn SourceDatabase, copy: Crate) -> Option<SharedModu
         // A macro defined here can be exported to the root, or reach modules declared after it. A `macro_rules!`
         // is in the textual macro scope and not among the declarations: a module's scope holds the macros its
         // parent had when it was declared and the ones it defines, so the ones the parent does not have are its own.
-        let inherited = data.parent.map(|parent| &map.module_data(db, parent).scope);
+        let inherited = data.parent.map(|parent| &modules[&parent].scope);
         let defines_macro = data.scope.legacy_macros().any(|(_, macros)| {
             macros
                 .iter()
                 .any(|mac| inherited.is_none_or(|parent| !parent.legacy_macros().any(|(_, held)| held.contains(mac))))
         }) || data.scope.declarations().any(|def| matches!(def, ModuleDefId::MacroId(_)));
         if defines_macro {
+            macro_definition_changed |= matches!(why.get(&id), Some(Reason::File));
             why.entry(id).or_insert(Reason::Macro);
+        }
+        if data.scope.all_macro_calls().next().is_some() {
+            calls_macros.push(id);
         }
         let mut from: Vec<ModuleId> = Vec::new();
         for (_, per_ns) in data.scope.entries() {
@@ -94,18 +142,35 @@ pub fn shared_modules(db: &dyn SourceDatabase, copy: Crate) -> Option<SharedModu
         }
         imports.push((id, from));
     }
+    // What the finished map cannot show: a macro that changed reaches every module that calls macros, and a name
+    // that is new may resolve what was not resolved.
+    if macro_definition_changed {
+        for id in calls_macros {
+            why.entry(id).or_insert(Reason::MacroCall);
+        }
+    }
+    if why.values().any(|reason| matches!(reason, Reason::File)) {
+        for id in &reads.unresolved {
+            why.entry(*id).or_insert(Reason::Unresolved);
+        }
+    }
     loop {
         let before = why.len();
+        for (importer, source) in &reads.globs {
+            if why.contains_key(source) {
+                why.entry(*importer).or_insert(Reason::Import(*source));
+            }
+        }
         for (id, from) in &imports {
             if why.contains_key(id) {
-                if let Some(parent) = map.module_data(db, *id).parent {
+                if let Some(parent) = modules[id].parent {
                     why.entry(parent).or_insert(Reason::Parent(*id));
                 }
             } else if let Some(module) = from.iter().find(|module| why.contains_key(module)) {
                 why.insert(*id, Reason::Import(*module));
-            } else if let Some(parent) = map.module_data(db, *id).parent
+            } else if let Some(parent) = modules[id].parent
                 && why.contains_key(&parent)
-                && map.module_data(db, *id).scope.legacy_macros().next().is_some()
+                && modules[id].scope.legacy_macros().next().is_some()
             {
                 why.insert(*id, Reason::InheritedMacros);
             }
@@ -114,15 +179,11 @@ pub fn shared_modules(db: &dyn SourceDatabase, copy: Crate) -> Option<SharedModu
             break;
         }
     }
-    let affected: FxHashSet<ModuleId> = why.keys().copied().collect();
-    let unaffected: FxHashSet<ModuleId> =
-        map.modules(db).map(|(id, _)| id).filter(|id| !affected.contains(id)).collect();
-    report(db, map, &why, unaffected.len());
-    Some(SharedModules { affected, unaffected })
+    why
 }
 
 /// The module's place in its crate, as the names from the root.
-fn path_of(db: &dyn SourceDatabase, module: ModuleId) -> String {
+pub(super) fn path_of(db: &dyn SourceDatabase, module: ModuleId) -> String {
     let mut names = Vec::new();
     let mut at = module;
     while let Some(parent) = at.containing_module_inside_def_map(db) {
@@ -134,31 +195,36 @@ fn path_of(db: &dyn SourceDatabase, module: ModuleId) -> String {
 }
 
 /// Say, as an event, how many modules are affected and why, with a few of each reason.
-fn report(
-    db: &dyn SourceDatabase,
-    map: &crate::nameres::DefMap,
+pub(super) fn report(
+    _db: &dyn SourceDatabase,
+    modules: usize,
     why: &rustc_hash::FxHashMap<ModuleId, Reason>,
     shared: usize,
+    path_of: &dyn Fn(ModuleId) -> String,
 ) {
-    let mut counts = [0_u64; 6];
-    let mut examples: [Vec<String>; 6] = Default::default();
+    let mut counts = [0_u64; 10];
+    let mut examples: [Vec<String>; 10] = Default::default();
     let mut ordered: Vec<(&ModuleId, &Reason)> = why.iter().collect();
-    ordered.sort_by_key(|(id, _)| path_of(db, **id));
+    ordered.sort_by_key(|(id, _)| path_of(**id));
     for (id, reason) in ordered {
         let (slot, detail) = match reason {
             Reason::File => (0, String::new()),
             Reason::Macro => (1, String::new()),
             Reason::ProcMacro => (2, String::new()),
-            Reason::Import(from) => (3, format!(" imports from {}", path_of(db, *from))),
-            Reason::Parent(child) => (4, format!(" is above {}", path_of(db, *child))),
+            Reason::Import(from) => (3, format!(" imports from {}", path_of(*from))),
+            Reason::Parent(child) => (4, format!(" is above {}", path_of(*child))),
             Reason::InheritedMacros => (5, String::new()),
+            Reason::MacroCall => (6, String::new()),
+            Reason::Unresolved => (7, String::new()),
+            Reason::Gone => (8, String::new()),
+            Reason::External => (9, String::new()),
         };
         counts[slot] += 1;
         if examples[slot].len() < 3 {
-            examples[slot].push(format!("{}{detail}", path_of(db, *id)));
+            examples[slot].push(format!("{}{detail}", path_of(*id)));
         }
     }
-    let names = ["file", "macro", "proc_macro", "import", "parent", "inherited_macros"];
+    let names = ["file", "macro", "proc_macro", "import", "parent", "inherited_macros", "macro_call", "unresolved", "gone", "external"];
     let shown: Vec<String> = names
         .iter()
         .zip(&examples)
@@ -167,7 +233,7 @@ fn report(
         .collect();
     tracing::info!(
         target: "cordial::def_map",
-        modules = map.modules(db).count() as u64,
+        modules = modules as u64,
         affected_modules = why.len() as u64,
         shared_modules = shared as u64,
         affected_by_file = counts[0],
@@ -176,6 +242,10 @@ fn report(
         affected_by_import = counts[3],
         affected_by_parent = counts[4],
         affected_by_inherited_macros = counts[5],
+        affected_by_macro_call = counts[6],
+        affected_by_unresolved = counts[7],
+        affected_by_gone = counts[8],
+        affected_by_external = counts[9],
         examples = %shown.join(" | "),
         "which modules a copy of a crate takes from the original, and why the others are its own"
     );

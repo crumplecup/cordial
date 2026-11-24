@@ -261,6 +261,33 @@ pub struct ItemTree {
 impl ItemTree {
     /// Returns an iterator over all items located at the top level of the `HirFileId` this
     /// `ItemTree` was created from.
+    /// The names of the modules declared directly in the module that is `inline_path` inside the file this tree
+    /// is of, or in the file's own module when the path is empty. `None` when no inline module is there.
+    pub(crate) fn declared_modules(&self, inline_path: &[Name]) -> Option<Vec<Name>> {
+        let mut items: &[ModItemId] = &self.top_level;
+        for step in inline_path {
+            items = items.iter().find_map(|item| match item.get(self).1 {
+                Either::Right(BigModItem::Mod(Mod { name, kind: ModKind::Inline { items }, .. }))
+                    if name == step =>
+                {
+                    Some(&**items)
+                }
+                _ => None,
+            })?;
+        }
+        Some(
+            items
+                .iter()
+                // The tree keeps the items a cfg disables, and says they are: such a module is not declared.
+                .filter(|item| !matches!(self.attrs(**item), Some(AttrsOrCfg::CfgDisabled(_))))
+                .filter_map(|item| match item.get(self).1 {
+                    Either::Right(BigModItem::Mod(module)) => Some(module.name.clone()),
+                    _ => None,
+                })
+                .collect(),
+        )
+    }
+
     pub(crate) fn top_level_items(&self) -> &[ModItemId] {
         &self.top_level
     }

@@ -16,8 +16,8 @@ use ra_ap_hir_expand::intern::Symbol;
 use ra_ap_hir_ty::method_resolution::{InherentImpls, TraitImpls};
 use ra_ap_ide_db::RootDatabase;
 use ra_ap_ide_db::base_db::{
-    AbsPathBuf, Crate, CrateGraphBuilder, CrateOrigin, CrateWorkspaceData, Env, FileChange, FileId,
-    FileSet, SourceRoot, VfsPath,
+    AbsPathBuf, Crate, CrateGraphBuilder, CrateName, CrateOrigin, CrateWorkspaceData, DependencyBuilder, Env,
+    FileChange, FileId, FileSet, SourceRoot, VfsPath,
 };
 use ra_ap_ide_db::span::Edition;
 use salsa::Setter;
@@ -392,4 +392,300 @@ fn flipping_an_atom_a_crate_never_asks_about_does_not_make_its_definition_map_ag
              crate's whole set of options depends on all of them"
         );
     });
+}
+
+/// What each definition map built says of how many of its modules it walked and how many it took from an earlier
+/// map of the same crate.
+#[derive(Clone, Default)]
+struct MapsBuilt(Arc<Mutex<Vec<(u64, u64)>>>);
+
+impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for MapsBuilt {
+    fn on_event(&self, event: &tracing::Event<'_>, _: tracing_subscriber::layer::Context<'_, S>) {
+        #[derive(Default)]
+        struct Fields {
+            modules: Option<u64>,
+            taken: Option<u64>,
+        }
+        impl tracing::field::Visit for Fields {
+            fn record_debug(&mut self, _: &tracing::field::Field, _: &dyn std::fmt::Debug) {}
+            fn record_u64(&mut self, field: &tracing::field::Field, value: u64) {
+                match field.name() {
+                    "modules" => self.modules = Some(value),
+                    "taken_from_original" => self.taken = Some(value),
+                    _ => {}
+                }
+            }
+        }
+        if event.metadata().target() != "cordial::def_map" {
+            return;
+        }
+        let mut fields = Fields::default();
+        event.record(&mut fields);
+        if let (Some(modules), Some(taken)) = (fields.modules, fields.taken) {
+            self.0.lock().unwrap().push((modules, taken));
+        }
+    }
+}
+
+#[test]
+fn flipping_an_atom_takes_the_modules_it_does_not_reach_from_the_map_it_made_before() {
+    let _serial = SERIAL.lock().unwrap();
+    let built = MapsBuilt::default();
+    let subscriber = tracing_subscriber::registry().with(built.clone());
+    tracing::subscriber::with_default(subscriber, || {
+        let files = many(40);
+        let borrowed: Vec<(&str, &str)> =
+            files.iter().map(|(name, text)| (name.as_str(), text.as_str())).collect();
+        let (mut db, krate) = crate_of(&borrowed, CfgOptions::default());
+        let first = crate_def_map(&db, krate).modules(&db).count();
+        assert_eq!(first, 41, "the root and the 40 modules");
+
+        let mut cfg = CfgOptions::default();
+        flag(&mut cfg, "a");
+        krate.set_cfg_options(&mut db).to(cfg);
+        assert_eq!(crate_def_map(&db, krate).modules(&db).count(), 41, "a gated function, not a module");
+
+        let maps = built.0.lock().unwrap().clone();
+        let (modules, taken) = *maps.last().unwrap();
+        assert_eq!(modules, 41);
+        // The module whose function is made visible is walked, and so is the root, which defines a macro: the other
+        // 39 modules are taken.
+        assert!(
+            taken >= 39,
+            "the map made again for one flipped atom took {taken} of {modules} modules from the one before: {maps:?}"
+        );
+    });
+}
+
+/// What a crate's definition map says, by what each module and each id stands for, so that two databases that made
+/// it can be compared: each module by its path.
+fn what_the_map_says(db: &RootDatabase, krate: Crate) -> std::collections::BTreeMap<String, u64> {
+    let mut said: std::collections::BTreeMap<String, u64> =
+        ra_ap_hir_def::nameres::stable::module_fingerprints(db, krate)
+            .into_iter()
+            .map(|module| (module.path, module.data))
+            .collect();
+    said.insert(
+        "(diagnostics)".to_owned(),
+        ra_ap_hir_def::nameres::stable::diagnostics_fingerprint(db, krate),
+    );
+    said
+}
+
+/// A crate that has what a flip can reach in every way a map can hold it.
+const OF_EVERY_KIND: [(&str, &str); 15] = [
+    (
+        "lib.rs",
+        "mod plain;\n#[cfg(feature = \"a\")]\nmod gated;\nmod user;\nmod globber;\npub mod nested;\n\
+         mod macro_user;\nmod empty;\nmod globber_of_empty;\n\
+         #[macro_use]\nmod mm;\nmod uses_mm;\n#[path = \"elsewhere.rs\"]\nmod renamed;\nmod traits;\nmod impls;\n\
+         pub mod inline { #[cfg(feature = \"a\")] pub fn only_a() {} pub mod deeper { pub fn d() {} } pub use self::deeper::*; }\n\
+         macro_rules! shout { ($e:expr) => { $e + 1 }; }\n\
+         #[cfg(feature = \"b\")]\n#[macro_export]\nmacro_rules! make_items { () => { pub fn made() {} }; }\n\
+         pub use plain::exported;\n#[cfg(feature = \"a\")]\npub use gated::from_gated;\npub fn root() -> u32 { shout!(1) }\n",
+    ),
+    ("plain.rs", "pub fn exported() {}\npub struct P;\nimpl P { pub fn go(&self) {} }\n"),
+    (
+        "gated.rs",
+        "pub fn from_gated() {}\npub mod inner { pub fn deep() {} }\n#[cfg(feature = \"b\")]\npub fn also_b() {}\n",
+    ),
+    ("user.rs", "use crate::plain::P;\nuse crate::gated::inner::deep as d;\npub fn u(p: P) { p.go(); }\n"),
+    ("globber.rs", "pub use crate::plain::*;\n#[cfg(feature = \"a\")]\npub use crate::gated::*;\n"),
+    ("nested.rs", "pub mod one;\npub mod two { pub fn t() {} }\n#[cfg(feature = \"b\")]\npub fn nested_b() {}\n"),
+    ("nested/one.rs", "pub fn o() {}\n"),
+    // Calls a macro that the root defines only under `b`, by a path: it has no textual scope to inherit.
+    ("macro_user.rs", "crate::make_items!();\n"),
+    // Has nothing until `b`, and what imports everything from it does not change.
+    ("empty.rs", "#[cfg(feature = \"b\")]\npub fn appears() {}\n"),
+    ("globber_of_empty.rs", "pub use crate::empty::*;\n"),
+    // A macro in a module that `#[macro_use]` makes visible to the ones after it, and a module that calls it.
+    (
+        "mm.rs",
+        "macro_rules! from_mm { () => { pub fn from_mm() {} }; }\n#[cfg(feature = \"b\")]\nmacro_rules! only_with_b { () => { pub fn b_only() {} }; }\n",
+    ),
+    ("uses_mm.rs", "from_mm!();\n#[cfg(feature = \"b\")]\nonly_with_b!();\n"),
+    ("elsewhere.rs", "pub fn moved() {}\n#[cfg(feature = \"a\")]\npub fn moved_a() {}\n"),
+    ("traits.rs", "pub trait Speak { fn speak(&self) {} }\n#[cfg(feature = \"a\")]\npub trait OnlyA {}\n"),
+    (
+        "impls.rs",
+        "use crate::traits::Speak;\nuse crate::plain::P;\nimpl Speak for P {}\n#[cfg(feature = \"a\")]\nimpl crate::traits::OnlyA for P {}\n",
+    ),
+];
+
+#[test]
+fn a_map_made_again_after_flips_is_the_map_made_from_scratch() {
+    let _serial = SERIAL.lock().unwrap();
+    cordial::init_tracing();
+    let with = |atoms: &[&str]| {
+        let mut cfg = CfgOptions::default();
+        for atom in atoms {
+            flag(&mut cfg, atom);
+        }
+        cfg
+    };
+    // Flips in every direction: on, more on, one off, all off, a different one.
+    let sequence: [&[&str]; 6] = [&[], &["a"], &["a", "b"], &["b"], &[], &["a"]];
+    let (mut flipped, krate) = crate_of(&OF_EVERY_KIND, with(sequence[0]));
+    let _ = crate_def_map(&flipped, krate);
+    for step in &sequence[1..] {
+        krate.set_cfg_options(&mut flipped).to(with(step));
+        let again = what_the_map_says(&flipped, krate);
+
+        let (fresh_db, fresh) = crate_of(&OF_EVERY_KIND, with(step));
+        let scratch = what_the_map_says(&fresh_db, fresh);
+        let differing: Vec<&String> = again
+            .iter()
+            .filter(|(path, said)| scratch.get(*path) != Some(*said))
+            .map(|(path, _)| path)
+            .chain(scratch.keys().filter(|path| !again.contains_key(*path)))
+            .collect();
+        assert!(
+            differing.is_empty(),
+            "the map made again for {step:?} is not the one made from scratch: {differing:?} differ"
+        );
+    }
+}
+
+/// Two crates: `dep`, with `dep_cfg`, and `app`, with `app_cfg`, which depends on it as `dep`.
+fn two_crates(
+    dep_files: &[(&str, &str)],
+    app_files: &[(&str, &str)],
+    dep_cfg: CfgOptions,
+    app_cfg: CfgOptions,
+) -> (RootDatabase, Crate, Crate) {
+    let mut db = RootDatabase::default();
+    let mut graph = CrateGraphBuilder::default();
+    let mut set = FileSet::default();
+    let mut change = FileChange::default();
+    let mut next = 0u32;
+    let mut roots = Vec::new();
+    for (directory, files, cfg) in
+        [("dep", dep_files, dep_cfg), ("app", app_files, app_cfg)]
+    {
+        let first = next;
+        for (name, text) in files {
+            let file = FileId::from_raw(next);
+            next += 1;
+            set.insert(file, VfsPath::new_virtual_path(format!("/{directory}/{name}")));
+            change.change_file(file, Some((*text).to_owned()));
+        }
+        roots.push(graph.add_crate_root(
+            FileId::from_raw(first),
+            Edition::CURRENT,
+            None,
+            None,
+            cfg,
+            None,
+            Env::default(),
+            CrateOrigin::Local { repo: None, name: None },
+            Vec::new(),
+            false,
+            triomphe::Arc::new(AbsPathBuf::assert("/".into())),
+            triomphe::Arc::new(CrateWorkspaceData {
+                target: Err("fixture has no target".into()),
+                toolchain: None,
+            }),
+        ));
+    }
+    graph
+        .add_dep(roots[1], DependencyBuilder::new(CrateName::new("dep").unwrap(), roots[0]))
+        .unwrap();
+    change.set_roots(vec![SourceRoot::new_local(set)]);
+    change.set_crate_graph(graph);
+    let crates = change.apply(&mut db).unwrap();
+    let (dep, app) = (crates[&roots[0]], crates[&roots[1]]);
+    (db, dep, app)
+}
+
+/// What an app makes of a dependency whose cfg flips: it imports from it, calls its macros, and globs it.
+const DEP: [(&str, &str); 2] = [
+    (
+        "lib.rs",
+        "pub mod inner;\n#[cfg(feature = \"a\")]\npub fn gated() {}\npub fn always() {}\n\
+         #[cfg(feature = \"a\")]\n#[macro_export]\nmacro_rules! from_dep { () => { pub fn from_the_macro() {} }; }\n",
+    ),
+    ("inner.rs", "#[cfg(feature = \"a\")]\npub struct OnlyA;\npub struct Both;\n"),
+];
+
+const APP: [(&str, &str); 4] = [
+    ("lib.rs", "mod uses;\nmod globs;\nmod macros;\nmod untouched;\n"),
+    ("uses.rs", "pub use dep::gated;\npub use dep::always;\npub use dep::inner::OnlyA;\npub use dep::inner::Both;\n"),
+    ("globs.rs", "pub use dep::*;\n"),
+    ("macros.rs", "dep::from_dep!();\n"),
+];
+
+#[test]
+fn a_map_made_again_after_its_dependency_flips_is_the_map_made_from_scratch() {
+    let _serial = SERIAL.lock().unwrap();
+    cordial::init_tracing();
+    let with = |atoms: &[&str]| {
+        let mut cfg = CfgOptions::default();
+        for atom in atoms {
+            flag(&mut cfg, atom);
+        }
+        cfg
+    };
+    // `untouched.rs` does not exist: an unresolved module, which only the files can change.
+    let (mut flipped, dep, app) = two_crates(&DEP, &APP, with(&[]), with(&[]));
+    let _ = crate_def_map(&flipped, app);
+    for step in [&["a"][..], &[], &["a"]] {
+        dep.set_cfg_options(&mut flipped).to(with(step));
+        let again = what_the_map_says(&flipped, app);
+        let (fresh_db, _, fresh) = two_crates(&DEP, &APP, with(step), with(&[]));
+        let scratch = what_the_map_says(&fresh_db, fresh);
+        let differing: Vec<&String> = again
+            .iter()
+            .filter(|(path, said)| scratch.get(*path) != Some(*said))
+            .map(|(path, _)| path)
+            .collect();
+        if !differing.is_empty() {
+            let said = |db: &RootDatabase, krate: Crate| {
+                let mut lines: Vec<String> =
+                    crate_def_map(db, krate).diagnostics(db).iter().map(|d| format!("{:?}", d.kind)).collect();
+                lines.sort();
+                lines
+            };
+            panic!(
+                "the app's map made again with the dependency at {step:?} is not the one made from scratch: \
+                 {differing:?} differ\nmade again: {:#?}\nfrom scratch: {:#?}",
+                said(&flipped, app),
+                said(&fresh_db, fresh)
+            );
+        }
+    }
+}
+
+#[test]
+fn a_map_made_again_for_its_own_change_still_depends_on_what_the_modules_it_took_read() {
+    let _serial = SERIAL.lock().unwrap();
+    cordial::init_tracing();
+    let with = |atoms: &[&str]| {
+        let mut cfg = CfgOptions::default();
+        for atom in atoms {
+            flag(&mut cfg, atom);
+        }
+        cfg
+    };
+    let mut app_files: Vec<(&str, &str)> = APP.to_vec();
+    app_files[0] = (
+        "lib.rs",
+        "mod uses;\nmod globs;\nmod macros;\nmod untouched;\n#[cfg(feature = \"x\")]\npub fn mine() {}\n",
+    );
+    let (mut flipped, dep, app) = two_crates(&DEP, &app_files, with(&[]), with(&[]));
+    let _ = crate_def_map(&flipped, app);
+    // The app's own cfg changes, so its map is made again from its own files, and `uses.rs` is taken: nothing in
+    // it or in what it reads from the dependency has changed.
+    app.set_cfg_options(&mut flipped).to(with(&["x"]));
+    let _ = what_the_map_says(&flipped, app);
+    // Then the dependency changes. The app's map must be made again, and be the one made from scratch.
+    dep.set_cfg_options(&mut flipped).to(with(&["a"]));
+    let again = what_the_map_says(&flipped, app);
+    let (fresh_db, _, fresh) = two_crates(&DEP, &app_files, with(&["a"]), with(&["x"]));
+    let scratch = what_the_map_says(&fresh_db, fresh);
+    let differing: Vec<&String> =
+        again.iter().filter(|(path, said)| scratch.get(*path) != Some(*said)).map(|(path, _)| path).collect();
+    assert!(
+        differing.is_empty(),
+        "the app's map, made again for its own change and then for the dependency's, is not the one made from scratch: {differing:?} differ"
+    );
 }

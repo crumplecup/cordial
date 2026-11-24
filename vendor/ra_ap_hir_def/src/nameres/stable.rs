@@ -250,9 +250,20 @@ pub fn def_map_fingerprint(db: &dyn base_db::SourceDatabase, krate: Crate) -> St
     cx.finish()
 }
 
-/// What each module of `krate`'s definition map says, as the hash of the module's id and of its data: how
-/// much of a map is different after the crate's cfg changed is the modules whose hash is not the same.
-pub fn module_fingerprints(db: &dyn base_db::SourceDatabase, krate: Crate) -> Vec<(u64, u64)> {
+/// What one module of a definition map says: where it is, and the hash of its id and of its data.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ModuleFingerprint {
+    /// The names from the crate's root to the module, as `crate::a::b`.
+    pub path: String,
+    /// The hash of the module's id.
+    pub key: u64,
+    /// The hash of the module's data: how it differs from what it was is whether this does.
+    pub data: u64,
+}
+
+/// What each module of `krate`'s definition map says: how much of a map is different after the crate's cfg changed
+/// is the modules whose hash is not the same.
+pub fn module_fingerprints(db: &dyn base_db::SourceDatabase, krate: Crate) -> Vec<ModuleFingerprint> {
     let pair = super::crate_local_def_map(db, krate);
     pair.def_map
         .modules(db)
@@ -261,7 +272,26 @@ pub fn module_fingerprints(db: &dyn base_db::SourceDatabase, krate: Crate) -> Ve
             id.stable_hash(&mut key);
             let mut value = StableCx::new(db);
             data.stable_hash(&mut value);
-            (key.finish().hash, value.finish().hash)
+            let mut names = Vec::new();
+            let mut at = id;
+            while let Some(parent) = at.containing_module_inside_def_map(db) {
+                names.push(at.name_or_empty(db).as_str().to_owned());
+                at = *parent;
+            }
+            names.reverse();
+            ModuleFingerprint {
+                path: format!("crate::{}", names.join("::")),
+                key: key.finish().hash,
+                data: value.finish().hash,
+            }
         })
         .collect()
+}
+
+/// What the map says that is not of one module: its diagnostics, in no order.
+pub fn diagnostics_fingerprint(db: &dyn base_db::SourceDatabase, krate: Crate) -> u64 {
+    let pair = super::crate_local_def_map(db, krate);
+    let mut cx = StableCx::new(db);
+    cx.unordered(pair.def_map.diagnostics(db).iter(), |cx, diagnostic| diagnostic.stable_hash(cx));
+    cx.finish().hash
 }

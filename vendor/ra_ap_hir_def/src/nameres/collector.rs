@@ -66,7 +66,7 @@ pub(super) fn collect_defs(
     def_map: DefMap,
     tree_id: TreeId,
     crate_local_def_map: Option<&LocalDefMap>,
-) -> (DefMap, LocalDefMap) {
+) -> (DefMap, LocalDefMap, super::previous::Reads) {
     let krate = &def_map.krate.data(db);
     let cfg_options = def_map.krate.cfg(db);
 
@@ -89,16 +89,19 @@ pub(super) fn collect_defs(
         Default::default()
     };
 
-    let shared = if tree_id.is_block() || !def_map.krate.share_modules(db) {
+    let shared = if tree_id.is_block() {
         None
-    } else {
+    } else if *def_map.krate.share_modules(db) {
         SharedWithOriginal::of(db, def_map.krate)
+    } else {
+        SharedWithOriginal::previous(db, def_map.krate)
     };
     let mut collector = DefCollector {
         db,
         def_map,
         shared,
         shared_modules_taken: 0,
+        taken_modules: FxHashSet::default(),
         local_def_map: LocalDefMap::default(),
         crate_local_def_map,
         deps,
@@ -126,7 +129,7 @@ pub(super) fn collect_defs(
     collector.collect();
     let collected = started.elapsed();
     let taken = collector.shared_modules_taken;
-    let (mut def_map, mut local_def_map) = collector.finish();
+    let (mut def_map, mut local_def_map, reads) = collector.finish();
     def_map.shrink_to_fit();
     local_def_map.shrink_to_fit();
     if !tree_id.is_block() {
@@ -143,7 +146,7 @@ pub(super) fn collect_defs(
             "built a crate's definition map"
         );
     }
-    (def_map, local_def_map)
+    (def_map, local_def_map, reads)
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -262,6 +265,8 @@ struct DefCollector<'db> {
     shared: Option<SharedWithOriginal<'db>>,
     /// How many of the original's modules (each with all that is under it) the copy took instead of collecting.
     shared_modules_taken: u64,
+    /// Every module taken from the map made before, with those under it.
+    taken_modules: FxHashSet<ModuleId>,
     local_def_map: LocalDefMap,
     /// Set only in case of blocks.
     crate_local_def_map: Option<&'db LocalDefMap>,
@@ -320,6 +325,8 @@ impl<'db> DefCollector<'db> {
 
     fn seed_with_top_level(&mut self) {
         let _p = tracing::info_span!("seed_with_top_level").entered();
+        // What is read of other crates to set the crate up (its prelude, its extern crates) is read for its root.
+        let _reading = super::previous::Reading::for_module(self.def_map.root);
 
         let file_id = self.def_map.krate.root_file_id(self.db);
         let item_tree = file_item_tree(self.db, file_id.into(), self.def_map.krate);
@@ -888,6 +895,7 @@ impl<'db> DefCollector<'db> {
     }
 
     fn resolve_import(&self, module_id: ModuleId, import: &Import) -> PartialResolvedImport {
+        let _reading = super::previous::Reading::for_module(module_id);
         let _p = tracing::info_span!("resolve_import", import_path = %import.path.display(self.db, Edition::LATEST))
             .entered();
         tracing::debug!("resolving import: {:?} ({:?})", import, self.def_map.data.edition);
@@ -924,6 +932,7 @@ impl<'db> DefCollector<'db> {
     }
 
     fn record_resolved_import(&mut self, directive: &ImportDirective) {
+        let _reading = super::previous::Reading::for_module(directive.module_id);
         let _p = tracing::info_span!("record_resolved_import").entered();
 
         let module_id = directive.module_id;
@@ -1374,6 +1383,7 @@ impl<'db> DefCollector<'db> {
         let mut res = ReachedFixedPoint::Yes;
         // Retain unresolved macros after this round of resolution.
         let mut retain = |directive: &MacroDirective<'db>| {
+            let _reading = super::previous::Reading::for_module(directive.module_id);
             let subns = match &directive.kind {
                 MacroDirectiveKind::FnLike { .. } => MacroSubNs::Bang,
                 MacroDirectiveKind::Attr { .. } | MacroDirectiveKind::Derive { .. } => {
@@ -1822,11 +1832,12 @@ impl<'db> DefCollector<'db> {
         .collect(item_tree.top_level_items(), container);
     }
 
-    fn finish(mut self) -> (DefMap, LocalDefMap) {
+    fn finish(mut self) -> (DefMap, LocalDefMap, super::previous::Reads) {
         // Emit diagnostics for all remaining unexpanded macros.
         let _p = tracing::info_span!("DefCollector::finish").entered();
 
         for directive in &self.unresolved_macros {
+            let _reading = super::previous::Reading::for_module(directive.module_id);
             match &directive.kind {
                 MacroDirectiveKind::FnLike { ast_id, expand_to, ctxt: call_site } => {
                     // FIXME: we shouldn't need to re-resolve the macro here just to get the unresolved error!
@@ -1920,42 +1931,222 @@ impl<'db> DefCollector<'db> {
             self.deferred_builtin_derives,
         );
 
-        (self.def_map, self.local_def_map)
+        // What a module taken from the map made before said, and read, is what that map had: it was not made again.
+        if let Some(Taken::Previous { built, .. }) = self.shared.as_ref().map(|shared| &shared.from) {
+            for module in &self.taken_modules {
+                if let Some(said) = built.diagnostics.get(module) {
+                    self.def_map.diagnostics.extend(said.iter().cloned());
+                }
+            }
+        }
+        // What the finished map cannot show: what is unresolved, and the modules the globs import from.
+        let mut reads = super::previous::Reads {
+            external_changed: FxHashSet::default(),
+            carried_externals: FxHashMap::default(),
+            unresolved: self
+                .def_map
+                .diagnostics
+                .iter()
+                .filter(|diagnostic| {
+                    !matches!(diagnostic.kind, super::diagnostics::DefDiagnosticKind::UnconfiguredCode { .. })
+                })
+                .map(|diagnostic| diagnostic.in_module)
+                .collect(),
+            globs: self
+                .glob_imports
+                .iter()
+                .flat_map(|(source, importers)| {
+                    importers.iter().map(move |(importer, _, _)| (*importer, *source))
+                })
+                .collect(),
+        };
+        if let Some(Taken::Previous { built, .. }) = self.shared.as_ref().map(|shared| &shared.from) {
+            reads.globs.extend(
+                built.reads.globs.iter().filter(|(importer, _)| self.taken_modules.contains(importer)),
+            );
+            reads
+                .unresolved
+                .extend(built.reads.unresolved.iter().filter(|module| self.taken_modules.contains(*module)));
+            reads.carried_externals.extend(
+                built
+                    .externals
+                    .iter()
+                    .filter(|(reader, _)| self.taken_modules.contains(reader))
+                    .map(|(reader, read)| (*reader, read.clone())),
+            );
+        }
+        let violated = self.taken_with_what_is_gone();
+        if !violated.is_empty() {
+            let mut shown: Vec<String> = violated
+                .iter()
+                .map(|module| match self.shared.as_ref().map(|shared| &shared.from) {
+                    Some(Taken::Previous { built, .. }) => {
+                        built.paths.get(module).map(|(path, _)| path.clone()).unwrap_or_default()
+                    }
+                    _ => String::new(),
+                })
+                .collect();
+            shown.sort();
+            tracing::error!(
+                target: "cordial::def_map",
+                modules = violated.len() as u64,
+                shown = %shown.join(", "),
+                "modules taken from the map made before name what is no longer declared"
+            );
+        }
+        debug_assert!(violated.is_empty(), "modules taken from the map made before name what is gone");
+        (self.def_map, self.local_def_map, reads)
+    }
+
+    /// The modules taken from the map made before whose names come from a module that map had and this one does not:
+    /// the map made before could not say which modules would not be declared again, and each of these must be made
+    /// again, as the one under it that imports from the module that is gone.
+    fn taken_with_what_is_gone(&self) -> FxHashSet<ModuleId> {
+        let Some(shared) = &self.shared else { return FxHashSet::default() };
+        let Taken::Previous { built, .. } = &shared.from else { return FxHashSet::default() };
+        let vanished: FxHashSet<ModuleId> =
+            built.modules.keys().copied().filter(|id| !self.def_map.modules.contains_key(id)).collect();
+        if vanished.is_empty() {
+            return FxHashSet::default();
+        }
+        self.taken_modules
+            .iter()
+            .copied()
+            .filter(|id| {
+                let Some(data) = self.def_map.modules.get(id) else { return false };
+                data.scope.entries().any(|(_, per_ns)| {
+                    let PerNs { types, values, macros } = per_ns;
+                    types
+                        .filter(|item| item.import.is_some())
+                        .map(|item| item.def)
+                        .into_iter()
+                        .chain(values.filter(|item| item.import.is_some()).map(|item| item.def))
+                        .chain(
+                            macros
+                                .filter(|item| item.import.is_some())
+                                .map(|item| ModuleDefId::MacroId(item.def)),
+                        )
+                        .filter_map(|def| def.module(self.db))
+                        .any(|module| vanished.contains(&module))
+                })
+            })
+            .collect()
     }
 }
 
-/// What a copy of a crate takes from the original's definition map: the modules the context cannot change, by the
-/// original's own ids. An item in such a module is interned with the original's module as its container, so it is
-/// the original's item: the same id, and everything keyed by it is the original's too.
+/// Where the modules taken as they are come from.
+enum Taken<'db> {
+    /// The original of a copy: its finished map, read through its cells, and the modules of it the copy takes.
+    Original { map: &'db DefMap, unaffected: &'db FxHashSet<ModuleId> },
+    /// The map this crate made last, as what it was made of, and the modules of it that nothing it was made of has
+    /// changed since.
+    Previous { built: std::sync::Arc<super::previous::Built>, unaffected: FxHashSet<ModuleId> },
+}
+
+/// What a crate takes from a map made before: the modules nothing can have changed, by the ids they had. An item in
+/// such a module is interned with that module as its container, so it is the same item: the same id, and everything
+/// keyed by it is what it was.
 struct SharedWithOriginal<'db> {
-    original: &'db DefMap,
-    unaffected: &'db FxHashSet<ModuleId>,
-    /// The original's module for each of the copy's, once found (`None`: the copy's own).
+    from: Taken<'db>,
+    /// The module made before for each of this map's, once found (`None`: this map's own).
     found: FxHashMap<ModuleId, Option<ModuleId>>,
 }
 
 impl<'db> SharedWithOriginal<'db> {
+    /// What a copy takes from the original.
     fn of(db: &'db dyn SourceDatabase, copy: Crate) -> Option<Self> {
         let shared = super::shared::shared_modules(db, copy).as_ref()?;
         let original = (*copy.canonical(db))?;
         Some(Self {
-            original: super::crate_def_map(db, original),
-            unaffected: &shared.unaffected,
+            from: Taken::Original { map: super::crate_def_map(db, original), unaffected: &shared.unaffected },
             found: FxHashMap::default(),
         })
     }
 
-    /// The original's module at the same place as `module` of the copy, if the copy takes it as it is.
+    /// What a crate takes from the map it made last, when it made one: the modules whose files' item trees are
+    /// the ones the map was made from, and that nothing affected reaches (see `shared`).
+    fn previous(db: &'db dyn SourceDatabase, krate: Crate) -> Option<Self> {
+        let built = super::previous::recall(db, krate)?;
+        // What was read of other crates for no module in particular is not known to be what it was.
+        if built.unattributed_changed(db) {
+            return None;
+        }
+        let directly = built.changed_files(db, krate);
+        let reads = super::previous::Reads {
+            unresolved: built.reads.unresolved.clone(),
+            globs: built.reads.globs.clone(),
+            external_changed: built.read_what_changed(db),
+            carried_externals: FxHashMap::default(),
+        };
+        let modules: FxHashMap<ModuleId, &ModuleData> =
+            built.modules.iter().map(|(id, data)| (*id, &**data)).collect();
+        // A module of the map made before that no longer exists cannot be taken: what is made of it is read.
+        let mut gone: FxHashSet<ModuleId> = modules
+            .keys()
+            .copied()
+            .filter(|id| {
+                salsa::Database::existence(db, salsa::plumbing::AsId::as_id(id)) != salsa::Existence::Exists
+            })
+            .collect();
+        // And the modules that the trees of the files that changed no longer declare.
+        gone.extend(built.no_longer_declared(db, krate, &directly));
+        if !gone.is_empty() {
+            tracing::info!(
+                target: "cordial::def_map",
+                gone = gone.len() as u64,
+                "modules of the map made before are not taken: they no longer exist"
+            );
+        }
+        let why = super::shared::close_over(
+            db,
+            &modules,
+            &directly,
+            krate.data(db).is_proc_macro,
+            &reads,
+            &gone,
+        );
+        let unaffected: FxHashSet<ModuleId> =
+            modules.keys().copied().filter(|id| !why.contains_key(id)).collect();
+        super::shared::report(db, modules.len(), &why, unaffected.len(), &|module| {
+            built.paths.get(&module).map(|(path, _)| path.clone()).unwrap_or_default()
+        });
+        drop(modules);
+        Some(Self { from: Taken::Previous { built, unaffected }, found: FxHashMap::default() })
+    }
+
+    fn root(&self) -> ModuleId {
+        match &self.from {
+            Taken::Original { map, .. } => map.root,
+            Taken::Previous { built, .. } => built.map.root,
+        }
+    }
+
+    fn unaffected(&self, module: &ModuleId) -> bool {
+        match &self.from {
+            Taken::Original { unaffected, .. } => unaffected.contains(module),
+            Taken::Previous { unaffected, .. } => unaffected.contains(module),
+        }
+    }
+
+    /// What the map made before held for `module`.
+    fn data<'a>(&'a self, db: &'a dyn SourceDatabase, module: ModuleId) -> Option<&'a ModuleData> {
+        match &self.from {
+            Taken::Original { map, .. } => map.try_module_data(db, module),
+            Taken::Previous { built, .. } => built.modules.get(&module).map(|data| &**data),
+        }
+    }
+
+    /// The module made before at the same place as `module`, if it is taken as it is.
     fn original_of(&mut self, db: &dyn SourceDatabase, module: ModuleId) -> Option<ModuleId> {
         if let Some(found) = self.found.get(&module) {
             return *found;
         }
-        let found = self.original_at(db, module).filter(|module| self.unaffected.contains(module));
+        let found = self.original_at(db, module).filter(|module| self.unaffected(module));
         self.found.insert(module, found);
         found
     }
 
-    /// The original's module at the same place as `module` of the copy, whether or not it is taken as it is.
+    /// The module made before at the same place as `module`, whether or not it is taken as it is.
     fn original_at(&self, db: &dyn SourceDatabase, module: ModuleId) -> Option<ModuleId> {
         // The names from the root down to the module.
         let mut names = Vec::new();
@@ -1964,31 +2155,36 @@ impl<'db> SharedWithOriginal<'db> {
             names.push(at.name_or_empty(db));
             at = *parent;
         }
-        let mut found = Some(self.original.root);
+        let mut found = Some(self.root());
         for name in names.iter().rev() {
-            found = found.and_then(|module| self.original.try_module_data(db, module)?.children.get(name).copied());
+            found = found.and_then(|module| self.data(db, module)?.children.get(name).copied());
         }
         found
     }
 
-    /// The original's child `name` of the copy's module `parent`, when the copy takes it, and everything under it,
-    /// as it is.
+    /// The child `name` of `parent` made before, when it is taken, and everything under it, as it is.
     fn child(&self, db: &dyn SourceDatabase, parent: ModuleId, name: &Name) -> Option<ModuleId> {
         let original_parent = self.original_at(db, parent)?;
-        let child = *self.original.try_module_data(db, original_parent)?.children.get(name)?;
-        self.unaffected.contains(&child).then_some(child)
+        let child = *self.data(db, original_parent)?.children.get(name)?;
+        self.unaffected(&child).then_some(child)
     }
 
-    /// The original's `module` and every module under it, with their data.
+    /// The module made before and every module under it, with their data.
     fn subtree(&self, db: &dyn SourceDatabase, module: ModuleId) -> Vec<(ModuleId, ModuleData)> {
         let mut found = Vec::new();
         let mut pending = vec![module];
         while let Some(module) = pending.pop() {
-            let data = self.original.module_data(db, module);
+            let Some(data) = self.data(db, module) else { continue };
             pending.extend(data.children.values().copied());
             found.push((module, data.clone()));
         }
         found
+    }
+
+    /// Whether what is taken was made by this query, the last time it ran: its modules are tracked structs that
+    /// this run must make again, or they are deleted when it ends.
+    fn is_this_querys_own(&self) -> bool {
+        matches!(self.from, Taken::Previous { .. })
     }
 }
 
@@ -2009,6 +2205,7 @@ impl ModCollector<'_, '_> {
     }
 
     fn collect(&mut self, items: &[ModItemId], container: ItemContainerId) {
+        let _reading = super::previous::Reading::for_module(self.module_id);
         let is_crate_root = self.module_id == self.def_collector.def_map.root
             && self.def_collector.def_map.block.is_none();
 
@@ -2434,6 +2631,27 @@ impl ModCollector<'_, '_> {
             && let Some(original_child) = self.def_collector.shared_child(self.module_id, &module.name)
         {
             self.take_shared_child(module.name.clone(), original_child, &self.item_tree[module.visibility]);
+            // What was said of the declaration (that the module has no file) is said of the module's parent, which
+            // is made again, and the module's collecting that said it is skipped.
+            let declaration = InFile::new(self.file_id(), module_ast_id);
+            if let Some(Taken::Previous { built, .. }) =
+                self.def_collector.shared.as_ref().map(|shared| &shared.from)
+            {
+                let said: Vec<DefDiagnostic> = built
+                    .diagnostics
+                    .values()
+                    .flatten()
+                    .filter(|diagnostic| {
+                        matches!(&diagnostic.kind, super::diagnostics::DefDiagnosticKind::UnresolvedModule { ast, .. } if *ast == declaration)
+                    })
+                    .cloned()
+                    .map(|mut diagnostic| {
+                        diagnostic.in_module = self.module_id;
+                        diagnostic
+                    })
+                    .collect();
+                self.def_collector.def_map.diagnostics.extend(said);
+            }
             return;
         }
         match &module.kind {
@@ -2550,15 +2768,34 @@ impl ModCollector<'_, '_> {
             .as_ref()
             .map(|shared| shared.subtree(self.def_collector.db, original))
             .unwrap_or_default();
-        let def_map = &mut self.def_collector.def_map;
+        let own = self.def_collector.shared.as_ref().is_some_and(|shared| shared.is_this_querys_own());
         for (id, mut data) in subtree {
+            if own {
+                // This query made the module the last time it ran, and deletes what it does not make again: it is
+                // made again here, as the same one, since nothing in it has changed.
+                let db = self.def_collector.db;
+                // SAFETY: the module is of this database, and what is made of it is not kept outside this query.
+                let made = unsafe {
+                    crate::ModuleIdLt::new(
+                        db,
+                        id.krate(db),
+                        id.block(db),
+                        *id.containing_module_inside_def_map(db),
+                        id.name_or_empty(db),
+                    )
+                    .to_static()
+                };
+                debug_assert_eq!(made, id, "a module taken from the map made before is made again as itself");
+            }
             // The root of the part taken is under this module in the copy; what is under it is as it was.
             if id == original {
                 data.parent = Some(self.module_id);
             }
-            def_map.modules.insert(id, data);
+            self.def_collector.taken_modules.insert(id);
+            self.def_collector.def_map.modules.insert(id, data);
         }
         self.def_collector.shared_modules_taken += 1;
+        let def_map = &mut self.def_collector.def_map;
         def_map.modules[self.module_id].children.insert(name.clone(), original);
         let def = ModuleDefId::from(original);
         def_map.modules[self.module_id].scope.declare(def);
