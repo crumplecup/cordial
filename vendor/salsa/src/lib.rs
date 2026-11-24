@@ -264,6 +264,7 @@ mod database;
 mod database_impl;
 mod durability;
 mod event;
+mod existence;
 mod flatten;
 #[cfg(feature = "persistence")]
 mod stamps;
@@ -343,6 +344,7 @@ pub use self::database::{Segment, SegmentHeader};
 pub use self::database_impl::DatabaseImpl;
 pub use self::durability::Durability;
 pub use self::event::{Event, EventKind};
+pub use self::existence::Existence;
 pub use self::id::Id;
 pub use self::input::setter::Setter;
 pub use self::key::DatabaseKeyIndex;

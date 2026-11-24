@@ -89,6 +89,15 @@ pub trait Database: Send + ZalsaDatabase + AsDynDatabase {
         self.zalsa_mut().forget_memos_for_inputs(inputs)
     }
 
+    /// What became of `id`: a tracked struct that a query stopped making is deleted, and its slot is reused for
+    /// another with the next generation. Nothing of the struct is read, so this is for asking about an id that
+    /// may name something that is gone, as an item's id does of its module. Every other id exists.
+    #[doc(hidden)]
+    fn existence(&self, id: crate::Id) -> crate::Existence {
+        let zalsa = self.zalsa();
+        zalsa.lookup_ingredient(zalsa.ingredient_index(id)).existence(zalsa, id)
+    }
+
     /// Return exact input keys with a value in one of the named queries, verified
     /// and final in the current revision. Encoded values count; empty `only` matches
     /// all queries. Does not execute, validate or decode queries, or follow edges.

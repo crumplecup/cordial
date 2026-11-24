@@ -191,6 +191,11 @@ pub trait Ingredient: Any + fmt::Debug + Send + Sync {
         false
     }
 
+    /// What became of `id`, an id of this ingredient. Only a tracked struct is ever deleted.
+    fn existence(&self, _zalsa: &Zalsa, _id: Id) -> crate::Existence {
+        crate::Existence::Exists
+    }
+
     /// How many of this ingredient's memos hold a value in memory, and, if `drop`, drop those
     /// values (a memo whose value cannot be decoded again from bytes is computed again when
     /// something reads it). Memos whose value cannot be computed again are left alone.

@@ -79,3 +79,28 @@ fn a_memo_of_an_item_of_a_module_that_is_gone_is_forgotten_and_not_run_again() {
     <dyn Database>::verify_persisted_memos(&db);
     assert_eq!(describe(&db, Item::from_id(kept)), "a:1");
 }
+
+#[test]
+fn a_tracked_struct_says_whether_it_exists_deleted_or_replaced_without_being_read() {
+    use salsa::Existence;
+    let mut db = Db::default();
+    let switch = Switch::new(&db, true);
+    let b = {
+        let all = modules(&db, switch);
+        assert_eq!(<dyn Database>::existence(&db, all[0].as_id()), Existence::Exists);
+        assert_eq!(<dyn Database>::existence(&db, all[1].as_id()), Existence::Exists);
+        all[1].as_id()
+    };
+
+    // `b` is not made again: it is deleted, and asking says so; its fields are not read.
+    switch.set_on(&mut db).to(false);
+    assert_eq!(modules(&db, switch).len(), 1);
+    assert_eq!(<dyn Database>::existence(&db, b), Existence::Deleted);
+
+    // Made again, it takes the slot back with the next generation: the old id is not the new struct.
+    switch.set_on(&mut db).to(true);
+    let again = modules(&db, switch)[1].as_id();
+    assert_ne!(again, b);
+    assert_eq!(<dyn Database>::existence(&db, again), Existence::Exists);
+    assert_eq!(<dyn Database>::existence(&db, b), Existence::Replaced);
+}

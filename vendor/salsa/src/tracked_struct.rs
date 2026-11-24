@@ -429,6 +429,10 @@ where
     /// leaked a reference across threads somehow.
     updated_at: OptionalAtomicRevision,
 
+    /// The generation of the id this slot holds: an id of an earlier generation names a struct that is gone,
+    /// whether or not the slot has been reused.
+    generation: std::sync::atomic::AtomicU32,
+
     /// The durability minimum durability of all inputs consumed
     /// by the creator query prior to creating this tracked struct.
     /// If any of those inputs changes, then the creator query may
@@ -617,9 +621,10 @@ where
         fields: C::Fields<'db>,
     ) -> Id {
         let current_revision = zalsa.current_revision();
-        let value = |_| Value {
+        let value = |id: Id| Value {
             identity,
             updated_at: OptionalAtomicRevision::new(Some(current_revision)),
+            generation: std::sync::atomic::AtomicU32::new(id.generation()),
             durability: current_deps.durability,
             revisions: C::new_revisions(current_deps.changed_at),
 
@@ -790,6 +795,8 @@ where
             id = id
                 .next_generation()
                 .expect("already verified that generation is not maximum");
+            // SAFETY: We hold the write lock, and `generation` is atomic.
+            unsafe { (*data_raw).generation.store(id.generation(), std::sync::atomic::Ordering::Release) };
         }
 
         let durability = unsafe { &mut (*data_raw).durability };
@@ -1123,6 +1130,24 @@ where
         Some(memory_usage)
     }
 
+    fn existence(&self, zalsa: &Zalsa, id: Id) -> crate::Existence {
+        let data = Self::data_raw(zalsa.table(), id);
+        // SAFETY: The slot is initialized, and both fields are atomic: nothing of the struct is read.
+        let (updated_at, generation) = unsafe {
+            (
+                (*data).updated_at.load(),
+                (*data).generation.load(std::sync::atomic::Ordering::Acquire),
+            )
+        };
+        if generation != id.generation() {
+            crate::Existence::Replaced
+        } else if updated_at.is_none() {
+            crate::Existence::Deleted
+        } else {
+            crate::Existence::Exists
+        }
+    }
+
     fn is_persistable(&self) -> bool {
         C::PERSIST
     }
@@ -1444,6 +1469,7 @@ mod persistence {
                 identity,
                 durability,
                 updated_at,
+                generation: _,
                 revisions,
                 fields,
                 memos: _,
@@ -1530,6 +1556,7 @@ mod persistence {
                 let value = Value::<C> {
                     identity: value.identity,
                     updated_at: value.updated_at,
+                    generation: std::sync::atomic::AtomicU32::new(id.generation()),
                     durability: value.durability,
                     revisions: value.revisions,
                     fields: value.fields.0,
