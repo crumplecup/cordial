@@ -1088,9 +1088,19 @@ where
     fn remove_stale_output(
         &self,
         zalsa: &Zalsa,
-        _executor: DatabaseKeyIndex,
+        executor: DatabaseKeyIndex,
         stale_output_key: crate::Id,
     ) {
+        // Said as an event, so that a struct that something else made again, and found deleted, can be
+        // traced to the memo that deleted it.
+        ::tracing::debug!(
+            target: "salsa::discard",
+            struct_kind = C::DEBUG_NAME,
+            id = stale_output_key.as_bits(),
+            executor_query = zalsa.lookup_ingredient(executor.ingredient_index()).debug_name(),
+            executor_key = executor.key_index().as_bits(),
+            "a tracked struct is deleted: its query does not make it any more"
+        );
         // This method is called when, in prior revisions,
         // `executor` creates a tracked struct `salsa_output_key`,
         // but it did not in the current revision.

@@ -332,7 +332,7 @@ impl DefMap {
     /// Makes the finished map's modules cells, so that what reads one depends on that one.
     pub(crate) fn freeze(&mut self, db: &dyn SourceDatabase) {
         let diagnostics = std::mem::take(&mut self.diagnostics);
-        let cell = DiagnosticsCellLt::new(db, self.krate, diagnostics);
+        let cell = DiagnosticsCellLt::new(db, self.root, diagnostics);
         self.diagnostics_cell = Some(unsafe { cell.to_static() });
         let modules = std::mem::replace(&mut self.modules, ModulesMap::new());
         for (id, data) in modules.inner {
@@ -459,8 +459,10 @@ impl<'db> ModuleCellLt<'db> {
 /// reader of a module does not depend on them, and a reader of them (the diagnostics of a module) does.
 #[salsa::tracked(debug, persist)]
 pub struct DiagnosticsCellLt<'db> {
+    /// The root module of the map these are the diagnostics of: a crate's map and each block's have their own,
+    /// where the crate is every one's, and a database restored from a state finds a struct again by its identity.
     #[returns(copy)]
-    pub krate: Crate,
+    pub root: ModuleIdLt<'db>,
     #[tracked]
     #[returns(ref)]
     pub diagnostics: Vec<DefDiagnostic>,

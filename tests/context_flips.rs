@@ -402,3 +402,67 @@ fn an_attribute_macro_only_a_flipped_context_applies_does_not_stop_the_state_fro
     assert_eq!(active(&warm, only(&warm, "harness")?)?, vec![kani()]);
     Ok(())
 }
+
+/// What the state is saved with when a flipped context made each of these, in one fixture each. A save verifies
+/// every persisted memo, so each is a shape that a memo of the flipped state can be in when the cfg is back.
+const SHAPES: [(&str, &str); 5] = [
+    (
+        "an impl in a block inside a function only the context has",
+        "pub fn ordinary() -> u32 { 1 }\n#[cfg(kani)]\npub fn harness() -> u32 {\n    struct Local(u32);\n    impl Local { #[kani::proof] fn get(&self) -> u32 { self.0 } }\n    Local(ordinary()).get()\n}\n",
+    ),
+    (
+        "modules inside a module only the context has, with an impl whose item has an attribute path",
+        "pub fn ordinary() -> u32 { 1 }\n#[cfg(kani)]\npub mod proofs {\n    pub mod inner {\n        pub struct Witness(pub u32);\n        impl Witness { #[kani::proof] pub fn get(&self) -> u32 { self.0 } }\n    }\n    pub fn harness() -> u32 { inner::Witness(1).get() }\n}\n",
+    ),
+    (
+        "an attribute macro a macro_rules expansion applies only under the cfg",
+        "macro_rules! make { () => { #[cfg_attr(kani, test)] pub fn made() {} } }\nmake!();\n#[cfg(kani)]\npub fn harness() {}\npub fn ordinary() {}\n",
+    ),
+    (
+        "an enum, a trait and their members only the context has",
+        "pub fn ordinary() {}\n#[cfg(kani)]\npub enum Choice { A, B(u32) }\n#[cfg(kani)]\npub trait Prove { fn go(&self) -> u32; fn also(&self) -> u32 { 1 } }\n#[cfg(kani)]\nimpl Prove for Choice { fn go(&self) -> u32 { 2 } }\n#[cfg(kani)]\npub fn harness() -> u32 { Choice::A.go() }\n",
+    ),
+    (
+        "a function whose body has closures, blocks and a macro call, only the context has",
+        "pub fn ordinary() -> u32 { 1 }\n#[cfg(kani)]\npub fn harness() -> u32 {\n    let add = |x: u32| { let y = { x + 1 }; y };\n    let v = vec![1u32, 2, 3];\n    add(v.iter().sum::<u32>()) + ordinary()\n}\n",
+    ),
+];
+
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn each_shape_of_what_only_a_flipped_context_has_leaves_a_state_that_saves() -> Result<()> {
+    let _serial = SERIAL.lock().unwrap();
+    cordial::init_tracing();
+    let mut failures = Vec::new();
+    for (shape, source) in SHAPES {
+        let root = fixture_with(source)?;
+        let state = tempfile::tempdir().into_diagnostic()?;
+        let saved = cordial::SavedState::at(state.path().join("analysis-state"));
+        let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            run_saving(root.path(), &saved).and_then(|(_, _)| run_saving(root.path(), &saved))
+        }));
+        match outcome {
+            Ok(Ok((restored, _))) if restored => {}
+            Ok(Ok(_)) => failures.push(format!("{shape}: the second run did not restore")),
+            Ok(Err(error)) => failures.push(format!("{shape}: {error:?}")),
+            Err(_) => failures.push(format!("{shape}: a panic")),
+        }
+    }
+    assert!(failures.is_empty(), "{failures:#?}");
+    Ok(())
+}
+
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn an_impl_in_a_block_inside_a_function_only_a_flipped_context_has_leaves_a_state_that_saves() -> Result<()> {
+    let _serial = SERIAL.lock().unwrap();
+    cordial::init_tracing();
+    let root = fixture_with(SHAPES[0].1)?;
+    let state = tempfile::tempdir().into_diagnostic()?;
+    let saved = cordial::SavedState::at(state.path().join("analysis-state"));
+    let (restored, _) = run_saving(root.path(), &saved)?;
+    assert!(!restored);
+    let (restored, _) = run_saving(root.path(), &saved)?;
+    assert!(restored);
+    Ok(())
+}
