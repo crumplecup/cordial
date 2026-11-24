@@ -38,7 +38,7 @@ static EXTERNAL_READS: AtomicUsize = AtomicUsize::new(0);
 fn external_items(db: &dyn SourceDatabase, krate: Crate) -> usize {
     EXTERNAL_READS.fetch_add(1, Ordering::SeqCst);
     crate_def_map(db, krate)
-        .modules()
+        .modules(db)
         .map(|(_, module)| module.scope.declarations().count())
         .sum()
 }
@@ -214,7 +214,7 @@ impl Fixture {
 
     fn modules(&self) -> Vec<ra_ap_hir_def::ModuleId> {
         crate_def_map(&self.db, self.krate)
-            .modules()
+            .modules(&self.db)
             .map(|(id, _)| id)
             .collect()
     }
@@ -267,7 +267,7 @@ impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for MapExecutions {
 
 fn declared_functions(db: &RootDatabase, krate: Crate) -> Vec<FunctionId> {
     let mut functions: Vec<_> = crate_def_map(db, krate)
-        .modules()
+        .modules(db)
         .flat_map(|(_, module)| module.scope.declarations())
         .filter_map(|def| match def {
             ModuleDefId::FunctionId(id) => Some(id),
@@ -388,7 +388,7 @@ impl LocalBodies {
             }
         }
         let mut bodies = Vec::new();
-        for (_, module) in map.modules() {
+        for (_, module) in map.modules(db) {
             for def in module.scope.declarations() {
                 match def {
                     ModuleDefId::FunctionId(id) => bodies.push(id.into()),
@@ -483,7 +483,7 @@ impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for LocalExecutions {
 
 fn associated_functions(db: &RootDatabase, krate: Crate) -> Vec<FunctionId> {
     let mut functions = Vec::new();
-    for (_, module) in crate_def_map(db, krate).modules() {
+    for (_, module) in crate_def_map(db, krate).modules(db) {
         let traits = module.scope.declarations().filter_map(|def| match def {
             ModuleDefId::TraitId(id) => Some(id),
             _ => None,
@@ -504,7 +504,7 @@ fn associated_functions(db: &RootDatabase, krate: Crate) -> Vec<FunctionId> {
 
 fn associated_query_keys(db: &RootDatabase, krate: Crate) -> Vec<salsa::Id> {
     let mut keys = Vec::new();
-    for (_, module) in crate_def_map(db, krate).modules() {
+    for (_, module) in crate_def_map(db, krate).modules(db) {
         for def in module.scope.declarations() {
             if let ModuleDefId::TraitId(id) = def {
                 let members = id.trait_items(db);
@@ -572,7 +572,7 @@ fn held_item_values(db: &mut RootDatabase, functions: &[FunctionId]) -> u64 {
 fn declared_variants(db: &RootDatabase, krate: Crate) -> (Vec<EnumVariantId>, usize) {
     let mut variants = Vec::new();
     let mut inactive = 0;
-    for (_, module) in crate_def_map(db, krate).modules() {
+    for (_, module) in crate_def_map(db, krate).modules(db) {
         for def in module.scope.declarations() {
             if let ModuleDefId::AdtId(AdtId::EnumId(id)) = def {
                 let (members, diagnostics) = id.enum_variants_with_diagnostics(db);
@@ -1082,7 +1082,7 @@ fn declared_locations_retire_cfg_item_values_without_retiring_imported_work() {
                     assert_eq!(declared_functions(&fixture.db, krate), functions[index]);
                     assert!(
                         crate_def_map(&fixture.db, krate)
-                            .modules()
+                            .modules(&fixture.db)
                             .any(|(_, module)| {
                                 module
                                     .scope
@@ -1232,13 +1232,13 @@ fn local_legacy_macros_retire_without_selecting_inherited_dependency_work() {
                 for (index, &krate) in fixture.contexts.iter().enumerate() {
                     let map = crate_def_map(&fixture.db, krate);
                     let visible_legacy = map
-                        .modules()
+                        .modules(&fixture.db)
                         .flat_map(|(_, module)| module.scope.legacy_macros())
                         .map(|(_, ids)| ids.len())
                         .sum::<usize>();
                     assert!(visible_legacy > macros[index].len());
                     assert!(
-                        map.modules().any(|(_, module)| module.scope.entries().any(
+                        map.modules(&fixture.db).any(|(_, module)| module.scope.entries().any(
                             |(_, entry)| entry.take_macros().is_some_and(|id| shared.contains(&id))
                         )),
                         "the dependency macro must actually be imported"
@@ -1573,7 +1573,7 @@ impl TreeLocations {
         let maps = std::iter::once(crate_def_map(db, krate))
             .chain(bodies.blocks.iter().map(|&block| block_def_map(db, block)));
         for map in maps {
-            for (_, module) in map.modules() {
+            for (_, module) in map.modules(db) {
                 match module.origin {
                     ModuleOrigin::CrateRoot { definition }
                     | ModuleOrigin::File { definition, .. } => files.push(definition.into()),
@@ -2351,7 +2351,7 @@ fn retiring_one_crate_preserves_dependency_maps_and_reenters_without_collection(
             let fingerprint = def_map_fingerprint(&fixture.db, fixture.krate);
             ra_ap_hir_def::lang_item::lang_items(&fixture.db, fixture.krate);
             let dependency_modules: Vec<_> = crate_def_map(&fixture.db, dependency)
-                .modules()
+                .modules(&fixture.db)
                 .map(|(id, _)| id)
                 .collect();
             for &module in modules.iter().chain(&dependency_modules) {
@@ -2512,7 +2512,7 @@ fn instantiated_mir(
 fn fixture_adt(db: &RootDatabase, krate: Crate) -> ra_ap_hir_ty::next_solver::StoredTy {
     use ra_ap_hir_ty::next_solver::{DbInterner, GenericArgs, Ty};
     let adt = crate_def_map(db, krate)
-        .modules()
+        .modules(db)
         .flat_map(|(_, module)| module.scope.declarations())
         .find_map(|def| match def {
             ModuleDefId::AdtId(id) => Some(id),
@@ -2849,7 +2849,7 @@ fn type_layout_walks_nested_unevaluated_constants_and_protects_both_roots() {
     let (left, right) = (fixture.contexts[0], fixture.contexts[1]);
     salsa::activate_owner_roots(&mut fixture.db, &[left.as_id(), right.as_id()]);
     let constant = crate_def_map(&fixture.db, left)
-        .modules()
+        .modules(&fixture.db)
         .flat_map(|(_, module)| module.scope.declarations())
         .find_map(|id| match id {
             ModuleDefId::ConstId(id) => Some(id),
@@ -2926,7 +2926,7 @@ fn const_evaluation_retires_local_substitutions_and_optional_environments() {
     let (left, right) = (fixture.contexts[0], fixture.contexts[1]);
     salsa::activate_owner_roots(&mut fixture.db, &[left.as_id(), right.as_id()]);
     let constant = crate_def_map(&fixture.db, shared)
-        .modules()
+        .modules(&fixture.db)
         .flat_map(|(_, module)| module.scope.declarations())
         .find_map(|id| match id {
             ModuleDefId::ConstId(id) => Some(id),
@@ -3125,7 +3125,7 @@ fn specialization_protects_both_impl_owners_and_preserves_shared_pairs() {
     salsa::activate_owner_roots(&mut fixture.db, &[left.as_id(), right.as_id()]);
     let implementation = |db: &RootDatabase, krate| {
         crate_def_map(db, krate)
-            .modules()
+            .modules(db)
             .flat_map(|(_, m)| m.scope.impls())
             .next()
             .unwrap()
@@ -3260,7 +3260,7 @@ fn proc_macro_spans_in_expansions_follow_the_expansion_crate() {
     salsa::activate_owner_roots(&mut fixture.db, &[root.as_id()]);
     let expansion = |db: &RootDatabase, krate| {
         let call = crate_def_map(db, krate)
-            .modules()
+            .modules(db)
             .flat_map(|(_, module)| module.scope.all_macro_calls())
             .next()
             .unwrap();

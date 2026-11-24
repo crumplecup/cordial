@@ -57,14 +57,14 @@ pub fn shared_modules(db: &dyn SourceDatabase, copy: Crate) -> Option<SharedModu
     let map = crate_def_map(db, original);
     let mut why: rustc_hash::FxHashMap<ModuleId, Reason> = rustc_hash::FxHashMap::default();
     if copy.data(db).is_proc_macro {
-        for (id, _) in map.modules() {
+        for (id, _) in map.modules(db) {
             why.entry(id).or_insert(Reason::ProcMacro);
         }
     }
     let directly: FxHashSet<_> = copy.affected_files(db).iter().copied().collect();
     // What each module imports from.
     let mut imports: Vec<(ModuleId, Vec<ModuleId>)> = Vec::new();
-    for (id, data) in map.modules() {
+    for (id, data) in map.modules(db) {
         let own_file = data.definition_source_file_id().file_id().map(|file| file.file_id(db));
         if own_file.is_none_or(|file| directly.contains(&file)) {
             why.entry(id).or_insert(Reason::File);
@@ -72,7 +72,7 @@ pub fn shared_modules(db: &dyn SourceDatabase, copy: Crate) -> Option<SharedModu
         // A macro defined here can be exported to the root, or reach modules declared after it. A `macro_rules!`
         // is in the textual macro scope and not among the declarations: a module's scope holds the macros its
         // parent had when it was declared and the ones it defines, so the ones the parent does not have are its own.
-        let inherited = data.parent.map(|parent| &map.modules[parent].scope);
+        let inherited = data.parent.map(|parent| &map.module_data(db, parent).scope);
         let defines_macro = data.scope.legacy_macros().any(|(_, macros)| {
             macros
                 .iter()
@@ -98,14 +98,14 @@ pub fn shared_modules(db: &dyn SourceDatabase, copy: Crate) -> Option<SharedModu
         let before = why.len();
         for (id, from) in &imports {
             if why.contains_key(id) {
-                if let Some(parent) = map.modules[*id].parent {
+                if let Some(parent) = map.module_data(db, *id).parent {
                     why.entry(parent).or_insert(Reason::Parent(*id));
                 }
             } else if let Some(module) = from.iter().find(|module| why.contains_key(module)) {
                 why.insert(*id, Reason::Import(*module));
-            } else if let Some(parent) = map.modules[*id].parent
+            } else if let Some(parent) = map.module_data(db, *id).parent
                 && why.contains_key(&parent)
-                && map.modules[*id].scope.legacy_macros().next().is_some()
+                && map.module_data(db, *id).scope.legacy_macros().next().is_some()
             {
                 why.insert(*id, Reason::InheritedMacros);
             }
@@ -116,7 +116,7 @@ pub fn shared_modules(db: &dyn SourceDatabase, copy: Crate) -> Option<SharedModu
     }
     let affected: FxHashSet<ModuleId> = why.keys().copied().collect();
     let unaffected: FxHashSet<ModuleId> =
-        map.modules().map(|(id, _)| id).filter(|id| !affected.contains(id)).collect();
+        map.modules(db).map(|(id, _)| id).filter(|id| !affected.contains(id)).collect();
     report(db, map, &why, unaffected.len());
     Some(SharedModules { affected, unaffected })
 }
@@ -167,7 +167,7 @@ fn report(
         .collect();
     tracing::info!(
         target: "cordial::def_map",
-        modules = map.modules().count() as u64,
+        modules = map.modules(db).count() as u64,
         affected_modules = why.len() as u64,
         shared_modules = shared as u64,
         affected_by_file = counts[0],

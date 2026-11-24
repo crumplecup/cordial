@@ -251,7 +251,7 @@ impl<'db> SourceToDefCtx<'db, '_> {
 
         let child_name = src.value.name()?.as_name();
         let def_map = parent_module.def_map(self.db);
-        let &child_id = def_map[parent_module].children.get(&child_name)?;
+        let &child_id = def_map.module_data(self.db, parent_module).children.get(&child_name)?;
         Some(child_id)
     }
 

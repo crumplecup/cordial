@@ -500,9 +500,12 @@ fn a_save_that_keeps_the_encoding_of_unchanged_ingredients_restores_as_one_that_
         &other.path().join("analysis-state"),
     )?;
     let full = SavedState::at(other.path().join("analysis-state")).without_reuse();
+    // The edit makes a macro call, which is expanded and so makes an ingredient that holds the expansions
+    // of every crate (the library's among them) one the save has to look into: a definition map is read
+    // by module, so an edit that only adds a function runs none of the library's.
     std::fs::write(
         root.path().join("src/first.rs"),
-        "pub fn alpha() {}\n// an edit\npub fn gamma() {}\n",
+        "pub fn alpha() {}\n// an edit\nmacro_rules! one { () => { 1 } }\npub fn gamma() -> u32 { one!() }\n",
     )
     .into_diagnostic()?;
     let _ = said();

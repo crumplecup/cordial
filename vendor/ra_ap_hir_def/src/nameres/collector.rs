@@ -814,7 +814,7 @@ impl<'db> DefCollector<'db> {
         let def_map = crate_def_map(self.db, krate);
         // `#[macro_use]` brings macros into macro_use prelude. Yes, even non-`macro_rules!`
         // macros.
-        let root_scope = &def_map[def_map.root].scope;
+        let root_scope = &def_map.module_data(self.db, def_map.root).scope;
         match names {
             Some(names) => {
                 for name in names {
@@ -1003,7 +1003,7 @@ impl<'db> DefCollector<'db> {
                         } else if m.krate(self.db) != self.def_map.krate {
                             cov_mark::hit!(glob_across_crates);
                             // glob import from other crate => we can just import everything once
-                            let scope = &m.def_map(self.db)[m].scope;
+                            let scope = &m.def_map(self.db).module_data(self.db, m).scope;
 
                             // Module scoped macros is included
                             let items = scope
@@ -1026,9 +1026,9 @@ impl<'db> DefCollector<'db> {
                             // import, and then need to propagate any further
                             // additions
                             let scope = if m.block(self.db) == self.def_map.block_id() {
-                                &self.def_map[m].scope
+                                &self.def_map.module_data(self.db, m).scope
                             } else {
-                                &m.def_map(self.db)[m].scope
+                                &m.def_map(self.db).module_data(self.db, m).scope
                             };
 
                             // Module scoped macros is included
@@ -1264,7 +1264,7 @@ impl<'db> DefCollector<'db> {
         let mut changed = false;
 
         if let Some(ImportOrExternCrate::Glob(_)) = def_import_type {
-            let prev_defs = self.def_map[module_id].scope.get(name);
+            let prev_defs = self.def_map.module_data(self.db, module_id).scope.get(name);
 
             // Multiple globs may import the same item and they may override visibility from
             // previously resolved globs. Handle overrides here and leave the rest to
@@ -1966,7 +1966,7 @@ impl<'db> SharedWithOriginal<'db> {
         }
         let mut found = Some(self.original.root);
         for name in names.iter().rev() {
-            found = found.and_then(|module| self.original.modules.get(&module)?.children.get(name).copied());
+            found = found.and_then(|module| self.original.try_module_data(db, module)?.children.get(name).copied());
         }
         found
     }
@@ -1975,16 +1975,16 @@ impl<'db> SharedWithOriginal<'db> {
     /// as it is.
     fn child(&self, db: &dyn SourceDatabase, parent: ModuleId, name: &Name) -> Option<ModuleId> {
         let original_parent = self.original_at(db, parent)?;
-        let child = *self.original.modules.get(&original_parent)?.children.get(name)?;
+        let child = *self.original.try_module_data(db, original_parent)?.children.get(name)?;
         self.unaffected.contains(&child).then_some(child)
     }
 
     /// The original's `module` and every module under it, with their data.
-    fn subtree(&self, module: ModuleId) -> Vec<(ModuleId, ModuleData)> {
+    fn subtree(&self, db: &dyn SourceDatabase, module: ModuleId) -> Vec<(ModuleId, ModuleData)> {
         let mut found = Vec::new();
         let mut pending = vec![module];
         while let Some(module) = pending.pop() {
-            let data = &self.original.modules[module];
+            let data = self.original.module_data(db, module);
             pending.extend(data.children.values().copied());
             found.push((module, data.clone()));
         }
@@ -2240,7 +2240,7 @@ impl ModCollector<'_, '_> {
                         // A proc macro is implemented as a function, but it's treated as a macro, not a function.
                         // You cannot call it like a function, for example, except in its defining crate.
                         // So we keep the function definition, but remove it from the scope, leaving only the macro.
-                        self.def_collector.def_map[module_id]
+                        self.def_collector.def_map.modules[module_id]
                             .scope
                             .remove_from_value_ns(&it.name, fn_id.into());
                     }
@@ -2548,7 +2548,7 @@ impl ModCollector<'_, '_> {
             .def_collector
             .shared
             .as_ref()
-            .map(|shared| shared.subtree(original))
+            .map(|shared| shared.subtree(self.def_collector.db, original))
             .unwrap_or_default();
         let def_map = &mut self.def_collector.def_map;
         for (id, mut data) in subtree {
@@ -2874,9 +2874,9 @@ impl ModCollector<'_, '_> {
                     let def_map = &self.def_collector.def_map;
                     def_map
                         .with_ancestor_maps(db, self.module_id, &mut |map, module| {
-                            map[module].scope.get_legacy_macro(name)?.last().copied()
+                            map.module_data(db, module).scope.get_legacy_macro(name)?.last().copied()
                         })
-                        .or_else(|| def_map[self.module_id].scope.get(name).take_macros())
+                        .or_else(|| def_map.module_data(db, self.module_id).scope.get(name).take_macros())
                         .or_else(|| Some(def_map.macro_use_prelude.get(name).copied()?.0))
                         .filter(|&id| sub_namespace_match(db, id, Some(MacroSubNs::Bang)))
                         .map(|it| it.definition(self.def_collector.db))

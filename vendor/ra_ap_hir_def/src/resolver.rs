@@ -629,11 +629,11 @@ impl<'db> Resolver<'db> {
         //         def: m.module.into(),
         //     }),
         // );
-        def_map[module_id].scope.entries().for_each(|(name, def)| {
+        def_map.module_data(db, module_id).scope.entries().for_each(|(name, def)| {
             res.add_per_ns(name, def);
         });
 
-        def_map[module_id].scope.legacy_macros().for_each(|(name, macs)| {
+        def_map.module_data(db, module_id).scope.legacy_macros().for_each(|(name, macs)| {
             macs.iter().for_each(|&mac| {
                 res.add(name, ScopeDef::ModuleDef(ModuleDefId::MacroId(mac)));
             })
@@ -651,7 +651,7 @@ impl<'db> Resolver<'db> {
         });
         if let Some((prelude, _use)) = def_map.prelude() {
             let prelude_def_map = prelude.def_map(db);
-            for (name, def) in prelude_def_map[prelude].scope.entries() {
+            for (name, def) in prelude_def_map.module_data(db, prelude).scope.entries() {
                 res.add_per_ns(name, def)
             }
         }
@@ -663,7 +663,7 @@ impl<'db> Resolver<'db> {
         &'a self,
         db: &'a dyn SourceDatabase,
     ) -> impl Iterator<Item = Name> + 'a {
-        self.module_scope.def_map[self.module_scope.module_id]
+        self.module_scope.def_map.module_data(db, self.module_scope.module_id)
             .scope
             .extern_crate_decls()
             .filter_map(|id| {
@@ -693,7 +693,7 @@ impl<'db> Resolver<'db> {
 
         for scope in self.scopes() {
             match scope {
-                Scope::BlockScope(m) => traits.extend(m.def_map[m.module_id].scope.traits()),
+                Scope::BlockScope(m) => traits.extend(m.def_map.module_data(db, m.module_id).scope.traits()),
                 &Scope::GenericParams { def: GenericDefId::ImplId(impl_), .. } => {
                     let impl_data = ImplSignature::of(db, impl_);
                     if let Some(target_trait) = impl_data.target_trait
@@ -710,17 +710,17 @@ impl<'db> Resolver<'db> {
         // Fill in the prelude traits
         if let Some((prelude, _use)) = self.module_scope.def_map.prelude() {
             let prelude_def_map = prelude.def_map(db);
-            traits.extend(prelude_def_map[prelude].scope.traits());
+            traits.extend(prelude_def_map.module_data(db, prelude).scope.traits());
         }
         // Fill in module visible traits
-        traits.extend(self.module_scope.def_map[self.module_scope.module_id].scope.traits());
+        traits.extend(self.module_scope.def_map.module_data(db, self.module_scope.module_id).scope.traits());
         traits
     }
 
-    pub fn traits_in_scope_from_block_scopes(&self) -> impl Iterator<Item = TraitId> + '_ {
+    pub fn traits_in_scope_from_block_scopes<'a>(&'a self, db: &'a dyn SourceDatabase) -> impl Iterator<Item = TraitId> + 'a {
         self.scopes()
             .filter_map(|scope| match scope {
-                Scope::BlockScope(m) => Some(m.def_map[m.module_id].scope.traits()),
+                Scope::BlockScope(m) => Some(m.def_map.module_data(db, m.module_id).scope.traits()),
                 _ => None,
             })
             .flatten()
@@ -730,9 +730,9 @@ impl<'db> Resolver<'db> {
         self.item_scope_().2
     }
 
-    pub fn item_scope(&self) -> &ItemScope {
+    pub fn item_scope<'a>(&'a self, db: &'a dyn SourceDatabase) -> &'a ItemScope {
         let (def_map, _, local_id) = self.item_scope_();
-        &def_map[local_id].scope
+        &def_map.module_data(db, local_id).scope
     }
 
     pub fn krate(&self) -> Crate {
@@ -1053,10 +1053,10 @@ impl<'db> Scope<'db> {
     fn process_names(&self, acc: &mut ScopeNames, db: &'db dyn SourceDatabase) {
         match self {
             Scope::BlockScope(m) => {
-                m.def_map[m.module_id].scope.entries().for_each(|(name, def)| {
+                m.def_map.module_data(db, m.module_id).scope.entries().for_each(|(name, def)| {
                     acc.add_per_ns(name, def);
                 });
-                m.def_map[m.module_id].scope.legacy_macros().for_each(|(name, macs)| {
+                m.def_map.module_data(db, m.module_id).scope.legacy_macros().for_each(|(name, macs)| {
                     macs.iter().for_each(|&mac| {
                         acc.add(name, ScopeDef::ModuleDef(ModuleDefId::MacroId(mac)));
                     })

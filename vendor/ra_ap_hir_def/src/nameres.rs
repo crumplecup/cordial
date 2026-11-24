@@ -180,7 +180,9 @@ pub struct DefMap {
     block: Option<BlockInfo>,
     pub root: ModuleId,
     /// The modules and their data declared in this crate.
-    pub modules: ModulesMap,
+    modules: ModulesMap,
+    /// The modules of a finished map, a cell each: empty while the collector builds, and then `modules` is.
+    cells: FxIndexMap<ModuleId, ModuleCell>,
     /// The prelude module for this crate. This either comes from an import
     /// marked with the `prelude_import` attribute, or (in the normal case) from
     /// a dependency (`std` or `core`).
@@ -201,8 +203,9 @@ pub struct DefMap {
     /// A mapping from [`hir_expand::MacroDefId`] to [`crate::MacroId`].
     pub macro_def_to_macro_id: FxHashMap<ErasedAstId, MacroId>,
 
-    /// The diagnostics that need to be emitted for this crate.
+    /// The diagnostics that need to be emitted for this crate, while the collector builds; then `diagnostics_cell` has them.
     diagnostics: Vec<DefDiagnostic>,
+    diagnostics_cell: Option<DiagnosticsCell>,
 
     /// The crate data that is shared between a crate's def map and all its block def maps.
     data: Arc<DefMapCrateData>,
@@ -291,11 +294,11 @@ fn crate_label(krate: Crate) -> String {
     .unwrap_or_else(|| "(no database attached)".to_owned())
 }
 
-impl std::ops::Index<ModuleIdLt<'_>> for DefMap {
-    type Output = ModuleData;
-
-    fn index(&self, id: ModuleIdLt<'_>) -> &ModuleData {
-        self.modules.get(&unsafe { id.to_static() }).unwrap_or_else(|| {
+impl DefMap {
+    /// A module's data. Reading a finished map's module depends on that module's cell and on no other.
+    pub fn module_data<'a>(&'a self, db: &'a dyn SourceDatabase, id: ModuleIdLt<'_>) -> &'a ModuleData {
+        let id = unsafe { id.to_static() };
+        self.try_module_data(db, id).unwrap_or_else(|| {
             // Said as an event first, so that the log has the steps that were running, which the
             // panic's message does not.
             let module_crate = salsa::with_attached_database(|db| id.krate(db))
@@ -311,11 +314,31 @@ impl std::ops::Index<ModuleIdLt<'_>> for DefMap {
             panic!("ModuleId not found in ModulesMap {:#?}: {id:#?}", self.root)
         })
     }
-}
 
-impl std::ops::IndexMut<ModuleId> for DefMap {
-    fn index_mut(&mut self, id: ModuleId) -> &mut ModuleData {
-        &mut self.modules[id]
+    /// A module's data if the map has the module.
+    pub fn try_module_data<'a>(
+        &'a self,
+        db: &'a dyn SourceDatabase,
+        id: ModuleIdLt<'_>,
+    ) -> Option<&'a ModuleData> {
+        let id = unsafe { id.to_static() };
+        if self.cells.is_empty() {
+            self.modules.get(&id)
+        } else {
+            self.cells.get(&id).map(|cell| cell.data(db))
+        }
+    }
+
+    /// Makes the finished map's modules cells, so that what reads one depends on that one.
+    pub(crate) fn freeze(&mut self, db: &dyn SourceDatabase) {
+        let diagnostics = std::mem::take(&mut self.diagnostics);
+        let cell = DiagnosticsCellLt::new(db, self.krate, diagnostics);
+        self.diagnostics_cell = Some(unsafe { cell.to_static() });
+        let modules = std::mem::replace(&mut self.modules, ModulesMap::new());
+        for (id, data) in modules.inner {
+            let cell = ModuleCellLt::new(db, id, data);
+            self.cells.insert(id, unsafe { cell.to_static() });
+        }
     }
 }
 
@@ -405,6 +428,52 @@ pub struct ModuleData {
     pub parent: Option<ModuleId>,
     pub children: FxIndexMap<Name, ModuleId>,
     pub scope: ItemScope,
+}
+
+/// One module's data, as a tracked field: a reader of it depends on this module and not on the map.
+///
+/// The collector builds a map of plain [`ModuleData`]. When it has finished, the map is frozen into a cell per
+/// module (`DefMap::freeze`). The cell is found again by the module's id when the query that made it runs
+/// again, and its data keeps the revision it last changed in when equal, so a map in which only one module
+/// differs is equal to the map before, and only what read that module's cell runs again.
+#[salsa::tracked(debug, persist)]
+pub struct ModuleCellLt<'db> {
+    #[returns(copy)]
+    pub module: ModuleIdLt<'db>,
+    #[tracked]
+    #[returns(ref)]
+    pub data: ModuleData,
+}
+pub type ModuleCell = ModuleCellLt<'static>;
+
+impl<'db> ModuleCellLt<'db> {
+    /// # Safety
+    ///
+    /// The cell is kept in the map of the query that made it, and read through the database that made it.
+    unsafe fn to_static(self) -> ModuleCell {
+        unsafe { std::mem::transmute(self) }
+    }
+}
+
+/// A finished map's diagnostics. They hold the crate's options, so they differ under any flip of the cfg: a
+/// reader of a module does not depend on them, and a reader of them (the diagnostics of a module) does.
+#[salsa::tracked(debug, persist)]
+pub struct DiagnosticsCellLt<'db> {
+    #[returns(copy)]
+    pub krate: Crate,
+    #[tracked]
+    #[returns(ref)]
+    pub diagnostics: Vec<DefDiagnostic>,
+}
+pub type DiagnosticsCell = DiagnosticsCellLt<'static>;
+
+impl<'db> DiagnosticsCellLt<'db> {
+    /// # Safety
+    ///
+    /// The cell is kept in the map of the query that made it, and read through the database that made it.
+    unsafe fn to_static(self) -> DiagnosticsCell {
+        unsafe { std::mem::transmute(self) }
+    }
 }
 
 #[inline]
@@ -575,6 +644,8 @@ pub(crate) fn crate_local_def_map(db: &dyn SourceDatabase, crate_id: Crate) -> D
     let (def_map, local_def_map) =
         collector::collect_defs(db, def_map, TreeId::new(root_file_id.into(), None), None);
 
+    let mut def_map = def_map;
+    def_map.freeze(db);
     DefMapPair { def_map: Arc::new(def_map), local: Arc::new(local_def_map) }
 }
 
@@ -611,6 +682,8 @@ pub fn block_def_map<'db>(db: &'db dyn SourceDatabase, block_id: BlockIdLt<'db>)
         TreeId::new(ast_id.file_id, Some(block_id)),
         Some(&local_def_map.local),
     );
+    let mut def_map = def_map;
+    def_map.freeze(db);
     def_map
 }
 
@@ -643,11 +716,13 @@ impl DefMap {
             block,
             root,
             modules,
+            cells: FxIndexMap::default(),
             krate,
             prelude: None,
             macro_use_prelude: FxHashMap::default(),
             derive_helpers_in_scope: FxHashMap::default(),
             diagnostics: Vec::new(),
+            diagnostics_cell: None,
             data: crate_data,
             macro_def_to_macro_id: FxHashMap::default(),
         }
@@ -657,7 +732,9 @@ impl DefMap {
         let Self {
             macro_use_prelude,
             diagnostics,
+            diagnostics_cell: _,
             modules,
+            cells,
             derive_helpers_in_scope,
             root: _,
             block: _,
@@ -671,6 +748,7 @@ impl DefMap {
         macro_use_prelude.shrink_to_fit();
         diagnostics.shrink_to_fit();
         modules.shrink_to_fit();
+        cells.shrink_to_fit();
         derive_helpers_in_scope.shrink_to_fit();
         for (_, module) in modules.iter_mut() {
             module.children.shrink_to_fit();
@@ -686,16 +764,19 @@ impl DefMap {
         db: &'a dyn SourceDatabase,
         file_id: FileId,
     ) -> impl Iterator<Item = ModuleId> + 'a {
-        self.modules
-            .iter()
+        self.modules(db)
             .filter(move |(_, data)| {
                 data.origin.file_id().map(|file_id| file_id.file_id(db)) == Some(file_id)
             })
             .map(|(id, _)| id)
     }
 
-    pub fn modules(&self) -> impl Iterator<Item = (ModuleId, &ModuleData)> + '_ {
-        self.modules.iter()
+    pub fn modules<'a>(
+        &'a self,
+        db: &'a dyn SourceDatabase,
+    ) -> impl Iterator<Item = (ModuleId, &'a ModuleData)> + 'a {
+        let cells = self.cells.iter().map(move |(&id, cell)| (id, cell.data(db)));
+        self.modules.iter().chain(cells)
     }
 
     /// The modules this map made: not the original's modules that a copy of a crate was given (see
@@ -704,7 +785,7 @@ impl DefMap {
         &'a self,
         db: &'a dyn SourceDatabase,
     ) -> impl Iterator<Item = (ModuleId, &'a ModuleData)> + 'a {
-        self.modules().filter(move |(id, _)| id.krate(db) == self.krate)
+        self.modules(db).filter(move |(id, _)| id.krate(db) == self.krate)
     }
 
     /// Query keys declared in this map's modules, excluding imports and inherited names.
@@ -756,12 +837,12 @@ impl DefMap {
     }
 
     /// Returns all inline modules (mod name { ... }) in the crate that are associated with the given macro expansion.
-    pub fn inline_modules_for_macro_file(
-        &self,
+    pub fn inline_modules_for_macro_file<'a>(
+        &'a self,
+        db: &'a dyn SourceDatabase,
         file_id: MacroCallId,
-    ) -> impl Iterator<Item = ModuleId> + '_ {
-        self.modules
-            .iter()
+    ) -> impl Iterator<Item = ModuleId> + 'a {
+        self.modules(db)
             .filter(move |(_, data)| {
                 matches!(
                     data.origin,
@@ -834,16 +915,23 @@ impl DefMap {
 
     /// Returns the module containing `local_mod`, either the parent `mod`, or the module (or block) containing
     /// the block, if `self` corresponds to a block expression.
-    pub fn containing_module(&self, local_mod: ModuleIdLt<'_>) -> Option<ModuleId> {
-        match self[local_mod].parent {
+    pub fn containing_module(
+        &self,
+        db: &dyn SourceDatabase,
+        local_mod: ModuleIdLt<'_>,
+    ) -> Option<ModuleId> {
+        match self.module_data(db, local_mod).parent {
             Some(parent) => Some(parent),
             None => self.block.map(|BlockInfo { parent, .. }| parent),
         }
     }
 
     /// Get a reference to the def map's diagnostics.
-    pub fn diagnostics(&self) -> &[DefDiagnostic] {
-        self.diagnostics.as_slice()
+    pub fn diagnostics<'a>(&'a self, db: &'a dyn SourceDatabase) -> &'a [DefDiagnostic] {
+        match self.diagnostics_cell {
+            Some(cell) => cell.diagnostics(db).as_slice(),
+            None => self.diagnostics.as_slice(),
+        }
     }
 
     pub fn recursion_limit(&self) -> u32 {
@@ -873,9 +961,9 @@ impl DefMap {
         ) {
             format_to!(buf, "{}\n", path);
 
-            map[module].scope.dump(db, buf);
+            map.module_data(db, module).scope.dump(db, buf);
 
-            for (name, child) in map[module].children.iter().sorted_by(|a, b| Ord::cmp(&a.0, &b.0))
+            for (name, child) in map.module_data(db, module).children.iter().sorted_by(|a, b| Ord::cmp(&a.0, &b.0))
             {
                 let path = format!("{path}::{}", name.display(db, Edition::LATEST));
                 buf.push('\n');

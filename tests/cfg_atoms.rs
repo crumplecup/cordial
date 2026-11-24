@@ -91,7 +91,7 @@ const FILES: [(&str, &str); 3] = [
 
 fn declared(db: &RootDatabase, krate: Crate) -> usize {
     crate_def_map(db, krate)
-        .modules()
+        .modules(db)
         .map(|(_, module)| module.scope.declarations().count())
         .sum()
 }
@@ -143,7 +143,7 @@ fn flipping_an_atom_no_file_tests_runs_no_item_tree_again() {
 /// Every function's body, as an analysis of the crate reads them.
 fn read_bodies(db: &RootDatabase, krate: Crate) -> usize {
     let functions: Vec<_> = crate_def_map(db, krate)
-        .modules()
+        .modules(db)
         .flat_map(|(_, module)| module.scope.declarations().collect::<Vec<_>>())
         .filter_map(|def| match def {
             ModuleDefId::FunctionId(id) => Some(DefWithBodyId::from(id)),
@@ -233,5 +233,15 @@ fn what_a_flip_runs_again_does_not_grow_with_the_files_it_does_not_reach() {
         small.get("file_item_tree_query"),
         large.get("file_item_tree_query"),
         "the item trees executed again are the ones that test the atom"
+    );
+    assert_eq!(
+        small.get("body_with_source_map_query"),
+        large.get("body_with_source_map_query"),
+        "the bodies executed again are the ones that read what the atom changed, not every body"
+    );
+    assert_eq!(
+        large.get("body_with_source_map_query"),
+        Some(&1),
+        "only the body the flip makes visible is executed: no other reads the module the gate is in"
     );
 }

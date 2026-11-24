@@ -249,7 +249,7 @@ impl ItemScope {
             match m {
                 ImportOrDef::Import(i) => {
                     let module_id = i.use_.lookup(db).container;
-                    scope = &module_id.def_map(db)[module_id].scope;
+                    scope = &module_id.def_map(db).module_data(db, module_id).scope;
                     import = i;
                 }
                 ImportOrDef::Def(ModuleDefId::MacroId(def)) => {
@@ -264,7 +264,7 @@ impl ItemScope {
             match m {
                 ImportOrDef::Import(i) => {
                     let module_id = i.use_.lookup(db).container;
-                    scope = &module_id.def_map(db)[module_id].scope;
+                    scope = &module_id.def_map(db).module_data(db, module_id).scope;
                     import = i;
                 }
                 ImportOrDef::Def(def) => {
@@ -279,7 +279,7 @@ impl ItemScope {
             match m {
                 ImportOrDef::Import(i) => {
                     let module_id = i.use_.lookup(db).container;
-                    scope = &module_id.def_map(db)[module_id].scope;
+                    scope = &module_id.def_map(db).module_data(db, module_id).scope;
                     import = i;
                 }
                 ImportOrDef::Def(def) => {

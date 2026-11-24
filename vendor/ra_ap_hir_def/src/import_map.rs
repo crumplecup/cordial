@@ -149,10 +149,10 @@ impl ImportMap {
                 continue;
             }
             let mod_data = if module.krate(db) == krate {
-                &def_map[module]
+                &def_map.module_data(db, module)
             } else {
                 // The crate might reexport a module defined in another crate.
-                &module.def_map(db)[module]
+                &module.def_map(db).module_data(db, module)
             };
 
             let visible_items = mod_data.scope.entries().filter_map(|(name, per_ns)| {

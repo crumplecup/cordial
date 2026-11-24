@@ -1127,9 +1127,9 @@ impl<'a, 'db> DiagnosticsCollector<'a, 'db> {
         let _p = tracing::info_span!("diagnostics", name = ?def.name(self.db)).entered();
 
         let def_map = def.def_map(self.db);
-        let scope = &def_map[def].scope;
+        let scope = &def_map.module_data(self.db, def).scope;
 
-        for diag in def_map.diagnostics() {
+        for diag in def_map.diagnostics(self.db) {
             if diag.in_module != def {
                 // FIXME: This is accidentally quadratic.
                 continue;
@@ -1348,7 +1348,7 @@ impl<'a, 'db> DiagnosticsCollector<'a, 'db> {
         match def {
             ModuleDefId::ModuleId(def) => {
                 // Only add diagnostics from inline modules
-                if def_map[def].origin.is_inline() {
+                if def_map.module_data(self.db, def).origin.is_inline() {
                     self.collect_module(def);
                 }
             }

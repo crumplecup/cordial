@@ -186,19 +186,24 @@ impl StableHash for DefMap {
             krate,
             block,
             root,
-            modules,
+            modules: _,
+            cells: _,
             prelude,
             macro_use_prelude,
             derive_helpers_in_scope,
             macro_def_to_macro_id,
-            diagnostics,
+            diagnostics: _,
+            diagnostics_cell: _,
             data,
         } = self;
         cx.tag("def map");
         krate.stable_hash(cx);
         block.stable_hash(cx);
         root.stable_hash(cx);
-        modules.stable_hash(cx);
+        cx.unordered(self.modules(cx.db), |cx, (id, data)| {
+            id.stable_hash(cx);
+            data.stable_hash(cx);
+        });
         prelude.stable_hash(cx);
         cx.unordered(macro_use_prelude.iter(), |cx, (name, (macro_id, extern_crate))| {
             name.stable_hash(cx);
@@ -218,7 +223,7 @@ impl StableHash for DefMap {
             definition.stable_hash(cx);
             macro_id.stable_hash(cx);
         });
-        diagnostics.stable_hash(cx);
+        self.diagnostics(cx.db).stable_hash(cx);
         data.stable_hash(cx);
     }
 }
