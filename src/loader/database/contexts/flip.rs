@@ -190,6 +190,57 @@ impl SourceDatabase {
         );
     }
 
+    /// Forget the saved queries that are keyed by an impl, a trait, an enum or a block that the definition map no
+    /// longer has: they are the flipped state's, and verifying one runs it against a module that is gone. Said for
+    /// each kind, how many are held and how many are not declared.
+    #[instrument(level = "debug", skip(self))]
+    pub(super) fn forget_undeclared_roots(&mut self) {
+        use ra_ap_hir_def::declaration::{
+            block_declaration, enum_declaration, impl_declaration, trait_declaration,
+        };
+        use ra_ap_hir_def::{BlockId, EnumId, ImplId, TraitId};
+        use salsa::plumbing::FromId as _;
+        let started = std::time::Instant::now();
+        let held = |db: &mut ra_ap_ide_db::RootDatabase, name: &str| {
+            salsa::Database::memo_keys(db, &[name])
+        };
+        let impls = held(&mut self.db, "ImplItems::of_");
+        let traits = held(&mut self.db, "TraitItems::query_with_diagnostics_");
+        let enums = held(&mut self.db, "EnumVariants::of_");
+        let blocks = held(&mut self.db, "block_def_map");
+        let db = &self.db;
+        let (dead_impls, dead_traits, dead_enums, dead_blocks) = attach_db(db, || {
+            let dead = |keys: &[salsa::Id], declared: &dyn Fn(salsa::Id) -> bool| -> Vec<salsa::Id> {
+                keys.iter().copied().filter(|key| !declared(*key)).collect()
+            };
+            (
+                dead(&impls, &|key| impl_declaration(db, ImplId::from_id(key)).is_declared()),
+                dead(&traits, &|key| trait_declaration(db, TraitId::from_id(key)).is_declared()),
+                dead(&enums, &|key| enum_declaration(db, EnumId::from_id(key)).is_declared()),
+                dead(&blocks, &|key| block_declaration(db, BlockId::from_id(key)).is_declared()),
+            )
+        });
+        let mut all = Vec::new();
+        for dead in [&dead_impls, &dead_traits, &dead_enums, &dead_blocks] {
+            all.extend(dead.iter().copied());
+        }
+        let forgotten = salsa::Database::forget_memos_for_inputs(&mut self.db, &all);
+        tracing::info!(
+            target: "cordial::eviction",
+            impls = impls.len() as u64,
+            impls_undeclared = dead_impls.len() as u64,
+            traits = traits.len() as u64,
+            traits_undeclared = dead_traits.len() as u64,
+            enums = enums.len() as u64,
+            enums_undeclared = dead_enums.len() as u64,
+            blocks = blocks.len() as u64,
+            blocks_undeclared = dead_blocks.len() as u64,
+            forgotten,
+            micros = u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX),
+            "saved queries keyed by what the definition map no longer declares are forgotten"
+        );
+    }
+
     /// Forget what was computed for `items`, which the ordinary cfg does not have.
     #[instrument(level = "debug", skip(self, items))]
     pub(super) fn forget_flipped(&mut self, items: &[salsa::Id]) {

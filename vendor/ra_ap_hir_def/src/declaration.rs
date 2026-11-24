@@ -7,7 +7,7 @@
 
 use salsa::Existence;
 
-use crate::{FunctionId, ItemContainerId, ModuleDefId, ModuleId};
+use crate::{BlockId, EnumId, FunctionId, ImplId, ItemContainerId, ModuleDefId, ModuleId, TraitId};
 use base_db::SourceDatabase;
 use salsa::plumbing::AsId;
 
@@ -25,6 +25,8 @@ pub enum Absence {
     ModuleGone(Existence),
     /// The module exists and does not declare the item (a cfg that is not set no longer declares it).
     NotDeclared,
+    /// The block expression the item, or the module it is in, is of no longer exists.
+    BlockGone(Existence),
 }
 
 impl Declaration {
@@ -34,11 +36,88 @@ impl Declaration {
     }
 }
 
-/// Whether `module` still exists, before anything of it is read.
+/// Whether `module` still exists, before anything of it is read, and the block it is a module of, if it is
+/// one: the block's own module is of the map of the block, which is made when something asks for it.
 fn exists(db: &dyn SourceDatabase, module: ModuleId) -> Result<(), Absence> {
     match salsa::Database::existence(db, module.as_id()) {
-        Existence::Exists => Ok(()),
-        gone => Err(Absence::ModuleGone(gone)),
+        Existence::Exists => {}
+        gone => return Err(Absence::ModuleGone(gone)),
+    }
+    if let Some(block) = module.block(db) {
+        // SAFETY: the module and the block are of this database, and are not kept.
+        let block = unsafe { block.to_static() };
+        block_exists(db, block)?;
+    }
+    Ok(())
+}
+
+/// Whether `block` and the module it is in still exist.
+fn block_exists(db: &dyn SourceDatabase, block: BlockId) -> Result<(), Absence> {
+    match salsa::Database::existence(db, block.as_id()) {
+        Existence::Exists => {}
+        gone => return Err(Absence::BlockGone(gone)),
+    }
+    // SAFETY: the block is of this database, and the module is not kept.
+    let parent = unsafe { block.module(db).to_static() };
+    exists(db, parent)
+}
+
+/// Whether the map of the block, which reads the module the block is in, can be asked for: the block and every
+/// module it is in, up to the crate's, exist.
+pub fn block_declaration(db: &dyn SourceDatabase, block: BlockId) -> Declaration {
+    match block_exists(db, block) {
+        Ok(()) => Declaration::Declared,
+        Err(absence) => Declaration::Absent(absence),
+    }
+}
+
+/// Whether the definition map declares the impl.
+pub fn impl_declaration(db: &dyn SourceDatabase, implementation: ImplId) -> Declaration {
+    let module = implementation.loc(db).container;
+    match in_scope(db, module, &|scope| scope.impls().any(|found| found == implementation)) {
+        Ok(()) => Declaration::Declared,
+        Err(absence) => Declaration::Absent(absence),
+    }
+}
+
+/// Whether the definition map declares the trait.
+pub fn trait_declaration(db: &dyn SourceDatabase, declared_trait: TraitId) -> Declaration {
+    let module = declared_trait.loc(db).container;
+    match in_scope(db, module, &|scope| {
+        scope.declarations().any(|def| def == ModuleDefId::TraitId(declared_trait))
+    }) {
+        Ok(()) => Declaration::Declared,
+        Err(absence) => Declaration::Absent(absence),
+    }
+}
+
+/// Whether the definition map declares the enum.
+pub fn enum_declaration(db: &dyn SourceDatabase, declared_enum: EnumId) -> Declaration {
+    let module = declared_enum.loc(db).container;
+    match in_scope(db, module, &|scope| {
+        scope
+            .declarations()
+            .any(|def| def == ModuleDefId::AdtId(crate::AdtId::EnumId(declared_enum)))
+    }) {
+        Ok(()) => Declaration::Declared,
+        Err(absence) => Declaration::Absent(absence),
+    }
+}
+
+/// Whether `module` exists and its scope, as the definition map has it now, says `found`. A module of a block
+/// is only asked whether it exists: its scope is made by the block's map, which asking would run.
+fn in_scope(
+    db: &dyn SourceDatabase,
+    module: ModuleId,
+    found: &dyn Fn(&crate::item_scope::ItemScope) -> bool,
+) -> Result<(), Absence> {
+    exists(db, module)?;
+    if module.block(db).is_some() {
+        return Ok(());
+    }
+    match module.def_map(db).try_module_data(db, module) {
+        Some(data) if found(&data.scope) => Ok(()),
+        _ => Err(Absence::NotDeclared),
     }
 }
 
@@ -51,31 +130,25 @@ pub fn function_declaration(db: &dyn SourceDatabase, function: FunctionId) -> De
 }
 
 fn declared(db: &dyn SourceDatabase, function: FunctionId) -> Result<(), Absence> {
-    let in_scope = |module: ModuleId, found: &dyn Fn(&crate::item_scope::ItemScope) -> bool| {
-        exists(db, module)?;
-        let map = module.def_map(db);
-        match map.try_module_data(db, module) {
-            Some(data) if found(&data.scope) => Ok(()),
-            _ => Err(Absence::NotDeclared),
-        }
-    };
     match function.loc(db).container {
-        ItemContainerId::ModuleId(module) => in_scope(module, &|scope| {
+        ItemContainerId::ModuleId(module) => in_scope(db, module, &|scope| {
             scope.declarations().any(|def| def == ModuleDefId::FunctionId(function))
         }),
-        ItemContainerId::ImplId(implementation) => {
-            in_scope(implementation.loc(db).container, &|scope| {
-                scope.impls().any(|found| found == implementation)
-            })
-        }
-        ItemContainerId::TraitId(declared_trait) => {
-            in_scope(declared_trait.loc(db).container, &|scope| {
+        ItemContainerId::ImplId(implementation) => in_scope(
+            db,
+            implementation.loc(db).container,
+            &|scope| scope.impls().any(|found| found == implementation),
+        ),
+        ItemContainerId::TraitId(declared_trait) => in_scope(
+            db,
+            declared_trait.loc(db).container,
+            &|scope| {
                 scope
                     .declarations()
                     .any(|def| def == ModuleDefId::TraitId(declared_trait))
-            })
-        }
-        ItemContainerId::ExternBlockId(block) => in_scope(block.loc(db).container, &|scope| {
+            },
+        ),
+        ItemContainerId::ExternBlockId(block) => in_scope(db, block.loc(db).container, &|scope| {
             scope.extern_blocks().any(|found| found == block)
         }),
     }

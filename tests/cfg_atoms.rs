@@ -311,3 +311,60 @@ fn an_item_says_why_the_definition_map_no_longer_declares_it() {
         Declaration::Absent(Absence::ModuleGone(salsa::Existence::Deleted))
     );
 }
+
+const MEMBERS: [(&str, &str); 2] = [
+    (
+        "lib.rs",
+        "#[cfg(feature = \"a\")]\nmod proofs;\npub struct Plain;\nimpl Plain {}\n#[cfg(feature = \"a\")]\nimpl Plain { fn gated(&self) {} }\n",
+    ),
+    ("proofs.rs", "pub trait Prove {}\npub enum Choice { A }\npub struct Witness;\nimpl Witness {}\n"),
+];
+
+#[test]
+fn an_impl_a_trait_and_an_enum_say_why_the_definition_map_no_longer_declares_them() {
+    use ra_ap_hir_def::declaration::{
+        Absence, Declaration, enum_declaration, impl_declaration, trait_declaration,
+    };
+    use ra_ap_hir_def::{AdtId, ImplId};
+    let _serial = SERIAL.lock().unwrap();
+    let mut on = CfgOptions::default();
+    flag(&mut on, "a");
+    let (mut db, krate) = crate_of(&MEMBERS, on);
+    let (mut impls, mut traits, mut enums) = (Vec::<ImplId>::new(), Vec::new(), Vec::new());
+    for (_, module) in crate_def_map(&db, krate).modules(&db) {
+        impls.extend(module.scope.impls());
+        for def in module.scope.declarations() {
+            match def {
+                ModuleDefId::TraitId(id) => traits.push(id),
+                ModuleDefId::AdtId(AdtId::EnumId(id)) => enums.push(id),
+                _ => {}
+            }
+        }
+    }
+    assert_eq!((impls.len(), traits.len(), enums.len()), (3, 1, 1));
+    for id in &impls {
+        assert_eq!(impl_declaration(&db, *id), Declaration::Declared);
+    }
+
+    krate.set_cfg_options(&mut db).to(CfgOptions::default());
+    let _ = crate_def_map(&db, krate);
+    let mut why: Vec<_> = impls.iter().map(|id| impl_declaration(&db, *id)).collect();
+    why.sort_by_key(|declaration| format!("{declaration:?}"));
+    assert_eq!(
+        why,
+        vec![
+            Declaration::Absent(Absence::ModuleGone(salsa::Existence::Deleted)),
+            Declaration::Absent(Absence::NotDeclared),
+            Declaration::Declared,
+        ],
+        "the impl in the module that is gone, the one the cfg no longer declares, and the one that remains"
+    );
+    assert_eq!(
+        trait_declaration(&db, traits[0]),
+        Declaration::Absent(Absence::ModuleGone(salsa::Existence::Deleted))
+    );
+    assert_eq!(
+        enum_declaration(&db, enums[0]),
+        Declaration::Absent(Absence::ModuleGone(salsa::Existence::Deleted))
+    );
+}

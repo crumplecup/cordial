@@ -373,6 +373,7 @@ impl SourceDatabase {
         }
         if ordinary_state.is_some() {
             self.settle_ordinary(cfgs);
+            self.forget_undeclared_roots();
         }
         Ok(wanted.queue.is_empty())
     }
