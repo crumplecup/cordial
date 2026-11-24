@@ -1527,6 +1527,16 @@ impl Function {
         }
     }
 
+    /// Whether the definition map, as it is now, declares the function. The id of one that a cfg declared holds
+    /// its module, and still names it when the cfg is not set: reading what it holds is reading a module that is
+    /// gone. The methods of a builtin derive are declared with their impl, which is not asked.
+    pub fn declaration(self, db: &dyn HirDatabase) -> hir_def::declaration::Declaration {
+        match self.id {
+            AnyFunctionId::FunctionId(id) => hir_def::declaration::function_declaration(db, id),
+            AnyFunctionId::BuiltinDeriveImplMethod { .. } => hir_def::declaration::Declaration::Declared,
+        }
+    }
+
     pub fn name(self, db: &dyn HirDatabase) -> Name {
         match self.id {
             AnyFunctionId::FunctionId(id) => FunctionSignature::of(db, id).name.clone(),

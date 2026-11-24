@@ -261,3 +261,53 @@ fn what_a_flip_runs_again_does_not_grow_with_the_files_it_does_not_reach() {
         "only the body the flip makes visible is executed: no other reads the module the gate is in"
     );
 }
+
+const GATED: [(&str, &str); 3] = [
+    (
+        "lib.rs",
+        "#[cfg(feature = \"a\")]\nmod proofs;\n#[cfg(feature = \"a\")]\npub fn gated_fn() {}\npub fn plain() {}\n",
+    ),
+    ("proofs.rs", "pub fn inside() {}\n"),
+    ("unused.rs", ""),
+];
+
+/// The functions of the crate by name, as the definition map declares them now.
+fn function_ids(db: &RootDatabase, krate: Crate) -> std::collections::BTreeMap<String, ra_ap_hir_def::FunctionId> {
+    use ra_ap_hir_def::signatures::FunctionSignature;
+    crate_def_map(db, krate)
+        .modules(db)
+        .flat_map(|(_, module)| module.scope.declarations().collect::<Vec<_>>())
+        .filter_map(|def| match def {
+            ModuleDefId::FunctionId(id) => Some((FunctionSignature::of(db, id).name.as_str().to_owned(), id)),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn an_item_says_why_the_definition_map_no_longer_declares_it() {
+    use ra_ap_hir_def::declaration::{Absence, Declaration, function_declaration};
+    let _serial = SERIAL.lock().unwrap();
+    let mut on = CfgOptions::default();
+    flag(&mut on, "a");
+    let (mut db, krate) = crate_of(&GATED, on);
+    let ids = function_ids(&db, krate);
+    assert_eq!(ids.keys().map(String::as_str).collect::<Vec<_>>(), ["gated_fn", "inside", "plain"]);
+    for id in ids.values() {
+        assert_eq!(function_declaration(&db, *id), Declaration::Declared);
+    }
+
+    // The atom is off and the map is made again: the function is not declared by a module that is there, and
+    // the other is in a module that is deleted, which is not read.
+    krate.set_cfg_options(&mut db).to(CfgOptions::default());
+    let _ = crate_def_map(&db, krate);
+    assert_eq!(function_declaration(&db, ids["plain"]), Declaration::Declared);
+    assert_eq!(
+        function_declaration(&db, ids["gated_fn"]),
+        Declaration::Absent(Absence::NotDeclared)
+    );
+    assert_eq!(
+        function_declaration(&db, ids["inside"]),
+        Declaration::Absent(Absence::ModuleGone(salsa::Existence::Deleted))
+    );
+}

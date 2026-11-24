@@ -158,7 +158,8 @@ fn direct_facts<'db>(db: &'db dyn SemanticDatabase, key: FunctionKey<'db>) -> Op
 fn collect_direct(db: &RootDatabase, function: Function) -> Option<DirectFacts> {
     // A saved memo can hold a function that an edit removed or renamed, and verifying what read it
     // asks again: it has no facts, as one that was never there has none.
-    if !function.is_written(db) {
+    // Nor does one that only a cfg declared, when that cfg is not set: its id still holds its module.
+    if !function.is_written(db) || !function.declaration(db).is_declared() {
         return None;
     }
     let sema = Semantics::new(db);
