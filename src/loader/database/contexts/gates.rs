@@ -42,6 +42,9 @@ pub(super) struct FileGates {
     pub(super) cfg_hosts: Vec<CfgHost>,
     /// Every cfg atom a `cfg` or `cfg_attr` predicate in the file names, as a context key spells it.
     pub(super) atoms: BTreeSet<String>,
+    /// Every identifier in the file's code, in a token tree as much as outside one: what it can mention. Not
+    /// what is in a comment or a string.
+    pub(super) idents: BTreeSet<String>,
     /// Whether the file reads the cfg some way its predicates do not say (`cfg!`) or moves where a
     /// module's file is (`include!`, `#[path]`): what it names is then not all it depends on.
     pub(super) opaque: bool,
@@ -52,10 +55,18 @@ impl FileGates {
     #[instrument(level = "debug", skip_all)]
     #[hotpath::measure(impl_type = "FileGates")]
     fn of(tree: &SourceFile) -> Self {
-        let mut gates = Self::default();
         let text = tree.syntax().to_string();
-        gates.opaque =
-            text.contains("cfg!") || text.contains("include!") || text.contains("#[path");
+        let mut gates = Self {
+            idents: tree
+                .syntax()
+                .descendants_with_tokens()
+                .filter_map(ra_ap_syntax::NodeOrToken::into_token)
+                .filter(|token| token.kind() == ra_ap_syntax::SyntaxKind::IDENT)
+                .map(|token| token.text().to_owned())
+                .collect(),
+            opaque: text.contains("cfg!") || text.contains("include!") || text.contains("#[path"),
+            ..Self::default()
+        };
         for predicate in tree
             .syntax()
             .descendants()
@@ -126,6 +137,15 @@ fn gates_in<'db>(db: &'db dyn SemanticDatabase, scope: ItemKey<'db>) -> FileGate
 pub(super) fn gates_of(db: &RootDatabase, file: FileId) -> Option<&FileGates> {
     let semantic: &dyn SemanticDatabase = db;
     Some(gates_in(semantic, item_key::file_scope(db, file)?))
+}
+
+/// The identifiers in the file's code, or `None` when its gates are not known.
+#[instrument(level = "trace", skip(db))]
+pub(in crate::loader::database) fn idents_of(
+    db: &RootDatabase,
+    file: FileId,
+) -> Option<&BTreeSet<String>> {
+    gates_of(db, file).map(|gates| &gates.idents)
 }
 
 /// The cfg atoms the file names, or `None` when it reads the cfg some way its predicates do not say

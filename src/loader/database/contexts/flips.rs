@@ -163,11 +163,34 @@ fn defined_names(host: &SyntaxNode) -> BTreeSet<String> {
             );
         }
     } else if ast::Use::can_cast(host.kind()) {
-        names.extend(
-            host.descendants()
-                .filter_map(ast::NameRef::cast)
-                .map(|name| name.text().to_string()),
-        );
+        // The names a `use` binds: each leaf's rename, or the last name of its path (the one before `self`), and
+        // not the path to it. A glob binds names it does not say.
+        for tree in host.descendants().filter_map(ast::UseTree::cast) {
+            if tree.use_tree_list().is_some() || tree.star_token().is_some() {
+                continue;
+            }
+            let renamed = tree
+                .rename()
+                .and_then(|rename| rename.name())
+                .map(|name| name.text().to_string());
+            let last = tree.path().and_then(|path| {
+                let segment = path.segment()?;
+                let name = segment.name_ref()?.text().to_string();
+                if name == "self" {
+                    return path
+                        .qualifier()?
+                        .segment()?
+                        .name_ref()
+                        .map(|name| name.text().to_string());
+                }
+                Some(name)
+            });
+            names.extend(
+                renamed
+                    .or(last)
+                    .filter(|name| !matches!(name.as_str(), "self" | "super" | "crate")),
+            );
+        }
     }
     // The items, fields, variants and methods inside, which are named by their `Name` child.
     names.extend(

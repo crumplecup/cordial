@@ -27,8 +27,8 @@ mod plan;
 mod reuse;
 
 pub(super) use flips::Reach;
-pub(super) use gates::atoms_of;
 pub(super) use gates::flipped_names_of;
+pub(super) use gates::{atoms_of, idents_of};
 pub(super) use pass::{ContextsState, FunctionNodes, FunctionNodesState};
 pub(super) use plan::guard;
 pub(super) use reuse::{Classified, Leaves, moves_modules};

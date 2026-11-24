@@ -967,3 +967,48 @@ fn a_module_that_defines_a_macro_is_the_copys_own_whatever_is_above_it() -> Resu
     );
     Ok(())
 }
+
+/// What makes a module the copy's own is a name its code uses that a flipped gate defines. A gated `use` defines
+/// the names it binds and not the path to them, and a comment or a string that says the name is not a use of it.
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn a_path_a_gated_use_goes_through_and_a_comment_that_names_a_gate_do_not_reach_a_module()
+-> Result<()> {
+    cordial::init_tracing();
+    let scratch = tempfile::tempdir().into_diagnostic()?;
+    let subscriber =
+        tracing_subscriber::registry().with(MetricsLayer.with_filter(metrics_filter_with(true)));
+    let (affected, shared) = tracing::subscriber::with_default(subscriber, || -> Result<_> {
+        let root = tempfile::tempdir().into_diagnostic()?;
+        write_workspace(root.path(), &["m".to_owned()])?;
+        write_crate(
+            root.path(),
+            "m",
+            &[],
+            "mod plain;\nmod commented;\n#[cfg(feature = \"extra\")]\nuse std::fmt::Display;\n#[cfg(feature = \"extra\")]\npub fn only_with_extra() -> u32 { 1 }\n",
+        )?;
+        let src = root.path().join("m/src");
+        std::fs::write(
+            src.join("plain.rs"),
+            "pub fn f() -> usize { std::mem::size_of::<u8>() + core::mem::size_of::<u16>() }\n",
+        )
+        .into_diagnostic()?;
+        std::fs::write(
+            src.join("commented.rs"),
+            "/// `only_with_extra` and `Display` are gated in the root.\npub fn g() -> &'static str { \"only_with_extra\" }\n",
+        )
+        .into_diagnostic()?;
+        project(root.path(), "m", false)?;
+        let metrics = metrics_of(scratch.path())?;
+        Ok((
+            sharing_field(&metrics, "affected_modules"),
+            sharing_field(&metrics, "shared_modules"),
+        ))
+    })?;
+    assert_eq!(
+        (affected, shared),
+        (1, 2),
+        "only the root is the copy's own: affected and shared modules"
+    );
+    Ok(())
+}

@@ -255,10 +255,16 @@ impl SourceDatabase {
                     Leaves::Mentioning => {
                         Flips::of_file(&self.db, *file, pairs, Reach::Written).is_flipped()
                             || reads_cfg_otherwise(&self.db.file_text(*file).text(&self.db), pairs)
-                            || mentions_any(
-                                &self.db.file_text(*file).text(&self.db),
-                                &flipped_names,
-                            )
+                            || match super::gates::idents_of(&self.db, *file) {
+                                // What the file's code says, and not its comments or strings.
+                                Some(idents) => {
+                                    flipped_names.iter().any(|name| idents.contains(name))
+                                }
+                                None => mentions_any(
+                                    &self.db.file_text(*file).text(&self.db),
+                                    &flipped_names,
+                                ),
+                            }
                     }
                 };
             if leaf_changes {

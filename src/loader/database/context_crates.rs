@@ -417,12 +417,13 @@ impl SourceDatabase {
                     let text = self.db.file_text(*file).text(&self.db).clone();
                     // A glob import brings in whatever the module it names has: nothing yet, under the ordinary
                     // cfg, if what the context switches is all it has.
+                    let idents = super::contexts::idents_of(&self.db, *file);
                     let (counter, detail) = if text.contains("::*") || text.contains("use *") {
                         (Some(&mut by_glob), String::new())
-                    } else if let Some(word) = text
-                        .split(|character: char| !(character.is_alphanumeric() || character == '_'))
-                        .find(|word| names.contains(*word))
-                    {
+                    } else if let Some(word) = idents.map_or_else(
+                        || None,
+                        |idents| names.iter().find(|name| idents.contains(*name)),
+                    ) {
                         (Some(&mut by_name), format!(" ({word})"))
                     } else {
                         (None, String::new())
@@ -482,14 +483,19 @@ impl SourceDatabase {
                 if !owners.crate_owns(*krate, path) {
                     continue;
                 }
-                let text = self.db.file_text(*file).text(&self.db).clone();
-                held.extend(
-                    text.split(|character: char| {
-                        !(character.is_alphanumeric() || character == '_')
-                    })
-                    .filter(|word| !word.is_empty())
-                    .map(str::to_owned),
-                );
+                match super::contexts::idents_of(&self.db, *file) {
+                    Some(idents) => held.extend(idents.iter().cloned()),
+                    None => {
+                        let text = self.db.file_text(*file).text(&self.db).clone();
+                        held.extend(
+                            text.split(|character: char| {
+                                !(character.is_alphanumeric() || character == '_')
+                            })
+                            .filter(|word| !word.is_empty())
+                            .map(str::to_owned),
+                        );
+                    }
+                }
             }
             words.insert(*krate, held);
         }
