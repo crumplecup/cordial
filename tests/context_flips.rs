@@ -67,6 +67,8 @@ struct Flipped {
     copied: Arc<AtomicUsize>,
     /// How many functions a context kept full facts for, per context.
     kept: Arc<Mutex<Vec<u64>>>,
+    /// The audit of each context: modules, changed, added, removed, crates changed.
+    audit: Arc<Mutex<Vec<[u64; 5]>>>,
 }
 
 impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for Flipped {
@@ -75,6 +77,24 @@ impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for Flipped {
         event: &tracing::Event<'_>,
         _: tracing_subscriber::layer::Context<'_, S>,
     ) {
+        #[derive(Default)]
+        struct Audit([Option<u64>; 5]);
+        impl tracing::field::Visit for Audit {
+            fn record_debug(&mut self, _: &tracing::field::Field, _: &dyn std::fmt::Debug) {}
+            fn record_u64(&mut self, field: &tracing::field::Field, value: u64) {
+                let at = ["modules", "modules_changed", "modules_added", "modules_removed", "crates_changed"]
+                    .iter()
+                    .position(|name| *name == field.name());
+                if let Some(at) = at {
+                    self.0[at] = Some(value);
+                }
+            }
+        }
+        let mut audit = Audit::default();
+        event.record(&mut audit);
+        if let [Some(a), Some(b), Some(c), Some(d), Some(e)] = audit.0 {
+            self.audit.lock().unwrap().push([a, b, c, d, e]);
+        }
         struct Message(String, Option<u64>);
         impl tracing::field::Visit for Message {
             fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
@@ -248,5 +268,34 @@ fn a_function_keeps_a_contexts_facts_only_when_they_differ_from_the_ordinary_one
             "{name}: its facts in the context are the ordinary ones, and are not kept again"
         );
     }
+    Ok(())
+}
+
+/// A crate of a root and six modules, one of which has a gated function.
+fn many_modules() -> Result<tempfile::TempDir> {
+    let root = fixture_with(
+        &(0..6).map(|m| format!("mod m{m};\n")).collect::<String>(),
+    )?;
+    for m in 0..6 {
+        let gate = if m == 0 { "#[cfg(kani)]\npub fn gated() {}\n" } else { "" };
+        std::fs::write(
+            root.path().join(format!("src/m{m}.rs")),
+            format!("{gate}pub fn f{m}() -> u32 {{ {m} }}\npub struct S{m};\nimpl S{m} {{ pub fn get(&self) -> u32 {{ {m} }} }}\n"),
+        )
+        .into_diagnostic()?;
+    }
+    Ok(root)
+}
+
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn a_flip_says_how_many_modules_of_the_crate_it_changed() -> Result<()> {
+    let _serial = SERIAL.lock().unwrap();
+    cordial::init_tracing();
+    let root = many_modules()?;
+    let flipped = Flipped::default();
+    let _graph = project(vec![kani()], root.path(), &flipped)?;
+    // Seven modules; the one with the gate has one declaration more, and nothing else differs.
+    assert_eq!(*flipped.audit.lock().unwrap(), vec![[7, 1, 0, 0, 1]]);
     Ok(())
 }

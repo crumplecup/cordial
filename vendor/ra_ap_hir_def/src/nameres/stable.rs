@@ -249,3 +249,19 @@ pub fn def_map_fingerprint(db: &dyn base_db::SourceDatabase, krate: Crate) -> St
     pair.local.stable_hash(&mut cx);
     cx.finish()
 }
+
+/// What each module of `krate`'s definition map says, as the hash of the module's id and of its data: how
+/// much of a map is different after the crate's cfg changed is the modules whose hash is not the same.
+pub fn module_fingerprints(db: &dyn base_db::SourceDatabase, krate: Crate) -> Vec<(u64, u64)> {
+    let pair = super::crate_local_def_map(db, krate);
+    pair.def_map
+        .modules(db)
+        .map(|(id, data)| {
+            let mut key = StableCx::new(db);
+            id.stable_hash(&mut key);
+            let mut value = StableCx::new(db);
+            data.stable_hash(&mut value);
+            (key.finish().hash, value.finish().hash)
+        })
+        .collect()
+}

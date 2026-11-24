@@ -12,9 +12,15 @@ use crate::loader::database::SourceDatabase;
 use crate::loader::database::context_crates::ContextCrates;
 use ra_ap_cfg::CfgOptions;
 use ra_ap_ide_db::base_db::Crate as InputCrate;
+use ra_ap_hir::attach_db;
+use ra_ap_hir_def::nameres::stable::module_fingerprints;
 use salsa::Durability;
 use salsa::Setter as _;
+use std::collections::HashMap;
 use tracing::instrument;
+
+/// What each module of each local crate said in the ordinary build, to say how many a context's cfg changed.
+pub(super) struct Baseline(HashMap<InputCrate, HashMap<u64, u64>>);
 
 impl SourceDatabase {
     /// Give each local crate the cfg `context` makes of its ordinary one, and say which crates they are.
@@ -49,6 +55,53 @@ impl SourceDatabase {
         for (krate, ordinary) in cfgs.cfgs() {
             self.write_cfg(*krate, ordinary.clone());
         }
+    }
+
+    /// What the modules of the local crates say now, when the run records what a definition map cost.
+    #[instrument(level = "debug", skip(self, cfgs))]
+    pub(super) fn module_baseline(&self, cfgs: &LocalCfgs) -> Option<Baseline> {
+        tracing::enabled!(target: "cordial::def_map", tracing::Level::INFO).then(|| {
+            Baseline(
+                cfgs.cfgs()
+                    .map(|(krate, _)| (*krate, self.module_hashes(*krate)))
+                    .collect(),
+            )
+        })
+    }
+
+    fn module_hashes(&self, krate: InputCrate) -> HashMap<u64, u64> {
+        attach_db(&self.db, || module_fingerprints(&self.db, krate).into_iter().collect())
+    }
+
+    /// Say how many modules of the local crates the flipped cfg changed, added and removed against the ordinary
+    /// ones: the definition work that was needed, whatever was done.
+    #[instrument(level = "debug", skip(self, baseline))]
+    pub(super) fn audit_flip(&self, baseline: &Baseline, context: &SemanticContextKey) {
+        let (mut modules, mut changed, mut added, mut removed, mut crates) = (0u64, 0u64, 0u64, 0u64, 0u64);
+        for (krate, before) in &baseline.0 {
+            let after = self.module_hashes(*krate);
+            let different = after
+                .iter()
+                .filter(|(key, hash)| before.get(key).is_some_and(|old| old != *hash))
+                .count() as u64;
+            let new = after.keys().filter(|key| !before.contains_key(key)).count() as u64;
+            let gone = before.keys().filter(|key| !after.contains_key(key)).count() as u64;
+            modules += after.len() as u64;
+            changed += different;
+            added += new;
+            removed += gone;
+            crates += u64::from(different + new + gone > 0);
+        }
+        tracing::info!(
+            target: "cordial::def_map",
+            %context,
+            modules,
+            modules_changed = changed,
+            modules_added = added,
+            modules_removed = removed,
+            crates_changed = crates,
+            "the definition maps of a flipped context against the ordinary ones"
+        );
     }
 
     /// Write `options` as the crate's cfg when it is not what it holds: an input is not compared to its old value,

@@ -263,6 +263,7 @@ impl SourceDatabase {
             ));
             crate::process_memory::log("planning scan done");
         }
+        let baseline = if in_place { self.module_baseline(cfgs) } else { None };
         while let Some(pending) = wanted.queue.pop_front() {
             let context = pending.key().clone();
             self.reporter.say(format!(
@@ -310,6 +311,9 @@ impl SourceDatabase {
             let stage = std::time::Instant::now();
             let outcome = self.harvest(&context, index, &pairs, &files, graph);
             let harvested = stage.elapsed();
+            if let Some(baseline) = &baseline {
+                self.audit_flip(baseline, &context);
+            }
             crate::process_memory::log("cfg context harvested");
             let outcome = outcome.and_then(|()| {
                 let stage = std::time::Instant::now();
