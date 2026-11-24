@@ -539,7 +539,8 @@ impl SourceDatabase {
                     );
                     push_activity(graph, node, index)?;
                     functions += 1;
-                    let new = crate::IrView::semantic_function(graph, node)?.is_none();
+                    let ordinary = crate::IrView::semantic_function(graph, node)?;
+                    let new = ordinary.is_none();
                     if new {
                         new_here += 1;
                         locator.record_trait_implementation(
@@ -548,11 +549,29 @@ impl SourceDatabase {
                             node,
                         )?;
                     }
-                    if !(new || flips.touches(range) || flips.mentions(function.syntax())) {
+                    let facts = evidence_of(&self.db, definition).as_ref();
+                    if in_place {
+                        // The crates are the ordinary ones, so what is asked of them is the ordinary build's
+                        // own answer when the cfg changed nothing it read: the facts are kept when they are
+                        // not the ordinary ones.
+                        let Some(facts) = facts else {
+                            if new {
+                                return Err(crate::CordialError::workspace_source_facts_missing(
+                                    "semantic function source",
+                                ));
+                            }
+                            continue;
+                        };
+                        let here = super::super::queries::in_file(&self.db, definition, facts)
+                            .map_identities(&mut |id| canonical_id(id));
+                        if ordinary.as_ref() == Some(&here) {
+                            continue;
+                        }
+                    } else if !(new || flips.touches(range) || flips.mentions(function.syntax())) {
                         continue;
                     }
                     kept += 1;
-                    let facts = evidence_of(&self.db, definition).as_ref().ok_or_else(|| {
+                    let facts = facts.ok_or_else(|| {
                         crate::CordialError::workspace_source_facts_missing(
                             "semantic function source",
                         )

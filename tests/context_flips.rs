@@ -45,6 +45,10 @@ fn creusot() -> SemanticContextKey {
 }
 
 fn fixture() -> Result<tempfile::TempDir> {
+    fixture_with(LIBRARY)
+}
+
+fn fixture_with(library: &str) -> Result<tempfile::TempDir> {
     let root = tempfile::tempdir().into_diagnostic()?;
     std::fs::create_dir_all(root.path().join("src")).into_diagnostic()?;
     std::fs::write(
@@ -52,7 +56,7 @@ fn fixture() -> Result<tempfile::TempDir> {
         "[package]\nname='gated'\nversion='0.1.0'\nedition='2024'\n[workspace]\n",
     )
     .into_diagnostic()?;
-    std::fs::write(root.path().join("src/lib.rs"), LIBRARY).into_diagnostic()?;
+    std::fs::write(root.path().join("src/lib.rs"), library).into_diagnostic()?;
     Ok(root)
 }
 
@@ -61,6 +65,8 @@ fn fixture() -> Result<tempfile::TempDir> {
 struct Flipped {
     written: Arc<AtomicUsize>,
     copied: Arc<AtomicUsize>,
+    /// How many functions a context kept full facts for, per context.
+    kept: Arc<Mutex<Vec<u64>>>,
 }
 
 impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for Flipped {
@@ -69,16 +75,24 @@ impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for Flipped {
         event: &tracing::Event<'_>,
         _: tracing_subscriber::layer::Context<'_, S>,
     ) {
-        struct Message(String);
+        struct Message(String, Option<u64>);
         impl tracing::field::Visit for Message {
             fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
                 if field.name() == "message" {
                     self.0 = format!("{value:?}");
                 }
             }
+            fn record_u64(&mut self, field: &tracing::field::Field, value: u64) {
+                if field.name() == "kept" {
+                    self.1 = Some(value);
+                }
+            }
         }
-        let mut message = Message(String::new());
+        let mut message = Message(String::new(), None);
         event.record(&mut message);
+        if let Some(kept) = message.1 {
+            self.kept.lock().unwrap().push(kept);
+        }
         if message.0.contains("cfg is written into the ordinary crates") {
             self.written.fetch_add(1, Ordering::SeqCst);
         }
@@ -199,5 +213,40 @@ fn exclusive_verifier_cfgs_flipped_one_after_the_other_never_see_both() -> Resul
     let mut ordinary_only = vec![SemanticContextKey::ordinary(), creusot()];
     ordinary_only.sort();
     assert_eq!(active(&graph, only(&graph, "ordinary_only")?)?, ordinary_only);
+    Ok(())
+}
+
+/// A function that spells a name the gate defines, and does not use what it defines.
+const NAMES_A_FLIPPED_NAME: &str = "\
+pub fn helper() {}
+
+#[cfg(kani)]
+pub fn harness() { helper(); }
+
+pub fn spells_it() -> u32 { let harness = 1; harness + 1 }
+
+pub fn alone() -> u32 { 2 }
+";
+
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn a_function_keeps_a_contexts_facts_only_when_they_differ_from_the_ordinary_ones() -> Result<()> {
+    let _serial = SERIAL.lock().unwrap();
+    cordial::init_tracing();
+    let root = fixture_with(NAMES_A_FLIPPED_NAME)?;
+    let flipped = Flipped::default();
+    let graph = project(vec![kani()], root.path(), &flipped)?;
+    // Only `harness`, which the context makes exist: `spells_it` has the word but not the dependence, and
+    // `helper` and `alone` read nothing the gate changes.
+    assert_eq!(*flipped.kept.lock().unwrap(), vec![1]);
+    for name in ["helper", "spells_it", "alone"] {
+        assert!(
+            graph
+                .semantic_context_functions(only(&graph, name)?)
+                .into_diagnostic()?
+                .is_empty(),
+            "{name}: its facts in the context are the ordinary ones, and are not kept again"
+        );
+    }
     Ok(())
 }
