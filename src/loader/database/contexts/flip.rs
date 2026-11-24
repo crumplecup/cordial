@@ -66,6 +66,26 @@ impl SourceDatabase {
         ContextCrates::in_place(context.clone(), crates)
     }
 
+    /// Make the local crates' definition maps again under the ordinary cfg, on this thread. A map made again
+    /// deletes the modules the flip added, and the threads that verify what is saved would otherwise make it
+    /// again among themselves, deleting a module that another is reading.
+    #[instrument(level = "debug", skip(self, cfgs))]
+    #[hotpath::measure(impl_type = "SourceDatabase")]
+    pub(super) fn settle_ordinary(&self, cfgs: &LocalCfgs) {
+        let started = std::time::Instant::now();
+        attach_db(&self.db, || {
+            for (krate, _) in cfgs.cfgs() {
+                let _ = ra_ap_hir_def::nameres::crate_def_map(&self.db, *krate);
+            }
+        });
+        tracing::info!(
+            target: "cordial::def_map",
+            crates = cfgs.cfgs().count() as u64,
+            micros = u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX),
+            "the definition maps of the local crates are made again under the ordinary cfg"
+        );
+    }
+
     /// Put each local crate's ordinary cfg back.
     #[instrument(level = "debug", skip(self, cfgs))]
     #[hotpath::measure(impl_type = "SourceDatabase")]

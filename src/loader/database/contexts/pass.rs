@@ -369,6 +369,9 @@ impl SourceDatabase {
             );
             crate::process_memory::log("cfg context analysed");
         }
+        if ordinary_state.is_some() {
+            self.settle_ordinary(cfgs);
+        }
         Ok(wanted.queue.is_empty())
     }
 

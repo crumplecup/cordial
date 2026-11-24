@@ -346,3 +346,31 @@ fn a_module_only_a_flipped_context_has_does_not_stop_the_state_from_being_saved(
     assert_eq!(active(&warm, only(&warm, "ordinary")?)?.len(), 2);
     Ok(())
 }
+
+const A_GATED_DERIVE: &str = "\
+pub fn ordinary() -> u32 { 1 }
+
+#[cfg_attr(kani, derive(Clone))]
+pub struct Witness(pub u32);
+
+#[cfg(kani)]
+pub fn harness() -> u32 { Witness(1).clone().0 }
+";
+
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn a_derive_only_a_flipped_context_has_does_not_stop_the_state_from_being_saved() -> Result<()> {
+    let _serial = SERIAL.lock().unwrap();
+    cordial::init_tracing();
+    let root = fixture_with(A_GATED_DERIVE)?;
+    let state = tempfile::tempdir().into_diagnostic()?;
+    let saved = cordial::SavedState::at(state.path().join("analysis-state"));
+
+    let (restored, cold) = run_saving(root.path(), &saved)?;
+    assert!(!restored);
+    assert_eq!(active(&cold, only(&cold, "harness")?)?, vec![kani()]);
+    let (restored, warm) = run_saving(root.path(), &saved)?;
+    assert!(restored, "the second run starts from the first's state");
+    assert_eq!(active(&warm, only(&warm, "harness")?)?, vec![kani()]);
+    Ok(())
+}
