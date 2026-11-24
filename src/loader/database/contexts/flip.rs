@@ -95,12 +95,22 @@ impl SourceDatabase {
         use ra_ap_hir_def::declaration::settle_block_map;
         use salsa::plumbing::FromId as _;
         let started = std::time::Instant::now();
+        tracing::info!(
+            target: "cordial::def_map",
+            "the definition maps and the bodies of the local crates are about to be made again under the ordinary cfg"
+        );
         let blocks = salsa::Database::memo_keys(&mut self.db, &["block_def_map"]);
         let db = &self.db;
         let mut remade = 0u64;
         attach_db(db, || {
             for (krate, _) in cfgs.cfgs() {
                 let _ = ra_ap_hir_def::nameres::crate_def_map(db, *krate);
+            }
+            // The bodies before the blocks: a body that is made again deletes the blocks it made before and does not
+            // make again, and a block that was read in the revision cannot be deleted in it. Reading what a block is
+            // of is reading it.
+            for (krate, _) in cfgs.cfgs() {
+                ra_ap_hir_def::declaration::settle_bodies(db, *krate);
             }
             for key in blocks {
                 settle_block_map(db, BlockId::from_id(key));

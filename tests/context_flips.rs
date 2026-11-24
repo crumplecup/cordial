@@ -559,3 +559,118 @@ fn contexts_say_how_many_atoms_apart_they_are() {
     assert_eq!(a.atoms_apart(&b), 2, "one off and one on");
     assert_eq!(ab.atoms_apart(&ab), 0);
 }
+
+/// Counts the bodies that execute, and how many did while the flipped crates were made again under the ordinary cfg.
+#[derive(Clone, Default)]
+struct Bodies {
+    executed: Arc<AtomicUsize>,
+    /// How many had executed when each settle began, and when it ended.
+    settles: Arc<Mutex<Vec<(usize, usize)>>>,
+    begun: Arc<Mutex<Option<usize>>>,
+}
+
+impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for Bodies {
+    fn on_new_span(
+        &self,
+        attrs: &tracing::span::Attributes<'_>,
+        _: &tracing::Id,
+        _: tracing_subscriber::layer::Context<'_, S>,
+    ) {
+        if attrs.metadata().name() == "body_with_source_map_query" {
+            self.executed.fetch_add(1, Ordering::SeqCst);
+        }
+    }
+
+    fn on_event(&self, event: &tracing::Event<'_>, _: tracing_subscriber::layer::Context<'_, S>) {
+        struct Message(String);
+        impl tracing::field::Visit for Message {
+            fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
+                if field.name() == "message" {
+                    self.0 = format!("{value:?}");
+                }
+            }
+        }
+        let mut message = Message(String::new());
+        event.record(&mut message);
+        let now = self.executed.load(Ordering::SeqCst);
+        if message.0.contains("are about to be made again under the ordinary cfg") {
+            *self.begun.lock().unwrap() = Some(now);
+        } else if message.0.contains("are made again under the ordinary cfg")
+            && let Some(begun) = self.begun.lock().unwrap().take()
+        {
+            self.settles.lock().unwrap().push((begun, now));
+        }
+    }
+}
+
+/// A body whose block exists only under the context: the body is made again with the ordinary cfg back, and the
+/// block it made is deleted when it is.
+const A_BLOCK_ONLY_THE_CONTEXT_HAS: &str = "\
+pub fn ordinary() -> u32 { 1 }
+
+pub fn with_a_block() -> u32 {
+    #[cfg(kani)]
+    {
+        struct Local(u32);
+        impl Local { fn get(&self) -> u32 { self.0 } }
+        return Local(ordinary()).get();
+    }
+    #[allow(unreachable_code)]
+    ordinary()
+}
+";
+
+/// The same, with nothing in any body that the context changes.
+const NO_BODY_THE_CONTEXT_CHANGES: &str = "\
+pub fn ordinary() -> u32 { 1 }
+
+pub fn plain() -> u32 {
+    let block = { ordinary() };
+    block
+}
+
+#[cfg(kani)]
+pub fn harness() {}
+";
+
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn the_bodies_a_flip_changed_are_made_again_before_anything_runs_in_parallel() -> Result<()> {
+    let _serial = SERIAL.lock().unwrap();
+    cordial::init_tracing();
+    enum Condition {
+        SomethingToCatch,
+        NothingToSee,
+    }
+    for condition in [Condition::SomethingToCatch, Condition::NothingToSee] {
+        let root = fixture_with(match condition {
+            Condition::SomethingToCatch => A_BLOCK_ONLY_THE_CONTEXT_HAS,
+            Condition::NothingToSee => NO_BODY_THE_CONTEXT_CHANGES,
+        })?;
+        let bodies = Bodies::default();
+        let subscriber = tracing_subscriber::registry().with(bodies.clone());
+        tracing::subscriber::with_default(subscriber, || -> Result<()> {
+            let options = SemanticCargoOptions::default()
+                .with_cfg_contexts(vec![kani()])
+                .with_cfg_planning(CfgPlanning::Explicit)
+                .with_cfg_context_mode(CfgContextMode::Flips);
+            let mut session = SourceDatabase::load_with(root.path(), &options).into_diagnostic()?;
+            session
+                .project(&CrateTarget::new("gated", root.path()), &[root.path().join("src/lib.rs")])
+                .into_diagnostic()?;
+            Ok(())
+        })?;
+        let settles = bodies.settles.lock().unwrap().clone();
+        let ended = settles.last().expect("the flipped crates were settled").1;
+        // Nothing runs a body after the last settle: what runs then runs in parallel. With the block that only the
+        // context has, a body made again there deletes a block that another thread read, which salsa does not allow
+        // (this fixture panicked in a worker before the bodies were settled); with nothing of the kind there is
+        // nothing to delete, and the same holds.
+        assert_eq!(
+            bodies.executed.load(Ordering::SeqCst),
+            ended,
+            "no body executes after the last settle ({settles:?})"
+        );
+    }
+    Ok(())
+}

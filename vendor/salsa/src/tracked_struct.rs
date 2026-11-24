@@ -579,6 +579,14 @@ where
 
             // SAFETY: The `id` was present in the interned map, so the value must be initialized.
             let update_result = unsafe { self.update(zalsa, id, &current_deps, fields) };
+            ::tracing::trace!(
+                target: "salsa::create",
+                struct_kind = C::DEBUG_NAME,
+                id = id.as_bits(),
+                revision = ?zalsa.current_revision(),
+                updated = update_result.is_ok(),
+                "a tracked struct that a query made before is made again"
+            );
 
             fields = match update_result {
                 // Overwrite the previous ID if we are reusing the old slot with new fields.
@@ -604,6 +612,13 @@ where
         // We failed to perform the update, or this is a new tracked struct, so allocate a new entry
         // in the struct map.
         let id = self.allocate(zalsa, zalsa_local, &current_deps, identity, fields);
+        ::tracing::trace!(
+            target: "salsa::create",
+            struct_kind = C::DEBUG_NAME,
+            id = id.as_bits(),
+            revision = ?zalsa.current_revision(),
+            "a tracked struct is made"
+        );
         crate::tracing::trace!(
             "Allocated new tracked struct {key:?}",
             key = self.database_key_index(id)
@@ -981,6 +996,15 @@ where
         let id = AsId::as_id(&s);
         let data = Self::data_raw(zalsa.table(), id);
 
+        // A read of a tracked struct's fields locks it for the revision, and a struct that was read cannot be deleted
+        // in it. Said, so that the read that made a deletion impossible can be found.
+        ::tracing::trace!(
+            target: "salsa::read",
+            struct_kind = C::DEBUG_NAME,
+            id = id.as_bits(),
+            revision = ?zalsa.current_revision(),
+            "the fields of a tracked struct are read"
+        );
         // Note that we do not need to add a dependency on the tracked struct
         // as IDs that are reused increment their generation, invalidating any
         // dependent queries directly.

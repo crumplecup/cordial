@@ -162,3 +162,43 @@ pub fn settle_block_map(db: &dyn SourceDatabase, block: BlockId) {
         let _ = crate::nameres::block_def_map(db, unsafe { block.to_db(db) });
     }
 }
+
+/// Makes again the body of every function, const and static the crate's definition map declares, on this thread, so
+/// that a body made under a cfg that is not set is replaced before anything else runs. A body that is made again
+/// deletes the blocks it made before and does not make again, and a block that another thread has read in the
+/// revision cannot be deleted in it.
+pub fn settle_bodies(db: &dyn SourceDatabase, krate: base_db::Crate) {
+    use crate::{AssocItemId, DefWithBodyId, expr_store::Body};
+    let map = crate::nameres::crate_def_map(db, krate);
+    let settle = |def: DefWithBodyId| {
+        let _ = Body::with_source_map(db, def);
+    };
+    for (_, module) in map.modules(db) {
+        for def in module.scope.declarations() {
+            match def {
+                ModuleDefId::FunctionId(function) => settle(DefWithBodyId::FunctionId(function)),
+                ModuleDefId::ConstId(constant) => settle(DefWithBodyId::ConstId(constant)),
+                ModuleDefId::StaticId(item) => settle(DefWithBodyId::StaticId(item)),
+                ModuleDefId::TraitId(declared) => {
+                    for (_, item) in declared.trait_items(db).items.iter() {
+                        match item {
+                            AssocItemId::FunctionId(function) => settle(DefWithBodyId::FunctionId(*function)),
+                            AssocItemId::ConstId(constant) => settle(DefWithBodyId::ConstId(*constant)),
+                            AssocItemId::TypeAliasId(_) => {}
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        for implementation in module.scope.impls() {
+            for (_, item) in implementation.impl_items(db).items.iter() {
+                match item {
+                    AssocItemId::FunctionId(function) => settle(DefWithBodyId::FunctionId(*function)),
+                    AssocItemId::ConstId(constant) => settle(DefWithBodyId::ConstId(*constant)),
+                    AssocItemId::TypeAliasId(_) => {}
+                }
+            }
+        }
+    }
+}

@@ -481,12 +481,13 @@ where
     }
 
     fn memo_keys(&self, zalsa: &Zalsa) -> Vec<Id> {
+        // Looked at through the unchecked table, which does not lock the struct a memo is keyed by: looking up a
+        // memo through the checked one locks the struct for the revision, and a struct that is locked cannot be
+        // deleted in it. This is called with exclusive access to the storage, and only looks.
         <C::SalsaStruct<'_> as SalsaStructInDb>::entries(zalsa)
             .filter(|entry| {
-                let memo_ingredient_index =
-                    self.memo_ingredient_indices.get(entry.ingredient_index());
-                self.get_memo_from_table_for(zalsa, entry.key_index(), memo_ingredient_index)
-                    .is_some()
+                // SAFETY: The caller has exclusive access to the storage: no query runs and nothing is replaced.
+                unsafe { FunctionIngredient::memo_unchecked(self, zalsa, entry.key_index()) }.is_some()
             })
             .map(|entry| entry.key_index())
             .collect()
