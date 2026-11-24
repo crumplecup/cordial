@@ -1,0 +1,203 @@
+//! A cfg context analysed by flipping the ordinary crates' own cfg gives what the copies gave.
+//!
+//! The same expectations as `cfg_contexts.rs`, read through `CfgContextMode::Flips`: no crate is added, the cfg of
+//! the workspace's own crates is written, the context is read from the same crates and files, and the ordinary cfg
+//! is written back.
+
+use cordial::{
+    CfgContextMode, CfgPlanning, CrateIr, CrateTarget, EdgeKind, IrView, NodeId,
+    SemanticCargoOptions, SemanticContextKey, SourceDatabase,
+};
+use miette::{IntoDiagnostic, Result};
+use std::path::Path;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
+use tracing_subscriber::layer::SubscriberExt;
+
+static SERIAL: Mutex<()> = Mutex::new(());
+
+const LIBRARY: &str = "\
+pub fn helper() -> Result<(), std::io::Error> { Ok(()) }
+
+#[cfg(kani)]
+pub fn harness() { let _ = helper(); }
+
+#[cfg(creusot)]
+pub fn creusot_harness() { let _ = helper(); }
+
+#[cfg(not(kani))]
+pub fn ordinary_only() {}
+
+#[cfg(kani)]
+pub fn exclusive() {}
+
+#[cfg(creusot)]
+pub fn exclusive() {}
+";
+
+
+fn kani() -> SemanticContextKey {
+    SemanticContextKey::enabling(["kani"])
+}
+
+fn creusot() -> SemanticContextKey {
+    SemanticContextKey::enabling(["creusot"])
+}
+
+fn fixture() -> Result<tempfile::TempDir> {
+    let root = tempfile::tempdir().into_diagnostic()?;
+    std::fs::create_dir_all(root.path().join("src")).into_diagnostic()?;
+    std::fs::write(
+        root.path().join("Cargo.toml"),
+        "[package]\nname='gated'\nversion='0.1.0'\nedition='2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
+    std::fs::write(root.path().join("src/lib.rs"), LIBRARY).into_diagnostic()?;
+    Ok(root)
+}
+
+/// Counts the writes of a context's cfg into the ordinary crates, and the crates a context copied.
+#[derive(Clone, Default)]
+struct Flipped {
+    written: Arc<AtomicUsize>,
+    copied: Arc<AtomicUsize>,
+}
+
+impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for Flipped {
+    fn on_event(
+        &self,
+        event: &tracing::Event<'_>,
+        _: tracing_subscriber::layer::Context<'_, S>,
+    ) {
+        struct Message(String);
+        impl tracing::field::Visit for Message {
+            fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
+                if field.name() == "message" {
+                    self.0 = format!("{value:?}");
+                }
+            }
+        }
+        let mut message = Message(String::new());
+        event.record(&mut message);
+        if message.0.contains("cfg is written into the ordinary crates") {
+            self.written.fetch_add(1, Ordering::SeqCst);
+        }
+        if message.0.contains("the files this context copies") {
+            self.copied.fetch_add(1, Ordering::SeqCst);
+        }
+    }
+}
+
+/// Only the named contexts, with no planning, flipped in place.
+fn project(contexts: Vec<SemanticContextKey>, root: &Path, flipped: &Flipped) -> Result<CrateIr> {
+    let options = SemanticCargoOptions::default()
+        .with_cfg_contexts(contexts)
+        .with_cfg_planning(CfgPlanning::Explicit)
+        .with_cfg_context_mode(CfgContextMode::Flips);
+    let subscriber = tracing_subscriber::registry().with(flipped.clone());
+    tracing::subscriber::with_default(subscriber, || {
+        let mut session = SourceDatabase::load_with(root, &options).into_diagnostic()?;
+        session
+            .project(&CrateTarget::new("gated", root), &[root.join("src/lib.rs")])
+            .into_diagnostic()
+    })
+}
+
+fn functions(graph: &CrateIr, name: &str) -> Vec<NodeId> {
+    let mut found: Vec<_> = graph
+        .nodes_matching(&cordial::BasicQuery::items())
+        .into_iter()
+        .filter(|node| node.weight().name().as_deref() == Some(name))
+        .map(|node| node.id())
+        .collect();
+    found.sort_by_key(|id| id.value());
+    found
+}
+
+fn only(graph: &CrateIr, name: &str) -> Result<NodeId> {
+    match functions(graph, name).as_slice() {
+        [id] => Ok(*id),
+        other => Err(miette::miette!("{name}: {other:?}")),
+    }
+}
+
+fn active(graph: &CrateIr, id: NodeId) -> Result<Vec<SemanticContextKey>> {
+    let mut contexts = graph
+        .active_contexts(id)
+        .into_diagnostic()?
+        .ok_or_else(|| miette::miette!("no semantic projection"))?;
+    contexts.sort();
+    Ok(contexts)
+}
+
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn a_context_flipped_in_place_resolves_gated_code_and_its_calls() -> Result<()> {
+    let _serial = SERIAL.lock().unwrap();
+    cordial::init_tracing();
+    let root = fixture()?;
+    let flipped = Flipped::default();
+    let graph = project(vec![kani()], root.path(), &flipped)?;
+    assert_eq!(flipped.written.load(Ordering::SeqCst), 1, "the cfg is written, once, for the one context");
+    assert_eq!(flipped.copied.load(Ordering::SeqCst), 0, "and no crate or file is copied");
+    let (helper, harness) = (only(&graph, "helper")?, only(&graph, "harness")?);
+
+    assert_eq!(active(&graph, harness)?, vec![kani()]);
+    assert!(
+        graph.semantic_function(harness).into_diagnostic()?.is_none(),
+        "gated code has no ordinary facts"
+    );
+    let entries = graph.semantic_context_functions(harness).into_diagnostic()?;
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].context(), &kani());
+    assert_eq!(entries[0].function().calls().len(), 1);
+
+    assert_eq!(graph.context_children(harness, &kani()), vec![helper]);
+    assert_eq!(graph.context_parents(helper, &kani()), vec![harness]);
+    assert!(graph.children(harness, EdgeKind::Calls).is_empty());
+    assert!(graph.parents(helper, EdgeKind::Calls).is_empty());
+    assert!(graph.context_parents(helper, &creusot()).is_empty());
+
+    // Code the context turns off is no longer active there, and the ordinary build is as it was.
+    assert_eq!(
+        active(&graph, only(&graph, "ordinary_only")?)?,
+        vec![SemanticContextKey::ordinary()]
+    );
+    let mut helper_contexts = vec![SemanticContextKey::ordinary(), kani()];
+    helper_contexts.sort();
+    assert_eq!(active(&graph, helper)?, helper_contexts);
+    Ok(())
+}
+
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn exclusive_verifier_cfgs_flipped_one_after_the_other_never_see_both() -> Result<()> {
+    let _serial = SERIAL.lock().unwrap();
+    cordial::init_tracing();
+    let root = fixture()?;
+    let flipped = Flipped::default();
+    let graph = project(vec![kani(), creusot()], root.path(), &flipped)?;
+    assert_eq!(flipped.written.load(Ordering::SeqCst), 2);
+    let helper = only(&graph, "helper")?;
+
+    let exclusive = functions(&graph, "exclusive");
+    assert_eq!(exclusive.len(), 2, "{exclusive:?}");
+    let mut seen = Vec::new();
+    for id in exclusive {
+        seen.push(active(&graph, id)?);
+    }
+    seen.sort();
+    assert_eq!(seen, vec![vec![creusot()], vec![kani()]]);
+
+    assert_eq!(graph.context_children(only(&graph, "harness")?, &kani()), vec![helper]);
+    assert_eq!(
+        graph.context_children(only(&graph, "creusot_harness")?, &creusot()),
+        vec![helper]
+    );
+    // `ordinary_only` is `not(kani)`: off in the kani context, on in the creusot one, and the cfg that was
+    // written for kani is not still there for creusot.
+    let mut ordinary_only = vec![SemanticContextKey::ordinary(), creusot()];
+    ordinary_only.sort();
+    assert_eq!(active(&graph, only(&graph, "ordinary_only")?)?, ordinary_only);
+    Ok(())
+}

@@ -90,6 +90,10 @@ pub struct ContextCrates {
     /// sources of this run since: its copies and crates are the ones the last run made.
     #[getter(skip)]
     kept: bool,
+    /// Whether this is the ordinary crates under the context's cfg, flipped in place: there are no copies,
+    /// and what it names is the original's.
+    #[getter(skip)]
+    in_place: bool,
 }
 
 /// What of a context is saved with the database: which crates and files are its, by where
@@ -171,7 +175,30 @@ impl ContextCrates {
             aliased: std::collections::HashSet::new(),
             borrowed,
             kept: true,
+            in_place: false,
         })
+    }
+
+    /// A context whose cfg is flipped in the `crates` themselves: nothing is copied, so nothing is retired after it.
+    #[instrument(level = "trace", skip(crates))]
+    pub(super) fn in_place(
+        context: SemanticContextKey,
+        crates: impl IntoIterator<Item = InputCrate>,
+    ) -> Self {
+        Self {
+            context,
+            crates: crates.into_iter().map(|krate| (krate, krate)).collect(),
+            files: HashMap::new(),
+            aliased: std::collections::HashSet::new(),
+            borrowed: Borrowed::default(),
+            kept: false,
+            in_place: true,
+        }
+    }
+
+    /// Whether this context is the ordinary crates flipped in place.
+    pub(super) fn is_in_place(&self) -> bool {
+        self.in_place
     }
 
     /// How many crates this context copied: each is a definition map to build under its cfg.
@@ -183,12 +210,12 @@ impl ContextCrates {
     /// The crates this context added, as a set.
     #[instrument(level = "trace", skip(self))]
     pub(super) fn crate_set(&self) -> BTreeSet<InputCrate> {
-        self.shadows().collect()
+        self.crates.iter().map(|(_, shadow)| *shadow).collect()
     }
 
     #[instrument(level = "trace", skip(self))]
     pub(super) fn shadows(&self) -> impl Iterator<Item = InputCrate> + '_ {
-        self.crates.iter().map(|(_, shadow)| *shadow)
+        self.crates.iter().filter(|_| !self.in_place).map(|(_, shadow)| *shadow)
     }
 
     /// This context's copy of `original`, if it has one.
@@ -743,6 +770,7 @@ impl SourceDatabase {
             aliased,
             borrowed,
             kept: false,
+            in_place: false,
         })
     }
 

@@ -226,6 +226,7 @@ impl SourceDatabase {
         let options = self.cargo_options.clone().unwrap_or_default();
         let automatic = *options.cfg_planning() == CfgPlanning::Automatic;
         let ordinary = SemanticContextKey::ordinary();
+        let in_place = *options.cfg_context_mode() == crate::CfgContextMode::Flips;
         let mut covered = Covered::default();
         let mut wanted = Wanted::default();
         if let Some(state) = resume {
@@ -272,7 +273,11 @@ impl SourceDatabase {
             let watch =
                 crate::process_memory::Watch::start(format!("cfg context {}", analysed.len() + 1));
             let stage = std::time::Instant::now();
-            let added = match self.add_context_crates(&context) {
+            let added = match if in_place {
+                Ok(self.flip_context(cfgs, &context))
+            } else {
+                self.add_context_crates(&context)
+            } {
                 Ok(added) => added,
                 Err(error) => {
                     self.evict_regenerable("failed cfg context registration");
@@ -328,6 +333,9 @@ impl SourceDatabase {
             // Ask for eviction only once those consumers have finished.
             let stage = std::time::Instant::now();
             self.finish_context(&added, "cfg context");
+            if in_place {
+                self.restore_cfgs(cfgs);
+            }
             if crate::memory_limit::pressured() {
                 graph.drop_decoded_attrs();
             }
@@ -421,6 +429,7 @@ impl SourceDatabase {
             let (mut functions, mut kept, mut new_here) = (0usize, 0usize, 0usize);
             for path in files.paths {
                 let original = self.file_id(path)?;
+                let in_place = files.context.is_in_place();
                 if files.context.is_aliased(original) {
                     // The context takes this file as it is: its functions are the ordinary
                     // build's, active here as there, and nothing in the file is switched.
@@ -435,12 +444,13 @@ impl SourceDatabase {
                     continue;
                 }
                 // The context's copy of the file, which has the same text.
-                let Some(file) = files.context.copy_of(original) else {
+                let Some(file) = (if in_place { Some(original) } else { files.context.copy_of(original) })
+                else {
                     continue;
                 };
                 // The functions of the copy as the last run saved them, when every one of them can
                 // be found again from its description: nothing is asked of rust-analyzer.
-                let listed = copy_functions(&self.db, file);
+                let listed = if in_place { None } else { copy_functions(&self.db, file) };
                 if let Some(records) =
                     listed.filter(|records| records.iter().all(|record| *record.found()))
                 {

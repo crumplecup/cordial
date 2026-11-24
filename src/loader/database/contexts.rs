@@ -17,6 +17,7 @@
 //! accumulate.
 
 mod copy_functions;
+mod flip;
 mod flips;
 mod gates;
 #[cfg(feature = "tracing")]

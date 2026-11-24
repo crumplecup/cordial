@@ -418,7 +418,7 @@ pub use isolation::{
 #[cfg(any(feature = "_quality_support", feature = "verus_ir"))]
 pub use loader::path_has_fixtures;
 pub use loader::{
-    CHUNKS, CfgPlanning, ChunkDir, ChunkEntry, ChunkError, ChunkReadError, Chunked, ChunkedReader,
+    CHUNKS, CfgContextMode, CfgPlanning, ChunkDir, ChunkEntry, ChunkError, ChunkReadError, Chunked, ChunkedReader,
     ContextCrates, CrateTarget, LoadView, SavedState, SemanticCargoOptions, SourceDatabase,
     SourceFile, SourceLoadView, SourceLoader, SourceSyntax, SyncOutcome, chunked_reader,
     module_path_from_src_file, quality_scan_trees, write_chunked,

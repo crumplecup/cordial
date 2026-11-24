@@ -14,6 +14,17 @@ pub enum CfgPlanning {
     Explicit,
 }
 
+/// How a cfg context is analysed beside the ordinary build.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum CfgContextMode {
+    /// Add a copy of each crate the context changes, with its own files, and read the context from the copies.
+    #[default]
+    Copies,
+    /// Change the cfg of the workspace's own crates in place, read the context from the same crates and files,
+    /// and put the cfg back. What did not read an atom the context flips is not run again.
+    Flips,
+}
+
 /// One Cargo configuration for a canonical semantic session.
 /// These are driver inputs, not an alternative analysis backend.
 #[derive(Debug, Clone, Default, derive_getters::Getters, derive_setters::Setters)]
@@ -34,6 +45,8 @@ pub struct SemanticCargoOptions {
     /// the same database. Code gated by them is inactive in the ordinary build and
     /// has no semantic facts there. Exclusive cfgs belong in separate contexts.
     cfg_contexts: Vec<crate::SemanticContextKey>,
+    /// How each context is analysed: from copies of the crates, or by flipping the crates' own cfg.
+    cfg_context_mode: CfgContextMode,
     /// Whether further contexts are planned from the workspace's cfg predicates.
     cfg_planning: CfgPlanning,
     /// Save what is computed for a function as depending on a fingerprint of its crate's

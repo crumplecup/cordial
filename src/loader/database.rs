@@ -80,7 +80,7 @@ mod types;
 
 pub(super) use super::native_syntax::DatabaseSource;
 pub use context_crates::ContextCrates;
-pub use options::{CfgPlanning, SemanticCargoOptions};
+pub use options::{CfgContextMode, CfgPlanning, SemanticCargoOptions};
 #[cfg(any(
     feature = "tracing",
     feature = "internal_error_chain",
