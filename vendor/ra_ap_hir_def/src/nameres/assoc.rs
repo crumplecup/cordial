@@ -237,8 +237,8 @@ impl<'db> AssocItemCollector<'db> {
                 self.diagnostics.push(DefDiagnostic::unconfigured_code(
                     self.module_id,
                     InFile::new(self.file_id, ast_id.erase()),
-                    cfg.0,
-                    self.cfg_options.options().clone(),
+                    cfg.0.clone(),
+                    self.cfg_options.options_for(&cfg.0),
                 ));
                 return;
             }

@@ -3329,8 +3329,8 @@ impl<'db> ExprCollector<'db> {
             Err(cfg) => {
                 self.store.diagnostics.push(ExpressionStoreDiagnostics::InactiveCode {
                     node: self.expander.in_file(SyntaxNodePtr::new(owner.syntax())),
+                    opts: self.cfg_options.options_for(&cfg),
                     cfg,
-                    opts: self.cfg_options.options().clone(),
                 });
                 false
             }

@@ -158,6 +158,18 @@ impl CfgExpr {
         }
     }
 
+    /// Calls `f` for every atom the expression mentions.
+    pub fn for_each_atom(&self, f: &mut dyn FnMut(&CfgAtom)) {
+        match self {
+            CfgExpr::Invalid => {}
+            CfgExpr::Atom(atom) => f(atom),
+            CfgExpr::All(preds) | CfgExpr::Any(preds) => {
+                preds.iter().for_each(|pred| pred.for_each_atom(f));
+            }
+            CfgExpr::Not(pred) => pred.for_each_atom(f),
+        }
+    }
+
     /// Fold the cfg by querying all basic `Atom` and `KeyValue` predicates.
     pub fn fold(&self, query: &dyn Fn(&CfgAtom) -> bool) -> Option<bool> {
         match self {

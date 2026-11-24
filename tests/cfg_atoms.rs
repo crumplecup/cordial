@@ -368,3 +368,28 @@ fn an_impl_a_trait_and_an_enum_say_why_the_definition_map_no_longer_declares_the
         Declaration::Absent(Absence::ModuleGone(salsa::Existence::Deleted))
     );
 }
+
+#[test]
+fn flipping_an_atom_a_crate_never_asks_about_does_not_make_its_definition_map_again() {
+    let _serial = SERIAL.lock().unwrap();
+    let executed = Executed::default();
+    let subscriber = tracing_subscriber::registry().with(executed.clone());
+    tracing::subscriber::with_default(subscriber, || {
+        // `one.rs` and `two.rs` have items that are cfg-disabled, which the map says in a diagnostic.
+        let (mut db, krate) = crate_of(&FILES, CfgOptions::default());
+        assert_eq!(declared(&db, krate), 2);
+        let before = executed.0.lock().unwrap().get("crate_def_map_query").copied().unwrap_or(0);
+        assert_eq!(before, 1);
+
+        let mut cfg = CfgOptions::default();
+        flag(&mut cfg, "unrelated");
+        krate.set_cfg_options(&mut db).to(cfg);
+        assert_eq!(declared(&db, krate), 2);
+        assert_eq!(
+            executed.0.lock().unwrap().get("crate_def_map_query").copied().unwrap_or(0),
+            before,
+            "nothing in the crate asks about `unrelated`, so its map is not made again: a diagnostic that holds the \
+             crate's whole set of options depends on all of them"
+        );
+    });
+}

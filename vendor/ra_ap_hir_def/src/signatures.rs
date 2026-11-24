@@ -1032,8 +1032,8 @@ fn lower_fields<Field: ast::HasAttrs + ast::HasVisibility>(
                 col.store.diagnostics.push(
                     crate::expr_store::ExpressionStoreDiagnostics::InactiveCode {
                         node: InFile::new(fields.file_id, SyntaxNodePtr::new(field.syntax())),
+                        opts: cfg_options.options_for(&cfg),
                         cfg,
-                        opts: cfg_options.options().clone(),
                     },
                 );
             }
@@ -1108,8 +1108,8 @@ impl EnumVariants {
                     Err(cfg) => {
                         diagnostics.push(InactiveEnumVariantCode {
                             ast_id,
+                            opts: cfg_options.options_for(&cfg),
                             cfg,
-                            opts: cfg_options.options().clone(),
                         });
                         None
                     }

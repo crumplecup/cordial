@@ -419,7 +419,7 @@ impl<'db> DefCollector<'db> {
                 self.def_map.root,
                 InFile::new(file_id.into(), ROOT_ERASED_FILE_AST_ID),
                 cfg_expr.clone(),
-                self.cfg_options.options().clone(),
+                self.cfg_options.options_for(cfg_expr),
             ));
             return;
         }
@@ -2939,7 +2939,7 @@ impl ModCollector<'_, '_> {
             self.module_id,
             ast_id,
             cfg.clone(),
-            self.def_collector.cfg_options.options().clone(),
+            self.def_collector.cfg_options.options_for(cfg),
         ));
     }
 

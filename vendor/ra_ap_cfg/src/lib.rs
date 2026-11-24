@@ -70,6 +70,18 @@ pub trait CfgCheck {
     fn check(&self, cfg: &CfgExpr) -> Option<bool> {
         cfg.fold(&|atom| self.check_atom(atom))
     }
+
+    /// The options that are enabled of the atoms `cfg` mentions, and no others: what says why `cfg` holds or does
+    /// not. Reading it depends on those atoms and not on the rest, which [`Self::options`] does.
+    fn options_for(&self, cfg: &CfgExpr) -> CfgOptions {
+        let mut enabled = CfgOptions::default();
+        cfg.for_each_atom(&mut |atom| {
+            if self.check_atom(atom) {
+                enabled.insert_any_atom(atom.clone());
+            }
+        });
+        enabled
+    }
 }
 
 impl CfgCheck for CfgOptions {
