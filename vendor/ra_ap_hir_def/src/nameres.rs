@@ -460,13 +460,13 @@ fn def_map_declared_query_keys(
         Either::Left(krate) => &crate_local_def_map(db, krate).def_map,
         Either::Right(block) => block_def_map(db, block),
     };
-    let mut keys: Vec<_> = map.declared_query_keys().collect();
+    let mut keys: Vec<_> = map.declared_query_keys(db).collect();
     keys.extend(map.item_tree_query_keys(db));
     let krate = map.krate;
     keys.extend(map.macro_def_to_macro_id.values().filter_map(|&mac| {
         mac.declarative_expander_key(db).map(|key| key.as_id())
     }));
-    let owners: Vec<_> = map.modules().flat_map(|(_, module)| {
+    let owners: Vec<_> = map.own_modules(db).flat_map(|(_, module)| {
         module.scope.declarations()
             .filter_map(|def| match def {
                 crate::ModuleDefId::TraitId(id) => Some(Either::Left(id)),
@@ -474,7 +474,7 @@ fn def_map_declared_query_keys(
             })
             .chain(module.scope.impls().map(Either::Right))
     }).collect();
-    let enums: Vec<_> = map.modules()
+    let enums: Vec<_> = map.own_modules(db)
         .flat_map(|(_, module)| module.scope.declarations())
         .filter_map(|def| match def {
             crate::ModuleDefId::AdtId(crate::AdtId::EnumId(id)) => Some(id),
@@ -698,6 +698,15 @@ impl DefMap {
         self.modules.iter()
     }
 
+    /// The modules this map made: not the original's modules that a copy of a crate was given (see
+    /// `nameres::shared`), which belong to the original and to whatever was computed for it.
+    pub fn own_modules<'a>(
+        &'a self,
+        db: &'a dyn SourceDatabase,
+    ) -> impl Iterator<Item = (ModuleId, &'a ModuleData)> + 'a {
+        self.modules().filter(move |(id, _)| id.krate(db) == self.krate)
+    }
+
     /// Query keys declared in this map's modules, excluding imports and inherited names.
     ///
     /// Used to retire module-level semantic values without scanning interned locations.
@@ -705,17 +714,25 @@ impl DefMap {
     /// variants and declarations in body-local block maps are not enumerated here.
     /// Macro definitions come from the local definition table, not the inherited
     /// legacy namespace stored in every module scope.
-    fn declared_query_keys(&self) -> impl Iterator<Item = salsa::Id> + '_ {
-        self.modules().flat_map(|(id, module)| {
+    fn declared_query_keys<'a>(&'a self, db: &'a dyn SourceDatabase) -> impl Iterator<Item = salsa::Id> + 'a {
+        // A module the copy was given is the original's, and a scope that declares it names it: it is not ours.
+        let foreign: rustc_hash::FxHashSet<salsa::Id> = self
+            .own_modules(db)
+            .flat_map(|(_, module)| module.children.values())
+            .filter(|child| child.krate(db) != self.krate)
+            .map(|child| child.as_id())
+            .collect();
+        self.own_modules(db).flat_map(|(id, module)| {
             std::iter::once(id.as_id()).chain(module.scope.declared_query_keys())
         }).chain(self.macro_def_to_macro_id.values().map(|id| id.as_id()))
+            .filter(move |key| !foreign.contains(key))
     }
 
     /// Enumerate local tree locations already recorded by collection. Empty macro
     /// expansions still have call records; imported namespaces are not tree owners.
     fn item_tree_query_keys(&self, db: &dyn SourceDatabase) -> Vec<salsa::Id> {
         let mut keys = Vec::new();
-        for (_, module) in self.modules() {
+        for (_, module) in self.own_modules(db) {
             match module.origin {
                 ModuleOrigin::CrateRoot { definition } => {
                     keys.push(FileItemTreeKey::new(db, HirFileId::from(definition), self.krate).as_id());

@@ -177,6 +177,19 @@ sharing on and off on five fixtures, now including an affected module that calls
 functions and a `pub(crate)` method of a shared module (the visibility risk of S2: not seen); 90 context,
 saved-state, base and cfg-etiquette tests pass. Not measured on amenable.
 
+*S4 done (2026-11-23).* What the tool does with a context's items, checked against the code and a test. Retirement:
+the keys a finished context drops (`crate_declared_query_keys`) were collected from every module in the copy's map, which
+now includes the original's modules it was given, so a context would have dropped the values the ordinary build computed
+for shared items (the test measured it: 20 of 29 keys, then 5 of 8, were the ordinary build's). `DefMap::own_modules`
+(modules whose id names this map's crate) is now what that walk, the item-tree keys, and the trait, impl and enum owner
+lists iterate, and a scope's declaration of a module the copy was given is left out
+(`a_context_retires_nothing_that_is_the_ordinary_builds`, with `context_retirement_overlap`). Ownership of memos: a memo
+of a canonical item is keyed by the original's crate, which is not a registered owner root, so it is unclassified and
+kept (as the ordinary build's own are), and not retired with a context. `item_key` and `copy_functions` map a copy's
+file to the original's by path; an item in a shared module is in an original file and needs no mapping. The harvest
+reads functions in the files the context copied, which are in modules the context affects, so what it reads and merges
+is unchanged by the ids being canonical elsewhere. 88 context, saved-state, base and retention tests pass.
+
 ## Tests (each stage; the method is the complexity ratchet)
 
 Growth: a fixture with 3 and 30 unchanged modules, asserting what grows under the context (item tree queries,

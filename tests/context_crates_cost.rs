@@ -849,3 +849,28 @@ fn a_copy_collects_none_of_the_modules_it_takes_from_the_original() -> Result<()
     );
     Ok(())
 }
+
+/// What a context gives up when it is done is what it made. The copy's map holds the original's modules it was
+/// given, and the keys of their items and traits and impls are the ordinary build's: dropping the values keyed by
+/// them would drop what the ordinary build computed.
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn a_context_retires_nothing_that_is_the_ordinary_builds() -> Result<()> {
+    cordial::init_tracing();
+    let root = modules_beside_a_gate(5)?;
+    let mut session = SourceDatabase::load_with(root.path(), &SemanticCargoOptions::default())
+        .into_diagnostic()?;
+    let dir = root.path().join("m");
+    session
+        .project(&CrateTarget::new("m", &dir), &[dir.join("src/lib.rs")])
+        .into_diagnostic()?;
+    let context = cordial::SemanticContextKey::enabling(["feature=\"extra\""]);
+    let added = session.add_context_crates(&context).into_diagnostic()?;
+    let (overlap, dropped) = session.context_retirement_overlap(&added);
+    assert!(dropped > 0, "a context drops what it made");
+    assert_eq!(
+        overlap, 0,
+        "{overlap} of the {dropped} keys it drops are the ordinary build's"
+    );
+    Ok(())
+}

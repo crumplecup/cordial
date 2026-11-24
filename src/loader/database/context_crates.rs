@@ -1118,6 +1118,30 @@ impl SourceDatabase {
         self.locations(|krate| !shadows.contains(&krate.base()), &HashMap::new())
     }
 
+    /// How many of the keys a context's retirement drops are keys of the ordinary build's own items, and how many
+    /// it drops in all: what a context made is the context's to give up, and what it shares with the ordinary
+    /// build is not.
+    #[instrument(level = "debug", skip(self, context))]
+    pub fn context_retirement_overlap(&mut self, context: &ContextCrates) -> (usize, usize) {
+        let shadows: Vec<InputCrate> = context.shadows().collect();
+        let ordinary: Vec<InputCrate> = self.ordinary_crates().into_iter().collect();
+        let mut dropped: std::collections::HashSet<salsa::Id> = std::collections::HashSet::new();
+        for krate in shadows {
+            dropped.extend(ra_ap_hir_def::nameres::crate_declared_query_keys(
+                &mut self.db,
+                krate,
+            ));
+        }
+        let mut kept: std::collections::HashSet<salsa::Id> = std::collections::HashSet::new();
+        for krate in ordinary {
+            kept.extend(ra_ap_hir_def::nameres::crate_declared_query_keys(
+                &mut self.db,
+                krate,
+            ));
+        }
+        (dropped.intersection(&kept).count(), dropped.len())
+    }
+
     /// How many of the functions declared in the crates `context` added are the ordinary build's own functions
     /// (the same id, because they are in modules the context cannot change) and how many are its own: the
     /// context's work is the second number, and what is shared is everything downstream of the first.
