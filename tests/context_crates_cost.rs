@@ -874,3 +874,96 @@ fn a_context_retires_nothing_that_is_the_ordinary_builds() -> Result<()> {
     );
     Ok(())
 }
+
+/// The events say why a module is the copy's own, so that a run on a large workspace can be read for it.
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn the_events_say_why_each_module_is_the_copys_own() -> Result<()> {
+    cordial::init_tracing();
+    let scratch = tempfile::tempdir().into_diagnostic()?;
+    let subscriber =
+        tracing_subscriber::registry().with(MetricsLayer.with_filter(metrics_filter_with(true)));
+    let (modules, files) = tracing::subscriber::with_default(subscriber, || -> Result<_> {
+        project(modules_of_each_kind()?.path(), "m", false)?;
+        let metrics = metrics_of(scratch.path())?;
+        let of = |name: &str| {
+            metrics
+                .values()
+                .iter()
+                .filter(|(key, _)| key.ends_with(name))
+                .map(|(_, count)| *count)
+                .sum::<u64>()
+        };
+        Ok((
+            [
+                of("def_map.affected_by_file"),
+                of("def_map.affected_by_macro"),
+                of("def_map.affected_by_import"),
+                of("def_map.affected_by_parent"),
+            ],
+            [
+                of("contexts.affected_copied"),
+                of("contexts.affected_by_name"),
+                of("contexts.affected_by_glob"),
+            ],
+        ))
+    })?;
+    // By file: the root, `named`, `globby` and `inner`. By macro: `mac`. By import: none. By parent: `outer`.
+    assert_eq!(
+        modules,
+        [4, 1, 0, 1],
+        "modules affected by file, macro, import, parent"
+    );
+    // Of the files: the root is copied; `named` and `inner` mention the name; `globby` has a glob.
+    assert_eq!(
+        files,
+        [1, 2, 1],
+        "files affected by being copied, by name, by glob"
+    );
+    Ok(())
+}
+
+/// A module that defines a macro is the copy's own even when nothing the gate switches reaches it, and so is the
+/// module above it: a `macro_rules!` is in the textual macro scope and not among a module's declarations, and
+/// what is exported reaches the crate root.
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn a_module_that_defines_a_macro_is_the_copys_own_whatever_is_above_it() -> Result<()> {
+    cordial::init_tracing();
+    let scratch = tempfile::tempdir().into_diagnostic()?;
+    let subscriber =
+        tracing_subscriber::registry().with(MetricsLayer.with_filter(metrics_filter_with(true)));
+    let counts = tracing::subscriber::with_default(subscriber, || -> Result<_> {
+        let root = tempfile::tempdir().into_diagnostic()?;
+        write_workspace(root.path(), &["m".to_owned()])?;
+        write_crate(
+            root.path(),
+            "m",
+            &[],
+            "mod holder;\nmod plain;\n#[cfg(feature = \"extra\")]\npub fn only_with_extra() -> u32 { 1 }\n",
+        )?;
+        let src = root.path().join("m/src");
+        std::fs::create_dir_all(src.join("holder")).into_diagnostic()?;
+        std::fs::write(src.join("holder/mod.rs"), "mod defines;\npub struct H;\n")
+            .into_diagnostic()?;
+        std::fs::write(
+            src.join("holder/defines.rs"),
+            "macro_rules! made { () => { 1 }; }\npub fn f() -> u32 { made!() }\n",
+        )
+        .into_diagnostic()?;
+        std::fs::write(src.join("plain.rs"), "pub struct P;\n").into_diagnostic()?;
+        project(root.path(), "m", false)?;
+        let metrics = metrics_of(scratch.path())?;
+        Ok([
+            sharing_field(&metrics, "affected_by_macro"),
+            sharing_field(&metrics, "affected_by_parent"),
+            sharing_field(&metrics, "shared_modules"),
+        ])
+    })?;
+    assert_eq!(
+        counts,
+        [1, 1, 1],
+        "affected by macro, by parent, and shared: only `plain` is shared"
+    );
+    Ok(())
+}

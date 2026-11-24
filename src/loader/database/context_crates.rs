@@ -396,31 +396,58 @@ impl SourceDatabase {
         visible_through: &HashMap<InputCrate, BTreeSet<String>>,
     ) -> HashMap<InputCrate, Vec<FileId>> {
         let mut affected: HashMap<InputCrate, Vec<FileId>> = HashMap::new();
+        // Why a file the context takes from the ordinary build is nevertheless not the copy's to take: it mentions
+        // a name a flipped gate defines, or has a glob import. How many, and a few of each.
+        let mut copied = 0_u64;
+        let mut by_name: (u64, Vec<String>) = (0, Vec::new());
+        let mut by_glob: (u64, Vec<String>) = (0, Vec::new());
         for (file, path) in files {
             for krate in owners
                 .owners_of(path)
                 .filter(|krate| crates.contains(krate))
             {
-                let sensitive = !copied_files.contains(file)
-                    && visible_through.get(&krate).is_some_and(|names| {
-                        !names.is_empty() && {
-                            let text = self.db.file_text(*file).text(&self.db).clone();
-                            // A glob import brings in whatever the module it names has: nothing yet, under the
-                            // ordinary cfg, if what the context switches is all it has.
-                            text.contains("::*")
-                                || text.contains("use *")
-                                || text
-                                    .split(|character: char| {
-                                        !(character.is_alphanumeric() || character == '_')
-                                    })
-                                    .any(|word| names.contains(word))
+                let mut is_affected = false;
+                if copied_files.contains(file) {
+                    copied += 1;
+                    is_affected = true;
+                } else if let Some(names) = visible_through
+                    .get(&krate)
+                    .filter(|names| !names.is_empty())
+                {
+                    let text = self.db.file_text(*file).text(&self.db).clone();
+                    // A glob import brings in whatever the module it names has: nothing yet, under the ordinary
+                    // cfg, if what the context switches is all it has.
+                    let (counter, detail) = if text.contains("::*") || text.contains("use *") {
+                        (Some(&mut by_glob), String::new())
+                    } else if let Some(word) = text
+                        .split(|character: char| !(character.is_alphanumeric() || character == '_'))
+                        .find(|word| names.contains(*word))
+                    {
+                        (Some(&mut by_name), format!(" ({word})"))
+                    } else {
+                        (None, String::new())
+                    };
+                    if let Some(counter) = counter {
+                        is_affected = true;
+                        counter.0 += 1;
+                        if counter.1.len() < 4 {
+                            counter.1.push(format!("{}{detail}", path.display()));
                         }
-                    });
-                if copied_files.contains(file) || sensitive {
+                    }
+                }
+                if is_affected {
                     affected.entry(krate).or_default().push(*file);
                 }
             }
         }
+        tracing::info!(
+            target: "cordial::semantic::contexts",
+            affected_copied = copied,
+            affected_by_name = by_name.0,
+            affected_by_glob = by_glob.0,
+            examples = %format!("name: {} | glob: {}", by_name.1.join("; "), by_glob.1.join("; ")),
+            "which files the copies of this context cannot take as they are, beyond the ones it copies"
+        );
         for files in affected.values_mut() {
             files.sort_by_key(|file| file.index());
         }
