@@ -137,3 +137,43 @@ Done, each with its test, all green in `Copies` mode too:
 
 Not done: ordering contexts by the atoms between neighbours (each context now restores the ordinary cfg first);
 memory after a flip back (1d); save and restore with flips (1e); the amenable measurement (below); Phase 2 and 3.
+
+## Status (2026-11-24, after Phase 2)
+
+**Built, with unit tests that fail without each part:**
+
+* *Phase 1, flips with no copies anywhere.* `CfgContextMode::Flips` (option, and `cfg_context_mode` in
+  `cordial.toml`). The cfg contexts pass and the leaf stage both write a context's cfg into the ordinary crates,
+  read it from the same crates and files, harvest by an exact comparison with the ordinary facts, and take the
+  nearest context next (`SemanticContextKey::atoms_apart`). A context's cfg is written straight over the one before,
+  so what it computed stays for the next (`a_context_that_keeps_the_atoms_of_the_one_before_...`); the flipped state is
+  forgotten once, when the pass is done: the ordinary cfg is written back, what the flips changed is forgotten
+  (`forget_memos_changed_after`), the saved queries keyed by what the map no longer declares are forgotten with typed
+  reasons (`hir_def::declaration`), and the maps are made again before the save. `tests/context_flips.rs`,
+  `tests/cfg_contexts.rs` (every test in both modes), `tests/leaf_functions.rs` (zero copies).
+* *Salsa.* `forget_memos_for_inputs`, `forget_memos_changed_after` (never a query that made tracked structs),
+  `memo_keys`, `existence` (exists, deleted, replaced, from a stored generation), `extension` (state of one database).
+  `tests/salsa_forget.rs`, `tests/salsa_extension.rs`.
+* *Phase 2, a crate's definition map in proportion to what changed.* A crate keeps what its last map was made from
+  (`nameres/previous.rs`, in the database's own extension) and takes from it every module that nothing it was made of
+  has changed, with the ids it had. A file is changed when its item tree is not the one the map was made from, and the
+  closure over imports, parents and macros that the copy design had runs from there, plus the cases a finished map
+  cannot show: unresolved names, glob sources that were empty, macros that changed, modules a changed file no longer
+  declares, and modules of other crates that were read (compared by the address of what they held, which also keeps
+  the dependence on them). **Checked against a map made from scratch**, after flips in every direction, in a crate
+  with every kind of module and in two crates (`tests/cfg_atoms.rs`); each rule was removed in turn and the check fails
+  without it.
+
+**Not built, and why:**
+
+* *Phase 3, deleting the copy design* (`context_crates.rs`, `context_shares.rs`, `Crate.canonical`, the word-matched
+  file lists, `shared_modules`, `Copies`). It is gated by one parity run on amenable (findings equal to a run with
+  copies), as the plan says, because deleting is not undone by a test. The default is still `Copies`.
+* The block maps are not made from the map before (they are small, and made again whole).
+* A restored process has no previous map, so its first map of each crate is made whole.
+* Not measured on amenable since Phase 2: every number in this file before this section was taken with the whole map
+  made again.
+
+**Known conservative cases** (a module is made again where it could have been taken): a module that has anything
+unresolved, calls a macro when any macro-defining file changed, has a macro call resolved through another crate, or
+reads a module of another crate that changed.
