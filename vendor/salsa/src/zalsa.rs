@@ -160,6 +160,9 @@ pub struct Zalsa {
     #[cfg(not(feature = "inventory"))]
     nonce: crate::nonce::Nonce<StorageNonce>,
 
+    /// Values that belong to this storage and are not a query's result, by their type: made when first asked for.
+    extensions: std::sync::Mutex<FxHashMap<TypeId, std::sync::Arc<dyn Any + Send + Sync>>>,
+
     /// Map from the [`IngredientIndex::as_usize`][] of a salsa struct to a list of
     /// [ingredient-indices](`IngredientIndex`) for tracked functions that have this salsa struct
     /// as input.
@@ -231,6 +234,7 @@ impl Zalsa {
             chunk_plan: std::sync::Mutex::new(Default::default()),
             #[cfg(not(feature = "inventory"))]
             nonce: NONCE.nonce(),
+            extensions: std::sync::Mutex::new(FxHashMap::default()),
         };
 
         // Collect and initialize all registered ingredients.
@@ -254,6 +258,19 @@ impl Zalsa {
         }
 
         zalsa
+    }
+
+    /// The value of type `T` that belongs to this storage, made with `T::default()` the first time it is asked for.
+    /// It is shared by every handle of the storage and dropped with it.
+    pub fn extension<T: Any + Send + Sync + Default>(&self) -> std::sync::Arc<T> {
+        let mut extensions = self.extensions.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let found = extensions
+            .entry(TypeId::of::<T>())
+            .or_insert_with(|| std::sync::Arc::new(T::default()) as std::sync::Arc<dyn Any + Send + Sync>)
+            .clone();
+        found
+            .downcast::<T>()
+            .unwrap_or_else(|_| unreachable!("an extension is stored under its own type"))
     }
 
     #[cfg(not(feature = "inventory"))]

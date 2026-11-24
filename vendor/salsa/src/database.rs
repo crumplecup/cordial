@@ -296,6 +296,14 @@ pub fn current_revision<Db: ?Sized + Database>(db: &Db) -> Revision {
     db.zalsa().current_revision()
 }
 
+/// The value of type `T` that belongs to this database: made with `T::default()` the first time it is asked for,
+/// shared by the database's handles, and dropped with it.
+pub fn extension<T: std::any::Any + Send + Sync + Default, Db: ?Sized + Database>(
+    db: &Db,
+) -> std::sync::Arc<T> {
+    db.zalsa().extension::<T>()
+}
+
 #[cfg(feature = "persistence")]
 mod persistence {
     use crate::plumbing::Ingredient;
