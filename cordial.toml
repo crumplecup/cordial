@@ -35,10 +35,6 @@ filter = "all()"
 [perf.workflows.cordial]
 edit = "src/perf/spread.rs"
 
-# The same on amenable: `cordial perf workflow amenable --project <amenable>`.
-[perf.workflows.amenable]
-edit = "crates/amenable/src/paths.rs"
-
 [perf.tests.verus]
 filter = "binary(verus_ir) | binary(panics_verus) | binary(verus_identity) | binary(proof_patterns_etiquette) | binary(verus_warnings_etiquette)"
 
