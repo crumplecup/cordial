@@ -274,6 +274,7 @@ impl SourceDatabase {
             let watch =
                 crate::process_memory::Watch::start(format!("cfg context {}", analysed.len() + 1));
             let stage = std::time::Instant::now();
+            let revision_before = self.revision();
             let added = match if in_place {
                 Ok(self.flip_context(cfgs, &context))
             } else {
@@ -344,6 +345,7 @@ impl SourceDatabase {
             if let Some(only_here) = &only_here {
                 self.restore_cfgs(cfgs);
                 self.forget_flipped(only_here);
+                self.forget_changed_since(revision_before);
             }
             if crate::memory_limit::pressured() {
                 graph.drop_decoded_attrs();

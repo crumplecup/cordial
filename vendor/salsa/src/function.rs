@@ -186,6 +186,11 @@ impl<'db> FunctionIngredientRef<'db> {
         self.ingredient.memo_index_for(zalsa, input)
     }
 
+    /// Every key this query holds a memo for.
+    pub(crate) fn memo_keys(&self, zalsa: &Zalsa) -> Vec<Id> {
+        self.ingredient.memo_keys(zalsa)
+    }
+
     /// Returns the cached memo for `input`, relying on the caller to prevent its storage from
     /// being reused or freed (unlike [`Self::memo`], which asserts that an interned key was
     /// interned in the latest revision, and so fails for the memos of keys that have been idle).
@@ -235,6 +240,9 @@ pub(crate) trait FunctionIngredient: Send + Sync {
 
     /// Where this query's memo for `input` is in the memo table of `input`.
     fn memo_index_for(&self, zalsa: &Zalsa, input: Id) -> MemoIngredientIndex;
+
+    /// Every key this query holds a memo for.
+    fn memo_keys(&self, zalsa: &Zalsa) -> Vec<Id>;
 
     /// Returns information about the current provisional status of `input`.
     ///
@@ -470,6 +478,18 @@ where
 
     fn memo_index_for(&self, zalsa: &Zalsa, input: Id) -> MemoIngredientIndex {
         self.memo_ingredient_index(zalsa, input)
+    }
+
+    fn memo_keys(&self, zalsa: &Zalsa) -> Vec<Id> {
+        <C::SalsaStruct<'_> as SalsaStructInDb>::entries(zalsa)
+            .filter(|entry| {
+                let memo_ingredient_index =
+                    self.memo_ingredient_indices.get(entry.ingredient_index());
+                self.get_memo_from_table_for(zalsa, entry.key_index(), memo_ingredient_index)
+                    .is_some()
+            })
+            .map(|entry| entry.key_index())
+            .collect()
     }
 
     /// Returns `final` if the memo has the `verified_final` flag set.

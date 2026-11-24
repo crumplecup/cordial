@@ -89,6 +89,26 @@ pub trait Database: Send + ZalsaDatabase + AsDynDatabase {
         self.zalsa_mut().forget_memos_for_inputs(inputs)
     }
 
+    /// Forget every query result whose value changed after `revision`: what a cfg that was flipped and flipped
+    /// back made of the crate while it was flipped. A value that did not change is kept, and is valid when the
+    /// cfg is back; one that did is a flipped state's, and is not verified or saved. Memos that are inputs'
+    /// fields, or hold a value another query assigned, are not touched. Returns how many were forgotten.
+    ///
+    /// **WARNING:** Cancels other database handles if any exist, like a write.
+    #[doc(hidden)]
+    fn forget_memos_changed_after(&mut self, revision: crate::Revision) -> u64 {
+        self.zalsa_mut().forget_memos_changed_after(revision)
+    }
+
+    /// Every key the named queries hold a memo for (see `Zalsa::memo_keys`). For finding what a persisted
+    /// query holds that no longer exists, without asking the query.
+    ///
+    /// **WARNING:** Cancels other database handles if any exist, like a write.
+    #[doc(hidden)]
+    fn memo_keys(&mut self, only: &[&str]) -> Vec<crate::Id> {
+        self.zalsa_mut_for_inspection().memo_keys(only)
+    }
+
     /// What became of `id`: a tracked struct that a query stopped making is deleted, and its slot is reused for
     /// another with the next generation. Nothing of the struct is read, so this is for asking about an id that
     /// may name something that is gone, as an item's id does of its module. Every other id exists.

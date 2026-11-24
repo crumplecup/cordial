@@ -104,3 +104,69 @@ fn a_tracked_struct_says_whether_it_exists_deleted_or_replaced_without_being_rea
     assert_eq!(<dyn Database>::existence(&db, again), Existence::Exists);
     assert_eq!(<dyn Database>::existence(&db, b), Existence::Replaced);
 }
+
+#[test]
+fn a_query_says_which_keys_it_holds_a_memo_for() {
+    let mut db = Db::default();
+    let switch = Switch::new(&db, true);
+    let (asked, never) = {
+        let all = modules(&db, switch);
+        let items: Vec<_> = (0..3).map(|n| Item::new(&db, all[0], n)).collect();
+        describe(&db, items[0]);
+        describe(&db, items[2]);
+        (vec![items[0].as_id(), items[2].as_id()], items[1].as_id())
+    };
+    let mut held = <dyn Database>::memo_keys(&mut db, &["describe"]);
+    held.sort_by_key(|id| id.as_bits());
+    let mut asked = asked;
+    asked.sort_by_key(|id| id.as_bits());
+    assert_eq!(held, asked, "the two that were asked, and not the one that was not");
+    assert!(!held.contains(&never));
+}
+
+/// What does not read the switch.
+#[salsa::tracked(persist)]
+fn stable<'db>(db: &'db dyn Database, item: Item<'db>) -> usize {
+    item.n(db) * 10
+}
+
+#[test]
+fn what_changed_while_a_switch_was_on_is_forgotten_and_what_did_not_is_kept() {
+    let mut db = Db::default();
+    let switch = Switch::new(&db, false);
+    let kept = {
+        let all = modules(&db, switch);
+        let kept = Item::new(&db, all[0], 1);
+        assert_eq!(describe(&db, kept), "a:1");
+        assert_eq!(*stable(&db, kept), 10);
+        kept.as_id()
+    };
+    let before = salsa::plumbing::current_revision(&db);
+
+    // The switch is on for a while: `b` exists, and what reads the switch is computed for it.
+    switch.set_on(&mut db).to(true);
+    let gone = {
+        let all = modules(&db, switch);
+        let (kept, gone) = (Item::from_id(kept), Item::new(&db, all[1], 2));
+        assert_eq!(describe(&db, gone), "b:2");
+        // Verified again with the switch on, and the same: it did not change.
+        assert_eq!(describe(&db, kept), "a:1");
+        gone.as_id()
+    };
+    switch.set_on(&mut db).to(false);
+    let _ = modules(&db, switch);
+
+    let held = |db: &mut Db, name: &str| <dyn Database>::memo_keys(db, &[name]);
+    assert!(held(&mut db, "describe").contains(&gone));
+    let forgotten = <dyn Database>::forget_memos_changed_after(&mut db, before);
+    assert!(forgotten >= 1, "what was made while the switch was on is forgotten");
+    assert!(!held(&mut db, "describe").contains(&gone));
+    assert!(held(&mut db, "describe").contains(&kept), "a value that did not change is kept");
+    assert!(held(&mut db, "stable").contains(&kept));
+    // What made tracked structs is not forgotten: the structs are what other things hold ids of, and are the
+    // same ones when the query runs again, which they would not be without its memo.
+    assert!(
+        !held(&mut db, "modules").is_empty(),
+        "a query that makes tracked structs keeps its memo"
+    );
+}

@@ -637,6 +637,23 @@ impl Zalsa {
         keys
     }
 
+    /// Every key the named queries hold a memo for, whatever the memo's state. The queries are named by
+    /// their debug names, as in [`Self::cached_query_keys`]. Keys are the ids of the queries' own inputs: a query
+    /// of several arguments, or of one that is not a salsa struct, is keyed by an interned tuple.
+    #[doc(hidden)]
+    pub fn memo_keys(&mut self, only: &[&str]) -> Vec<Id> {
+        let mut keys = Vec::new();
+        for ingredient in self.ingredients() {
+            if !only.contains(&ingredient.debug_name()) {
+                continue;
+            }
+            if let Some(function) = ingredient.as_function() {
+                keys.extend(function.memo_keys(self));
+            }
+        }
+        keys
+    }
+
     /// Remove every memo keyed directly by these ids (see `Database::forget_memos_for_inputs`).
     #[doc(hidden)]
     pub fn forget_memos_for_inputs(&mut self, inputs: &[Id]) -> u64 {
@@ -653,6 +670,48 @@ impl Zalsa {
                 ));
             }
         }
+        self.forget_planned(planned)
+    }
+
+    /// Remove every memo of a query whose value changed after `revision` (see
+    /// `Database::forget_memos_changed_after`).
+    #[doc(hidden)]
+    pub fn forget_memos_changed_after(&mut self, revision: Revision) -> u64 {
+        let mut planned = Vec::new();
+        for ingredient in self.ingredients() {
+            let Some(function) = ingredient.as_function() else {
+                continue;
+            };
+            for key in function.memo_keys(self) {
+                // SAFETY: `&mut self` is exclusive access to the storage: no query runs and nothing
+                // borrows a memo.
+                let Some(memo) = (unsafe { function.memo_unchecked(self, key) }) else {
+                    continue;
+                };
+                // A query's own result, which running it again makes again: not an input's field, and not
+                // one whose value was handed to it.
+                // A query that made tracked structs keeps its memo: they are what ids held elsewhere name, and
+                // they are the same ones when the query runs again only because the memo is there.
+                let closure = memo.header().closure();
+                let makes_structs = memo.header().tracked_output_ids().next().is_some();
+                if closure.trusted && closure.changed > revision && !makes_structs {
+                    planned.push((
+                        DatabaseKeyIndex::new(ingredient.ingredient_index(), key),
+                        function.memo_index_for(self, key),
+                    ));
+                }
+            }
+        }
+        self.forget_planned(planned)
+    }
+
+    fn forget_planned(&mut self, planned: Vec<(DatabaseKeyIndex, MemoIngredientIndex)>) -> u64 {
+        if planned.is_empty() {
+            return 0;
+        }
+        // Forgetting is a change of what the database holds, like a write: the tracked structs a memo made are
+        // deleted with it, and one that was read in this revision cannot be deleted in it.
+        self.new_revision();
         let mut taken = Vec::new();
         for (executor, memo_index) in planned {
             // SAFETY: `&mut self` is exclusive access to the storage: no query runs and nothing

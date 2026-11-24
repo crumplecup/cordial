@@ -374,3 +374,31 @@ fn a_derive_only_a_flipped_context_has_does_not_stop_the_state_from_being_saved(
     assert_eq!(active(&warm, only(&warm, "harness")?)?, vec![kani()]);
     Ok(())
 }
+
+const A_GATED_ATTRIBUTE: &str = "\
+pub fn ordinary() -> u32 { 1 }
+
+#[cfg_attr(kani, test)]
+pub fn attributed() {}
+
+#[cfg(kani)]
+pub fn harness() -> u32 { ordinary() }
+";
+
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn an_attribute_macro_only_a_flipped_context_applies_does_not_stop_the_state_from_being_saved() -> Result<()> {
+    let _serial = SERIAL.lock().unwrap();
+    cordial::init_tracing();
+    let root = fixture_with(A_GATED_ATTRIBUTE)?;
+    let state = tempfile::tempdir().into_diagnostic()?;
+    let saved = cordial::SavedState::at(state.path().join("analysis-state"));
+
+    let (restored, cold) = run_saving(root.path(), &saved)?;
+    assert!(!restored);
+    assert_eq!(active(&cold, only(&cold, "harness")?)?, vec![kani()]);
+    let (restored, warm) = run_saving(root.path(), &saved)?;
+    assert!(restored, "the second run starts from the first's state");
+    assert_eq!(active(&warm, only(&warm, "harness")?)?, vec![kani()]);
+    Ok(())
+}

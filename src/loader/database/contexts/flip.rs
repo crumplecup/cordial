@@ -170,6 +170,26 @@ impl SourceDatabase {
         only
     }
 
+    /// The database's revision now, which a context's flips are measured from.
+    pub(super) fn revision(&self) -> salsa::Revision {
+        salsa::plumbing::current_revision(&self.db)
+    }
+
+    /// Forget what a flipped context changed: the value of a query that is not what it was before the flip is
+    /// the flipped state's, and is not verified or saved. A value that did not change is valid with the ordinary
+    /// cfg back and stays. What made tracked structs stays too, as it runs again as any query does.
+    #[instrument(level = "debug", skip(self))]
+    pub(super) fn forget_changed_since(&mut self, revision: salsa::Revision) {
+        let started = std::time::Instant::now();
+        let forgotten = salsa::Database::forget_memos_changed_after(&mut self.db, revision);
+        tracing::info!(
+            target: "cordial::eviction",
+            forgotten,
+            micros = u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX),
+            "what a flipped context changed is forgotten"
+        );
+    }
+
     /// Forget what was computed for `items`, which the ordinary cfg does not have.
     #[instrument(level = "debug", skip(self, items))]
     pub(super) fn forget_flipped(&mut self, items: &[salsa::Id]) {
