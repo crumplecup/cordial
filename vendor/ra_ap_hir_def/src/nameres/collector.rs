@@ -2785,6 +2785,13 @@ impl ModCollector<'_, '_> {
                     )
                     .to_static()
                 };
+                if made != id {
+                    // Said in a release build too: what is made of that module is now under another id.
+                    tracing::error!(
+                        target: "cordial::def_map",
+                        "a module taken from the map made before was made again as another module"
+                    );
+                }
                 debug_assert_eq!(made, id, "a module taken from the map made before is made again as itself");
             }
             // The root of the part taken is under this module in the copy; what is under it is as it was.
