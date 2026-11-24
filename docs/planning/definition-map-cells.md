@@ -68,8 +68,13 @@ reuse of chunks inside an ingredient the edit reached; the edit no longer reache
 (that is the result), so it now edits in a macro call, which an ingredient holding every crate's expansions has to
 look into. The persistence event gained `planned_chunks`, `keeping` and `clean_memos`, which is how this was found.
 
-**Still whole-crate readers.** The inherent and trait impl maps (`hir_ty::method_resolution`), `lang_items`,
-`include_macro_invoc` and the import map iterate every module, so they depend on every cell and run again on any
-change. They are the next readers to split (a cell of impls per module); until then a flip runs these and not the
-bodies. Not yet done: the prelude, `macro_use_prelude`, derive helpers and `macro_def_to_macro_id` in cells of their
+**Whole-crate readers, measured (2026-11-24).** The inherent and trait impl maps, `lang_items`, `include_macro_invoc`
+and the import map iterate every module, so each depends on every cell and runs once on any change. With an inherent
+and a trait impl in every module of the fixture (`tests/cfg_atoms.rs`), a flip executes the same queries in 4 and in
+40 modules: the impl collections once each, two type lowerings (the impls the flip makes visible), one body, and the
+definition map's own collector. The scan over modules is linear but everything it asks per impl is memoized, and its
+output is equal, so nothing that reads the impls runs again. Splitting them into per-module cells would save the scan
+only; it is not done. What is left of a flip is the definition-map rebuild (`DefCollector::collect`, resolution loop).
+
+Not yet done: the prelude, `macro_use_prelude`, derive helpers and `macro_def_to_macro_id` in cells of their
 own (they change only with a gated macro or derive); M3 (the sharing rules on cells) and M4.

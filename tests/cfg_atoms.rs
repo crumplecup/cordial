@@ -13,6 +13,7 @@ use ra_ap_hir_def::expr_store::body::Body;
 use ra_ap_hir_def::nameres::crate_def_map;
 use ra_ap_hir_def::{DefWithBodyId, ModuleDefId};
 use ra_ap_hir_expand::intern::Symbol;
+use ra_ap_hir_ty::method_resolution::{InherentImpls, TraitImpls};
 use ra_ap_ide_db::RootDatabase;
 use ra_ap_ide_db::base_db::{
     AbsPathBuf, Crate, CrateGraphBuilder, CrateOrigin, CrateWorkspaceData, Env, FileChange, FileId,
@@ -156,6 +157,13 @@ fn read_bodies(db: &RootDatabase, krate: Crate) -> usize {
     functions.len()
 }
 
+/// What an analysis reads of the whole crate: its impls and its lang items.
+fn read_impls(db: &RootDatabase, krate: Crate) {
+    let _ = InherentImpls::for_crate(db, krate);
+    let _ = TraitImpls::for_crate(db, krate);
+    let _ = ra_ap_hir_def::lang_item::lang_items(db, krate);
+}
+
 /// Counts every query that executes, by name.
 #[derive(Clone, Default)]
 struct Executed(Arc<Mutex<std::collections::BTreeMap<String, usize>>>);
@@ -189,7 +197,11 @@ fn many(modules: usize) -> Vec<(String, String)> {
         let gate = if m == 0 { "#[cfg(feature = \"a\")]\n" } else { "" };
         files.push((
             format!("m{m}.rs"),
-            format!("{gate}pub fn f{m}() -> u32 {{ 1 + 1 }}\npub struct S{m}(pub u32);\n"),
+            format!(
+                "{gate}pub fn f{m}() -> u32 {{ 1 + 1 }}\npub struct S{m}(pub u32);\n\
+                 impl S{m} {{ pub fn get(&self) -> u32 {{ self.0 }} }}\n\
+                 impl Clone for S{m} {{ fn clone(&self) -> Self {{ S{m}(self.0) }} }}\n"
+            ),
         ));
     }
     files
@@ -206,12 +218,14 @@ fn executed_by_flipping(modules: usize) -> std::collections::BTreeMap<String, us
             .collect();
         let (mut db, krate) = crate_of(&borrowed, CfgOptions::default());
         let _ = read_bodies(&db, krate);
+        read_impls(&db, krate);
         let before = executed.0.lock().unwrap().clone();
 
         let mut cfg = CfgOptions::default();
         flag(&mut cfg, "a");
         krate.set_cfg_options(&mut db).to(cfg);
         let _ = read_bodies(&db, krate);
+        read_impls(&db, krate);
         let after = executed.0.lock().unwrap().clone();
         after
             .into_iter()
@@ -239,6 +253,8 @@ fn what_a_flip_runs_again_does_not_grow_with_the_files_it_does_not_reach() {
         large.get("body_with_source_map_query"),
         "the bodies executed again are the ones that read what the atom changed, not every body"
     );
+    assert_eq!(small.get("inherent_impls_in_crate_query"), Some(&2), "the inherent and trait impls are collected again: {small:?}");
+    assert_eq!(small, large, "everything the flip executes again is the same in a crate ten times the size");
     assert_eq!(
         large.get("body_with_source_map_query"),
         Some(&1),
