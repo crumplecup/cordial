@@ -170,3 +170,48 @@ fn what_changed_while_a_switch_was_on_is_forgotten_and_what_did_not_is_kept() {
         "a query that makes tracked structs keeps its memo"
     );
 }
+
+/// Records the events about reads of tracked structs that are gone.
+#[derive(Clone, Default)]
+struct DeadReads(std::sync::Arc<std::sync::Mutex<Vec<(String, String)>>>);
+
+impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for DeadReads {
+    fn on_event(&self, event: &tracing::Event<'_>, _: tracing_subscriber::layer::Context<'_, S>) {
+        struct Fields(String, String);
+        impl tracing::field::Visit for Fields {
+            fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
+                match field.name() {
+                    "struct_kind" => self.0 = format!("{value:?}"),
+                    "state" => self.1 = format!("{value:?}"),
+                    _ => {}
+                }
+            }
+        }
+        if event.metadata().target() != "salsa::dead_read" {
+            return;
+        }
+        let mut fields = Fields(String::new(), String::new());
+        event.record(&mut fields);
+        self.0.lock().unwrap().push((fields.0, fields.1));
+    }
+}
+
+#[test]
+fn a_read_of_a_tracked_struct_that_is_gone_says_which_before_it_fails() {
+    use tracing_subscriber::layer::SubscriberExt;
+    let mut db = Db::default();
+    let switch = Switch::new(&db, true);
+    let b = modules(&db, switch)[1].as_id();
+    switch.set_on(&mut db).to(false);
+    assert_eq!(modules(&db, switch).len(), 1);
+    assert_eq!(<dyn Database>::existence(&db, b), salsa::Existence::Deleted);
+
+    let reads = DeadReads::default();
+    let subscriber = tracing_subscriber::registry().with(reads.clone());
+    // The read of what is gone is a panic, as it always was; what is new is that the log says what it was.
+    let failed = tracing::subscriber::with_default(subscriber, || {
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| Module::from_id(b).name(&db))).is_err()
+    });
+    assert!(failed);
+    assert_eq!(*reads.0.lock().unwrap(), vec![("\"Module\"".to_owned(), "Deleted".to_owned())]);
+}

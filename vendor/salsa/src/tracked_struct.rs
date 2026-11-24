@@ -940,6 +940,22 @@ where
         memo_table.reset();
     }
 
+    /// Says, as an event, that the fields of a struct that is gone are about to be read, which is a panic: with the
+    /// struct's kind and id and whether it was deleted or its slot was reused, which the panic does not say.
+    fn say_if_gone(&self, zalsa: &Zalsa, id: Id) {
+        let state = <Self as Ingredient>::existence(self, zalsa, id);
+        if state != crate::Existence::Exists {
+            ::tracing::error!(
+                target: "salsa::dead_read",
+                struct_kind = C::DEBUG_NAME,
+                id = id.as_bits(),
+                state = ?state,
+                revision = ?zalsa.current_revision(),
+                "the fields of a tracked struct that is gone are read"
+            );
+        }
+    }
+
     /// Return reference to the field data ignoring dependency tracking.
     /// Used for debugging.
     pub fn leak_fields<'db>(
@@ -948,6 +964,7 @@ where
         s: C::Struct<'db>,
     ) -> &'db C::Fields<'db> {
         let id = AsId::as_id(&s);
+        self.say_if_gone(zalsa, id);
         let data = Self::data_raw(zalsa.table(), id);
         // SAFETY: `data` is a valid pointer acquired from the table.
         unsafe { self.lock_fields(data, zalsa.current_revision()) }
@@ -965,6 +982,7 @@ where
         relative_tracked_index: usize,
     ) -> &'db C::Fields<'db> {
         let id = AsId::as_id(&s);
+        self.say_if_gone(zalsa, id);
         let field_ingredient_index = self.ingredient_index.successor(relative_tracked_index);
         let data = Self::data_raw(zalsa.table(), id);
 
@@ -994,6 +1012,7 @@ where
         s: C::Struct<'db>,
     ) -> &'db C::Fields<'db> {
         let id = AsId::as_id(&s);
+        self.say_if_gone(zalsa, id);
         let data = Self::data_raw(zalsa.table(), id);
 
         // A read of a tracked struct's fields locks it for the revision, and a struct that was read cannot be deleted
