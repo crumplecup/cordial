@@ -56,6 +56,32 @@ impl fmt::Debug for CfgOptions {
     }
 }
 
+/// Something that says whether an atom is enabled.
+///
+/// A plain [`CfgOptions`] says so from its set. A crate's options as the database reads them say so
+/// through a query per atom, so that what asks records which atoms it asked about and not the whole set.
+pub trait CfgCheck {
+    fn check_atom(&self, atom: &CfgAtom) -> bool;
+
+    /// Every enabled option. Reading this depends on all of them: it is for what reports the options,
+    /// not for what decides by them.
+    fn options(&self) -> &CfgOptions;
+
+    fn check(&self, cfg: &CfgExpr) -> Option<bool> {
+        cfg.fold(&|atom| self.check_atom(atom))
+    }
+}
+
+impl CfgCheck for CfgOptions {
+    fn check_atom(&self, atom: &CfgAtom) -> bool {
+        self.enabled.contains(atom)
+    }
+
+    fn options(&self) -> &CfgOptions {
+        self
+    }
+}
+
 impl CfgOptions {
     pub fn check(&self, cfg: &CfgExpr) -> Option<bool> {
         cfg.fold(&|atom| self.enabled.contains(atom))

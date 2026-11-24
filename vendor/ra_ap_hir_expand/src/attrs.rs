@@ -18,7 +18,7 @@ use std::{borrow::Cow, cell::OnceCell, convert::Infallible, fmt, ops::ControlFlo
 
 use ::tt::TextRange;
 use base_db::{Crate, SourceDatabase};
-use cfg::{CfgExpr, CfgOptions};
+use cfg::{CfgCheck, CfgExpr};
 use either::Either;
 use intern::Interned;
 use itertools::Itertools;
@@ -97,7 +97,7 @@ impl AstKeyValueMetaExt for ast::KeyValueMeta {
 #[inline]
 pub fn expand_cfg_attr<'a, BreakValue>(
     attrs: impl Iterator<Item = ast::Attr>,
-    cfg_options: impl FnMut() -> &'a CfgOptions,
+    cfg_options: impl FnMut() -> &'a dyn CfgCheck,
     mut callback: impl FnMut(ast::Meta, ast::Attr) -> ControlFlow<BreakValue>,
 ) -> Option<BreakValue> {
     expand_cfg_attr_with_doc_comments::<Infallible, _>(
@@ -110,7 +110,7 @@ pub fn expand_cfg_attr<'a, BreakValue>(
 #[inline]
 pub fn expand_cfg_attr_with_doc_comments<'a, DocComment, BreakValue>(
     mut attrs: impl Iterator<Item = Either<ast::Attr, DocComment>>,
-    mut cfg_options: impl FnMut() -> &'a CfgOptions,
+    mut cfg_options: impl FnMut() -> &'a dyn CfgCheck,
     mut callback: impl FnMut(Either<(ast::Meta, ast::Attr), DocComment>) -> ControlFlow<BreakValue>,
 ) -> Option<BreakValue> {
     let mut stack = SmallVec::<[_; 1]>::new();
@@ -178,7 +178,7 @@ pub(crate) fn is_item_tree_filtered_attr(name: &str) -> bool {
 /// as well as for resolving [`AttrId`]s.
 pub fn collect_item_tree_attrs<'a, BreakValue>(
     owner: &dyn ast::HasAttrs,
-    cfg_options: impl Fn() -> &'a CfgOptions,
+    cfg_options: impl Fn() -> &'a dyn CfgCheck,
     mut on_attr: impl FnMut(ast::Meta, ast::Attr) -> ControlFlow<BreakValue>,
 ) -> Option<Either<BreakValue, CfgExpr>> {
     let attrs = ast::attrs_including_inner(owner);
@@ -400,7 +400,7 @@ impl AttrId {
         let mut index = 0;
         let result = collect_item_tree_attrs(
             owner,
-            || cfg_options.get_or_init(|| krate.cfg_options(db)),
+            || cfg_options.get_or_init(|| krate.cfg(db)),
             |meta, top_attr| {
                 if index == self.id {
                     return ControlFlow::Break((top_attr, meta));

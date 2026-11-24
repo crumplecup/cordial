@@ -9,7 +9,8 @@ mod path;
 use std::{cell::OnceCell, mem};
 
 use base_db::{FxIndexSet, SourceDatabase};
-use cfg::CfgOptions;
+use base_db::CrateCfg;
+use cfg::CfgCheck;
 use either::Either;
 use hir_expand::{
     HirFileId, InFile, MacroDefId,
@@ -507,7 +508,7 @@ pub(crate) fn lower_function(
 
 pub struct ExprCollector<'db> {
     db: &'db dyn SourceDatabase,
-    cfg_options: &'db CfgOptions,
+    cfg_options: CrateCfg<'db>,
     expander: Expander<'db>,
     def_map: &'db DefMap,
     local_def_map: &'db LocalDefMap,
@@ -678,7 +679,7 @@ impl<'db> ExprCollector<'db> {
         let krate = module.krate(db);
         let mut result = ExprCollector {
             db,
-            cfg_options: krate.cfg_options(db),
+            cfg_options: krate.cfg(db),
             module,
             lowering_mode,
             def_map,
@@ -3322,14 +3323,14 @@ impl<'db> ExprCollector<'db> {
     /// Returns `false` (and emits diagnostics) when `owner` if `#[cfg]`d out, and `true` when
     /// not.
     fn check_cfg(&mut self, owner: &dyn ast::HasAttrs) -> bool {
-        let enabled = self.expander.is_cfg_enabled(owner, self.cfg_options);
+        let enabled = self.expander.is_cfg_enabled(owner, &self.cfg_options);
         match enabled {
             Ok(()) => true,
             Err(cfg) => {
                 self.store.diagnostics.push(ExpressionStoreDiagnostics::InactiveCode {
                     node: self.expander.in_file(SyntaxNodePtr::new(owner.syntax())),
                     cfg,
-                    opts: self.cfg_options.clone(),
+                    opts: self.cfg_options.options().clone(),
                 });
                 false
             }

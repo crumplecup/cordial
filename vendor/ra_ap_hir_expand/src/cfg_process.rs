@@ -1,9 +1,9 @@
 //! Processes out `#[cfg]` and `#[cfg_attr]` attributes from the input for the derive macro
-use std::{cell::OnceCell, ops::ControlFlow};
+use std::ops::ControlFlow;
 
 use ::tt::TextRange;
 use base_db::{Crate, SourceDatabase};
-use cfg::CfgExpr;
+use cfg::{CfgCheck, CfgExpr};
 use parser::T;
 use smallvec::SmallVec;
 use syntax::{
@@ -52,8 +52,7 @@ fn macro_input_callback(
     default_span: Span,
     span_map: SpanMap<'_>,
 ) -> impl FnMut(&mut PreorderWithTokens, &WalkEvent<SyntaxElement>) -> (bool, Vec<tt::Leaf>) {
-    let cfg_options = OnceCell::new();
-    let cfg_options = move || *cfg_options.get_or_init(|| krate.cfg_options(db));
+    let cfg = krate.cfg(db);
 
     let mut should_strip_attr = {
         let mut item_tree_attr_id = 0;
@@ -143,7 +142,7 @@ fn macro_input_callback(
 
                     attrs_idx = 0;
                     let strip_current_item =
-                        expand_cfg_attr(node_attrs, &cfg_options, |attr, top_attr| {
+                        expand_cfg_attr(node_attrs, || &cfg as &dyn CfgCheck, |attr, top_attr| {
                             // Find the attr.
                             while attrs[attrs_idx].range != top_attr.syntax().text_range() {
                                 attrs_idx += 1;
@@ -154,7 +153,7 @@ fn macro_input_callback(
                                 ast::Meta::CfgMeta(attr) => {
                                     if let Some(cfg_predicate) = attr.cfg_predicate() {
                                         let cfg_expr = CfgExpr::parse_from_ast(cfg_predicate);
-                                        if cfg_options().check(&cfg_expr) == Some(false) {
+                                        if cfg.check(&cfg_expr) == Some(false) {
                                             return ControlFlow::Break(ItemIsCfgedOut);
                                         }
                                         strip_current_attr = true;

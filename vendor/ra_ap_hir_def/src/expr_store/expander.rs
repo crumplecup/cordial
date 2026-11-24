@@ -3,7 +3,7 @@
 use std::mem;
 
 use base_db::{Crate, SourceDatabase};
-use cfg::CfgOptions;
+use cfg::CfgCheck;
 use drop_bomb::DropBomb;
 use hir_expand::{
     AstId, ExpandError, ExpandErrorKind, ExpandResult, HirFileId, InFile, Lookup, MacroCallId,
@@ -67,7 +67,7 @@ impl<'db> Expander<'db> {
     pub(super) fn is_cfg_enabled(
         &self,
         owner: &dyn HasAttrs,
-        cfg_options: &CfgOptions,
+        cfg_options: &dyn CfgCheck,
     ) -> Result<(), cfg::CfgExpr> {
         AttrFlags::is_cfg_enabled_for(owner, cfg_options)
     }

@@ -8,8 +8,10 @@
 extern crate rustc_driver as _;
 
 pub use salsa;
+pub use cfg_atoms::{CfgAtomKey, CrateCfg, cfg_atom_enabled};
 use span::TextSize;
 
+mod cfg_atoms;
 mod change;
 mod editioned_file_id;
 mod input;

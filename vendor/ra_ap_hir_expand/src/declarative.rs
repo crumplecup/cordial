@@ -3,6 +3,7 @@
 use std::ops::ControlFlow;
 
 use base_db::{Crate, SourceDatabase};
+use cfg::CfgCheck;
 use span::{Edition, Span, SyntaxContext};
 use stdx::TupleExt;
 use syntax::{
@@ -112,10 +113,10 @@ impl<'db> DeclarativeMacroKey<'db> {
         let root = root.syntax_node();
 
         let transparency = |node: ast::AnyHasAttrs| {
-            let mut cfg_options = None;
+            let cfg = def_crate.cfg(db);
             expand_cfg_attr(
                 node.attrs(),
-                || cfg_options.get_or_insert_with(|| def_crate.cfg_options(db)),
+                || &cfg as &dyn CfgCheck,
                 |attr, _| {
                     if let ast::Meta::KeyValueMeta(attr) = attr
                         && attr.path().is1("rustc_macro_transparency")

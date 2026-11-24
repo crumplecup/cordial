@@ -3,7 +3,8 @@
 use std::mem;
 
 use base_db::SourceDatabase;
-use cfg::CfgOptions;
+use base_db::CrateCfg;
+use cfg::CfgCheck;
 use hir_expand::{
     AstId, AttrMacroAttrIds, ExpandTo, HirFileId, InFile, Intern, Lookup, MacroCallKind,
     MacroDefKind,
@@ -178,7 +179,7 @@ struct AssocItemCollector<'db> {
     local_def_map: &'db LocalDefMap,
     ast_id_map: &'db AstIdMap,
     span_map: SpanMap<'db>,
-    cfg_options: &'db CfgOptions,
+    cfg_options: CrateCfg<'db>,
     file_id: HirFileId,
     diagnostics: Vec<DefDiagnostic>,
     container: ItemContainerId,
@@ -203,7 +204,7 @@ impl<'db> AssocItemCollector<'db> {
             local_def_map,
             ast_id_map: file_id.ast_id_map(db),
             span_map: file_id.span_map(db),
-            cfg_options: module_id.krate(db).cfg_options(db),
+            cfg_options: module_id.krate(db).cfg(db),
             file_id,
             container,
             items: Vec::new(),
@@ -230,14 +231,14 @@ impl<'db> AssocItemCollector<'db> {
 
     fn collect_item(&mut self, item: ast::AssocItem) {
         let ast_id = self.ast_id_map.ast_id(&item);
-        let attrs = match AttrsOrCfg::lower(self.db, &item, &|| self.cfg_options, self.span_map) {
+        let attrs = match AttrsOrCfg::lower(self.db, &item, &|| &self.cfg_options as &dyn CfgCheck, self.span_map) {
             AttrsOrCfg::Enabled { attrs } => attrs,
             AttrsOrCfg::CfgDisabled(cfg) => {
                 self.diagnostics.push(DefDiagnostic::unconfigured_code(
                     self.module_id,
                     InFile::new(self.file_id, ast_id.erase()),
                     cfg.0,
-                    self.cfg_options.clone(),
+                    self.cfg_options.options().clone(),
                 ));
                 return;
             }

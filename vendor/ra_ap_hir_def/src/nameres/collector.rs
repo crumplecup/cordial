@@ -6,7 +6,8 @@
 use std::{iter, mem, ops::Range};
 
 use base_db::{BuiltDependency, Crate, CrateOrigin, LangCrateOrigin, SourceDatabase};
-use cfg::{CfgAtom, CfgExpr, CfgOptions};
+use base_db::CrateCfg;
+use cfg::{CfgAtom, CfgCheck, CfgExpr};
 use either::Either;
 use hir_expand::{
     AttrMacroAttrIds, EditionedFileId, ErasedAstId, ExpandTo, HirFileId, InFile, MacroCallId,
@@ -67,7 +68,7 @@ pub(super) fn collect_defs(
     crate_local_def_map: Option<&LocalDefMap>,
 ) -> (DefMap, LocalDefMap) {
     let krate = &def_map.krate.data(db);
-    let cfg_options = def_map.krate.cfg_options(db);
+    let cfg_options = def_map.krate.cfg(db);
 
     // populate external prelude and dependency list
     let mut deps =
@@ -275,7 +276,7 @@ struct DefCollector<'db> {
     // doesn't start with an unresolved crate's name.
     unresolved_extern_crates: FxHashSet<Name>,
     mod_dirs: FxHashMap<ModuleId, ModDir>,
-    cfg_options: &'db CfgOptions,
+    cfg_options: CrateCfg<'db>,
     /// List of procedural macros defined by this crate. This is read from the dynamic library
     /// built by the build system, and is the list of proc-macros we can actually expand. It is
     /// empty when proc-macro support is disabled (in which case we still do name resolution for
@@ -418,7 +419,7 @@ impl<'db> DefCollector<'db> {
                 self.def_map.root,
                 InFile::new(file_id.into(), ROOT_ERASED_FILE_AST_ID),
                 cfg_expr.clone(),
-                self.cfg_options.clone(),
+                self.cfg_options.options().clone(),
             ));
             return;
         }
@@ -2938,7 +2939,7 @@ impl ModCollector<'_, '_> {
             self.module_id,
             ast_id,
             cfg.clone(),
-            self.def_collector.cfg_options.clone(),
+            self.def_collector.cfg_options.options().clone(),
         ));
     }
 

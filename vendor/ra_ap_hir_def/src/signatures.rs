@@ -4,7 +4,7 @@ use std::cell::LazyCell;
 
 use base_db::SourceDatabase;
 use bitflags::bitflags;
-use cfg::{CfgExpr, CfgOptions};
+use cfg::{CfgCheck, CfgExpr, CfgOptions};
 use hir_expand::{
     InFile, Intern, Lookup,
     name::{AsName, Name},
@@ -986,7 +986,7 @@ fn lower_fields<Field: ast::HasAttrs + ast::HasVisibility>(
     mut field_name: impl FnMut(usize, &Field) -> Name,
     override_visibility: Option<Option<ast::Visibility>>,
 ) -> Option<(Arena<FieldData>, ExpressionStore, ExpressionStoreSourceMap)> {
-    let cfg_options = module.krate(db).cfg_options(db);
+    let cfg_options = module.krate(db).cfg(db);
     let mut col = ExprCollector::new(db, module, fields.file_id, crate::LoweringMode::Analysis);
     let override_visibility = override_visibility.map(|vis| {
         LazyCell::new(|| {
@@ -1000,7 +1000,7 @@ fn lower_fields<Field: ast::HasAttrs + ast::HasVisibility>(
     let mut has_fields = false;
     for (ty, field) in fields.value {
         has_fields = true;
-        match AttrFlags::is_cfg_enabled_for(&field, cfg_options) {
+        match AttrFlags::is_cfg_enabled_for(&field, &cfg_options) {
             Ok(()) => {
                 let type_ref =
                     col.lower_type_ref_opt(ty, &mut ExprCollector::impl_trait_error_allocator);
@@ -1033,7 +1033,7 @@ fn lower_fields<Field: ast::HasAttrs + ast::HasVisibility>(
                     crate::expr_store::ExpressionStoreDiagnostics::InactiveCode {
                         node: InFile::new(fields.file_id, SyntaxNodePtr::new(field.syntax())),
                         cfg,
-                        opts: cfg_options.clone(),
+                        opts: cfg_options.options().clone(),
                     },
                 );
             }
@@ -1085,7 +1085,7 @@ impl EnumVariants {
         let ast_id_map = source.file_id.ast_id_map(db);
 
         let mut diagnostics = ThinVec::new();
-        let cfg_options = loc.container.krate(db).cfg_options(db);
+        let cfg_options = loc.container.krate(db).cfg(db);
         let Some(variants) = source.value.variant_list() else {
             return (EnumVariants { variants: FxIndexMap::default() }, ThinVec::new());
         };
@@ -1093,7 +1093,7 @@ impl EnumVariants {
             .variants()
             .filter_map(|variant| {
                 let ast_id = ast_id_map.ast_id(&variant);
-                match AttrFlags::is_cfg_enabled_for(&variant, cfg_options) {
+                match AttrFlags::is_cfg_enabled_for(&variant, &cfg_options) {
                     Ok(()) => {
                         let name = as_name_opt(variant.name());
                         let enum_variant = EnumVariantLoc {
@@ -1109,7 +1109,7 @@ impl EnumVariants {
                         diagnostics.push(InactiveEnumVariantCode {
                             ast_id,
                             cfg,
-                            opts: cfg_options.clone(),
+                            opts: cfg_options.options().clone(),
                         });
                         None
                     }

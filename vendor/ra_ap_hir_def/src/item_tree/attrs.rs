@@ -11,7 +11,7 @@ use std::{
 };
 
 use base_db::SourceDatabase;
-use cfg::{CfgExpr, CfgOptions};
+use cfg::{CfgCheck, CfgExpr};
 use either::Either;
 use hir_expand::{
     attrs::{Attr, AttrId, AttrInput, collect_item_tree_attrs},
@@ -45,7 +45,7 @@ impl AttrsOrCfg {
     pub(crate) fn lower<'a, S>(
         db: &dyn SourceDatabase,
         owner: &dyn ast::HasAttrs,
-        cfg_options: &dyn Fn() -> &'a CfgOptions,
+        cfg_options: &dyn Fn() -> &'a dyn CfgCheck,
         span_map: S,
     ) -> AttrsOrCfg
     where

@@ -45,7 +45,7 @@ use std::{
 
 use ast::{AstNode, StructKind};
 use base_db::{Crate, SourceDatabase};
-use cfg::CfgOptions;
+use cfg::CfgCheck;
 use either::Either;
 use hir_expand::{
     ExpandTo, HirFileId,
@@ -97,7 +97,7 @@ fn lower_extra_crate_attrs<'a>(
     db: &dyn SourceDatabase,
     crate_attrs_as_src: SourceFile,
     file_id: span::EditionedFileId,
-    cfg_options: &dyn Fn() -> &'a CfgOptions,
+    cfg_options: &dyn Fn() -> &'a dyn CfgCheck,
 ) -> AttrsOrCfg {
     #[derive(Copy, Clone)]
     struct FakeSpanMap {

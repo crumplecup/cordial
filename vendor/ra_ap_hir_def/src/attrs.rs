@@ -18,7 +18,7 @@
 use std::{convert::Infallible, iter::Peekable, ops::ControlFlow};
 
 use base_db::{Crate, SourceDatabase};
-use cfg::{CfgExpr, CfgOptions};
+use cfg::{CfgCheck, CfgExpr};
 use either::Either;
 use hir_expand::{
     InFile, Lookup,
@@ -496,10 +496,10 @@ fn collect_attrs<BreakValue>(
         .flat_map(|src| src.attrs())
         .chain(outer_mod_decl.into_iter().flat_map(|it| it.value.attrs()));
 
-    let mut cfg_options = None;
+    let cfg = krate.cfg(db);
     expand_cfg_attr(
         extra_attrs.chain(ast::attrs_including_inner(&source.value)),
-        || cfg_options.get_or_insert_with(|| krate.cfg_options(db)),
+        || &cfg as &dyn CfgCheck,
         move |meta, _| callback(meta),
     )
 }
@@ -507,14 +507,14 @@ fn collect_attrs<BreakValue>(
 fn collect_field_attrs<T>(
     db: &dyn SourceDatabase,
     variant: VariantId,
-    mut field_attrs: impl FnMut(&CfgOptions, InFile<ast::AnyHasAttrs>) -> T,
+    mut field_attrs: impl FnMut(&dyn CfgCheck, InFile<ast::AnyHasAttrs>) -> T,
 ) -> ArenaMap<LocalFieldId, T> {
     let (variant_syntax, krate) = match variant {
         VariantId::EnumVariantId(it) => attrs_from_ast_id_loc(db, it),
         VariantId::StructId(it) => attrs_from_ast_id_loc(db, it),
         VariantId::UnionId(it) => attrs_from_ast_id_loc(db, it),
     };
-    let cfg_options = krate.cfg_options(db);
+    let cfg_options = krate.cfg(db);
     let variant_syntax = variant_syntax
         .with_value(ast::VariantDef::cast(variant_syntax.value.syntax().clone()).unwrap());
     let fields = match &variant_syntax.value {
@@ -531,10 +531,10 @@ fn collect_field_attrs<T>(
     match fields {
         ast::FieldList::RecordFieldList(fields) => {
             for field in fields.fields() {
-                if AttrFlags::is_cfg_enabled_for(&field, cfg_options).is_ok() {
+                if AttrFlags::is_cfg_enabled_for(&field, &cfg_options).is_ok() {
                     result.insert(
                         la_arena::Idx::from_raw(la_arena::RawIdx::from_u32(idx)),
-                        field_attrs(cfg_options, variant_syntax.with_value(field.into())),
+                        field_attrs(&cfg_options, variant_syntax.with_value(field.into())),
                     );
                     idx += 1;
                 }
@@ -542,10 +542,10 @@ fn collect_field_attrs<T>(
         }
         ast::FieldList::TupleFieldList(fields) => {
             for field in fields.fields() {
-                if AttrFlags::is_cfg_enabled_for(&field, cfg_options).is_ok() {
+                if AttrFlags::is_cfg_enabled_for(&field, &cfg_options).is_ok() {
                     result.insert(
                         la_arena::Idx::from_raw(la_arena::RawIdx::from_u32(idx)),
-                        field_attrs(cfg_options, variant_syntax.with_value(field.into())),
+                        field_attrs(&cfg_options, variant_syntax.with_value(field.into())),
                     );
                     idx += 1;
                 }
@@ -653,9 +653,8 @@ impl AttrFlags {
             let mut lifetimes = ArenaMap::new();
             let mut type_and_consts = ArenaMap::new();
 
-            let mut cfg_options = None;
-            let mut cfg_options =
-                || *cfg_options.get_or_insert_with(|| def.krate(db).cfg_options(db));
+            let cfg = def.krate(db).cfg(db);
+            let mut cfg_options = || &cfg as &dyn CfgCheck;
 
             let lifetimes_source = HasChildSource::<LocalLifetimeParamId>::child_source(&def, db);
             for (lifetime_id, lifetime) in lifetimes_source.value.iter() {
@@ -708,7 +707,7 @@ impl AttrFlags {
 
     pub(crate) fn is_cfg_enabled_for(
         owner: &dyn HasAttrs,
-        cfg_options: &CfgOptions,
+        cfg_options: &dyn CfgCheck,
     ) -> Result<(), CfgExpr> {
         let attrs = ast::attrs_including_inner(owner);
         let result = expand_cfg_attr(
@@ -848,10 +847,10 @@ impl AttrFlags {
         let extra_crate_attrs =
             parse_extra_crate_attrs(db, krate).into_iter().flat_map(|src| src.attrs());
 
-        let mut cfg_options = None;
+        let cfg = krate.cfg(db);
         expand_cfg_attr(
             extra_crate_attrs.chain(syntax.attrs()),
-            || cfg_options.get_or_insert(krate.cfg_options(db)),
+            || &cfg as &dyn CfgCheck,
             |attr, _| {
                 if let ast::Meta::TokenTreeMeta(attr) = attr
                     && attr.path().is1("doc")
@@ -1083,11 +1082,12 @@ impl AttrFlags {
         // Note: we don't have to pass down `_extra_crate_attrs` here, since `extract_docs`
         // does not handle crate-level attributes related to docs.
         // See: https://doc.rust-lang.org/rustdoc/write-documentation/the-doc-attribute.html#at-the-crate-level
+        let cfg = krate.cfg(db);
         self::docs::extract_docs(
             db,
             krate,
             &|| resolver_for_attr_def_id(db, owner),
-            &|| krate.cfg_options(db),
+            &|| &cfg as &dyn CfgCheck,
             source,
             outer_mod_decl,
             inner_attrs_node,

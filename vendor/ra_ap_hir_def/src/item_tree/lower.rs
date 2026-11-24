@@ -3,7 +3,8 @@
 use std::cell::OnceCell;
 
 use base_db::{Crate, FxIndexSet, SourceDatabase};
-use cfg::CfgOptions;
+use base_db::CrateCfg;
+use cfg::CfgCheck;
 use either::Either;
 use hir_expand::{HirFileId, mod_path::PathKind, name::AsName, span_map::SpanMap};
 use la_arena::Arena;
@@ -27,7 +28,7 @@ pub(super) struct Ctx<'db> {
     source_ast_id_map: &'db AstIdMap,
     span_map: OnceCell<SpanMap<'db>>,
     file: HirFileId,
-    cfg_options: OnceCell<&'db CfgOptions>,
+    cfg_options: OnceCell<CrateCfg<'db>>,
     krate: Crate,
     top_level: Vec<ModItemId>,
     visibilities: FxIndexSet<RawVisibility>,
@@ -49,8 +50,8 @@ impl<'db> Ctx<'db> {
     }
 
     #[inline]
-    pub(super) fn cfg_options(&self) -> &'db CfgOptions {
-        self.cfg_options.get_or_init(|| self.krate.cfg_options(self.db))
+    pub(super) fn cfg_options(&self) -> &dyn CfgCheck {
+        self.cfg_options.get_or_init(|| self.krate.cfg(self.db))
     }
 
     pub(super) fn span_map(&self) -> SpanMap<'_> {

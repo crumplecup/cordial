@@ -13,7 +13,7 @@ use std::{
 };
 
 use base_db::{Crate, SourceDatabase};
-use cfg::CfgOptions;
+use cfg::CfgCheck;
 use either::Either;
 use hir_expand::{
     AstId, ExpandTo, HirFileId, InFile, MacroCallId,
@@ -654,8 +654,8 @@ fn extend_with_attrs<'a, 'db>(
     file_id: HirFileId,
     expect_inner_attrs: bool,
     indent: &mut Indent,
-    get_cfg_options: &dyn Fn() -> &'a CfgOptions,
-    cfg_options: &mut Option<&'a CfgOptions>,
+    get_cfg_options: &dyn Fn() -> &'a dyn CfgCheck,
+    cfg_options: &mut Option<&'a dyn CfgCheck>,
     make_resolver: &dyn Fn() -> Resolver<'db>,
 ) {
     // Lazily initialised when we first encounter a `#[doc = macro!()]`.
@@ -718,7 +718,7 @@ pub(crate) fn extract_docs<'a, 'db>(
     db: &'db dyn SourceDatabase,
     krate: Crate,
     resolver: &dyn Fn() -> Resolver<'db>,
-    get_cfg_options: &dyn Fn() -> &'a CfgOptions,
+    get_cfg_options: &dyn Fn() -> &'a dyn CfgCheck,
     source: InFile<ast::AnyHasAttrs>,
     outer_mod_decl: Option<InFile<ast::Module>>,
     inner_attrs_node: Option<SyntaxNode>,

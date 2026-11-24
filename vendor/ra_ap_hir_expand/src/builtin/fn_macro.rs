@@ -3,7 +3,7 @@
 use std::borrow::Cow;
 
 use base_db::{AnchoredPath, SourceDatabase};
-use cfg::CfgExpr;
+use cfg::{CfgCheck, CfgExpr};
 use either::Either;
 use intern::{Symbol, sym};
 use itertools::Itertools;
@@ -346,7 +346,7 @@ fn cfg_select_expand(
     span: Span,
 ) -> ExpandResult<tt::TopSubtree> {
     let loc = id.loc(db);
-    let cfg_options = loc.krate.cfg_options(db);
+    let cfg_options = loc.krate.cfg(db);
 
     let mut iter = tt.iter();
     let mut expand_to = None;
