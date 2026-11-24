@@ -1649,3 +1649,148 @@ fn a_restored_run_takes_no_direct_path_a_cold_run_did_not() -> Result<()> {
     );
     Ok(())
 }
+
+/// A crate with a gate a context flips and modules beside it that the context does not touch.
+fn with_modules_beside_a_gate() -> Result<tempfile::TempDir> {
+    let root = tempfile::tempdir().into_diagnostic()?;
+    std::fs::create_dir_all(root.path().join("src")).into_diagnostic()?;
+    std::fs::write(
+        root.path().join("Cargo.toml"),
+        "[package]\nname='gated'\nversion='0.1.0'\nedition='2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
+    let declared: String = (0..6).map(|index| format!("mod m{index};\n")).collect();
+    std::fs::write(
+        root.path().join("src/lib.rs"),
+        format!(
+            "{declared}pub fn ordinary() {{}}\n#[cfg(kani)]\npub fn harness() {{ ordinary(); }}\n"
+        ),
+    )
+    .into_diagnostic()?;
+    // Each module imports from the next, and the last from none: a chain, so what reaches one reaches only the
+    // ones before it.
+    for index in 0..6 {
+        let text = if index + 1 < 6 {
+            let other = index + 1;
+            format!(
+                "use crate::m{other}::S{other};\npub struct S{index};\nimpl S{index} {{ pub fn f(&self) -> u32 {{ {index} }} }}\npub fn g{index}(_: S{other}) -> u32 {{ {index} }}\n"
+            )
+        } else {
+            format!(
+                "pub struct S{index};\nimpl S{index} {{ pub fn f(&self) -> u32 {{ {index} }} }}\npub fn g{index}() -> u32 {{ {index} }}\n"
+            )
+        };
+        std::fs::write(root.path().join(format!("src/m{index}.rs")), text).into_diagnostic()?;
+    }
+    Ok(root)
+}
+
+/// One run, with how many of the context's functions are the ordinary build's own and how many are the copy's.
+fn run_with_sharing(root: &Path, saved: &SavedState) -> Result<(bool, CrateIr, (usize, usize))> {
+    let options = SemanticCargoOptions::default()
+        .with_cfg_contexts(vec![SemanticContextKey::enabling(["kani"])])
+        .with_cfg_planning(CfgPlanning::Explicit);
+    let mut session =
+        SourceDatabase::load_saved(root, &options, Some(saved.clone())).into_diagnostic()?;
+    let restored = session.restored();
+    let graph = session
+        .project(&CrateTarget::new("gated", root), &[root.join("src/lib.rs")])
+        .into_diagnostic()?;
+    let added = session
+        .add_context_crates(&SemanticContextKey::enabling(["kani"]))
+        .into_diagnostic()?;
+    let sharing = session.context_function_sharing(&added);
+    Ok((restored, graph, sharing))
+}
+
+/// A context that takes modules from the original is saved with the database and found again: its crate says
+/// which crate it is a copy of and which files it cannot take, and the modules it was given are the original's
+/// by the saved ids, so a restored run has the same functions shared and computes nothing for them.
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn a_restored_context_still_takes_its_modules_from_the_original_and_computes_nothing_for_them()
+-> Result<()> {
+    cordial::init_tracing();
+    let metrics = support::semantic_metrics::QueryMetrics::default();
+    let subscriber = tracing_subscriber::registry()
+        .with(metrics.clone())
+        .with(cordial::tracing_fmt_layer());
+    let _subscriber = tracing::subscriber::set_default(subscriber);
+    let root = with_modules_beside_a_gate()?;
+    let state = tempfile::tempdir().into_diagnostic()?;
+    let saved = SavedState::at(state.path().join("analysis-state"));
+
+    let (restored, cold, shared_cold) = run_with_sharing(root.path(), &saved)?;
+    assert!(!restored);
+    assert_eq!(
+        shared_cold,
+        (12, 2),
+        "(shared, own): a method and a function in each of six modules, and the root's two functions"
+    );
+    let cold_counts = metrics.snapshot();
+
+    let (restored, warm, shared_warm) = run_with_sharing(root.path(), &saved)?;
+    assert!(restored, "the second run starts from the first's state");
+    assert_eq!(functions(&warm), functions(&cold), "the same answer");
+    assert_eq!(
+        shared_warm, shared_cold,
+        "the same functions are the original's"
+    );
+    let mut recomputed: std::collections::BTreeMap<String, usize> = metrics
+        .snapshot()
+        .into_iter()
+        .filter_map(|(key, count)| {
+            let before = cold_counts.get(&key).copied().unwrap_or(0);
+            (count > before).then(|| (key, count - before))
+        })
+        .collect();
+    const JOINS: [&str; 6] = [
+        "antipattern_crate_facts:",
+        "architecture_catalog:",
+        "module_tree:",
+        "panic_graph:",
+        "panic_reachable:",
+        "signature_index:",
+    ];
+    recomputed.retain(|key, _| !JOINS.iter().any(|join| key.starts_with(join)));
+    assert!(
+        recomputed.is_empty(),
+        "the restored run computed again: {recomputed:#?}"
+    );
+    Ok(())
+}
+
+/// What a context takes from the original is decided again when the sources change between runs: a module that
+/// comes to mention a name the gate defines is the copy's own in the restored run, and the functions it holds
+/// stop being the original's.
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn an_edit_that_reaches_a_taken_module_makes_it_the_copys_own_in_the_restored_run() -> Result<()> {
+    cordial::init_tracing();
+    let root = with_modules_beside_a_gate()?;
+    let state = tempfile::tempdir().into_diagnostic()?;
+    let saved = SavedState::at(state.path().join("analysis-state"));
+
+    let (_, _, before) = run_with_sharing(root.path(), &saved)?;
+    assert_eq!(before, (12, 2));
+
+    // `m0` now calls the function only the context has.
+    let file = root.path().join("src/m0.rs");
+    let text = std::fs::read_to_string(&file).into_diagnostic()?;
+    std::fs::write(
+        &file,
+        format!("{text}pub fn reaches() {{ crate::harness(); }}\n"),
+    )
+    .into_diagnostic()?;
+
+    let (restored, _, after) = run_with_sharing(root.path(), &saved)?;
+    assert!(restored);
+    // Nothing imports from `m0` (each imports from the next): it alone is the copy's own, with the root's two
+    // functions and the new one; the five after it are still the original's.
+    assert_eq!(
+        after,
+        (10, 5),
+        "(shared, own) after the edit: m0, the root and the new function are the copy's"
+    );
+    Ok(())
+}

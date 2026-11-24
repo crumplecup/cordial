@@ -190,6 +190,17 @@ file to the original's by path; an item in a shared module is in an original fil
 reads functions in the files the context copied, which are in modules the context affects, so what it reads and merges
 is unchanged by the ids being canonical elsewhere. 88 context, saved-state, base and retention tests pass.
 
+*S5 done (2026-11-23).* The new crate fields (`canonical`, `affected_files`, `share_modules`) are inputs of the copy
+and persist with it, and the module query is persisted, so nothing needed a format change beyond the layout digest the
+fields already moved. Tests in `saved_contexts`: a restored run has the same functions shared with the original
+(12 of the copy's 14) and computes nothing for them
+(`a_restored_context_still_takes_its_modules_from_the_original_and_computes_nothing_for_them`); and an edit between
+runs that makes a taken module mention the name the gate defines makes that module the copy's own in the restored
+run, and only it (10 shared and 5 own where it was 12 and 2), through the same restored copy, whose `affected_files` is
+written when it differs (`an_edit_that_reaches_a_taken_module_makes_it_the_copys_own_in_the_restored_run`). A ring
+of imports makes every module of the ring the copy's after one is reached, which is the closure working; the fixture
+is a chain for the test to say more.
+
 ## Tests (each stage; the method is the complexity ratchet)
 
 Growth: a fixture with 3 and 30 unchanged modules, asserting what grows under the context (item tree queries,
