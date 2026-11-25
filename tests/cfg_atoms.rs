@@ -1072,3 +1072,161 @@ fn the_map_of_a_block_in_an_expansion_that_is_not_any_more_fails_when_what_only_
     let failed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| settle_block_map(&db, block))).is_err();
     assert!(failed, "without the forgetting, the stale block's map is asked for and fails");
 }
+
+/// Counts every query salsa executes, by name, from the event it says for each.
+#[derive(Clone, Default)]
+struct Runs(Arc<Mutex<std::collections::BTreeMap<String, usize>>>);
+
+impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for Runs {
+    fn on_event(&self, event: &tracing::Event<'_>, _: tracing_subscriber::layer::Context<'_, S>) {
+        struct Message(String);
+        impl tracing::field::Visit for Message {
+            fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
+                if field.name() == "message" {
+                    self.0 = format!("{value:?}");
+                }
+            }
+        }
+        if event.metadata().target() != "salsa::function::execute" {
+            return;
+        }
+        let mut message = Message(String::new());
+        event.record(&mut message);
+        let name = message.0.trim_matches('"').split('(').next().unwrap_or_default().to_owned();
+        if name != "new_revision" {
+            *self.0.lock().unwrap().entry(name).or_default() += 1;
+        }
+    }
+}
+
+impl Runs {
+    fn now(&self) -> std::collections::BTreeMap<String, usize> {
+        self.0.lock().unwrap().clone()
+    }
+
+    /// What ran since `before`, by name.
+    fn since(&self, before: &std::collections::BTreeMap<String, usize>) -> std::collections::BTreeMap<String, usize> {
+        self.0
+            .lock()
+            .unwrap()
+            .iter()
+            .filter_map(|(name, count)| {
+                let more = count - before.get(name).copied().unwrap_or(0);
+                (more > 0).then(|| (name.clone(), more))
+            })
+            .collect()
+    }
+}
+
+/// `modules` modules, each with a macro that defines a function, a function whose body calls a macro and an item
+/// that a macro call makes; the first gated by the atom `a`, and so the only module that flipping `a` changes.
+fn macro_modules(modules: usize) -> Vec<(String, String)> {
+    let mut files = vec![(
+        "lib.rs".to_owned(),
+        String::from(
+            "macro_rules! define { ($name:ident) => { pub fn $name() -> u32 { 1 } }; }\n\
+             macro_rules! twice { ($e:expr) => { $e + $e }; }\n",
+        ) + &(0..modules).map(|m| format!("mod m{m};\n")).collect::<String>(),
+    )];
+    for m in 0..modules {
+        let gate = if m == 0 { "#[cfg(feature = \"a\")]\n" } else { "" };
+        files.push((
+            format!("m{m}.rs"),
+            format!(
+                "{gate}define!(made_{m});\n{gate}pub fn uses_{m}() -> u32 {{ twice!({m}) }}\n\
+                 pub fn plain_{m}() -> u32 {{ twice!(2) }}\n"
+            ),
+        ));
+    }
+    files
+}
+
+/// What executes in each step of what a flipped pass does, over a crate of `modules` modules: the flip and the
+/// reading of what it changed, then the ordinary cfg back with what the flip changed forgotten and everything read
+/// again.
+fn steps_of_a_pass(modules: usize) -> [std::collections::BTreeMap<String, usize>; 2] {
+    let executed = Runs::default();
+    let subscriber = tracing_subscriber::registry().with(executed.clone());
+    tracing::subscriber::with_default(subscriber, || {
+        let files = macro_modules(modules);
+        let borrowed: Vec<(&str, &str)> = files.iter().map(|(name, text)| (name.as_str(), text.as_str())).collect();
+        let (mut db, krate) = crate_of(&borrowed, CfgOptions::default());
+        let _ = read_bodies(&db, krate);
+        read_impls(&db, krate);
+        let start = salsa::plumbing::current_revision(&db);
+
+        let before = executed.now();
+        let mut flipped = CfgOptions::default();
+        flag(&mut flipped, "a");
+        krate.set_cfg_options(&mut db).to(flipped);
+        let _ = read_bodies(&db, krate);
+        read_impls(&db, krate);
+        let flip = executed.since(&before);
+
+        let before = executed.now();
+        krate.set_cfg_options(&mut db).to(CfgOptions::default());
+        let _ = <dyn salsa::Database>::forget_memos_changed_after(&mut db, start);
+        let _ = read_bodies(&db, krate);
+        read_impls(&db, krate);
+        [flip, executed.since(&before)]
+    })
+}
+
+#[test]
+fn the_steps_of_a_flipped_pass_run_the_same_queries_in_a_crate_ten_times_the_size() {
+    let _serial = SERIAL.lock().unwrap();
+    let [small_flip, small_settle] = steps_of_a_pass(4);
+    let [large_flip, large_settle] = steps_of_a_pass(40);
+    assert_eq!(small_flip, large_flip, "what the flip executes is what the module it changes needs");
+    assert_eq!(small_settle, large_settle, "what putting the ordinary cfg back executes is the same");
+    // The flip makes the gated module's two macro calls run, and nothing else.
+    assert_eq!(large_flip.get("MacroCallId::parse_macro_expansion_"), Some(&2), "{large_flip:?}");
+    // Putting the cfg back runs the maps and item trees again and no expansion: those of the ungated modules are
+    // still good, and those of the gated one are gone with it.
+    assert!(
+        large_settle.keys().all(|name| !name.contains("expansion") && !name.contains("macro_arg")),
+        "no expansion is executed again: {large_settle:?}"
+    );
+}
+
+/// What executes again when an atom that nothing reads is flipped in the crate that defines the macros `app` calls
+/// `calls` times, with the maps and bodies of both read again.
+fn flipped_in_the_macro_crate(calls: usize) -> std::collections::BTreeMap<String, usize> {
+    let executed = Runs::default();
+    let subscriber = tracing_subscriber::registry().with(executed.clone());
+    tracing::subscriber::with_default(subscriber, || {
+        let dep = [(
+            "lib.rs",
+            "#[macro_export]\nmacro_rules! twice { ($e:expr) => { $e + $e }; }\n\
+             #[macro_export]\nmacro_rules! define { ($name:ident) => { pub fn $name() -> u32 { 1 } }; }\n",
+        )];
+        let app_text: String = (0..calls)
+            .map(|n| format!("dep::define!(made_{n});\npub fn uses_{n}() -> u32 {{ dep::twice!({n}) }}\n"))
+            .collect();
+        let app = [("lib.rs", app_text.as_str())];
+        let (mut db, dep_crate, app_crate) = two_crates(&dep, &app, CfgOptions::default(), CfgOptions::default());
+        let _ = read_bodies(&db, dep_crate);
+        let _ = read_bodies(&db, app_crate);
+        let before = executed.now();
+        let mut unrelated = CfgOptions::default();
+        flag(&mut unrelated, "unrelated");
+        dep_crate.set_cfg_options(&mut db).to(unrelated);
+        let _ = read_bodies(&db, dep_crate);
+        let _ = read_bodies(&db, app_crate);
+        executed.since(&before)
+    })
+}
+
+#[test]
+fn flipping_an_atom_nothing_reads_in_the_crate_that_defines_a_macro_runs_none_of_the_expansions_of_its_callers() {
+    let _serial = SERIAL.lock().unwrap();
+    let small = flipped_in_the_macro_crate(4);
+    let large = flipped_in_the_macro_crate(40);
+    assert_eq!(small, large, "what is executed again does not grow with the calls of the macros: {small:?} {large:?}");
+    let expansions: usize = large
+        .iter()
+        .filter(|(name, _)| name.contains("expansion") || name.contains("macro_arg") || name.contains("expand_"))
+        .map(|(_, count)| *count)
+        .sum();
+    assert_eq!(expansions, 0, "no expansion of a call is executed again: {large:?}");
+}
