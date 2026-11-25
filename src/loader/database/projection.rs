@@ -74,6 +74,9 @@ impl SourceDatabase {
         paths: &[PathBuf],
         policy_paths: &[PathBuf],
     ) -> CordialResult<CrateIr> {
+        // What is analysed, said in every segment of the projection; and the projection itself as the outermost one.
+        let _scope = crate::Segment::scope(target.crate_name());
+        let _projection = crate::Segment::begin("projection");
         crate::process_memory::log("projection begun");
         let context = self.projection_context()?;
         selection::validate_target(target, &context)?;
@@ -95,6 +98,7 @@ impl SourceDatabase {
             }
         }
         if self.restored {
+            let _warm = crate::Segment::begin("warm");
             self.warm_persisted_dependencies(paths);
             self.warm_fingerprint();
         }
@@ -118,11 +122,13 @@ impl SourceDatabase {
             };
             crate::process_memory::log("declarations collected");
             // A process that did the work of the evidence may end once it is in the store.
+            let evidence = crate::Segment::begin("evidence");
             if self.prime_function_evidence() {
                 self.evidence_done();
             }
             self.audit_reused_evidence();
             self.evict_regenerable("evidence");
+            drop(evidence);
             crate::process_memory::log("function evidence primed");
             super::footprint::log(&mut self.db, "function evidence primed");
             #[cfg(any(
@@ -146,6 +152,7 @@ impl SourceDatabase {
             crate::process_memory::log("file scans primed");
             let ordinary_watch =
                 crate::process_memory::Watch::start("ordinary projection".to_owned());
+            let ordinary_segment = crate::Segment::begin("ordinary");
             let (mut graph, outline) = attach_db(&self.db, || {
                 self.project_attached(
                     target,
@@ -156,7 +163,9 @@ impl SourceDatabase {
                 )
             })?;
             drop(ordinary_watch);
+            drop(ordinary_segment);
             crate::process_memory::log("ordinary projection done");
+            let ordinary_after = crate::Segment::begin("ordinary_after");
             self.evict_regenerable("ordinary projection");
             if crate::memory_limit::pressured() {
                 // What the steps read of the graph's bulk attributes goes back to bytes.
@@ -173,13 +182,16 @@ impl SourceDatabase {
             // process ends here if it is the kind that does.
             self.store_outline(&outline);
             self.stage_done(&graph, None, "ordinary");
+            drop(ordinary_after);
             (graph, outline)
         };
         // Gated code is analysed by changing the database's cfg input, which
         // needs the exclusive borrow the ordinary pass does not have.
         let rest = self.project_after_ordinary(paths, &outline, &mut graph);
         // A run that fails in the contexts still leaves what it computed.
+        let save = crate::Segment::begin("save");
         self.save_state();
+        drop(save);
         rest?;
         // The whole projection is done: a run with the same inputs has the graph from the store.
         self.stage_complete(&graph);
@@ -204,6 +216,7 @@ impl SourceDatabase {
         // needs the exclusive borrow the ordinary pass does not have.
         // A process that takes up a run an earlier one began skips what that one finished.
         if !self.unit_is_done("contexts") {
+            let _contexts = crate::Segment::begin("contexts");
             self.project_contexts(paths, outline.functions(), graph)?;
             self.stage_done(graph, None, "contexts");
         }
@@ -211,18 +224,22 @@ impl SourceDatabase {
         #[cfg(feature = "tracing")]
         {
             if !self.unit_is_done("tracing-inventories") {
+                let _inventories = crate::Segment::begin("inventories");
                 self.prime_tracing_inventories(outline);
                 self.project_tracing_inventories(outline, graph)?;
                 self.stage_done(graph, None, "tracing-inventories");
             }
             crate::process_memory::log("tracing inventories done");
             if !self.unit_is_done("leaves") {
+                let _leaves = crate::Segment::begin("leaves");
                 self.project_leaves(graph)?;
                 self.stage_done(graph, None, "leaves");
             }
             crate::process_memory::log("leaf functions done");
             super::footprint::log(&mut self.db, "leaf functions done");
+            let observability = crate::Segment::begin("observability_calls");
             self.project_observability_calls(outline, graph)?;
+            drop(observability);
             crate::process_memory::log("observability calls done");
         }
         Ok(())

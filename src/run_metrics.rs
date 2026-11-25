@@ -147,6 +147,7 @@ pub fn metrics_filter() -> Targets {
 pub fn metrics_filter_with(steps: bool) -> Targets {
     let targets = Targets::new()
         .with_target("cordial::phase_queries", tracing::Level::INFO)
+        .with_target("cordial::segment", tracing::Level::INFO)
         .with_target("cordial::milestones", tracing::Level::DEBUG)
         .with_target("cordial::budget", tracing::Level::INFO)
         .with_target("cordial::semantic::contexts", tracing::Level::INFO)

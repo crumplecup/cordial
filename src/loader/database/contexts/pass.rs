@@ -273,6 +273,7 @@ impl SourceDatabase {
             wanted.add_exact(options.cfg_contexts().clone());
         }
         if automatic && !self.has_resumed_contexts(analysed, &wanted) {
+            let _plan = crate::Segment::begin("plan");
             let _watch = crate::process_memory::Watch::start("planning scan".to_owned());
             wanted.add(asked(
                 &self.db,
@@ -291,6 +292,7 @@ impl SourceDatabase {
         while let Some(pending) = wanted.next_after(in_place.then_some(&current)) {
             current = pending.key().clone();
             let context = pending.key().clone();
+            let _context_segment = crate::Segment::begin("context");
             self.reporter.say(format!(
                 "Analysing cfg context {} ({} queued): {context}",
                 analysed.len() + 1,
@@ -299,6 +301,7 @@ impl SourceDatabase {
             let watch =
                 crate::process_memory::Watch::start(format!("cfg context {}", analysed.len() + 1));
             let stage = std::time::Instant::now();
+            let enter = crate::Segment::begin("enter");
             let added = match if in_place {
                 Ok(self.flip_context(cfgs, &context))
             } else {
@@ -311,6 +314,7 @@ impl SourceDatabase {
                 }
             };
             let entered = stage.elapsed();
+            drop(enter);
             crate::process_memory::log("cfg context entered");
             if pending.is_merged() && declares_a_name_twice(&self.db, &added.crate_set()) {
                 tracing::debug!(
@@ -334,8 +338,10 @@ impl SourceDatabase {
                 context: &added,
             };
             let stage = std::time::Instant::now();
+            let harvest = crate::Segment::begin("harvest");
             let outcome = self.harvest(&context, index, &pairs, &files, graph);
             let harvested = stage.elapsed();
+            drop(harvest);
             if let Some(modules) = run.as_ref().and_then(|run| run.modules()) {
                 self.audit_flip(modules, &context);
             }
@@ -343,9 +349,13 @@ impl SourceDatabase {
             let outcome = outcome.and_then(|()| {
                 let stage = std::time::Instant::now();
                 #[cfg(feature = "tracing")]
-                self.merge_context_observability(graph, &added)?;
+                {
+                    let _observability = crate::Segment::begin("observability");
+                    self.merge_context_observability(graph, &added)?;
+                }
                 let merged = stage.elapsed();
                 let stage = std::time::Instant::now();
+                let _plan_more = crate::Segment::begin("plan_more");
                 if automatic {
                     wanted.add(asked(
                         &self.db,
@@ -361,11 +371,13 @@ impl SourceDatabase {
             // Observability and gate discovery still read this context after harvesting.
             // Ask for eviction only once those consumers have finished.
             let stage = std::time::Instant::now();
+            let end = crate::Segment::begin("end");
             self.end_context(&added, "cfg context", cfgs, run.as_mut());
             if crate::memory_limit::pressured() {
                 graph.drop_decoded_attrs();
             }
             let finished = stage.elapsed();
+            drop(end);
             drop(watch);
             let (merged, planned) = match outcome {
                 Ok(done) => done,
@@ -376,8 +388,10 @@ impl SourceDatabase {
             };
             // What a process that takes up the run needs to go on from here is kept, and the process
             // ends here if it is the kind that does.
+            let kept = crate::Segment::begin("kept");
             let state = self.contexts_state(analysed, &wanted, &covered);
             self.stage_done(graph, Some(&state), &format!("context-{}", analysed.len()));
+            drop(kept);
             tracing::info!(
                 target: "cordial::semantic::contexts",
                 %context,

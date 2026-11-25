@@ -51,6 +51,7 @@ mod reporter;
 mod result_store;
 mod run_cache;
 mod run_metrics;
+mod segment;
 /// Rustdoc JSON inventory helpers used by coverage etiquettes.
 #[cfg(feature = "rustdoc")]
 pub mod rustdoc;
@@ -288,6 +289,7 @@ pub use etiquettes::quality_etiquettes;
 #[cfg(feature = "amenable_ext")]
 pub use etiquettes::{AMENABLE_EXT_JIFF_ETIQUETTE, ExtReporter};
 pub use live_status::{LiveLayer, LiveStatus, live_filter};
+pub use segment::{ScopeGuard, Segment};
 pub use memory_limit::{
     ALLOCATOR_OVERHEAD_PERCENT, Backoff, Budget, CHECKPOINT_AFTER_CHUNKS_VARIABLE,
     CHECKPOINT_AFTER_STAGES_VARIABLE, CHECKPOINT_PERCENT, DEFAULT_MEMORY_LIMIT,

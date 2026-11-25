@@ -143,7 +143,9 @@ impl SourceDatabase {
         let mut current = SemanticContextKey::ordinary();
         while let Some(context) = next_leaf_context(&mut queue, flips.then_some(&current)) {
             current = context.clone();
+            let _leaf = crate::Segment::begin("leaf");
             let stage = std::time::Instant::now();
+            let enter = crate::Segment::begin("enter");
             let added = match if flips {
                 Ok(self.flip_context(&cfgs, &context))
             } else {
@@ -157,7 +159,9 @@ impl SourceDatabase {
                 }
             };
             let entered = stage.elapsed();
+            drop(enter);
             let stage = std::time::Instant::now();
+            let read = crate::Segment::begin("read");
             let mut found = Vec::new();
             let known: BTreeSet<FunctionLocation> =
                 leaves.iter().map(|leaf| leaf.location().clone()).collect();
@@ -170,6 +174,7 @@ impl SourceDatabase {
                 known: &known,
             });
             outcome = self.read_leaves(files, &added, flipped.as_ref(), &mut found);
+            drop(read);
             tracing::info!(
                 target: "cordial::semantic::leaves",
                 %context,
@@ -197,9 +202,12 @@ impl SourceDatabase {
                 }
             }
             // Planning and persistence preparation finish before eviction.
+            let end = crate::Segment::begin("end");
             self.end_context(&added, "leaf context", &cfgs, run.as_mut());
+            drop(end);
             // What a process that takes up the run needs to go on from here is kept, and the
             // process ends here if it is the kind that does.
+            let _kept = crate::Segment::begin("kept");
             let state = LeavesState {
                 leaves: leaves.clone(),
                 seen: seen.clone(),

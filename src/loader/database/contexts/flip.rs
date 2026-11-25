@@ -67,6 +67,7 @@ impl SourceDatabase {
         cfgs: &LocalCfgs,
         context: &SemanticContextKey,
     ) -> ContextCrates {
+        let _write = crate::Segment::begin("flip_write");
         let pairs = cfgs.pairs(context);
         let mut flipped = 0usize;
         let mut crates = Vec::new();
@@ -94,24 +95,35 @@ impl SourceDatabase {
         use ra_ap_hir_def::BlockId;
         use ra_ap_hir_def::declaration::settle_block_map;
         use salsa::plumbing::FromId as _;
+        let _settle = crate::Segment::begin("settle");
         let started = std::time::Instant::now();
         tracing::info!(
             target: "cordial::def_map",
             "the definition maps and the bodies of the local crates are about to be made again under the ordinary cfg"
         );
-        let blocks = salsa::Database::memo_keys(&mut self.db, &["block_def_map"]);
+        let blocks = {
+            let _keys = crate::Segment::begin("block_keys");
+            salsa::Database::memo_keys(&mut self.db, &["block_def_map"])
+        };
         let db = &self.db;
         let mut remade = 0u64;
         attach_db(db, || {
-            for (krate, _) in cfgs.cfgs() {
-                let _ = ra_ap_hir_def::nameres::crate_def_map(db, *krate);
+            {
+                let _maps = crate::Segment::begin("maps");
+                for (krate, _) in cfgs.cfgs() {
+                    let _ = ra_ap_hir_def::nameres::crate_def_map(db, *krate);
+                }
             }
             // The bodies before the blocks: a body that is made again deletes the blocks it made before and does not
             // make again, and a block that was read in the revision cannot be deleted in it. Reading what a block is
             // of is reading it.
-            for (krate, _) in cfgs.cfgs() {
-                ra_ap_hir_def::declaration::settle_bodies(db, *krate);
+            {
+                let _bodies = crate::Segment::begin("bodies");
+                for (krate, _) in cfgs.cfgs() {
+                    ra_ap_hir_def::declaration::settle_bodies(db, *krate);
+                }
             }
+            let _blocks = crate::Segment::begin("blocks");
             for key in blocks {
                 settle_block_map(db, BlockId::from_id(key));
                 remade += 1;
@@ -130,6 +142,7 @@ impl SourceDatabase {
     #[instrument(level = "debug", skip(self, cfgs))]
     #[hotpath::measure(impl_type = "SourceDatabase")]
     pub(super) fn restore_cfgs(&mut self, cfgs: &LocalCfgs) {
+        let _restore = crate::Segment::begin("restore");
         for (krate, ordinary) in cfgs.cfgs() {
             self.write_cfg(*krate, ordinary.clone());
         }
@@ -176,6 +189,7 @@ impl SourceDatabase {
         cfgs: &LocalCfgs,
         ordinary: &Ordinary,
     ) -> Vec<salsa::Id> {
+        let _declared = crate::Segment::begin("declared_keys");
         let (mut only, mut now, mut before_total) = (Vec::new(), 0u64, 0u64);
         for (krate, before) in &ordinary.declared {
             let declared = crate_declared_query_keys(&mut self.db, *krate);
@@ -220,6 +234,7 @@ impl SourceDatabase {
     /// A pass over the contexts begins: the local crates as they are are the ordinary build, when the contexts are
     /// flipped.
     pub(super) fn begin_flips(&mut self, cfgs: &LocalCfgs) -> Option<FlipRun> {
+        let _begin = crate::Segment::begin("begin_flips");
         self.flips_contexts().then(|| FlipRun {
             start: self.revision(),
             ordinary: self.ordinary_state(cfgs),
@@ -242,7 +257,10 @@ impl SourceDatabase {
             let only_here = self.declared_only_when_flipped(cfgs, &run.ordinary);
             run.only.extend(only_here);
         }
-        self.finish_context(added, after);
+        {
+            let _finish = crate::Segment::begin("finish_context");
+            self.finish_context(added, after);
+        }
         self.report_slots(after);
     }
 
@@ -250,6 +268,7 @@ impl SourceDatabase {
     /// block ids are never deleted, and the cells are.
     #[instrument(level = "debug", skip(self))]
     pub(super) fn report_slots(&self, when: &str) {
+        let _slots = crate::Segment::begin("report_slots");
         let slots = <dyn salsa::Database>::struct_slots(
             &self.db,
             &["ModuleIdLt", "BlockIdLt", "ModuleCellLt", "DiagnosticsCellLt"],
@@ -272,6 +291,7 @@ impl SourceDatabase {
     /// is forgotten, and the maps are made again for what is verified next.
     #[instrument(level = "debug", skip(self, cfgs, run))]
     pub(super) fn finish_flips(&mut self, cfgs: &LocalCfgs, run: FlipRun) {
+        let _finish = crate::Segment::begin("finish_flips");
         self.restore_cfgs(cfgs);
         let only: Vec<salsa::Id> = run.only.into_iter().collect();
         self.forget_flipped(&only);
@@ -285,6 +305,7 @@ impl SourceDatabase {
     /// the maps again in it, so that what is verified next reads only what has been made in the revision it is
     /// read in.
     pub(super) fn settle_flipped_crates(&mut self, cfgs: &LocalCfgs) {
+        let _settle = crate::Segment::begin("settle_flipped");
         self.settle_ordinary(cfgs);
         self.forget_undeclared_roots();
         self.settle_ordinary(cfgs);
@@ -300,6 +321,7 @@ impl SourceDatabase {
     /// cfg back and stays. What made tracked structs stays too, as it runs again as any query does.
     #[instrument(level = "debug", skip(self))]
     pub(super) fn forget_changed_since(&mut self, revision: salsa::Revision) {
+        let _forget = crate::Segment::begin("forget_changed");
         let started = std::time::Instant::now();
         let forgotten = salsa::Database::forget_memos_changed_after(&mut self.db, revision);
         tracing::info!(
@@ -320,6 +342,7 @@ impl SourceDatabase {
         };
         use ra_ap_hir_def::{BlockId, EnumId, ImplId, TraitId};
         use salsa::plumbing::FromId as _;
+        let _forget = crate::Segment::begin("forget_undeclared");
         let started = std::time::Instant::now();
         let held = |db: &mut ra_ap_ide_db::RootDatabase, name: &str| {
             salsa::Database::memo_keys(db, &[name])
@@ -364,6 +387,7 @@ impl SourceDatabase {
     /// Forget what was computed for `items`, which the ordinary cfg does not have.
     #[instrument(level = "debug", skip(self, items))]
     pub(super) fn forget_flipped(&mut self, items: &[salsa::Id]) {
+        let _forget = crate::Segment::begin("forget_flipped");
         let forgotten = salsa::Database::forget_memos_for_inputs(&mut self.db, items);
         tracing::info!(
             target: "cordial::eviction",
@@ -386,6 +410,7 @@ impl SourceDatabase {
     /// ones: the definition work that was needed, whatever was done.
     #[instrument(level = "debug", skip(self, baseline))]
     pub(super) fn audit_flip(&self, baseline: &HashMap<InputCrate, HashMap<u64, u64>>, context: &SemanticContextKey) {
+        let _audit = crate::Segment::begin("audit");
         let (mut modules, mut changed, mut added, mut removed, mut crates) = (0u64, 0u64, 0u64, 0u64, 0u64);
         for (krate, before) in baseline {
             let after = self.module_hashes(*krate);
