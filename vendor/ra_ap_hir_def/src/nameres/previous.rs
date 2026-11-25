@@ -238,8 +238,7 @@ pub(crate) fn remember(
 /// What `krate` made last, if it made anything in this database.
 pub(crate) fn recall(db: &dyn SourceDatabase, krate: Crate) -> Option<std::sync::Arc<Built>> {
     let kept = salsa::plumbing::extension::<Previous, _>(db);
-    let found = kept.0.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).get(&krate).cloned();
-    found
+    kept.0.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).get(&krate).cloned()
 }
 
 impl Built {

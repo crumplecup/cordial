@@ -25,7 +25,6 @@ description = "Early name and import resolution for rust-analyzer."
 readme = false
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/rust-lang/rust-analyzer"
-resolver = "2"
 
 [package.metadata.cargo-machete]
 ignored = ["unicode-ident"]
@@ -113,6 +112,7 @@ features = [
     "salsa_unstable",
     "macros",
     "inventory",
+    "persistence",
     "triomphe",
 ]
 default-features = false
@@ -226,3 +226,14 @@ check-cfg = [
     "cfg(bootstrap)",
     "cfg(no_salsa_async_drops)",
 ]
+
+[dev-dependencies.expect-test]
+version = "1.5.1"
+
+[dev-dependencies.test-fixture]
+version = "=0.0.358"
+package = "ra_ap_test_fixture"
+
+[dev-dependencies.test-utils]
+version = "=0.0.358"
+package = "ra_ap_test_utils"

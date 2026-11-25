@@ -744,7 +744,7 @@ pub struct bar;
 
 #[test]
 fn macro_dollar_crate_is_correct_in_derive_meta() {
-    compute_crate_def_map(
+    compute_crate_def_map_with_db(
         r#"
 //- minicore: derive, clone
 //- /main.rs crate:main deps:lib
@@ -761,13 +761,13 @@ macro_rules! foo {
 
 pub use core::clone::Clone;
 "#,
-        |map| assert_eq!(map.modules[map.root].scope.builtin_derive_impls().len(), 1),
+        |map, db| assert_eq!(map.module_data(db, map.root).scope.builtin_derive_impls().len(), 1),
     );
 }
 
 #[test]
 fn expand_derive() {
-    compute_crate_def_map(
+    compute_crate_def_map_with_db(
         r#"
 //- /main.rs crate:main deps:core
 use core::Copy;
@@ -783,7 +783,7 @@ pub macro Copy {}
 #[rustc_builtin_macro]
 pub macro Clone {}
 "#,
-        |map| assert_eq!(map.modules[map.root].scope.builtin_derive_impls().len(), 2),
+        |map, db| assert_eq!(map.module_data(db, map.root).scope.builtin_derive_impls().len(), 2),
     );
 }
 
@@ -811,7 +811,7 @@ pub trait Clone {}
 fn builtin_derive_with_unresolved_attributes_fall_back() {
     // Tests that we still resolve derives after ignoring an unresolved attribute.
     cov_mark::check!(unresolved_attribute_fallback);
-    compute_crate_def_map(
+    compute_crate_def_map_with_db(
         r#"
 //- /main.rs crate:main deps:core
 use core::{Clone, derive};
@@ -826,7 +826,7 @@ pub macro derive($item:item) {}
 #[rustc_builtin_macro]
 pub macro Clone {}
 "#,
-        |map| assert_eq!(map.modules[map.root].scope.builtin_derive_impls().len(), 1),
+        |map, db| assert_eq!(map.module_data(db, map.root).scope.builtin_derive_impls().len(), 1),
     );
 }
 
@@ -1478,7 +1478,7 @@ fn proc_attr(a: TokenStream, b: TokenStream) -> TokenStream { a }
     let krate = *all_crates(&db).last().expect("no crate graph present");
     let def_map = crate_def_map(&db, krate);
 
-    let root_module = &def_map[def_map.root].scope;
+    let root_module = &def_map.module_data(&db, def_map.root).scope;
     assert!(
         root_module.legacy_macros().count() == 0,
         "`#[macro_use]` shouldn't bring macros into textual macro scope",
@@ -1576,7 +1576,7 @@ macro_rules! mk_foo {
 
 #[test]
 fn macro_sub_namespace() {
-    compute_crate_def_map(
+    compute_crate_def_map_with_db(
         r#"
 //- minicore: derive, clone
 macro_rules! Clone { () => {} }
@@ -1585,7 +1585,7 @@ macro_rules! derive { () => {} }
 #[derive(Clone)]
 struct S;
     "#,
-        |map| assert_eq!(map.modules[map.root].scope.builtin_derive_impls().len(), 1),
+        |map, db| assert_eq!(map.module_data(db, map.root).scope.builtin_derive_impls().len(), 1),
     );
 }
 

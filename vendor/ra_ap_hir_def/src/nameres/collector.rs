@@ -3253,9 +3253,9 @@ foo!(KABOOM);
         "#;
         let (db, _) = TestDB::with_single_file(fixture);
         let def_map = crate_def_map(&db, db.test_crate());
-        assert_eq!(def_map.recursion_limit(), 4);
-        assert!(def_map.is_no_core());
-        assert!(def_map.is_no_std());
-        assert!(def_map.features().is_enabled(&sym::register_tool));
+        assert_eq!(def_map.recursion_limit(&db), 4);
+        assert!(def_map.is_no_core(&db));
+        assert!(def_map.is_no_std(&db));
+        assert!(def_map.features(&db).is_enabled(&sym::register_tool));
     }
 }

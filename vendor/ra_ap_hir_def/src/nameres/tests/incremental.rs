@@ -112,14 +112,15 @@ pub const BAZ: u32 = 0;
                 crate_def_map(&db, krate);
             }
         },
-        // `c` gets invalidated as its dependency `b` changed
-        // `b` gets invalidated due to its new dependency edge to `a`
-        &[("crate_local_def_map", 2)],
+        // `b` gets invalidated due to its new dependency edge to `a`.
+        // `c` is not: it reads the modules of `b` through their cells, and the new edge changes `b`'s extern
+        // prelude, which is not among them. Upstream's map was one value that `c` read, so it ran again.
+        &[("crate_local_def_map", 1)],
         expect![[r#"
             [
                 "crate_local_def_map",
                 "file_item_tree_query",
-                "crate_local_def_map",
+                "external_def_map",
             ]
         "#]],
     );
@@ -164,11 +165,13 @@ fn no() {}
 ",
         expect![[r#"
             [
+                "external_def_map",
                 "crate_local_def_map",
                 "file_item_tree_query",
                 "HirFileId::ast_id_map_",
                 "EditionedFileId::parse_",
                 "real_span_map",
+                "cfg_atom_enabled",
                 "file_item_tree_query",
                 "HirFileId::ast_id_map_",
                 "EditionedFileId::parse_",
@@ -222,6 +225,7 @@ pub struct S {}
 ",
         expect![[r#"
             [
+                "external_def_map",
                 "crate_local_def_map",
                 "file_item_tree_query",
                 "HirFileId::ast_id_map_",
@@ -240,6 +244,7 @@ pub struct S {}
                 "file_item_tree_query",
                 "HirFileId::ast_id_map_",
                 "MacroCallId::parse_macro_expansion_",
+                "expand_pure_macro_of",
                 "MacroCallId::macro_arg_",
             ]
         "#]],
@@ -250,6 +255,7 @@ pub struct S {}
                 "file_item_tree_query",
                 "real_span_map",
                 "MacroCallId::macro_arg_",
+                "expand_pure_macro_of",
                 "MacroCallId::parse_macro_expansion_",
                 "HirFileId::ast_id_map_",
                 "file_item_tree_query",
@@ -280,11 +286,13 @@ fn f() { foo }
 ",
         expect![[r#"
             [
+                "external_def_map",
                 "crate_local_def_map",
                 "file_item_tree_query",
                 "HirFileId::ast_id_map_",
                 "EditionedFileId::parse_",
                 "real_span_map",
+                "external_def_map",
                 "crate_local_def_map",
                 "ProcMacros::get_for_crate_",
                 "file_item_tree_query",
@@ -299,11 +307,12 @@ fn f() { foo }
                 "HirFileId::ast_id_map_",
                 "EditionedFileId::parse_",
                 "real_span_map",
+                "crate_module_cell",
                 "MacroId::definition_",
                 "file_item_tree_query",
                 "HirFileId::ast_id_map_",
                 "MacroCallId::parse_macro_expansion_",
-                "MacroCallId::expand_proc_macro_",
+                "expand_proc_macro_of",
                 "MacroCallId::macro_arg_",
                 "proc_macro_span",
             ]
@@ -315,7 +324,7 @@ fn f() { foo }
                 "file_item_tree_query",
                 "real_span_map",
                 "MacroCallId::macro_arg_",
-                "MacroCallId::expand_proc_macro_",
+                "expand_proc_macro_of",
                 "MacroCallId::parse_macro_expansion_",
                 "HirFileId::ast_id_map_",
                 "file_item_tree_query",
@@ -404,11 +413,13 @@ pub struct S {}
 ",
         expect![[r#"
             [
+                "external_def_map",
                 "crate_local_def_map",
                 "file_item_tree_query",
                 "HirFileId::ast_id_map_",
                 "EditionedFileId::parse_",
                 "real_span_map",
+                "external_def_map",
                 "crate_local_def_map",
                 "ProcMacros::get_for_crate_",
                 "file_item_tree_query",
@@ -428,18 +439,21 @@ pub struct S {}
                 "file_item_tree_query",
                 "HirFileId::ast_id_map_",
                 "MacroCallId::parse_macro_expansion_",
+                "expand_pure_macro_of",
                 "MacroCallId::macro_arg_",
                 "DeclarativeMacroKey < 'db >::expander_",
                 "MacroId::definition_",
                 "file_item_tree_query",
                 "HirFileId::ast_id_map_",
                 "MacroCallId::parse_macro_expansion_",
+                "expand_pure_macro_of",
                 "MacroCallId::macro_arg_",
+                "crate_module_cell",
                 "MacroId::definition_",
                 "file_item_tree_query",
                 "HirFileId::ast_id_map_",
                 "MacroCallId::parse_macro_expansion_",
-                "MacroCallId::expand_proc_macro_",
+                "expand_proc_macro_of",
                 "MacroCallId::macro_arg_",
                 "proc_macro_span",
             ]
@@ -514,13 +528,16 @@ m!(Z);
         &db,
         || {
             let crate_def_map = crate_def_map(&db, krate);
-            let module_data = &crate_def_map
-                [crate_def_map.modules_for_file(&db, pos.file_id.file_id(&db)).next().unwrap()];
+            let module_data = crate_def_map.module_data(
+                &db,
+                crate_def_map.modules_for_file(&db, pos.file_id.file_id(&db)).next().unwrap(),
+            );
             assert_eq!(module_data.scope.resolutions().count(), 4);
         },
         &[("file_item_tree_query", 6), ("parse_macro_expansion", 3)],
         expect![[r#"
             [
+                "external_def_map",
                 "crate_local_def_map",
                 "file_item_tree_query",
                 "HirFileId::ast_id_map_",
@@ -539,15 +556,19 @@ m!(Z);
                 "file_item_tree_query",
                 "HirFileId::ast_id_map_",
                 "MacroCallId::parse_macro_expansion_",
+                "expand_pure_macro_of",
                 "MacroCallId::macro_arg_",
                 "file_item_tree_query",
                 "HirFileId::ast_id_map_",
                 "MacroCallId::parse_macro_expansion_",
+                "expand_pure_macro_of",
                 "MacroCallId::macro_arg_",
                 "file_item_tree_query",
                 "HirFileId::ast_id_map_",
                 "MacroCallId::parse_macro_expansion_",
+                "expand_pure_macro_of",
                 "MacroCallId::macro_arg_",
+                "crate_module_cell",
             ]
         "#]],
     );
@@ -564,8 +585,10 @@ m!(Z);
         &db,
         || {
             let crate_def_map = crate_def_map(&db, krate);
-            let module_data = &crate_def_map
-                [crate_def_map.modules_for_file(&db, pos.file_id.file_id(&db)).next().unwrap()];
+            let module_data = crate_def_map.module_data(
+                &db,
+                crate_def_map.modules_for_file(&db, pos.file_id.file_id(&db)).next().unwrap(),
+            );
             assert_eq!(module_data.scope.resolutions().count(), 4);
         },
         &[("file_item_tree_query", 1), ("parse_macro_expansion", 0)],

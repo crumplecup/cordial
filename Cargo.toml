@@ -696,3 +696,6 @@ ra_ap_edition = { path = "vendor/ra_ap_edition" }
 ra_ap_ide_db = { path = "vendor/ra_ap_ide_db" }
 ra_ap_load-cargo = { path = "vendor/ra_ap_load-cargo" }
 salsa = { path = "vendor/salsa" }
+
+[workspace]
+members = ["vendor/ra_ap_hir_def"]

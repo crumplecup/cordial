@@ -21,6 +21,16 @@ fn compute_crate_def_map(
     cb(crate_def_map(&db, krate));
 }
 
+/// As `compute_crate_def_map`, and with the database: a finished map keeps its modules in cells that are read through it.
+fn compute_crate_def_map_with_db(
+    #[rust_analyzer::rust_fixture] ra_fixture: &str,
+    cb: impl FnOnce(&DefMap, &TestDB),
+) {
+    let db = TestDB::with_files(ra_fixture);
+    let krate = db.fetch_test_crate();
+    cb(crate_def_map(&db, krate), &db);
+}
+
 fn render_crate_def_map(#[rust_analyzer::rust_fixture] ra_fixture: &str) -> String {
     let db = TestDB::with_files(ra_fixture);
     let krate = db.fetch_test_crate();

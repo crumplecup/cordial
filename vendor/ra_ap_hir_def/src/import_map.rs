@@ -672,7 +672,7 @@ mod tests {
         assert!(def_map.block_id().is_none(), "block local items should not be in `ImportMap`");
 
         while let Some(parent) = module.containing_module(db) {
-            let parent_data = &def_map[parent];
+            let parent_data = def_map.module_data(db, parent);
             let (name, _) = parent_data.children.iter().find(|(_, id)| **id == module).unwrap();
             segments.push(name);
             module = parent;
