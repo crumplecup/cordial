@@ -972,8 +972,11 @@ impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for KeptReport {
     }
 }
 
+/// What a run reported of a context's kept functions, and the functions it named with the part that differs.
+type KeptOfARun = ((u64, u64, String), Vec<(String, String)>);
+
 /// What the one context `kani` kept of `library`: kept, new here, and the parts that differ.
-fn kept_of_a_run(library: &str) -> Result<((u64, u64, String), Vec<(String, String)>)> {
+fn kept_of_a_run(library: &str) -> Result<KeptOfARun> {
     let root = fixture_with(library)?;
     let state = tempfile::tempdir().into_diagnostic()?;
     let saved = cordial::SavedState::at(state.path().join("analysis-state"));
