@@ -38,6 +38,7 @@ pub struct Segment {
     before: HashMap<String, u64>,
     verified_before: HashMap<&'static str, (u64, u64)>,
     durability_before: [u64; 4],
+    keyed_before: (u64, u64),
 }
 
 impl Segment {
@@ -58,6 +59,7 @@ impl Segment {
             before: live.counts(),
             verified_before: salsa::deep_verifications_by_ingredient(),
             durability_before: salsa::deep_verifications_by_durability(),
+            keyed_before: salsa::keyed::counts(),
         }
     }
 
@@ -100,6 +102,7 @@ impl Drop for Segment {
         let scope = SCOPE.with(|scope| scope.borrow().clone());
         let now = salsa::deep_verifications_by_durability();
         let durability: [u64; 4] = std::array::from_fn(|at| now[at].saturating_sub(self.durability_before[at]));
+        let keyed = salsa::keyed::counts();
         tracing::info!(
             target: "cordial::segment",
             label = %self.path,
@@ -114,6 +117,8 @@ impl Drop for Segment {
             verified_low = durability[0],
             verified_medium = durability[1],
             verified_high = durability[2],
+            keyed_reads = keyed.0.saturating_sub(self.keyed_before.0),
+            keyed_touches = keyed.1.saturating_sub(self.keyed_before.1),
             "a region of the run"
         );
     }

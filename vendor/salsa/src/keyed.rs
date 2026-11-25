@@ -19,6 +19,18 @@ use crate::zalsa::{HasJar, IngredientIndex, JarKind, Zalsa};
 use crate::zalsa_local::QueryEdge;
 use crate::{Database, DatabaseKeyIndex, Durability, Id, Revision};
 
+/// How many keyed reads, and how many keys were touched, in this process: what a region of a run says it did.
+static READS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+static TOUCHES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// How many keyed reads have been made and how many keys touched, in this process.
+pub fn counts() -> (u64, u64) {
+    (
+        READS.load(std::sync::atomic::Ordering::Relaxed),
+        TOUCHES.load(std::sync::atomic::Ordering::Relaxed),
+    )
+}
+
 /// The jar of the keyed ingredient, registered with every database.
 pub(crate) struct KeyedJar;
 
@@ -93,6 +105,7 @@ impl KeyedIngredient {
 /// Say that the running query read `key`, whether it is there or not, and that what it read has the
 /// `durability` of what holds it.
 pub fn read(db: &dyn Database, key: Id, durability: Durability) {
+    READS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let (zalsa, zalsa_local) = db.zalsas();
     let ingredient = KeyedIngredient::of(zalsa);
     zalsa_local.report_tracked_read_simple(
@@ -118,6 +131,7 @@ pub fn unrecorded<R>(db: &dyn Database, read: impl FnOnce() -> R) -> (R, Durabil
 
 /// Say that `key` changed in the current revision: it was added, removed or given another value.
 pub fn touch(db: &dyn Database, key: Id) {
+    TOUCHES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let zalsa = db.zalsa();
     KeyedIngredient::of(zalsa).touch(key, zalsa.current_revision());
 }

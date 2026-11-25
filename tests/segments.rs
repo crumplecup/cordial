@@ -25,6 +25,8 @@ struct Said {
     by_durability: [u64; 3],
     /// The queries it executed most, as `name=count`.
     executed_top: String,
+    /// How many keyed reads it made, and how many keys it touched (see `salsa::keyed`).
+    keyed: [u64; 2],
 }
 
 #[derive(Clone, Default)]
@@ -39,8 +41,8 @@ impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for Segments {
             verified_top: String,
             executed_top: String,
             by_durability: [u64; 3],
-            /// micros, queries, verified memos, verified edges.
-            numbers: [u64; 4],
+            /// micros, queries, verified memos, verified edges, keyed reads, keys touched.
+            numbers: [u64; 6],
         }
         impl tracing::field::Visit for Fields {
             fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
@@ -59,7 +61,7 @@ impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for Segments {
                 if let Some(by) = by {
                     self.by_durability[by] = value;
                 }
-                let at = ["micros", "queries", "verified_memos", "verified_edges"]
+                let at = ["micros", "queries", "verified_memos", "verified_edges", "keyed_reads", "keyed_touches"]
                     .iter()
                     .position(|name| *name == field.name());
                 if let Some(at) = at {
@@ -70,7 +72,7 @@ impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for Segments {
         if event.metadata().target() == "cordial::segment" {
             let mut fields = Fields::default();
             event.record(&mut fields);
-            let [micros, queries, verified_memos, verified_edges] = fields.numbers;
+            let [micros, queries, verified_memos, verified_edges, keyed_reads, keyed_touches] = fields.numbers;
             self.0.lock().unwrap().push(Said {
                 label: fields.label,
                 scope: fields.scope,
@@ -81,6 +83,7 @@ impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for Segments {
                 verified_top: fields.verified_top,
                 by_durability: fields.by_durability,
                 executed_top: fields.executed_top,
+                keyed: [keyed_reads, keyed_touches],
             });
         }
     }
@@ -313,5 +316,19 @@ fn the_context_pass_and_the_leaf_pass_are_one_flipped_session() -> Result<()> {
     assert_eq!(finishes.len(), 1, "one finish for the whole flipped session: {finishes:?}");
     let leaf_flips = said.iter().filter(|said| said.label.ends_with("leaf/enter/flip_write")).count();
     assert!(leaf_flips >= 1, "the leaf stage still flips its contexts");
+    Ok(())
+}
+
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn a_region_says_how_many_names_it_read_by_key_and_how_many_keys_it_touched() -> Result<()> {
+    let _serial = SERIAL.lock().unwrap();
+    cordial::init_tracing();
+    let said = regions_of_a_run(CfgContextMode::Flips)?;
+    let reads: u64 = said.iter().filter(|said| said.label == "projection").map(|said| said.keyed[0]).sum();
+    let touches: u64 = said.iter().filter(|said| said.label == "projection").map(|said| said.keyed[1]).sum();
+    assert!(reads > 0, "resolving names reads them by key: {said:?}");
+    // The context adds `harvest`'s gate and so one name to the crate's scope, and the map made again says so.
+    assert!(touches > 0, "a flip that adds a name touches its key: {said:?}");
     Ok(())
 }
