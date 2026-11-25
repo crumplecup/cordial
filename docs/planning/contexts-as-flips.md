@@ -303,3 +303,5 @@ Stale memos in flips fell from 35,259 to 15,113 and none is now stale because of
    module list, not yet measured in a run.
 3. The context pass executes 84,121 queries against 47,086 in copies, `finish_flips` 53,754, inventories 47,217 against
    2,779; superseded memos 71,137 against 1,175 (`eviction.cfg_context.deferred_released`).
+
+For the state of the work, how to measure it and what to do next, see [the handoff](contexts-as-flips-handoff.md).
