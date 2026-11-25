@@ -1015,10 +1015,10 @@ fn a_function_the_context_does_not_change_is_not_kept_and_one_whose_call_resolve
 /// The totals a harvest reported (functions, files taken as they are), and the functions each file has.
 type FunctionsByFile = ((u64, u64), Vec<(String, u64)>);
 
-/// What a context that disables `unix` says it has of a crate whose `platform` module is `#[cfg(unix)]`: the functions
-/// it has, and the files it took as they are.
-fn functions_without_unix(mode: CfgContextMode) -> Result<FunctionsByFile> {
-    let root = fixture_with("#[cfg(unix)]\nmod platform;\npub fn alive() -> u32 { 1 }\n")?;
+/// What the context `-unix` says it has of a crate whose root is `library` and which has `src/platform.rs`: the
+/// functions it has, and the files it took as they are.
+fn functions_of_a_crate_without_unix(mode: CfgContextMode, library: &str) -> Result<FunctionsByFile> {
+    let root = fixture_with(library)?;
     std::fs::write(
         root.path().join("src/platform.rs"),
         "pub fn only_unix() -> u32 { 1 }\npub fn also_unix() -> u32 { 2 }\n",
@@ -1045,6 +1045,40 @@ fn functions_without_unix(mode: CfgContextMode) -> Result<FunctionsByFile> {
     let mut files = report.1.lock().unwrap().clone();
     files.sort();
     Ok(((said[0].0, said[0].1), files))
+}
+
+/// `platform` is declared, and only where `unix` is set.
+fn functions_without_unix(mode: CfgContextMode) -> Result<FunctionsByFile> {
+    functions_of_a_crate_without_unix(mode, "#[cfg(unix)]\nmod platform;\npub fn alive() -> u32 { 1 }\n")
+}
+
+/// `platform.rs` is a file no module declares, as `src/quality/exceptions.rs` of `elicit_doc` is.
+fn functions_of_a_file_no_module_declares(mode: CfgContextMode) -> Result<FunctionsByFile> {
+    functions_of_a_crate_without_unix(mode, "pub fn alive() -> u32 { 1 }\n")
+}
+
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn a_file_no_module_declares_has_no_active_functions_in_a_context() -> Result<()> {
+    let _serial = SERIAL.lock().unwrap();
+    cordial::init_tracing();
+    let (totals, files) = functions_of_a_file_no_module_declares(CfgContextMode::Flips)?;
+    assert_eq!(totals, (1, 0));
+    assert_eq!(files, [("lib.rs".to_owned(), 1), ("platform.rs".to_owned(), 0)]);
+    Ok(())
+}
+
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn the_copy_design_counts_the_functions_of_a_file_no_module_declares_as_active() -> Result<()> {
+    let _serial = SERIAL.lock().unwrap();
+    cordial::init_tracing();
+    // The 13 functions of `src/quality/exceptions.rs` that `elicit_doc` had active in the copies run and not in the
+    // flips run: nothing declares the file, and the copy takes it as it is. Removed with the copy design.
+    let (totals, files) = functions_of_a_file_no_module_declares(CfgContextMode::Copies)?;
+    assert_eq!(totals, (3, 2), "no gate names `unix`, so both files are taken as they are");
+    assert_eq!(files, [("lib.rs".to_owned(), 1), ("platform.rs".to_owned(), 2)]);
+    Ok(())
 }
 
 #[test]
