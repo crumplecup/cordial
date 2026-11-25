@@ -23,7 +23,7 @@ pub fn span_events(setting: Option<&str>) -> tracing_subscriber::fmt::format::Fm
 }
 
 /// Say, in the log, what every panic was doing: its message, where it was, the thread, the queries that were
-/// running (with their keys) when it struck, and the calls that led to it. A panic of a query has the stack of the thread that ran it, which is
+/// running (with their keys) when it struck. A panic of a query has the stack of the thread that ran it, which is
 /// gone once the panic unwinds, and a panic does not strike in the same place twice. Installed once, ahead of the
 /// hook that was there, which still runs.
 #[tracing::instrument(level = "debug")]
@@ -44,7 +44,6 @@ pub fn install_panic_event() {
                 thread = std::thread::current().name().unwrap_or("(unnamed)"),
                 %location,
                 queries = %salsa::Backtrace::capture().map(|stack| stack.to_string()).unwrap_or_default(),
-                calls = %std::backtrace::Backtrace::force_capture(),
                 message = %message.chars().take(400).collect::<String>(),
                 "a panic"
             );
