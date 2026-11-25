@@ -45,7 +45,15 @@ pub struct KeyedIngredient {
     changed: std::sync::RwLock<FxHashMap<Id, Revision>>,
     /// The revision every key changed in at the latest, whatever it says: set when what changed is not known.
     floor: std::sync::atomic::AtomicUsize,
+    /// Whether a key was touched, or the floor raised, since the state this was restored from was restored (or
+    /// ever, if it was not restored): what a save of it would hold is then not what that state holds.
+    changed_since_restore: std::sync::atomic::AtomicBool,
 }
+
+/// What is saved is a map, as every ingredient is, from the bits of a key to the revision it changed in. No key has
+/// the bits 0, so the floor is the entry of that.
+#[cfg(feature = "persistence")]
+const FLOOR_KEY: u64 = 0;
 
 impl KeyedIngredient {
     fn new(index: IngredientIndex) -> Self {
@@ -53,6 +61,7 @@ impl KeyedIngredient {
             index,
             changed: std::sync::RwLock::new(FxHashMap::default()),
             floor: std::sync::atomic::AtomicUsize::new(Revision::start().as_usize()),
+            changed_since_restore: std::sync::atomic::AtomicBool::new(false),
         }
     }
 
@@ -69,10 +78,12 @@ impl KeyedIngredient {
     }
 
     fn raise_floor(&self, revision: Revision) {
+        self.changed_since_restore.store(true, std::sync::atomic::Ordering::Release);
         self.floor.fetch_max(revision.as_usize(), std::sync::atomic::Ordering::AcqRel);
     }
 
     fn touch(&self, key: Id, revision: Revision) {
+        self.changed_since_restore.store(true, std::sync::atomic::Ordering::Release);
         let mut changed = self.changed.write().unwrap_or_else(|poisoned| poisoned.into_inner());
         let at = changed.entry(key).or_insert(revision);
         *at = (*at).max(revision);
@@ -172,6 +183,55 @@ impl Ingredient for KeyedIngredient {
 
     fn debug_name(&self) -> &'static str {
         "keyed"
+    }
+
+    fn is_persistable(&self) -> bool {
+        true
+    }
+
+    /// A state that is saved says the revision of every key that changed, so that a memo that was out of date when
+    /// it was saved is found out of date when it is restored. Nothing is saved while no key changed.
+    fn should_serialize(&self, _zalsa: &Zalsa) -> bool {
+        let changed = self.changed.read().unwrap_or_else(|poisoned| poisoned.into_inner());
+        !changed.is_empty() || self.floor.load(std::sync::atomic::Ordering::Acquire) > Revision::start().as_usize()
+    }
+
+    fn unchanged_since_restore(&self) -> bool {
+        !self.changed_since_restore.load(std::sync::atomic::Ordering::Acquire)
+    }
+
+    fn mark_restored(&self) {
+        self.changed_since_restore.store(false, std::sync::atomic::Ordering::Release);
+    }
+
+    #[cfg(feature = "persistence")]
+    unsafe fn serialize<'db>(&'db self, _zalsa: &'db Zalsa, f: &mut dyn FnMut(&dyn erased_serde::Serialize)) {
+        // Sorted by key, so that a state saved again is the same whatever order the table is in.
+        let mut saved: std::collections::BTreeMap<u64, Revision> = {
+            let changed = self.changed.read().unwrap_or_else(|poisoned| poisoned.into_inner());
+            changed.iter().map(|(key, revision)| (key.as_bits(), *revision)).collect()
+        };
+        saved.insert(FLOOR_KEY, Revision::from(self.floor.load(std::sync::atomic::Ordering::Acquire)));
+        f(&saved);
+    }
+
+    #[cfg(feature = "persistence")]
+    fn deserialize(
+        &mut self,
+        _zalsa: &mut Zalsa,
+        deserializer: &mut dyn erased_serde::Deserializer,
+    ) -> Result<(), erased_serde::Error> {
+        let saved: std::collections::BTreeMap<u64, Revision> = erased_serde::deserialize(deserializer)?;
+        let changed = self.changed.get_mut().unwrap_or_else(|poisoned| poisoned.into_inner());
+        changed.clear();
+        for (bits, revision) in saved {
+            if bits == FLOOR_KEY {
+                *self.floor.get_mut() = revision.as_usize();
+            } else {
+                changed.insert(Id::from_bits(bits), revision);
+            }
+        }
+        Ok(())
     }
 
     fn jar_kind(&self) -> JarKind {

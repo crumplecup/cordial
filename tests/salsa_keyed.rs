@@ -179,3 +179,84 @@ fn what_is_read_without_a_dependency_says_the_durability_of_what_it_read() {
     let (_, read) = salsa::keyed::unrecorded(&db, || low.names(&db));
     assert_eq!(read, Durability::LOW);
 }
+
+/// A name, as a module's scope has them, in a database that is saved.
+#[salsa::interned(persist, revisions = usize::MAX)]
+struct SavedName<'db> {
+    text: String,
+}
+
+/// A reader of one name that is saved with the database.
+#[salsa::tracked(persist)]
+fn saved_lookup<'db>(db: &'db dyn Database, name: SavedName<'db>) -> Option<u32> {
+    salsa::keyed::read(db, name.as_id(), Durability::LOW);
+    let text = name.text(db);
+    RAN.with(|ran| ran.borrow_mut().push(text.clone()));
+    SCOPE.with(|scope| scope.borrow().get(text.as_str()).copied())
+}
+
+fn read_saved(db: &Db, text: &str) -> Option<u32> {
+    *saved_lookup(db, SavedName::new(db, text.to_owned()))
+}
+
+fn save(db: &mut Db) -> String {
+    serde_json::to_string(&<dyn Database>::as_serialize(db)).unwrap()
+}
+
+fn restore(saved: &str) -> Db {
+    let mut db = Db::default();
+    <dyn Database>::deserialize(&mut db, &mut serde_json::Deserializer::from_str(saved)).unwrap();
+    db
+}
+
+#[test]
+fn a_reader_of_a_key_that_was_saved_is_not_run_again_when_nothing_touched_the_key() {
+    let mut db = Db::default();
+    SCOPE.with(|scope| *scope.borrow_mut() = [("twice".to_owned(), 1), ("plain".to_owned(), 2)].into());
+    assert_eq!(read_saved(&db, "twice"), Some(1));
+    assert_eq!(read_saved(&db, "plain"), Some(2));
+    assert_eq!(read_saved(&db, "tests"), None);
+    let _ = db.ran();
+
+    let restored = restore(&save(&mut db));
+    assert_eq!(read_saved(&restored, "twice"), Some(1));
+    assert_eq!(read_saved(&restored, "plain"), Some(2));
+    assert_eq!(read_saved(&restored, "tests"), None);
+    assert_eq!(restored.ran(), Vec::<String>::new(), "what was saved is read from what was saved");
+}
+
+#[test]
+fn a_key_touched_after_a_restore_runs_its_reader_and_no_other() {
+    let mut db = Db::default();
+    SCOPE.with(|scope| *scope.borrow_mut() = [("twice".to_owned(), 1), ("plain".to_owned(), 2)].into());
+    for name in ["twice", "plain", "tests"] {
+        let _ = read_saved(&db, name);
+    }
+    let mut restored = restore(&save(&mut db));
+    let _ = restored.ran();
+
+    SCOPE.with(|scope| scope.borrow_mut().insert("tests".to_owned(), 3));
+    restored.synthetic_write(Durability::LOW);
+    let tests = SavedName::new(&restored, "tests".to_owned());
+    salsa::keyed::touch(&restored, tests.as_id());
+    let found: Vec<_> = ["twice", "plain", "tests"].iter().map(|name| read_saved(&restored, name)).collect();
+    assert_eq!(found, [Some(1), Some(2), Some(3)]);
+    assert_eq!(restored.ran(), ["tests"], "only the reader of the key that was touched runs");
+}
+
+#[test]
+fn a_reader_that_was_stale_when_the_state_was_saved_is_not_taken_as_current_after_the_restore() {
+    let mut db = Db::default();
+    SCOPE.with(|scope| *scope.borrow_mut() = [("twice".to_owned(), 1)].into());
+    assert_eq!(read_saved(&db, "twice"), Some(1));
+    assert_eq!(read_saved(&db, "tests"), None);
+
+    // `tests` is added and its key touched, and nothing reads it before the state is saved.
+    SCOPE.with(|scope| scope.borrow_mut().insert("tests".to_owned(), 3));
+    db.synthetic_write(Durability::LOW);
+    let tests = SavedName::new(&db, "tests".to_owned());
+    salsa::keyed::touch(&db, tests.as_id());
+
+    let restored = restore(&save(&mut db));
+    assert_eq!(read_saved(&restored, "tests"), Some(3), "the reader of the key that changed does not answer from before");
+}
