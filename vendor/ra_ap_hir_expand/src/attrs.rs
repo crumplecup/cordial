@@ -384,6 +384,15 @@ impl AttrId {
         owner: &dyn ast::HasAttrs,
     ) -> (ast::Attr, ast::Meta) {
         self.find_attr_range_with_source_opt(db, krate, owner).unwrap_or_else(|| {
+            // Said as an event first: the panic's message has neither what was asked nor the queries that asked.
+            let owner_text = owner.syntax().to_string();
+            tracing::error!(
+                target: "cordial::attrs",
+                attr_id = self.id,
+                owner = %owner_text.chars().take(200).collect::<String>(),
+                queries = %salsa::Backtrace::capture().map(|stack| stack.to_string()).unwrap_or_default(),
+                "an attribute id the item it was made for does not have"
+            );
             panic!("used an incorrect `AttrId`; crate={krate:?}, attr_id={self:?}");
         })
     }

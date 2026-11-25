@@ -229,3 +229,53 @@ fn a_read_of_a_tracked_struct_that_is_gone_says_which_before_it_fails() {
     assert!(said[0].1.starts_with("Deleted"), "{said:?}");
     assert!(said[0].1.contains("describe"), "the query that read it is named: {said:?}");
 }
+
+/// Records the `cordial::panic` events: the queries that were running, and the message.
+#[derive(Clone, Default)]
+struct Panics(std::sync::Arc<std::sync::Mutex<Vec<(String, String)>>>);
+
+impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for Panics {
+    fn on_event(&self, event: &tracing::Event<'_>, _: tracing_subscriber::layer::Context<'_, S>) {
+        struct Fields(String, String);
+        impl tracing::field::Visit for Fields {
+            fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
+                match field.name() {
+                    "queries" => self.0 = format!("{value:?}"),
+                    "message" => self.1 = format!("{value:?}"),
+                    _ => {}
+                }
+            }
+        }
+        if event.metadata().target() == "cordial::panic" {
+            let mut fields = Fields(String::new(), String::new());
+            event.record(&mut fields);
+            self.0.lock().unwrap().push((fields.0, fields.1));
+        }
+    }
+}
+
+#[test]
+fn a_panic_in_a_query_says_which_queries_were_running() {
+    use tracing_subscriber::layer::SubscriberExt;
+    cordial::install_panic_event();
+    let mut db = Db::default();
+    let switch = Switch::new(&db, true);
+    let item = {
+        let all = modules(&db, switch);
+        Item::new(&db, all[1], 9).as_id()
+    };
+    switch.set_on(&mut db).to(false);
+    assert_eq!(modules(&db, switch).len(), 1);
+
+    let panics = Panics::default();
+    let subscriber = tracing_subscriber::registry().with(panics.clone());
+    let failed = tracing::subscriber::with_default(subscriber, || {
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| describe(&db, Item::from_id(item)).clone()))
+            .is_err()
+    });
+    assert!(failed);
+    let said = panics.0.lock().unwrap().clone();
+    assert_eq!(said.len(), 1, "{said:?}");
+    assert!(said[0].0.contains("describe"), "the query that was running is named: {said:?}");
+    assert!(!said[0].1.is_empty(), "the message is there: {said:?}");
+}

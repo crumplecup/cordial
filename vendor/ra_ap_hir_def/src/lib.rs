@@ -535,12 +535,12 @@ mod tracked_struct_token {
     }
 }
 
-/// A block expression that has a map of its own. An id that is never deleted: items hold it for good (the id of an
-/// item in a block holds the block), and a tracked struct is deleted when the query that made it stops making it,
-/// which left what held it reading a struct that was gone (or, once its slot was reused, another's).
-#[salsa::interned(constructor = new_, revisions = usize::MAX, persist)]
+/// A block expression that has a map of its own. Tracked, and deleted with the body that made it: that is what says
+/// a block of a function that is gone is gone, and a block's map is made from the file the block is in, which can be
+/// an expansion that is not any more.
+#[salsa::tracked(constructor = new_, persist)]
 #[derive(PartialOrd, Ord)]
-pub struct BlockIdLt {
+pub struct BlockIdLt<'db> {
     #[returns(copy)]
     pub ast_id: AstId<ast::BlockExpr>,
     /// The containing module.

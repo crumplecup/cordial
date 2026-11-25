@@ -22,6 +22,36 @@ pub fn span_events(setting: Option<&str>) -> tracing_subscriber::fmt::format::Fm
     }
 }
 
+/// Say, in the log, what every panic was doing: its message, where it was, the thread, and the queries that were
+/// running (with their keys) when it struck. A panic of a query has the stack of the thread that ran it, which is
+/// gone once the panic unwinds, and a panic does not strike in the same place twice. Installed once, ahead of the
+/// hook that was there, which still runs.
+#[tracing::instrument(level = "debug")]
+pub fn install_panic_event() {
+    static INSTALLED: std::sync::Once = std::sync::Once::new();
+    INSTALLED.call_once(|| {
+        let previous = std::panic::take_hook();
+        std::panic::set_hook(Box::new(move |info| {
+            let message = info
+                .payload()
+                .downcast_ref::<String>()
+                .map(String::as_str)
+                .or_else(|| info.payload().downcast_ref::<&str>().copied())
+                .unwrap_or("(a panic with no message)");
+            let location = info.location().map_or_else(String::new, ToString::to_string);
+            tracing::error!(
+                target: "cordial::panic",
+                thread = std::thread::current().name().unwrap_or("(unnamed)"),
+                %location,
+                queries = %salsa::Backtrace::capture().map(|stack| stack.to_string()).unwrap_or_default(),
+                message = %message.chars().take(400).collect::<String>(),
+                "a panic"
+            );
+            previous(info);
+        }));
+    });
+}
+
 /// Cordial's own events at `info`; dependencies only at `warn`.
 const TEST_DEFAULT_FILTER: &str = "warn,cordial=info";
 
@@ -38,6 +68,7 @@ const TEST_DEFAULT_FILTER: &str = "warn,cordial=info";
 #[tracing::instrument(level = "debug")]
 #[hotpath::measure]
 pub fn init_tracing() {
+    install_panic_event();
     profile::start();
     init_tracing_with_default(TEST_DEFAULT_FILTER);
 }
@@ -49,6 +80,7 @@ pub fn init_tracing() {
 #[tracing::instrument(level = "debug")]
 #[hotpath::measure]
 pub fn init_cli_tracing() {
+    install_panic_event();
     use tracing_subscriber::Layer as _;
     use tracing_subscriber::layer::SubscriberExt as _;
     use tracing_subscriber::util::SubscriberInitExt as _;

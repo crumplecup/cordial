@@ -1014,3 +1014,61 @@ fn a_module_the_map_does_not_have_says_which_query_asked_for_it() {
     assert_eq!(said.len(), 1, "{said:?}");
     assert!(said[0].contains("asks_the_map_for_a_module"), "the query that asked is named: {said:?}");
 }
+
+/// A function whose attribute macro exists only under the atom, and which has a block with an item: the block is in
+/// the file the macro call expands to.
+const ATTRIBUTE_ONLY_WHEN_ON: [(&str, &str); 1] = [(
+    "lib.rs",
+    "#[rustc_builtin_macro]\npub macro global_allocator($item:item) {}\n#[cfg_attr(feature = \"a\", global_allocator)]\npub fn f() { { struct B; } }\n",
+)];
+
+#[test]
+fn the_map_of_a_block_in_an_expansion_that_is_not_any_more_is_not_made() {
+    use ra_ap_hir_def::declaration::{Absence, Declaration, block_declaration, settle_block_map};
+    use salsa::plumbing::AsId;
+    let _serial = SERIAL.lock().unwrap();
+    let (mut db, krate) = crate_of(&ATTRIBUTE_ONLY_WHEN_ON, atoms(&["a"]));
+    let f = function_ids(&db, krate)["f"];
+    let block = {
+        let (body, _) = Body::with_source_map(&db, DefWithBodyId::FunctionId(f));
+        let blocks: Vec<_> = body.blocks(&db).map(|(block, _)| block).collect();
+        assert_eq!(blocks.len(), 1, "the block that has an item has a map of its own");
+        assert!(blocks[0].ast_id(&db).file_id.is_macro(), "and it is in the file the attribute macro expands to");
+        blocks[0]
+    };
+    assert_eq!(block_declaration(&db, block), Declaration::Declared);
+
+    // The atom is off: the attribute is not there, the function is the one in the file, and the macro call is not
+    // any more. What only the flipped state had is forgotten, as the end of the flips does.
+    krate.set_cfg_options(&mut db).to(CfgOptions::default());
+    let _ = crate_def_map(&db, krate);
+    let forgotten = <dyn salsa::Database>::forget_memos_for_inputs(&mut db, &[f.as_id()]);
+    assert!(forgotten >= 1, "the body of the function of the expansion is forgotten");
+
+    // The block was made by that body, and is gone with it, which is said before its map is asked for: it would
+    // expand a call whose attribute the item does not have, and fail with `used an incorrect AttrId`.
+    assert_eq!(
+        block_declaration(&db, block),
+        Declaration::Absent(Absence::BlockGone(salsa::Existence::Deleted))
+    );
+    settle_block_map(&db, block);
+}
+
+#[test]
+fn the_map_of_a_block_in_an_expansion_that_is_not_any_more_fails_when_what_only_the_flip_had_is_not_forgotten() {
+    use ra_ap_hir_def::declaration::{Declaration, block_declaration, settle_block_map};
+    let _serial = SERIAL.lock().unwrap();
+    let (mut db, krate) = crate_of(&ATTRIBUTE_ONLY_WHEN_ON, atoms(&["a"]));
+    let f = function_ids(&db, krate)["f"];
+    let block = {
+        let (body, _) = Body::with_source_map(&db, DefWithBodyId::FunctionId(f));
+        body.blocks(&db).map(|(block, _)| block).next().expect("the block has a map of its own")
+    };
+    krate.set_cfg_options(&mut db).to(CfgOptions::default());
+    let _ = crate_def_map(&db, krate);
+    // Nothing is forgotten: the block is there, its module is in the map, and so it is said to be declared. Its map is
+    // the failure the amenable run had, which is what forgetting before asking prevents.
+    assert_eq!(block_declaration(&db, block), Declaration::Declared);
+    let failed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| settle_block_map(&db, block))).is_err();
+    assert!(failed, "without the forgetting, the stale block's map is asked for and fails");
+}

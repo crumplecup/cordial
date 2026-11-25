@@ -339,7 +339,7 @@ pub use run_metrics::{
     write as write_run_metrics, write_ended as write_ended_run_metrics,
 };
 pub use tracing_init::{
-    LOG_SPANS_VARIABLE, TestProfileGuard, init_cli_tracing, init_tracing, profile_test,
+    LOG_SPANS_VARIABLE, TestProfileGuard, init_cli_tracing, init_tracing, install_panic_event, profile_test,
     span_events, tracing_fmt_layer,
 };
 // `homecoming_std` re-exports live in one block (see docs/planning/cfg-scatter-etiquette.md)
