@@ -1495,3 +1495,61 @@ fn finding_the_modules_of_a_file_does_not_run_again_when_a_name_is_added_to_a_mo
         "what finds the modules of a file reads where they are, not what they hold"
     );
 }
+
+/// How many traits are in scope in a module of a crate: what method resolution asks of the module a body is in.
+#[salsa::tracked(returns(copy))]
+fn traits_in_scope_of_the_root(db: &dyn ra_ap_ide_db::base_db::SourceDatabase, krate: Crate) -> usize {
+    use ra_ap_hir_def::resolver::HasResolver as _;
+    let root = crate_def_map(db, krate).root_module_id();
+    root.resolver(db).traits_in_scope(db).len()
+}
+
+/// What executes of `traits_in_scope_of_the_root` when the atom `a` adds a function, and no trait, to the module.
+fn traits_in_scope_after_a_function_is_added() -> usize {
+    let executed = Runs::default();
+    let subscriber = tracing_subscriber::registry().with(executed.clone());
+    tracing::subscriber::with_default(subscriber, || {
+        let (mut db, krate) = crate_of(
+            &[("lib.rs", "pub trait Shape {}\npub fn always() {}\n#[cfg(feature = \"a\")]\npub fn only_with_a() {}\n")],
+            CfgOptions::default(),
+        );
+        assert_eq!(traits_in_scope_of_the_root(&db, krate), 1);
+        let before = executed.now();
+        krate.set_cfg_options(&mut db).to(atoms(&["a"]));
+        assert_eq!(traits_in_scope_of_the_root(&db, krate), 1);
+        executed.since(&before).get("traits_in_scope_of_the_root").copied().unwrap_or(0)
+    })
+}
+
+#[test]
+fn the_traits_in_scope_of_a_module_do_not_run_again_when_a_function_is_added_to_it() {
+    let _serial = SERIAL.lock().unwrap();
+    assert_eq!(
+        traits_in_scope_after_a_function_is_added(),
+        0,
+        "what method resolution asks of a module reads its traits, not all it holds"
+    );
+}
+
+/// The same, when the atom adds a trait: the traits changed, and so it must run.
+fn traits_in_scope_after_a_trait_is_added() -> usize {
+    let executed = Runs::default();
+    let subscriber = tracing_subscriber::registry().with(executed.clone());
+    tracing::subscriber::with_default(subscriber, || {
+        let (mut db, krate) = crate_of(
+            &[("lib.rs", "pub trait Shape {}\n#[cfg(feature = \"a\")]\npub trait Area {}\n")],
+            CfgOptions::default(),
+        );
+        assert_eq!(traits_in_scope_of_the_root(&db, krate), 1);
+        let before = executed.now();
+        krate.set_cfg_options(&mut db).to(atoms(&["a"]));
+        assert_eq!(traits_in_scope_of_the_root(&db, krate), 2, "the trait the atom adds is in scope");
+        executed.since(&before).get("traits_in_scope_of_the_root").copied().unwrap_or(0)
+    })
+}
+
+#[test]
+fn the_traits_in_scope_of_a_module_run_again_when_a_trait_is_added_to_it() {
+    let _serial = SERIAL.lock().unwrap();
+    assert_eq!(traits_in_scope_after_a_trait_is_added(), 1);
+}

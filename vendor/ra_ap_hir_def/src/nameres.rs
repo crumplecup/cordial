@@ -353,6 +353,16 @@ impl DefMap {
         &data.scope
     }
 
+    /// The traits in the scope of a module. The reader depends on the module's traits, as a key of its own, and not
+    /// on the scope as a whole: a function added to the module does not make it run again.
+    pub(crate) fn scope_traits<'a>(
+        &'a self,
+        db: &'a dyn SourceDatabase,
+        id: ModuleIdLt<'_>,
+    ) -> impl Iterator<Item = crate::TraitId> + 'a {
+        self.scope_read(db, id, &traits_facet()).traits()
+    }
+
     /// What `name` is in the scope of a module, in every namespace; legacy macros are not included. The reader
     /// depends on that name of that module.
     pub fn scope_get(&self, db: &dyn SourceDatabase, id: ModuleIdLt<'_>, name: &Name) -> PerNs {
@@ -602,6 +612,11 @@ pub struct ScopeKeyLt {
     pub name: Name,
 }
 
+/// The name of the key of a module's traits. It is not a name that can be written, so that no lookup is of it.
+fn traits_facet() -> Name {
+    Name::new_symbol_root(Symbol::intern("#traits"))
+}
+
 /// What a lookup of `name` finds in `scope`, if there is one.
 fn found_in<'a>(scope: Option<&'a ItemScope>, name: &Name) -> Option<(PerNs, Option<&'a [MacroId]>)> {
     scope.map(|scope| scope.found(name))
@@ -630,6 +645,12 @@ fn touch_changed_names(
                 salsa::keyed::touch(db, key.as_id());
                 touched += 1;
             }
+        }
+        let traits = |scope: Option<&ItemScope>| scope.map(|scope| scope.traits().collect::<rustc_hash::FxHashSet<_>>());
+        if traits(old).unwrap_or_default() != traits(new).unwrap_or_default() {
+            let key = ScopeKeyLt::new(db, unsafe { module.to_db(db) }, traits_facet());
+            salsa::keyed::touch(db, key.as_id());
+            touched += 1;
         }
     };
     for (&module, new) in now {

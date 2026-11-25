@@ -710,10 +710,10 @@ impl<'db> Resolver<'db> {
         // Fill in the prelude traits
         if let Some((prelude, _use)) = self.module_scope.def_map.prelude(db) {
             let prelude_def_map = prelude.def_map(db);
-            traits.extend(prelude_def_map.module_data(db, prelude).scope.traits());
+            traits.extend(prelude_def_map.scope_traits(db, prelude));
         }
         // Fill in module visible traits
-        traits.extend(self.module_scope.def_map.module_data(db, self.module_scope.module_id).scope.traits());
+        traits.extend(self.module_scope.def_map.scope_traits(db, self.module_scope.module_id));
         traits
     }
 
