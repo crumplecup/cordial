@@ -959,3 +959,58 @@ fn the_map_of_a_block_in_a_module_the_map_no_longer_has_is_not_made() {
     // it would look its module up in a map that does not have it.
     settle_block_map(&db, block);
 }
+
+/// Asks the crate's map for a module's data, as a query does.
+#[salsa::tracked(returns(copy))]
+fn asks_the_map_for_a_module(
+    db: &dyn ra_ap_ide_db::base_db::SourceDatabase,
+    krate: Crate,
+    module: ra_ap_hir_def::ModuleId,
+) -> usize {
+    crate_def_map(db, krate).module_data(db, module).children.len()
+}
+
+/// Records what the `cordial::nameres` events say the queries were.
+#[derive(Clone, Default)]
+struct LookupFailures(Arc<Mutex<Vec<String>>>);
+
+impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for LookupFailures {
+    fn on_event(&self, event: &tracing::Event<'_>, _: tracing_subscriber::layer::Context<'_, S>) {
+        struct Queries(String);
+        impl tracing::field::Visit for Queries {
+            fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
+                if field.name() == "queries" {
+                    self.0 = format!("{value:?}");
+                }
+            }
+        }
+        if event.metadata().target() == "cordial::nameres" {
+            let mut queries = Queries(String::new());
+            event.record(&mut queries);
+            self.0.lock().unwrap().push(queries.0);
+        }
+    }
+}
+
+#[test]
+fn a_module_the_map_does_not_have_says_which_query_asked_for_it() {
+    let _serial = SERIAL.lock().unwrap();
+    let (mut db, krate) = crate_of(&GATED, atoms(&["a"]));
+    let module = match function_ids(&db, krate)["inside"].loc(&db).container {
+        ra_ap_hir_def::ItemContainerId::ModuleId(module) => module,
+        other => panic!("`inside` is declared in a module: {other:?}"),
+    };
+    krate.set_cfg_options(&mut db).to(CfgOptions::default());
+    let _ = crate_def_map(&db, krate);
+
+    let failures = LookupFailures::default();
+    let subscriber = tracing_subscriber::registry().with(failures.clone());
+    let failed = tracing::subscriber::with_default(subscriber, || {
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| asks_the_map_for_a_module(&db, krate, module)))
+            .is_err()
+    });
+    assert!(failed, "asking the map for a module it does not have is a failure");
+    let said = failures.0.lock().unwrap().clone();
+    assert_eq!(said.len(), 1, "{said:?}");
+    assert!(said[0].contains("asks_the_map_for_a_module"), "the query that asked is named: {said:?}");
+}

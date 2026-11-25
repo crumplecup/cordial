@@ -310,6 +310,7 @@ impl DefMap {
                 module_crate = %module_crate,
                 def_map_root = ?self.root,
                 module = ?id,
+                queries = %salsa::Backtrace::capture().map(|stack| stack.to_string()).unwrap_or_default(),
                 "a module is not in the def map it was looked up in"
             );
             panic!("ModuleId not found in ModulesMap {:#?}: {id:#?}", self.root)
