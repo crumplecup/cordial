@@ -1456,3 +1456,42 @@ fn making_the_map_of_one_crate_for_the_first_time_runs_nothing_of_another_crate_
         .collect();
     assert!(of_dep.is_empty(), "what `dep` has is not run again for a crate it does not use: {ran:?}");
 }
+
+/// How many modules a crate has for a file, as what finds a file's modules asks: a query of the file and the map.
+#[salsa::tracked(returns(copy))]
+fn modules_of_a_file(
+    db: &dyn ra_ap_ide_db::base_db::SourceDatabase,
+    krate: Crate,
+    file: FileId,
+) -> usize {
+    crate_def_map(db, krate).modules_for_file(db, file).count()
+}
+
+/// What executes of `modules_of_a_file` when the atom `a` adds a function to a module the crate had: the modules of the
+/// file are the ones they were, and what says where they are did not change.
+fn finding_the_modules_of_a_file_after_a_name_is_added() -> usize {
+    let executed = Runs::default();
+    let subscriber = tracing_subscriber::registry().with(executed.clone());
+    tracing::subscriber::with_default(subscriber, || {
+        let (mut db, krate) = crate_of(
+            &[("lib.rs", "pub fn always() {}\n#[cfg(feature = \"a\")]\npub fn only_with_a() {}\n")],
+            CfgOptions::default(),
+        );
+        let file = krate.root_file_id(&db).file_id(&db);
+        let _ = modules_of_a_file(&db, krate, file);
+        let before = executed.now();
+        krate.set_cfg_options(&mut db).to(atoms(&["a"]));
+        let _ = modules_of_a_file(&db, krate, file);
+        executed.since(&before).get("modules_of_a_file").copied().unwrap_or(0)
+    })
+}
+
+#[test]
+fn finding_the_modules_of_a_file_does_not_run_again_when_a_name_is_added_to_a_module() {
+    let _serial = SERIAL.lock().unwrap();
+    assert_eq!(
+        finding_the_modules_of_a_file_after_a_name_is_added(),
+        0,
+        "what finds the modules of a file reads where they are, not what they hold"
+    );
+}

@@ -308,6 +308,7 @@ fn f() { foo }
                 "EditionedFileId::parse_",
                 "real_span_map",
                 "crate_module_cell",
+                "crate_module_cells",
                 "MacroId::definition_",
                 "file_item_tree_query",
                 "HirFileId::ast_id_map_",
@@ -449,6 +450,7 @@ pub struct S {}
                 "expand_pure_macro_of",
                 "MacroCallId::macro_arg_",
                 "crate_module_cell",
+                "crate_module_cells",
                 "MacroId::definition_",
                 "file_item_tree_query",
                 "HirFileId::ast_id_map_",
@@ -568,6 +570,7 @@ m!(Z);
                 "MacroCallId::parse_macro_expansion_",
                 "expand_pure_macro_of",
                 "MacroCallId::macro_arg_",
+                "crate_module_cells",
                 "crate_module_cell",
             ]
         "#]],

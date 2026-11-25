@@ -451,7 +451,7 @@ impl DefMap {
         for (id, data) in modules.inner {
             let data = Arc::new(data);
             held.insert(id, Arc::clone(&data));
-            let cell = ModuleCellLt::new(db, id, data);
+            let cell = ModuleCellLt::new(db, id, data.origin, data);
             cells.insert(id, unsafe { cell.to_static() });
         }
         // Only a crate's map is frozen in this sense: a block's keeps its cells.
@@ -568,6 +568,11 @@ pub struct ModuleData {
 pub struct ModuleCellLt<'db> {
     #[returns(copy)]
     pub module: ModuleIdLt<'db>,
+    /// Where the module comes from: what finds the modules of a file reads this and not the module's data, so a name
+    /// added to a module does not make it run again.
+    #[tracked]
+    #[returns(copy)]
+    pub origin: ModuleOrigin,
     /// Shared with what remembers the map (see `previous`), so that remembering it does not copy it.
     #[tracked]
     #[returns(ref)]
@@ -877,6 +882,19 @@ fn external_def_map(db: &dyn SourceDatabase, crate_id: Crate) -> Arc<DefMap> {
 }
 
 
+/// The cells of the modules of a crate's finished map, and what a map says that no resolution of a name reads: made from
+/// the owner and persisted, as the owner is, so that a restored run is told them and does not ask for them, and so
+/// that what reads them runs again when they change and not when the owner is made again with the same ones.
+#[salsa::tracked(returns(ref), persist)]
+fn crate_module_cells(db: &dyn SourceDatabase, crate_id: Crate) -> Arc<FxIndexMap<ModuleId, ModuleCell>> {
+    Arc::clone(&crate_local_def_map(db, crate_id).cells)
+}
+
+#[salsa::tracked(returns(ref), persist)]
+fn crate_extras(db: &dyn SourceDatabase, crate_id: Crate) -> Arc<DefMapExtras> {
+    Arc::clone(&crate_local_def_map(db, crate_id).extras)
+}
+
 /// The cell of one module of a crate's finished map. It is the cell it was when modules are added or dropped, so
 /// what reads it does not run again for them, and it is not there when the module is not in the map.
 ///
@@ -884,7 +902,7 @@ fn external_def_map(db: &dyn SourceDatabase, crate_id: Crate) -> Arc<DefMap> {
 /// restored run is told the cell and does not ask for it.
 #[salsa::tracked(returns(copy), persist)]
 fn crate_module_cell<'db>(db: &'db dyn SourceDatabase, module: ModuleIdLt<'db>) -> Option<ModuleCell> {
-    crate_local_def_map(db, module.krate(db)).cells.get(&unsafe { module.to_static() }).copied()
+    crate_module_cells(db, module.krate(db)).get(&unsafe { module.to_static() }).copied()
 }
 
 #[salsa::tracked(returns(ref))]
@@ -1055,16 +1073,25 @@ impl DefMap {
 }
 
 impl DefMap {
-    /// Returns all modules in the crate that are associated with the given file.
+    /// Returns all modules in the crate that are associated with the given file. Reads where each module comes from
+    /// and nothing else of it.
     pub fn modules_for_file<'a>(
         &'a self,
         db: &'a dyn SourceDatabase,
         file_id: FileId,
     ) -> impl Iterator<Item = ModuleId> + 'a {
-        self.modules(db)
-            .filter(move |(_, data)| {
-                data.origin.file_id().map(|file_id| file_id.file_id(db)) == Some(file_id)
-            })
+        let building = self.modules.iter().map(|(id, data)| (id, data.origin));
+        let block_cells = self.cells.iter().map(move |(&id, cell)| (id, cell.origin(db)));
+        let crate_cells = self
+            .frozen
+            .then(|| crate_module_cells(db, self.krate))
+            .into_iter()
+            .flat_map(|cells| cells.iter())
+            .map(move |(&id, cell)| (id, cell.origin(db)));
+        building
+            .chain(block_cells)
+            .chain(crate_cells)
+            .filter(move |(_, origin)| origin.file_id().map(|file_id| file_id.file_id(db)) == Some(file_id))
             .map(|(id, _)| id)
     }
 
@@ -1075,7 +1102,7 @@ impl DefMap {
         let cells = self.cells.iter().map(move |(&id, cell)| (id, &**cell.data(db)));
         let crate_cells = self
             .frozen
-            .then(|| &crate_local_def_map(db, self.krate).cells)
+            .then(|| crate_module_cells(db, self.krate))
             .into_iter()
             .flat_map(|cells| cells.iter())
             .map(move |(&id, cell)| (id, &**cell.data(db)));
@@ -1170,7 +1197,7 @@ impl DefMap {
         db: &'a dyn SourceDatabase,
     ) -> &'a FxHashMap<AstId<ast::Item>, Vec<(Name, MacroId, Either<MacroCallId, BuiltinDeriveImplId>)>> {
         if self.frozen && self.block.is_none() {
-            &crate_local_def_map(db, self.krate).extras.derive_helpers_in_scope
+            &crate_extras(db, self.krate).derive_helpers_in_scope
         } else {
             &self.derive_helpers_in_scope
         }
@@ -1179,7 +1206,7 @@ impl DefMap {
     /// The macro each macro definition made: a finished crate's map says it beside itself.
     pub(crate) fn macro_definitions<'a>(&'a self, db: &'a dyn SourceDatabase) -> &'a FxHashMap<ErasedAstId, MacroId> {
         if self.frozen && self.block.is_none() {
-            &crate_local_def_map(db, self.krate).extras.macro_def_to_macro_id
+            &crate_extras(db, self.krate).macro_def_to_macro_id
         } else {
             &self.macro_def_to_macro_id
         }
