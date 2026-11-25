@@ -1012,9 +1012,12 @@ fn a_function_the_context_does_not_change_is_not_kept_and_one_whose_call_resolve
     Ok(())
 }
 
+/// The totals a harvest reported (functions, files taken as they are), and the functions each file has.
+type FunctionsByFile = ((u64, u64), Vec<(String, u64)>);
+
 /// What a context that disables `unix` says it has of a crate whose `platform` module is `#[cfg(unix)]`: the functions
 /// it has, and the files it took as they are.
-fn functions_without_unix(mode: CfgContextMode) -> Result<(u64, u64)> {
+fn functions_without_unix(mode: CfgContextMode) -> Result<FunctionsByFile> {
     let root = fixture_with("#[cfg(unix)]\nmod platform;\npub fn alive() -> u32 { 1 }\n")?;
     std::fs::write(
         root.path().join("src/platform.rs"),
@@ -1039,7 +1042,9 @@ fn functions_without_unix(mode: CfgContextMode) -> Result<(u64, u64)> {
     })?;
     let said = report.0.lock().unwrap().clone();
     assert_eq!(said.len(), 1, "one harvest was reported: {said:?}");
-    Ok((said[0].0, said[0].1))
+    let mut files = report.1.lock().unwrap().clone();
+    files.sort();
+    Ok(((said[0].0, said[0].1), files))
 }
 
 #[test]
@@ -1048,7 +1053,13 @@ fn a_file_only_a_disabled_atom_declares_has_no_active_functions_in_the_context_t
     let _serial = SERIAL.lock().unwrap();
     cordial::init_tracing();
     // The module is not in the crate without `unix`, so its two functions are not active there: only `alive` is.
-    assert_eq!(functions_without_unix(CfgContextMode::Flips)?, (1, 0), "functions, and files taken as they are");
+    let (totals, files) = functions_without_unix(CfgContextMode::Flips)?;
+    assert_eq!(totals, (1, 0), "functions, and files taken as they are");
+    assert_eq!(
+        files,
+        [("lib.rs".to_owned(), 1), ("platform.rs".to_owned(), 0)],
+        "the log says which file has the function"
+    );
     Ok(())
 }
 
@@ -1060,34 +1071,62 @@ fn the_copy_design_counts_the_functions_of_a_file_a_context_disables_as_active()
     // Why the third amenable context had 216 active functions in the copies run and 39 in the flips run: the copy
     // takes a file whose words no gate names as it is, and counts every function in it active, whether the crate has
     // the module or not. Removed with the copy design (Phase 3), with the parity it was the exception to.
-    assert_eq!(functions_without_unix(CfgContextMode::Copies)?, (3, 1), "functions, and files taken as they are");
+    let (totals, files) = functions_without_unix(CfgContextMode::Copies)?;
+    assert_eq!(totals, (3, 1), "functions, and files taken as they are");
+    assert_eq!(
+        files,
+        [("lib.rs".to_owned(), 1), ("platform.rs".to_owned(), 2)],
+        "and the file that the crate does not have is the one with the two"
+    );
     Ok(())
 }
 
+/// The harvest's totals (functions, aliased files, kept) and, per file, the functions it has in the context.
 #[derive(Clone, Default)]
-struct FunctionsReport(Arc<Mutex<Vec<(u64, u64, u64)>>>);
+struct FunctionsReport(Arc<Mutex<Vec<(u64, u64, u64)>>>, Arc<Mutex<Vec<(String, u64)>>>);
 
 impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for FunctionsReport {
     fn on_event(&self, event: &tracing::Event<'_>, _: tracing_subscriber::layer::Context<'_, S>) {
         #[derive(Default)]
-        struct Fields([Option<u64>; 3]);
+        struct Fields {
+            totals: [Option<u64>; 3],
+            file: Option<String>,
+            file_functions: Option<u64>,
+        }
         impl tracing::field::Visit for Fields {
-            fn record_debug(&mut self, _: &tracing::field::Field, _: &dyn std::fmt::Debug) {}
+            fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
+                if field.name() == "file" {
+                    self.file = Some(format!("{value:?}"));
+                }
+            }
             fn record_u64(&mut self, field: &tracing::field::Field, value: u64) {
                 match field.name() {
-                    "functions" => self.0[0] = Some(value),
-                    "aliased_files" => self.0[1] = Some(value),
-                    "kept" => self.0[2] = Some(value),
+                    "functions" => {
+                        self.totals[0] = Some(value);
+                        self.file_functions = Some(value);
+                    }
+                    "aliased_files" => self.totals[1] = Some(value),
+                    "kept" => self.totals[2] = Some(value),
                     _ => {}
                 }
             }
         }
-        if event.metadata().target() == "cordial::semantic::contexts" {
-            let mut fields = Fields::default();
-            event.record(&mut fields);
-            if let [Some(a), Some(b), Some(c)] = fields.0 {
-                self.0.lock().unwrap().push((a, b, c));
+        let mut fields = Fields::default();
+        match event.metadata().target() {
+            "cordial::semantic::contexts" => {
+                event.record(&mut fields);
+                if let [Some(a), Some(b), Some(c)] = fields.totals {
+                    self.0.lock().unwrap().push((a, b, c));
+                }
             }
+            "cordial::semantic::files" => {
+                event.record(&mut fields);
+                if let (Some(file), Some(functions)) = (fields.file, fields.file_functions) {
+                    let name = file.trim_matches('"').rsplit('/').next().unwrap_or_default().to_owned();
+                    self.1.lock().unwrap().push((name, functions));
+                }
+            }
+            _ => {}
         }
     }
 }

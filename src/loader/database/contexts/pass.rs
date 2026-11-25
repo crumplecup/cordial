@@ -469,7 +469,23 @@ impl SourceDatabase {
             // their facts, and the first few named, so that the log says what a kept function changed.
             let mut differing: BTreeMap<crate::FactPart, usize> = BTreeMap::new();
             let mut named = 0usize;
+            // How many functions each file has in this context, said once the file is done, so that two runs of a
+            // crate can be told apart by file when their totals are not the same.
+            let mut file_started: Option<(&std::path::Path, usize)> = None;
+            let say_file = |started: Option<(&std::path::Path, usize)>, functions: usize| {
+                if let Some((path, at)) = started {
+                    tracing::debug!(
+                        target: "cordial::semantic::files",
+                        %context,
+                        file = %path.display(),
+                        functions = functions - at,
+                        "the functions a file has in this context"
+                    );
+                }
+            };
             for path in files.paths {
+                say_file(file_started, functions);
+                file_started = Some((path.as_ref(), functions));
                 let original = self.file_id(path)?;
                 let in_place = files.context.is_in_place();
                 if files.context.is_aliased(original) {
@@ -651,6 +667,7 @@ impl SourceDatabase {
                     )?;
                 }
             }
+            say_file(file_started, functions);
             tracing::info!(
                 target: "cordial::semantic::contexts",
                 %context,
