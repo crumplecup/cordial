@@ -244,3 +244,29 @@ an atom nothing reads runs no macro expansion again, in the crate or in a crate 
 
 **Left, with a number to beat:** `finish_flips` re-validates about nine memos for each function (456 for 50), the
 settle of every body of every crate it reaches, which copies never does.
+
+## Status (2026-11-25, algorithmic waste found with unit tests)
+
+Each of these was shown by a unit test before it was changed.
+
+1. **A pass flips what the target reaches** (`crates_reaching`, `tests/flip_scope.rs`): the ten amenable packages go
+   from 1,100 crate-passes to 143.
+2. **A local crate's cfg is low durability**, so its first flip is not a write the library's memos are verified against
+   (about 113,000 memos for a crate of five functions, again for each crate flipped for the first time).
+3. **What a flip first computes and does not depend on is kept, not forgotten with it**
+   (`what_was_first_computed_during_a_flip_and_does_not_depend_on_it_is_not_forgotten_with_it`, and in
+   `tests/salsa_forget.rs`). `forget_memos_changed_after` forgot a memo whenever its own `changed_at` was after the flip
+   began, which includes every memo first computed in the flip: bodies and expansions the ordinary pass had not yet needed,
+   which the inventories, the leaf pass and the save then computed again. A memo is now forgotten when it also read, through
+   what it recorded, something that changed after the flip began (`depends_on_a_change_after`: an input written, or a memo
+   whose value changed). Re-reading the bodies after the restore ran 7 of them in a crate of 4 modules and 79 in 40; it runs
+   none of the ones that do not read the atom.
+
+**Found, and not a rule to change: the granularity of a module's scope.** A `#[cfg(test)] mod tests` beside the code of a
+module changes that module's scope when `test` flips, and name and macro resolution read a scope as a whole, so every
+expansion and resolution in that module depends on a value that changed, though none mentions `tests`. In a fixture with the
+test module and the functions in one module, the 25 `twice!` expansions of the plain functions are forgotten by a flip that
+reads nothing of them. Finer reads (a dependency on the name looked up, not on the module's whole scope) would make a flip
+cost what it changes; it is a change to how `hir_def` resolves names, and the next thing to try if the repeated work is to go.
+
+**Not yet done:** one flipped session for the contexts pass and the leaf pass (a restore, a forget and a settle each now).

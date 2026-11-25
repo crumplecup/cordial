@@ -269,7 +269,7 @@ mod flatten;
 #[cfg(feature = "persistence")]
 mod stamps;
 pub use flatten::{
-    RunBuilder, Runs, deep_verifications, deep_verifications_by_durability, deep_verifications_by_ingredient, edges_expanded, flatten_breadth, persisted_executions,
+    RunBuilder, Runs, deep_verifications, deep_verifications_by_durability, last_forgotten, deep_verifications_by_ingredient, edges_expanded, flatten_breadth, persisted_executions,
     set_verifications,
 };
 mod function;

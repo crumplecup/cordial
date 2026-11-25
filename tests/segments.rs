@@ -5,6 +5,7 @@ use cordial::{
 };
 use miette::{IntoDiagnostic, Result};
 use std::sync::{Arc, Mutex};
+use tracing_subscriber::Layer as _;
 use tracing_subscriber::layer::SubscriberExt;
 
 static SERIAL: Mutex<()> = Mutex::new(());
@@ -22,6 +23,8 @@ struct Said {
     verified_top: String,
     /// How many memos of low, medium and high durability it re-validated.
     by_durability: [u64; 3],
+    /// The queries it executed most, as `name=count`.
+    executed_top: String,
 }
 
 #[derive(Clone, Default)]
@@ -34,6 +37,7 @@ impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for Segments {
             label: String,
             scope: String,
             verified_top: String,
+            executed_top: String,
             by_durability: [u64; 3],
             /// micros, queries, verified memos, verified edges.
             numbers: [u64; 4],
@@ -44,6 +48,7 @@ impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for Segments {
                     "label" => self.label = format!("{value:?}"),
                     "scope" => self.scope = format!("{value:?}"),
                     "verified_top" => self.verified_top = format!("{value:?}").trim_matches('"').to_owned(),
+                    "top" => self.executed_top = format!("{value:?}").trim_matches('"').to_owned(),
                     _ => {}
                 }
             }
@@ -75,6 +80,7 @@ impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for Segments {
                 verified_edges,
                 verified_top: fields.verified_top,
                 by_durability: fields.by_durability,
+                executed_top: fields.executed_top,
             });
         }
     }
@@ -112,6 +118,24 @@ fn regions_of_a_run(mode: CfgContextMode) -> Result<Vec<Said>> {
 
 /// The regions a run of the context `kani` says of the crate whose root is `library`, in `mode`.
 fn regions_of_a_crate(mode: CfgContextMode, library: &str) -> Result<Vec<Said>> {
+    regions_of(mode, SemanticContextKey::enabling(["kani"]), &[("src/lib.rs", library)])
+}
+
+/// The regions a run of `context` says of the crate with these files (the first is its root), in `mode`, with the
+/// queries it executed counted.
+fn regions_of(mode: CfgContextMode, context: SemanticContextKey, files: &[(&str, &str)]) -> Result<Vec<Said>> {
+    Ok(regions_and_forgets(mode, context, files)?.0)
+}
+
+/// What a forget dropped: how many memos, and the queries most.
+type Forgotten = (u64, String);
+
+/// [`regions_of`], and what each forget of the run dropped.
+fn regions_and_forgets(
+    mode: CfgContextMode,
+    context: SemanticContextKey,
+    files: &[(&str, &str)],
+) -> Result<(Vec<Said>, Vec<Forgotten>)> {
     let root = tempfile::tempdir().into_diagnostic()?;
     std::fs::create_dir_all(root.path().join("src")).into_diagnostic()?;
     std::fs::write(
@@ -119,13 +143,22 @@ fn regions_of_a_crate(mode: CfgContextMode, library: &str) -> Result<Vec<Said>> 
         "[package]\nname='gated'\nversion='0.1.0'\nedition='2024'\n[workspace]\n",
     )
     .into_diagnostic()?;
-    std::fs::write(root.path().join("src/lib.rs"), library).into_diagnostic()?;
+    for (path, text) in files {
+        let path = root.path().join(path);
+        std::fs::create_dir_all(path.parent().expect("a file has a directory")).into_diagnostic()?;
+        std::fs::write(path, text).into_diagnostic()?;
+    }
     let options = SemanticCargoOptions::default()
-        .with_cfg_contexts(vec![SemanticContextKey::enabling(["kani"])])
+        .with_cfg_contexts(vec![context])
         .with_cfg_planning(CfgPlanning::Explicit)
         .with_cfg_context_mode(mode);
     let segments = Segments::default();
-    let subscriber = tracing_subscriber::registry().with(segments.clone());
+    let forgets = Forgets::default();
+    // The live layer counts the queries Salsa executes, which a region says it ran.
+    let subscriber = tracing_subscriber::registry()
+        .with(segments.clone())
+        .with(forgets.clone())
+        .with(cordial::LiveLayer.with_filter(cordial::live_filter()));
     tracing::subscriber::with_default(subscriber, || -> Result<()> {
         let mut session = SourceDatabase::load_saved(root.path(), &options, None).into_diagnostic()?;
         session
@@ -134,7 +167,8 @@ fn regions_of_a_crate(mode: CfgContextMode, library: &str) -> Result<Vec<Said>> 
         Ok(())
     })?;
     let said = segments.0.lock().unwrap().clone();
-    Ok(said)
+    let forgotten = forgets.0.lock().unwrap().clone();
+    Ok((said, forgotten))
 }
 
 #[test]
@@ -215,4 +249,37 @@ fn a_flip_that_changes_nothing_verifies_memos_in_proportion_to_the_crate_and_not
         "each of the 45 functions more costs a few memos, and not a share of the library: {small} for 5, {large} for 50"
     );
     Ok(())
+}
+
+/// What each forget of a flipped pass dropped: how many, and the queries most.
+#[derive(Clone, Default)]
+struct Forgets(Arc<Mutex<Vec<Forgotten>>>);
+
+impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for Forgets {
+    fn on_event(&self, event: &tracing::Event<'_>, _: tracing_subscriber::layer::Context<'_, S>) {
+        #[derive(Default)]
+        struct Fields {
+            forgotten: Option<u64>,
+            top: Option<String>,
+        }
+        impl tracing::field::Visit for Fields {
+            fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
+                if field.name() == "top" {
+                    self.top = Some(format!("{value:?}").trim_matches('"').to_owned());
+                }
+            }
+            fn record_u64(&mut self, field: &tracing::field::Field, value: u64) {
+                if field.name() == "forgotten" {
+                    self.forgotten = Some(value);
+                }
+            }
+        }
+        if event.metadata().target() == "cordial::eviction" {
+            let mut fields = Fields::default();
+            event.record(&mut fields);
+            if let (Some(forgotten), Some(top)) = (fields.forgotten, fields.top) {
+                self.0.lock().unwrap().push((forgotten, top));
+            }
+        }
+    }
 }

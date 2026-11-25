@@ -149,6 +149,8 @@ fn what_changed_while_a_switch_was_on_is_forgotten_and_what_did_not_is_kept() {
         let all = modules(&db, switch);
         let (kept, gone) = (Item::from_id(kept), Item::new(&db, all[1], 2));
         assert_eq!(describe(&db, gone), "b:2");
+        // First computed while the switch was on, and it does not read the switch: what the earlier state would give.
+        assert_eq!(*stable(&db, gone), 20);
         // Verified again with the switch on, and the same: it did not change.
         assert_eq!(describe(&db, kept), "a:1");
         gone.as_id()
@@ -162,6 +164,10 @@ fn what_changed_while_a_switch_was_on_is_forgotten_and_what_did_not_is_kept() {
     assert!(forgotten >= 1, "what was made while the switch was on is forgotten");
     assert!(!held(&mut db, "describe").contains(&gone));
     assert!(held(&mut db, "describe").contains(&kept), "a value that did not change is kept");
+    assert!(
+        held(&mut db, "stable").contains(&gone),
+        "what was first made while the switch was on and read nothing of it is not the switch's, and is kept"
+    );
     assert!(held(&mut db, "stable").contains(&kept));
     // What made tracked structs is not forgotten: the structs are what other things hold ids of, and are the
     // same ones when the query runs again, which they would not be without its memo.

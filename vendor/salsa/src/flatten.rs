@@ -88,6 +88,26 @@ pub fn deep_verifications_by_durability() -> [u64; 4] {
     std::array::from_fn(|at| DEEP_BY_DURABILITY[at].load(std::sync::atomic::Ordering::Relaxed))
 }
 
+static LAST_FORGOTTEN: std::sync::Mutex<Vec<(&'static str, u64)>> = std::sync::Mutex::new(Vec::new());
+
+/// Remember what the forget that has just ended dropped, by the name of the query, most first.
+pub(crate) fn note_forgotten(names: &[&'static str]) {
+    let mut counted: std::collections::HashMap<&'static str, u64> = std::collections::HashMap::new();
+    for name in names {
+        *counted.entry(*name).or_default() += 1;
+    }
+    let mut sorted: Vec<(&'static str, u64)> = counted.into_iter().collect();
+    sorted.sort_by_key(|(name, count)| (std::cmp::Reverse(*count), *name));
+    if let Ok(mut last) = LAST_FORGOTTEN.lock() {
+        *last = sorted;
+    }
+}
+
+/// What the forget that ended last dropped, by the name of the query, most first.
+pub fn last_forgotten() -> Vec<(&'static str, u64)> {
+    LAST_FORGOTTEN.lock().map(|last| last.clone()).unwrap_or_default()
+}
+
 static NAMES: std::sync::Mutex<Vec<&'static str>> = std::sync::Mutex::new(Vec::new());
 
 /// Remember the name of the ingredient at `index`, so that a count by index can be said by name.

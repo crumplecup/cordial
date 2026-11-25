@@ -705,6 +705,7 @@ impl Zalsa {
     #[doc(hidden)]
     pub fn forget_memos_changed_after(&mut self, revision: Revision) -> u64 {
         let mut planned = Vec::new();
+        let mut tainted = FxHashMap::default();
         for ingredient in self.ingredients() {
             let Some(function) = ingredient.as_function() else {
                 continue;
@@ -721,7 +722,18 @@ impl Zalsa {
                 // they are the same ones when the query runs again only because the memo is there.
                 let closure = memo.header().closure();
                 let makes_structs = memo.header().tracked_output_ids().next().is_some();
-                if closure.trusted && closure.changed > revision && !makes_structs {
+                // A memo that was made for the first time after `revision` has a value that no earlier state saw;
+                // it is the flipped state's only if what it read changed. One that read nothing that changed holds
+                // the value the earlier state would give, and is kept.
+                if closure.trusted
+                    && closure.changed > revision
+                    && !makes_structs
+                    && self.depends_on_a_change_after(
+                        DatabaseKeyIndex::new(ingredient.ingredient_index(), key),
+                        revision,
+                        &mut tainted,
+                    )
+                {
                     planned.push((
                         DatabaseKeyIndex::new(ingredient.ingredient_index(), key),
                         function.memo_index_for(self, key),
@@ -732,6 +744,116 @@ impl Zalsa {
         self.forget_planned(planned)
     }
 
+    /// Whether the memo at `root` read, directly or through the memos it read, something that changed after
+    /// `revision`: an input written after it, or a memo whose value is not what it was. A memo whose value has not
+    /// changed since is not walked into, whatever it read (it was verified and found the same), and one that is not
+    /// there to be looked at, or has an untracked read, is taken to have read a change.
+    ///
+    /// The walk uses the memos' own records and executes nothing. `known` holds the answers for the memos already
+    /// walked, which the dependencies of many memos share.
+    fn depends_on_a_change_after(
+        &self,
+        root: DatabaseKeyIndex,
+        revision: Revision,
+        known: &mut FxHashMap<DatabaseKeyIndex, bool>,
+    ) -> bool {
+        use crate::zalsa_local::{QueryEdgeKind, QueryOriginRef};
+        enum Look {
+            Answer(bool),
+            Reads(Vec<DatabaseKeyIndex>),
+        }
+        struct Frame {
+            key: DatabaseKeyIndex,
+            reads: Vec<DatabaseKeyIndex>,
+            next: usize,
+            found: bool,
+        }
+        let look = |key: DatabaseKeyIndex| -> Look {
+            let ingredient = self.lookup_ingredient(key.ingredient_index());
+            // An input's or a tracked struct's field changed when its record says it did; what else is not a query
+            // (an interned value) is never written.
+            let Some(function) = ingredient.as_function() else {
+                return Look::Answer(
+                    ingredient
+                        .field_changed_at(self, key.key_index())
+                        .is_some_and(|changed| changed > revision),
+                );
+            };
+            // SAFETY: the caller has exclusive access to the storage: no query runs and nothing borrows a memo.
+            let Some(memo) = (unsafe { function.memo_unchecked(self, key.key_index()) }) else {
+                return Look::Answer(true);
+            };
+            if memo.header().closure().changed <= revision {
+                return Look::Answer(false);
+            }
+            match memo.header().origin() {
+                QueryOriginRef::Derived(edges) => {
+                    let mut reads = Vec::new();
+                    for edge in edges.iter() {
+                        if edge.is_set() {
+                            for member in crate::flatten::shared_set(edge.set_number()).edges() {
+                                if member.kind() == QueryEdgeKind::Input && !member.is_watermark() {
+                                    reads.push(member.key());
+                                }
+                            }
+                        } else if edge.kind() == QueryEdgeKind::Input && !edge.is_watermark() {
+                            reads.push(edge.key());
+                        }
+                    }
+                    Look::Reads(reads)
+                }
+                // An input field written after `revision`, a value assigned by another query, or an untracked read.
+                _ => Look::Answer(true),
+            }
+        };
+        // Look at `key`: its answer if it is known at once, and otherwise a frame for it, which makes the answer
+        // one that is open (a cycle that comes back to it reads nothing that changed).
+        let enter = |key: DatabaseKeyIndex,
+                     stack: &mut Vec<Frame>,
+                     known: &mut FxHashMap<DatabaseKeyIndex, bool>|
+         -> Option<bool> {
+            if let Some(found) = known.get(&key) {
+                return Some(*found);
+            }
+            match look(key) {
+                Look::Answer(found) => {
+                    known.insert(key, found);
+                    Some(found)
+                }
+                Look::Reads(reads) => {
+                    known.insert(key, false);
+                    stack.push(Frame { key, reads, next: 0, found: false });
+                    None
+                }
+            }
+        };
+        let mut stack: Vec<Frame> = Vec::new();
+        if let Some(found) = enter(root, &mut stack, known) {
+            return found;
+        }
+        loop {
+            let Some(frame) = stack.last_mut() else {
+                return false;
+            };
+            if frame.found || frame.next >= frame.reads.len() {
+                let done = stack.pop().expect("a frame is open");
+                known.insert(done.key, done.found);
+                match stack.last_mut() {
+                    None => return done.found,
+                    Some(parent) => parent.found |= done.found,
+                }
+                continue;
+            }
+            let read = frame.reads[frame.next];
+            frame.next += 1;
+            if let Some(found) = enter(read, &mut stack, known) {
+                if let Some(parent) = stack.last_mut() {
+                    parent.found |= found;
+                }
+            }
+        }
+    }
+
     fn forget_planned(&mut self, planned: Vec<(DatabaseKeyIndex, MemoIngredientIndex)>) -> u64 {
         if planned.is_empty() {
             return 0;
@@ -739,6 +861,11 @@ impl Zalsa {
         // Forgetting is a change of what the database holds, like a write: the tracked structs a memo made are
         // deleted with it, and one that was read in this revision cannot be deleted in it.
         self.new_revision();
+        let names: Vec<&'static str> = planned
+            .iter()
+            .map(|(executor, _)| self.lookup_ingredient(executor.ingredient_index()).debug_name())
+            .collect();
+        crate::flatten::note_forgotten(&names);
         let mut taken = Vec::new();
         for (executor, memo_index) in planned {
             // SAFETY: `&mut self` is exclusive access to the storage: no query runs and nothing

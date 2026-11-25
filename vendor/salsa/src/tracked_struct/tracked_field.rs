@@ -60,6 +60,12 @@ where
         self.ingredient_index
     }
 
+    fn field_changed_at(&self, zalsa: &crate::zalsa::Zalsa, id: Id) -> Option<crate::Revision> {
+        let data = <super::IngredientImpl<C>>::data_raw(zalsa.table(), id);
+        // SAFETY: the slot is initialized, and the revision is atomic.
+        Some(unsafe { (&(*data).revisions)[self.field_index].load() })
+    }
+
     unsafe fn maybe_changed_after(
         &self,
         zalsa: &crate::zalsa::Zalsa,

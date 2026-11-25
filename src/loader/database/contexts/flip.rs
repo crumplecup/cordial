@@ -316,6 +316,16 @@ impl SourceDatabase {
         salsa::plumbing::current_revision(&self.db)
     }
 
+    /// What the forget that has just ended dropped, by query, most first.
+    fn forgotten_top() -> String {
+        salsa::last_forgotten()
+            .into_iter()
+            .take(6)
+            .map(|(name, count)| format!("{name}={count}"))
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+
     /// Forget what a flipped context changed: the value of a query that is not what it was before the flip is
     /// the flipped state's, and is not verified or saved. A value that did not change is valid with the ordinary
     /// cfg back and stays. What made tracked structs stays too, as it runs again as any query does.
@@ -327,6 +337,7 @@ impl SourceDatabase {
         tracing::info!(
             target: "cordial::eviction",
             forgotten,
+            top = %Self::forgotten_top(),
             micros = u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX),
             "what a flipped context changed is forgotten"
         );
@@ -393,6 +404,7 @@ impl SourceDatabase {
             target: "cordial::eviction",
             items = items.len() as u64,
             forgotten,
+            top = %Self::forgotten_top(),
             "memos of items only a flipped context has are forgotten"
         );
     }

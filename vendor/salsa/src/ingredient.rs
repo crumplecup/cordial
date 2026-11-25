@@ -191,6 +191,12 @@ pub trait Ingredient: Any + fmt::Debug + Send + Sync {
         false
     }
 
+    /// The revision the field `id` of this ingredient last changed in, for an input's or a tracked struct's field,
+    /// and `None` for what is not one. Read from the field's record: nothing runs and nothing is read as a query.
+    fn field_changed_at(&self, _zalsa: &Zalsa, _id: Id) -> Option<Revision> {
+        None
+    }
+
     /// How many slots of this ingredient exist (a tracked struct's deleted ones included), or `None` for what is
     /// not a struct. Counted from the table, so nothing is read or marked as read.
     fn slot_count(&self, _zalsa: &Zalsa) -> Option<u64> {

@@ -55,6 +55,10 @@ where
         self.index
     }
 
+    fn field_changed_at(&self, zalsa: &Zalsa, id: Id) -> Option<Revision> {
+        Some(<IngredientImpl<C>>::data(zalsa, id).revisions[self.field_index])
+    }
+
     unsafe fn maybe_changed_after(
         &self,
         zalsa: &Zalsa,

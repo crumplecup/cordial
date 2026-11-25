@@ -1230,3 +1230,50 @@ fn flipping_an_atom_nothing_reads_in_the_crate_that_defines_a_macro_runs_none_of
         .sum();
     assert_eq!(expansions, 0, "no expansion of a call is executed again: {large:?}");
 }
+
+/// What executes when the bodies are read for the first time during a flip, the ordinary cfg is put back and what
+/// the flip changed is forgotten, and they are read again: `modules` modules of functions that call macros, the
+/// first gated by the atom `a`. Nothing about the bodies is read before the flip.
+fn bodies_first_read_in_a_flip(modules: usize) -> std::collections::BTreeMap<String, usize> {
+    let executed = Runs::default();
+    let subscriber = tracing_subscriber::registry().with(executed.clone());
+    tracing::subscriber::with_default(subscriber, || {
+        let files = macro_modules(modules);
+        let borrowed: Vec<(&str, &str)> = files.iter().map(|(name, text)| (name.as_str(), text.as_str())).collect();
+        let (mut db, krate) = crate_of(&borrowed, CfgOptions::default());
+        // What a run has computed before its contexts begin: the map, not the bodies.
+        let _ = crate_def_map(&db, krate);
+        let start = salsa::plumbing::current_revision(&db);
+
+        let mut flipped = CfgOptions::default();
+        flag(&mut flipped, "a");
+        krate.set_cfg_options(&mut db).to(flipped);
+        let _ = read_bodies(&db, krate);
+
+        krate.set_cfg_options(&mut db).to(CfgOptions::default());
+        let _ = <dyn salsa::Database>::forget_memos_changed_after(&mut db, start);
+        let before = executed.now();
+        let _ = read_bodies(&db, krate);
+        executed.since(&before)
+    })
+}
+
+#[test]
+fn what_was_first_computed_during_a_flip_and_does_not_depend_on_it_is_not_forgotten_with_it() {
+    let _serial = SERIAL.lock().unwrap();
+    let small = bodies_first_read_in_a_flip(4);
+    let large = bodies_first_read_in_a_flip(40);
+    // The bodies of the modules the atom does not gate read nothing of it: what they computed while it was flipped is
+    // what the ordinary cfg gives, and reading them again runs none of it. Only the gated module's are gone.
+    let again = |counts: &std::collections::BTreeMap<String, usize>, name: &str| counts.get(name).copied().unwrap_or(0);
+    assert_eq!(
+        again(&large, "Body::with_source_map_"),
+        again(&small, "Body::with_source_map_"),
+        "the bodies run again do not grow with the modules that do not read the atom: {small:?} {large:?}"
+    );
+    assert_eq!(
+        again(&large, "MacroCallId::parse_macro_expansion_"),
+        again(&small, "MacroCallId::parse_macro_expansion_"),
+        "nor do the expansions: {small:?} {large:?}"
+    );
+}
