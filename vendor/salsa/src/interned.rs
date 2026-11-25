@@ -1202,6 +1202,10 @@ where
         Some(memory_usage)
     }
 
+    fn slot_count(&self, zalsa: &Zalsa) -> Option<u64> {
+        Some(zalsa.table().slots_of::<Value<C>>().count() as u64)
+    }
+
     fn is_persistable(&self) -> bool {
         C::PERSIST
     }

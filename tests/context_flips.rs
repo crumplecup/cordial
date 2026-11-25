@@ -781,3 +781,134 @@ fn what_two_contexts_add_in_turn_is_not_read_after_it_is_gone() -> Result<()> {
     assert!(found.is_empty(), "{found:#?}");
     Ok(())
 }
+
+/// The `cordial::slots` events of a run: `when`, module ids, block ids, module cells, diagnostics cells.
+#[derive(Clone, Default)]
+struct Slots(Arc<Mutex<Vec<Reported>>>);
+
+/// When it was said, and the module ids, block ids, module cells and diagnostics cells then.
+type Reported = (String, [u64; 4]);
+
+impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for Slots {
+    fn on_event(&self, event: &tracing::Event<'_>, _: tracing_subscriber::layer::Context<'_, S>) {
+        #[derive(Default)]
+        struct Fields(String, [u64; 4]);
+        impl tracing::field::Visit for Fields {
+            fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
+                if field.name() == "when" {
+                    self.0 = format!("{value:?}").trim_matches('"').to_owned();
+                }
+            }
+            fn record_str(&mut self, field: &tracing::field::Field, value: &str) {
+                if field.name() == "when" {
+                    self.0 = value.to_owned();
+                }
+            }
+            fn record_u64(&mut self, field: &tracing::field::Field, value: u64) {
+                let at = ["module_ids", "block_ids", "module_cells", "diagnostics_cells"]
+                    .iter()
+                    .position(|name| *name == field.name());
+                if let Some(at) = at {
+                    self.1[at] = value;
+                }
+            }
+        }
+        if event.metadata().target() == "cordial::slots" {
+            let mut fields = Fields::default();
+            event.record(&mut fields);
+            self.0.lock().unwrap().push((fields.0, fields.1));
+        }
+    }
+}
+
+/// The slots reported by a run of the one context over `library`, in the order they were reported.
+fn slots_of_a_run(library: &str) -> Result<Vec<Reported>> {
+    let root = fixture_with(library)?;
+    let state = tempfile::tempdir().into_diagnostic()?;
+    let saved = cordial::SavedState::at(state.path().join("analysis-state"));
+    let slots = Slots::default();
+    let subscriber = tracing_subscriber::registry().with(slots.clone());
+    tracing::subscriber::with_default(subscriber, || run_saving(root.path(), &saved))?;
+    let found = slots.0.lock().unwrap().clone();
+    Ok(found)
+}
+
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn the_ids_and_cells_a_run_holds_are_reported_and_a_module_only_a_context_has_adds_an_id() -> Result<()> {
+    let _serial = SERIAL.lock().unwrap();
+    cordial::init_tracing();
+    let without = slots_of_a_run("pub fn alive() {}\n#[cfg(kani)]\npub fn harness() {}\n")?;
+    let with = slots_of_a_run(
+        "pub fn alive() {}\n#[cfg(kani)]\npub mod proofs { pub fn harness() {} }\n",
+    )?;
+    let finished = |slots: &[Reported]| {
+        slots.iter().rev().find(|(when, _)| when == "flips finished").map(|(_, counts)| *counts)
+    };
+    let (without, with) = (finished(&without), finished(&with));
+    let (Some(without), Some(with)) = (without, with) else {
+        panic!("a run says what it holds when the flips are finished: {without:?} {with:?}");
+    };
+    assert!(without[0] > 0 && without[2] > 0, "module ids and cells are counted: {without:?}");
+    assert_eq!(with[0], without[0] + 1, "the module only the context has is one more id that is kept");
+    assert_eq!(with[1], without[1], "no block was added");
+    Ok(())
+}
+
+/// The `cordial::eviction` events about what the map no longer declares: blocks held, blocks not declared.
+#[derive(Clone, Default)]
+struct Blocks(Arc<Mutex<Vec<(u64, u64)>>>);
+
+impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for Blocks {
+    fn on_event(&self, event: &tracing::Event<'_>, _: tracing_subscriber::layer::Context<'_, S>) {
+        #[derive(Default)]
+        struct Fields([Option<u64>; 2]);
+        impl tracing::field::Visit for Fields {
+            fn record_debug(&mut self, _: &tracing::field::Field, _: &dyn std::fmt::Debug) {}
+            fn record_u64(&mut self, field: &tracing::field::Field, value: u64) {
+                match field.name() {
+                    "blocks" => self.0[0] = Some(value),
+                    "blocks_undeclared" => self.0[1] = Some(value),
+                    _ => {}
+                }
+            }
+        }
+        let mut fields = Fields::default();
+        event.record(&mut fields);
+        if let [Some(held), Some(undeclared)] = fields.0 {
+            self.0.lock().unwrap().push((held, undeclared));
+        }
+    }
+}
+
+/// The blocks held and not declared after a run of the one context over `library`.
+fn blocks_of_a_run(library: &str) -> Result<(u64, u64)> {
+    let root = fixture_with(library)?;
+    let state = tempfile::tempdir().into_diagnostic()?;
+    let saved = cordial::SavedState::at(state.path().join("analysis-state"));
+    let blocks = Blocks::default();
+    let subscriber = tracing_subscriber::registry().with(blocks.clone());
+    tracing::subscriber::with_default(subscriber, || run_saving(root.path(), &saved))?;
+    let said = blocks.0.lock().unwrap().clone();
+    assert_eq!(said.len(), 1, "one report of what is held: {said:?}");
+    Ok(said[0])
+}
+
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn a_block_in_a_module_only_the_context_has_is_not_held_when_the_flips_are_finished() -> Result<()> {
+    let _serial = SERIAL.lock().unwrap();
+    cordial::init_tracing();
+    let always = "pub fn alive() -> u32 { { struct S; let _ = S; } 1 }\n";
+    let gated = "#[cfg(kani)]\npub mod proofs { pub fn f() { { struct B; let _ = B; } } }\n";
+    let none = blocks_of_a_run("pub fn alive() -> u32 { 1 }\n")?;
+    let (with_block, undeclared) = blocks_of_a_run(always)?;
+    let (with_gated, undeclared_gated) = blocks_of_a_run(&format!("{always}{gated}"))?;
+    assert_eq!(with_block, none.0 + 1, "a block that is always there is held");
+    assert_eq!(
+        (with_gated, undeclared, undeclared_gated),
+        (with_block, 0, 0),
+        "the block of the module only the context has is not left behind, so there is none to say is not declared"
+    );
+    Ok(())
+}

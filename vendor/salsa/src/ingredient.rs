@@ -191,6 +191,12 @@ pub trait Ingredient: Any + fmt::Debug + Send + Sync {
         false
     }
 
+    /// How many slots of this ingredient exist (a tracked struct's deleted ones included), or `None` for what is
+    /// not a struct. Counted from the table, so nothing is read or marked as read.
+    fn slot_count(&self, _zalsa: &Zalsa) -> Option<u64> {
+        None
+    }
+
     /// What became of `id`, an id of this ingredient. Only a tracked struct is ever deleted.
     fn existence(&self, _zalsa: &Zalsa, _id: Id) -> crate::Existence {
         crate::Existence::Exists

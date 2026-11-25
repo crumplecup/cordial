@@ -671,6 +671,15 @@ impl Zalsa {
         keys
     }
 
+    /// How many slots each struct ingredient named holds (see `Database::struct_slots`).
+    #[doc(hidden)]
+    pub fn struct_slots(&self, only: &[&str]) -> Vec<(&'static str, u64)> {
+        self.ingredients()
+            .filter(|ingredient| only.contains(&ingredient.debug_name()))
+            .filter_map(|ingredient| Some((ingredient.debug_name(), ingredient.slot_count(self)?)))
+            .collect()
+    }
+
     /// Remove every memo keyed directly by these ids (see `Database::forget_memos_for_inputs`).
     #[doc(hidden)]
     pub fn forget_memos_for_inputs(&mut self, inputs: &[Id]) -> u64 {

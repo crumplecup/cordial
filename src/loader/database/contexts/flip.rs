@@ -243,6 +243,29 @@ impl SourceDatabase {
             run.only.extend(only_here);
         }
         self.finish_context(added, after);
+        self.report_slots(after);
+    }
+
+    /// Say how many module ids, block ids and cells exist, so that what grows with the contexts is named: module and
+    /// block ids are never deleted, and the cells are.
+    #[instrument(level = "debug", skip(self))]
+    pub(super) fn report_slots(&self, when: &str) {
+        let slots = <dyn salsa::Database>::struct_slots(
+            &self.db,
+            &["ModuleIdLt", "BlockIdLt", "ModuleCellLt", "DiagnosticsCellLt"],
+        );
+        let count = |name: &str| {
+            slots.iter().find(|(found, _)| *found == name).map_or(0, |(_, count)| *count)
+        };
+        tracing::info!(
+            target: "cordial::slots",
+            when,
+            module_ids = count("ModuleIdLt"),
+            block_ids = count("BlockIdLt"),
+            module_cells = count("ModuleCellLt"),
+            diagnostics_cells = count("DiagnosticsCellLt"),
+            "what the module and block ids and the cells hold"
+        );
     }
 
     /// The contexts are all done: the ordinary cfg is written back, what the flips changed and what only they had
@@ -254,6 +277,7 @@ impl SourceDatabase {
         self.forget_flipped(&only);
         self.forget_changed_since(run.start);
         self.settle_flipped_crates(cfgs);
+        self.report_slots("flips finished");
     }
 
     /// The flipped contexts are all done: the maps first, so that the modules the flips added are deleted and a

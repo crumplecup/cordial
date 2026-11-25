@@ -109,6 +109,12 @@ pub trait Database: Send + ZalsaDatabase + AsDynDatabase {
         self.zalsa_mut_for_inspection().memo_keys(only)
     }
 
+    /// How many slots each named struct (interned or tracked) holds, for saying what grows. Reads nothing.
+    #[doc(hidden)]
+    fn struct_slots(&self, only: &[&str]) -> Vec<(&'static str, u64)> {
+        self.zalsa().struct_slots(only)
+    }
+
     /// What became of `id`: a tracked struct that a query stopped making is deleted, and its slot is reused for
     /// another with the next generation. Nothing of the struct is read, so this is for asking about an id that
     /// may name something that is gone, as an item's id does of its module. Every other id exists.
