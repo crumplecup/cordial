@@ -203,7 +203,14 @@ impl SourceDatabase {
         nodes: &FunctionNodes,
         graph: &mut CrateIr,
     ) -> CordialResult<()> {
-        let cfgs = LocalCfgs::capture(&self.db, &self.analysed_crates());
+        // A flipped context is written into, settled over and planned from the crates the target reaches, and not
+        // every crate of the workspace: what a target's facts depend on is its own crates and what they depend on.
+        let reach = if self.flips_contexts() {
+            self.crates_reaching(paths)
+        } else {
+            self.analysed_crates()
+        };
+        let cfgs = LocalCfgs::capture(&self.db, &reach);
         let mut analysed = Vec::new();
         // A process that takes up a run an earlier one began goes on from the contexts it analysed.
         let resume = self.resume_contexts.take();
@@ -275,12 +282,17 @@ impl SourceDatabase {
         if automatic && !self.has_resumed_contexts(analysed, &wanted) {
             let _plan = crate::Segment::begin("plan");
             let _watch = crate::process_memory::Watch::start("planning scan".to_owned());
+            let planned_over: std::collections::BTreeSet<_> = if in_place {
+                cfgs.cfgs().map(|(krate, _)| *krate).collect()
+            } else {
+                self.analysed_crates()
+            };
             wanted.add(asked(
                 &self.db,
                 &ordinary,
                 &mut covered,
                 None,
-                &self.analysed_crates(),
+                &planned_over,
                 &HashMap::new(),
             ));
             crate::process_memory::log("planning scan done");

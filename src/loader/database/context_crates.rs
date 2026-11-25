@@ -1313,6 +1313,46 @@ impl SourceDatabase {
         })
     }
 
+    /// The crates a pass over `paths` can be affected by, of those cfg contexts are about: the crates that hold the
+    /// files, and every crate they depend on, since a cfg flipped in a dependency changes what the files see. A
+    /// crate that holds none of the files and is not depended on by one that does cannot change a fact about them,
+    /// so a context that is flipped, settled and planned over these alone costs what the target reaches and not what
+    /// the workspace holds. With no file in any crate, every crate cfg contexts are about counts.
+    #[instrument(level = "debug", skip(self, paths))]
+    #[hotpath::measure(impl_type = "SourceDatabase")]
+    pub(super) fn crates_reaching(&self, paths: &[std::path::PathBuf]) -> BTreeSet<InputCrate> {
+        let analysed = self.analysed_crates();
+        let mut pending: Vec<Crate> = paths
+            .iter()
+            .filter_map(|path| self.file_id(path).ok())
+            .flat_map(|file| {
+                ra_ap_ide_db::base_db::relevant_crates(&self.db, file)
+                    .iter()
+                    .map(|krate| Crate::from(*krate))
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+        let reached = attach_db(&self.db, || {
+            let mut reached = BTreeSet::new();
+            while let Some(krate) = pending.pop() {
+                if !reached.insert(krate.base()) {
+                    continue;
+                }
+                pending.extend(krate.dependencies(&self.db).into_iter().map(|dependency| dependency.krate));
+            }
+            reached
+        });
+        let reached: BTreeSet<InputCrate> = reached.intersection(&analysed).copied().collect();
+        tracing::info!(
+            target: "cordial::semantic::contexts",
+            files = paths.len() as u64,
+            reached = reached.len() as u64,
+            analysed = analysed.len() as u64,
+            "the crates a pass over the target's files can be affected by, of those cfg contexts are about"
+        );
+        if reached.is_empty() { analysed } else { reached }
+    }
+
     #[instrument(level = "trace", skip(self))]
     pub(super) fn shadow_crates(&self) -> BTreeSet<InputCrate> {
         self.context_crates

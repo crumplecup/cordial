@@ -114,7 +114,12 @@ impl SourceDatabase {
             only.insert(self.file_id(path)?);
         }
         let base = SemanticContextKey::enabling(["test"]);
-        let cfgs = LocalCfgs::capture(&self.db, &self.analysed_crates());
+        let reach = if self.flips_contexts() {
+            self.crates_reaching(files)
+        } else {
+            self.analysed_crates()
+        };
+        let cfgs = LocalCfgs::capture(&self.db, &reach);
         let in_base: Vec<CfgOptions> = cfgs.pairs(&base).into_iter().map(|(_, cfg)| cfg).collect();
         let mut covered = Covered::default();
         let mut seen = vec![base.clone()];
