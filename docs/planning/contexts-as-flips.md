@@ -274,3 +274,32 @@ The ordinary cfg is put back, what the flips changed forgotten and the maps sett
 the leaf stage begins from the flipped state the contexts leave. The inventories read what the contexts found and not the
 leaves, so they run after the session. A run that can end at the boundary between the stages (one in processes, for memory)
 keeps the order that has one. `the_context_pass_and_the_leaf_pass_are_one_flipped_session`.
+
+## Status (2026-11-25, keyed reads, the copies panic, and where repeated work is left)
+
+**Built, each shown by a unit test that failed first.** A module's scope is read one name at a time (`salsa::keyed`: a
+read is of a key, found or not, and the map says which keys changed when it is made again; `ScopeKeyLt`, `scope_read`).
+A crate's attributes and preludes are a cell with a tracked field each (`CrateFactsLt`); its cells, macro definitions and
+derive helpers are outside the map's value (`DefMapPair`, `crate_module_cells`, `crate_extras`, persisted). A module's
+origin is a field of its own, the modules of a file are a list of their own (`crate_modules_in_file`), and the traits in
+scope of a module are a key of their own (`scope_traits`). Upstream's 500 `hir_def` tests run (`cargo nextest run -p
+ra_ap_hir_def`, a second): the crate is a workspace member, and the tests were brought up to the fork's API.
+
+**The copies panic** (`no db attached` in `for_body_`, `main` thread, `observability_file`) was this: a crate's map made
+for the first time said every key of every crate had changed (one global floor in `salsa::keyed`), so in copies mode,
+where each copy is made in a later revision, memos of other crates went stale and salsa re-ran their dependencies while
+verifying a memo, with no `attach_db`. The floor is now a crate's (`touch_all(db, scope)`); the test is
+`making_the_map_of_one_crate_for_the_first_time_runs_nothing_of_another_crate_again`.
+
+**Measured on `elicit_doc`, cold, both modes (queries executed; wall times are a weak signal):** the ordinary evidence
+phase is 338,336 in flips and 338,329 in copies (it had been 418,629: the floor); findings: 85 files each, none differing.
+Stale memos in flips fell from 35,259 to 15,113 and none is now stale because of a key.
+
+**Repeated work left, by cause (`RUST_LOG=salsa::stale=debug,cordial::segment=info`, `scratchpad/stale.py`):**
+1. `Body::of_` stale because `Body::with_source_map_` changed, 7,379: a memo that was dropped and computed again cannot
+   backdate, so its dependents go stale though the value is the same. Bodies are dropped by the LRU eviction between
+   stages (10,791 in flips against 4,950 in copies). Finding why flips drops twice as many is next.
+2. `resolve`, `direct_facts` and others stale because the set of module cells changed (6,684): addressed by the per-file
+   module list, not yet measured in a run.
+3. The context pass executes 84,121 queries against 47,086 in copies, `finish_flips` 53,754, inventories 47,217 against
+   2,779; superseded memos 71,137 against 1,175 (`eviction.cfg_context.deferred_released`).
