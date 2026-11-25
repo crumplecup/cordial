@@ -207,7 +207,7 @@ pub use rustdoc_query::{
     type_trait_impls, type_trait_prereqs, type_wraps_foreign,
 };
 pub use semantic::{
-    ATTR_SEMANTIC_FUNCTION, ATTR_SEMANTIC_SNAPSHOT, SemanticCall, SemanticCallTarget,
+    ATTR_SEMANTIC_FUNCTION, ATTR_SEMANTIC_SNAPSHOT, FactPart, SemanticCall, SemanticCallTarget,
     SemanticFunction, SemanticItemId, SemanticReturnContract, SemanticSnapshot, SemanticType,
 };
 pub use semantic_callee::SemanticCallee;

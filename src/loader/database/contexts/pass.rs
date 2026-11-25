@@ -188,6 +188,10 @@ impl FunctionNodes {
     }
 }
 
+/// How many of the functions a context keeps that the ordinary build has too are named in the log, with the parts of
+/// their facts that differ.
+const KEPT_NAMED: usize = 25;
+
 impl SourceDatabase {
     /// Analyse the cfg contexts the options name and, when planning is on, the
     /// ones the workspace's own gates ask for, recording their facts in `graph`.
@@ -461,6 +465,10 @@ impl SourceDatabase {
             // The functions the context's copy has, and those of them it kept full facts for
             // (the rest are only marked active): the share a context changes.
             let (mut functions, mut kept, mut new_here) = (0usize, 0usize, 0usize);
+            // Of the functions the context kept that the ordinary build has too: how many differ in each part of
+            // their facts, and the first few named, so that the log says what a kept function changed.
+            let mut differing: BTreeMap<crate::FactPart, usize> = BTreeMap::new();
+            let mut named = 0usize;
             for path in files.paths {
                 let original = self.file_id(path)?;
                 let in_place = files.context.is_in_place();
@@ -600,6 +608,26 @@ impl SourceDatabase {
                         if ordinary.as_ref() == Some(&here) {
                             continue;
                         }
+                        if let Some(ordinary) = ordinary.as_ref() {
+                            let parts = ordinary.parts_that_differ(&here);
+                            for part in &parts {
+                                *differing.entry(*part).or_default() += 1;
+                            }
+                            if named < KEPT_NAMED {
+                                named += 1;
+                                tracing::info!(
+                                    target: "cordial::semantic::kept",
+                                    %context,
+                                    function = here.label(),
+                                    parts = ?parts,
+                                    first_part = parts
+                                        .first()
+                                        .map(|part| ordinary.difference_in(&here, *part))
+                                        .unwrap_or_default(),
+                                    "a function the ordinary build has, whose facts this context changes"
+                                );
+                            }
+                        }
                     } else if !(new || flips.touches(range) || flips.mentions(function.syntax())) {
                         continue;
                     }
@@ -632,6 +660,7 @@ impl SourceDatabase {
                 functions,
                 new_here,
                 kept,
+                differing = ?differing,
                 "the files of a context's copy: read from saved lists, and through rust-analyzer"
             );
             let mut edges: BTreeSet<(NodeId, NodeId)> = BTreeSet::new();

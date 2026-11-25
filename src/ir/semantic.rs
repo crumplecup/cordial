@@ -192,6 +192,119 @@ pub struct SemanticFunction {
     incomplete: bool,
 }
 
+/// A part of a function's facts that two versions of them can differ in. Calls say how.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum FactPart {
+    /// The function's identity.
+    Definition,
+    /// The function's label.
+    Label,
+    /// The return contract.
+    Output,
+    /// Formatting evidence for the result.
+    ResultRecording,
+    /// Which formatting trait it implements.
+    FormattingRole,
+    /// The macros called in the body and what they resolved to.
+    MacroCalls,
+    /// What the return type is.
+    ReturnShape,
+    /// Whether the return value can be recorded.
+    ReturnRecording,
+    /// The parameters and their `Debug` verdicts.
+    Parameters,
+    /// There are more or fewer calls.
+    CallsCount,
+    /// A call resolved to another target.
+    CallsTarget,
+    /// A call is somewhere else in the file.
+    CallsRange,
+    /// A call has another return contract.
+    CallsOutput,
+    /// A call has another callee.
+    CallsCallee,
+    /// The result error types reachable in calls.
+    ReachableResultErrors,
+    /// Whether resolution was incomplete.
+    Incomplete,
+}
+
+impl SemanticFunction {
+    /// The parts of these facts that are not the same in `other`, in a fixed order; none when they are equal.
+    #[tracing::instrument(level = "trace", skip(self, other))]
+    pub(crate) fn parts_that_differ(&self, other: &Self) -> Vec<FactPart> {
+        let pairs = || self.calls.iter().zip(&other.calls);
+        let same_count = self.calls.len() == other.calls.len();
+        [
+            (self.definition != other.definition, FactPart::Definition),
+            (self.label != other.label, FactPart::Label),
+            (self.output != other.output, FactPart::Output),
+            (self.result_recording != other.result_recording, FactPart::ResultRecording),
+            (self.formatting_role != other.formatting_role, FactPart::FormattingRole),
+            (self.macro_calls != other.macro_calls, FactPart::MacroCalls),
+            (self.return_shape != other.return_shape, FactPart::ReturnShape),
+            (self.return_recording != other.return_recording, FactPart::ReturnRecording),
+            (self.parameters != other.parameters, FactPart::Parameters),
+            (!same_count, FactPart::CallsCount),
+            (same_count && pairs().any(|(a, b)| a.target != b.target), FactPart::CallsTarget),
+            (same_count && pairs().any(|(a, b)| a.range != b.range), FactPart::CallsRange),
+            (same_count && pairs().any(|(a, b)| a.output != b.output), FactPart::CallsOutput),
+            (same_count && pairs().any(|(a, b)| a.callee != b.callee), FactPart::CallsCallee),
+            (self.reachable_result_errors != other.reachable_result_errors, FactPart::ReachableResultErrors),
+            (self.incomplete != other.incomplete, FactPart::Incomplete),
+        ]
+        .into_iter()
+        .filter_map(|(differs, part)| differs.then_some(part))
+        .collect()
+    }
+}
+
+impl SemanticFunction {
+    /// What `part` is in these facts and in `other`'s, for the log: the first call that differs for a call part, and
+    /// the whole part otherwise, each cut short.
+    #[tracing::instrument(level = "trace", skip(self, other))]
+    pub(crate) fn difference_in(&self, other: &Self, part: FactPart) -> String {
+        fn short(value: &dyn std::fmt::Debug) -> String {
+            format!("{value:?}").chars().take(240).collect()
+        }
+        let first_call = || {
+            self.calls
+                .iter()
+                .zip(&other.calls)
+                .find(|(a, b)| a != b)
+                .map(|(a, b)| format!("{} -> {}", short(a), short(b)))
+                .unwrap_or_default()
+        };
+        match part {
+            FactPart::Definition => format!("{} -> {}", short(&self.definition), short(&other.definition)),
+            FactPart::Label => format!("{} -> {}", short(&self.label), short(&other.label)),
+            FactPart::Output => format!("{} -> {}", short(&self.output), short(&other.output)),
+            FactPart::ResultRecording => {
+                format!("{} -> {}", short(&self.result_recording), short(&other.result_recording))
+            }
+            FactPart::FormattingRole => {
+                format!("{} -> {}", short(&self.formatting_role), short(&other.formatting_role))
+            }
+            FactPart::MacroCalls => format!("{} -> {}", short(&self.macro_calls), short(&other.macro_calls)),
+            FactPart::ReturnShape => format!("{} -> {}", short(&self.return_shape), short(&other.return_shape)),
+            FactPart::ReturnRecording => {
+                format!("{} -> {}", short(&self.return_recording), short(&other.return_recording))
+            }
+            FactPart::Parameters => format!("{} -> {}", short(&self.parameters), short(&other.parameters)),
+            FactPart::CallsCount => format!("{} calls -> {} calls", self.calls.len(), other.calls.len()),
+            FactPart::CallsTarget | FactPart::CallsRange | FactPart::CallsOutput | FactPart::CallsCallee => {
+                first_call()
+            }
+            FactPart::ReachableResultErrors => format!(
+                "{} -> {}",
+                short(&self.reachable_result_errors),
+                short(&other.reachable_result_errors)
+            ),
+            FactPart::Incomplete => format!("{} -> {}", self.incomplete, other.incomplete),
+        }
+    }
+}
+
 impl SemanticCall {
     /// This call with its range moved forward by `anchor`; a call whose range is no coordinate
     /// of any file (see `EXPANSION_RANGE`) is returned as it is.
