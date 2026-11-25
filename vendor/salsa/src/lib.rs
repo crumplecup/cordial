@@ -280,6 +280,7 @@ mod ingredient_cache;
 mod input;
 mod interned;
 mod key;
+pub mod keyed;
 mod memo_ingredient_indices;
 mod ownership;
 mod return_mode;

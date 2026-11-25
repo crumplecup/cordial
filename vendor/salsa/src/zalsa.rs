@@ -247,6 +247,9 @@ impl Zalsa {
         #[cfg(not(feature = "inventory"))]
         let mut jars = jars;
 
+        // The keyed ingredient belongs to every database.
+        jars.push(ErasedJar::erase::<crate::keyed::KeyedHasJar>());
+
         // Ensure structs are initialized before tracked functions.
         //
         // We also further sort by debug name, to maintain a consistent ordering across
