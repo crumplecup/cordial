@@ -570,6 +570,7 @@ m!(Z);
                 "MacroCallId::parse_macro_expansion_",
                 "expand_pure_macro_of",
                 "MacroCallId::macro_arg_",
+                "crate_modules_in_file",
                 "crate_module_cells",
                 "crate_module_cell",
             ]

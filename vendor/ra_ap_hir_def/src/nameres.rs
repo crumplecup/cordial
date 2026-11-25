@@ -916,6 +916,29 @@ fn crate_extras(db: &dyn SourceDatabase, crate_id: Crate) -> Arc<DefMapExtras> {
     Arc::clone(&crate_local_def_map(db, crate_id).extras)
 }
 
+/// A file of a crate: what the modules of a file are asked of.
+#[salsa::interned(debug, revisions = usize::MAX, persist)]
+pub struct FileInCrateLt {
+    #[returns(copy)]
+    pub krate: Crate,
+    #[returns(copy)]
+    pub file: FileId,
+}
+
+/// The modules of a crate's finished map that are in a file, by where each comes from. The same list when modules
+/// are added or dropped in other files, so what asks for the modules of one file does not run again for them.
+#[salsa::tracked(returns(ref), persist)]
+fn crate_modules_in_file<'db>(db: &'db dyn SourceDatabase, key: FileInCrateLt<'db>) -> Vec<ModuleId> {
+    let (krate, file) = (key.krate(db), key.file(db));
+    let mut found: Vec<ModuleId> = crate_module_cells(db, krate)
+        .iter()
+        .filter(|(_, cell)| cell.origin(db).file_id().map(|file_id| file_id.file_id(db)) == Some(file))
+        .map(|(&id, _)| id)
+        .collect();
+    found.sort_by_key(|id| id.as_id().as_bits());
+    found
+}
+
 /// The cell of one module of a crate's finished map. It is the cell it was when modules are added or dropped, so
 /// what reads it does not run again for them, and it is not there when the module is not in the map.
 ///
@@ -1103,17 +1126,15 @@ impl DefMap {
     ) -> impl Iterator<Item = ModuleId> + 'a {
         let building = self.modules.iter().map(|(id, data)| (id, data.origin));
         let block_cells = self.cells.iter().map(move |(&id, cell)| (id, cell.origin(db)));
-        let crate_cells = self
+        let in_this_file = move |(id, origin): (ModuleId, ModuleOrigin)| {
+            (origin.file_id().map(|file_id| file_id.file_id(db)) == Some(file_id)).then_some(id)
+        };
+        let crate_ids = self
             .frozen
-            .then(|| crate_module_cells(db, self.krate))
+            .then(|| crate_modules_in_file(db, FileInCrateLt::new(db, self.krate, file_id)))
             .into_iter()
-            .flat_map(|cells| cells.iter())
-            .map(move |(&id, cell)| (id, cell.origin(db)));
-        building
-            .chain(block_cells)
-            .chain(crate_cells)
-            .filter(move |(_, origin)| origin.file_id().map(|file_id| file_id.file_id(db)) == Some(file_id))
-            .map(|(id, _)| id)
+            .flat_map(|ids| ids.iter().copied());
+        building.chain(block_cells).filter_map(in_this_file).chain(crate_ids)
     }
 
     pub fn modules<'a>(

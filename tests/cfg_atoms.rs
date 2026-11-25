@@ -1553,3 +1553,35 @@ fn the_traits_in_scope_of_a_module_run_again_when_a_trait_is_added_to_it() {
     let _serial = SERIAL.lock().unwrap();
     assert_eq!(traits_in_scope_after_a_trait_is_added(), 1);
 }
+
+/// What executes of `modules_of_a_file` for the root file when the atom `a` adds a module in another file: the root file's
+/// modules are the ones they were.
+fn finding_the_modules_of_a_file_after_a_module_is_added_in_another_file() -> usize {
+    let executed = Runs::default();
+    let subscriber = tracing_subscriber::registry().with(executed.clone());
+    tracing::subscriber::with_default(subscriber, || {
+        let (mut db, krate) = crate_of(
+            &[
+                ("lib.rs", "pub fn always() {}\n#[cfg(feature = \"a\")]\nmod extra;\n"),
+                ("extra.rs", "pub fn in_extra() {}\n"),
+            ],
+            CfgOptions::default(),
+        );
+        let file = krate.root_file_id(&db).file_id(&db);
+        assert_eq!(modules_of_a_file(&db, krate, file), 1);
+        let before = executed.now();
+        krate.set_cfg_options(&mut db).to(atoms(&["a"]));
+        assert_eq!(modules_of_a_file(&db, krate, file), 1, "the root file still holds the root module only");
+        executed.since(&before).get("modules_of_a_file").copied().unwrap_or(0)
+    })
+}
+
+#[test]
+fn finding_the_modules_of_a_file_does_not_run_again_when_a_module_is_added_in_another_file() {
+    let _serial = SERIAL.lock().unwrap();
+    assert_eq!(
+        finding_the_modules_of_a_file_after_a_module_is_added_in_another_file(),
+        0,
+        "what finds the modules of one file does not depend on the modules of the others"
+    );
+}
