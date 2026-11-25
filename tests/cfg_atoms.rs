@@ -1409,3 +1409,35 @@ fn flipping_an_attribute_that_sets_the_recursion_limit_runs_the_expansions_that_
     assert!(bodies_and_expansions(&small_flip) > 0, "{small_flip:?}");
     assert!(bodies_and_expansions(&large_flip) > bodies_and_expansions(&small_flip), "{small_flip:?} {large_flip:?}");
 }
+
+/// What executes when the bodies of the crate `dep` are read again after the map of the crate `app`, which does not
+/// use `dep`, is made for the first time: `app` is a crate nothing was computed for before, as a copy of a crate is.
+fn dep_bodies_after_another_crates_first_map() -> std::collections::BTreeMap<String, usize> {
+    let executed = Runs::default();
+    let subscriber = tracing_subscriber::registry().with(executed.clone());
+    tracing::subscriber::with_default(subscriber, || {
+        let text: String = String::from("macro_rules! twice { ($e:expr) => { $e + $e }; }\n")
+            + &(0..10).map(|n| format!("pub fn plain_{n}() -> u32 {{ twice!({n}) }}\n")).collect::<String>();
+        let (mut db, dep, app) = two_crates(
+            &[("lib.rs", text.as_str())],
+            &[("lib.rs", "pub fn alone() {}\n")],
+            CfgOptions::default(),
+            CfgOptions::default(),
+        );
+        let _ = read_bodies(&db, dep);
+        // What adds a copy of a crate to a database is a write, and the copy's map is made in the revision after it.
+        app.set_cfg_options(&mut db).to(atoms(&["unrelated"]));
+        let before = executed.now();
+        let _ = crate_def_map(&db, app);
+        let _ = read_bodies(&db, dep);
+        executed.since(&before)
+    })
+}
+
+#[test]
+fn making_the_map_of_one_crate_for_the_first_time_runs_nothing_of_another_crate_again() {
+    let _serial = SERIAL.lock().unwrap();
+    let ran = dep_bodies_after_another_crates_first_map();
+    let again = bodies_and_expansions(&ran);
+    assert_eq!(again, 0, "the bodies and expansions of `dep` do not run again for a crate it does not use: {ran:?}");
+}
