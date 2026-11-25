@@ -1410,14 +1410,23 @@ fn flipping_an_attribute_that_sets_the_recursion_limit_runs_the_expansions_that_
     assert!(bodies_and_expansions(&large_flip) > bodies_and_expansions(&small_flip), "{small_flip:?} {large_flip:?}");
 }
 
-/// What executes when the bodies of the crate `dep` are read again after the map of the crate `app`, which does not
-/// use `dep`, is made for the first time: `app` is a crate nothing was computed for before, as a copy of a crate is.
-fn dep_bodies_after_another_crates_first_map() -> std::collections::BTreeMap<String, usize> {
+/// What executes when what the crate `dep` has (its bodies and its impls) is read again after the map of the crate
+/// `app`, which does not use `dep`, is made for the first time: `app` is a crate nothing was computed for before, as a
+/// copy of a crate is.
+fn dep_after_another_crates_first_map() -> std::collections::BTreeMap<String, usize> {
     let executed = Runs::default();
     let subscriber = tracing_subscriber::registry().with(executed.clone());
     tracing::subscriber::with_default(subscriber, || {
-        let text: String = String::from("macro_rules! twice { ($e:expr) => { $e + $e }; }\n")
-            + &(0..10).map(|n| format!("pub fn plain_{n}() -> u32 {{ twice!({n}) }}\n")).collect::<String>();
+        let text: String = String::from(
+            "macro_rules! twice { ($e:expr) => { $e + $e }; }\npub struct Shape;\npub trait Area { fn area(&self) -> u32; }\n",
+        ) + &(0..10)
+            .map(|n| {
+                format!(
+                    "pub fn plain_{n}() -> u32 {{ twice!({n}) }}\nimpl Shape {{ pub fn m{n}(&self) -> u32 {{ {n} }} }}\n"
+                )
+            })
+            .collect::<String>()
+            + "impl Area for Shape { fn area(&self) -> u32 { 1 } }\n";
         let (mut db, dep, app) = two_crates(
             &[("lib.rs", text.as_str())],
             &[("lib.rs", "pub fn alone() {}\n")],
@@ -1425,11 +1434,13 @@ fn dep_bodies_after_another_crates_first_map() -> std::collections::BTreeMap<Str
             CfgOptions::default(),
         );
         let _ = read_bodies(&db, dep);
+        read_impls(&db, dep);
         // What adds a copy of a crate to a database is a write, and the copy's map is made in the revision after it.
         app.set_cfg_options(&mut db).to(atoms(&["unrelated"]));
         let before = executed.now();
         let _ = crate_def_map(&db, app);
         let _ = read_bodies(&db, dep);
+        read_impls(&db, dep);
         executed.since(&before)
     })
 }
@@ -1437,7 +1448,11 @@ fn dep_bodies_after_another_crates_first_map() -> std::collections::BTreeMap<Str
 #[test]
 fn making_the_map_of_one_crate_for_the_first_time_runs_nothing_of_another_crate_again() {
     let _serial = SERIAL.lock().unwrap();
-    let ran = dep_bodies_after_another_crates_first_map();
-    let again = bodies_and_expansions(&ran);
-    assert_eq!(again, 0, "the bodies and expansions of `dep` do not run again for a crate it does not use: {ran:?}");
+    let ran = dep_after_another_crates_first_map();
+    // The map of `app` is made, with what it needs; nothing of `dep` runs again for it.
+    let of_dep: std::collections::BTreeMap<_, _> = ran
+        .iter()
+        .filter(|(name, _)| !matches!(name.as_str(), "crate_local_def_map" | "external_def_map" | "local_def_map" | "file_item_tree_query" | "HirFileId::ast_id_map_" | "EditionedFileId::parse_" | "real_span_map" | "cfg_atom_enabled" | "crate_module_cell"))
+        .collect();
+    assert!(of_dep.is_empty(), "what `dep` has is not run again for a crate it does not use: {ran:?}");
 }

@@ -35,10 +35,15 @@ impl Database for Db {}
 /// What the scope holds for a name: a reader of exactly that name.
 #[salsa::tracked]
 fn lookup<'db>(db: &'db dyn Database, name: Name<'db>) -> Option<u32> {
-    salsa::keyed::read(db, name.as_id(), Durability::LOW);
     let text = name.text(db);
+    salsa::keyed::read(db, scope_of(db, text), name.as_id(), Durability::LOW);
     RAN.with(|ran| ran.borrow_mut().push(text.clone()));
     SCOPE.with(|scope| scope.borrow().get(text.as_str()).copied())
+}
+
+/// The scope of a name: those that begin with `b.` are of one, as the names of one crate are, and the rest of another.
+fn scope_of(db: &dyn Database, text: &str) -> salsa::Id {
+    Name::new(db, if text.starts_with("b.") { "<b>" } else { "<a>" }.to_owned()).as_id()
 }
 
 impl Db {
@@ -125,7 +130,7 @@ fn contains<'db>(db: &'db dyn Database, held: Held, name: Name<'db>, whole: bool
         return held.names(db).contains(name.text(db));
     }
     let (found, durability) = salsa::keyed::unrecorded(db, || held.names(db).contains(name.text(db)));
-    salsa::keyed::read(db, name.as_id(), durability);
+    salsa::keyed::read(db, scope_of(db, name.text(db)), name.as_id(), durability);
     found
 }
 
@@ -161,11 +166,25 @@ fn when_what_changed_is_not_known_every_reader_runs_again() {
     assert_eq!(db.read("plain"), None);
     let _ = db.ran();
     db.synthetic_write(Durability::LOW);
-    salsa::keyed::touch_all(&db);
+    salsa::keyed::touch_all(&db, scope_of(&db, "twice"));
     let _ = (db.read("twice"), db.read("plain"));
     let mut ran = db.ran();
     ran.sort();
     assert_eq!(ran, ["plain", "twice"]);
+}
+
+#[test]
+fn when_what_changed_is_not_known_in_one_scope_only_the_readers_of_that_scope_run_again() {
+    let mut db = Db::default();
+    SCOPE.with(|scope| *scope.borrow_mut() = [("twice".to_owned(), 1), ("b.twice".to_owned(), 2)].into());
+    assert_eq!(db.read("twice"), Some(1));
+    assert_eq!(db.read("b.twice"), Some(2));
+    let _ = db.ran();
+    // A scope is made for the first time, in a later revision.
+    db.synthetic_write(Durability::LOW);
+    salsa::keyed::touch_all(&db, scope_of(&db, "b.twice"));
+    let _ = (db.read("twice"), db.read("b.twice"));
+    assert_eq!(db.ran(), ["b.twice"], "the reader of the other scope does not run again");
 }
 
 #[test]
@@ -189,8 +208,8 @@ struct SavedName<'db> {
 /// A reader of one name that is saved with the database.
 #[salsa::tracked(persist)]
 fn saved_lookup<'db>(db: &'db dyn Database, name: SavedName<'db>) -> Option<u32> {
-    salsa::keyed::read(db, name.as_id(), Durability::LOW);
     let text = name.text(db);
+    salsa::keyed::read(db, scope_of(db, text), name.as_id(), Durability::LOW);
     RAN.with(|ran| ran.borrow_mut().push(text.clone()));
     SCOPE.with(|scope| scope.borrow().get(text.as_str()).copied())
 }

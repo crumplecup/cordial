@@ -345,8 +345,11 @@ impl DefMap {
             return &self.module_data(db, id).scope;
         };
         let (data, durability) = salsa::keyed::unrecorded(db, || &**cell.data(db));
-        let key = ScopeKeyLt::new(db, unsafe { id.to_db(db) }, name.clone());
-        salsa::keyed::read(db, key.as_id(), durability);
+        let module = unsafe { id.to_db(db) };
+        let key = ScopeKeyLt::new(db, module, name.clone());
+        // The scope of a key is the crate of its module: making that crate's map for the first time says all its keys
+        // changed, and no key of another crate.
+        salsa::keyed::read(db, module.krate(db).as_id(), key.as_id(), durability);
         &data.scope
     }
 
@@ -604,11 +607,12 @@ fn found_in<'a>(scope: Option<&'a ItemScope>, name: &Name) -> Option<(PerNs, Opt
 /// changed, and every key has.
 fn touch_changed_names(
     db: &dyn SourceDatabase,
+    krate: Crate,
     before: Option<&FxHashMap<ModuleId, Arc<ModuleData>>>,
     now: &FxHashMap<ModuleId, Arc<ModuleData>>,
 ) {
     let Some(before) = before else {
-        salsa::keyed::touch_all(db);
+        salsa::keyed::touch_all(db, krate.as_id());
         return;
     };
     let mut touched = 0u64;
@@ -928,7 +932,7 @@ pub(crate) fn crate_local_def_map(db: &dyn SourceDatabase, crate_id: Crate) -> D
         said.entry(diagnostic.in_module).or_default().push(diagnostic.clone());
     }
     let (held, cells, extras) = def_map.freeze(db);
-    touch_changed_names(db, previous::recall(db, crate_id).as_deref().map(|built| &built.modules), &held);
+    touch_changed_names(db, crate_id, previous::recall(db, crate_id).as_deref().map(|built| &built.modules), &held);
     let def_map = Arc::new(def_map);
     previous::remember(db, crate_id, &def_map, held, reads, said, read);
     DefMapPair { def_map, local: Arc::new(local_def_map), cells: Arc::new(cells), extras: Arc::new(extras) }

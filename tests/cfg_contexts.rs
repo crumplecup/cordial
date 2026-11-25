@@ -375,3 +375,37 @@ in_both_modes! {
     compatible_requests_share_contexts_and_exclusive_ones_never_do => (compatible_requests_share_contexts_and_exclusive_ones_never_do_by_copies, compatible_requests_share_contexts_and_exclusive_ones_never_do_by_flips),
     a_contexts_facts_name_the_ordinary_functions_they_call_by_their_ordinary_identity => (a_contexts_facts_name_the_ordinary_functions_they_call_by_their_ordinary_identity_by_copies, a_contexts_facts_name_the_ordinary_functions_they_call_by_their_ordinary_identity_by_flips),
 }
+
+/// A constant and a static, whose types are asked for by what reads the items of a file, and a function a context
+/// turns on.
+const WITH_A_CONST_AND_A_STATIC: &str = "\
+pub const LIMIT: usize = 3;
+pub static NAME: &str = \"name\";
+
+pub fn limit() -> usize {
+    LIMIT
+}
+
+#[cfg(kani)]
+pub fn harness() {
+    let _ = limit();
+}
+";
+
+fn a_copied_file_with_a_const_and_a_static_is_read_without_a_panic(mode: CfgContextMode) -> Result<()> {
+    cordial::init_tracing();
+    let root = fixture_with(WITH_A_CONST_AND_A_STATIC)?;
+    let graph = project(mode, vec![kani()], root.path())?;
+    assert!(!functions(&graph, "limit").is_empty());
+    Ok(())
+}
+
+#[test]
+fn a_copied_file_with_a_const_and_a_static_is_read_without_a_panic_by_copies() -> Result<()> {
+    a_copied_file_with_a_const_and_a_static_is_read_without_a_panic(CfgContextMode::Copies)
+}
+
+#[test]
+fn a_copied_file_with_a_const_and_a_static_is_read_without_a_panic_by_flips() -> Result<()> {
+    a_copied_file_with_a_const_and_a_static_is_read_without_a_panic(CfgContextMode::Flips)
+}
