@@ -269,4 +269,8 @@ test module and the functions in one module, the 25 `twice!` expansions of the p
 reads nothing of them. Finer reads (a dependency on the name looked up, not on the module's whole scope) would make a flip
 cost what it changes; it is a change to how `hir_def` resolves names, and the next thing to try if the repeated work is to go.
 
-**Not yet done:** one flipped session for the contexts pass and the leaf pass (a restore, a forget and a settle each now).
+**Done: one flipped session for the contexts pass and the leaf pass** (`FlipSession`; `begin_session`, `finish_session`).
+The ordinary cfg is put back, what the flips changed forgotten and the maps settled once, when the leaf stage is done, and
+the leaf stage begins from the flipped state the contexts leave. The inventories read what the contexts found and not the
+leaves, so they run after the session. A run that can end at the boundary between the stages (one in processes, for memory)
+keeps the order that has one. `the_context_pass_and_the_leaf_pass_are_one_flipped_session`.

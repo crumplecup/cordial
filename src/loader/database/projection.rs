@@ -215,14 +215,48 @@ impl SourceDatabase {
         // Gated code is analysed by changing the database's cfg input, which
         // needs the exclusive borrow the ordinary pass does not have.
         // A process that takes up a run an earlier one began skips what that one finished.
+        // The contexts and the leaf files are read in one flipped session when the run can be: the ordinary cfg is put
+        // back, what the flips changed forgotten and the maps settled once, and the leaf stage begins from the state
+        // the contexts leave. The inventories read what the contexts found and not the leaves, so they come after.
+        // A run that can end at the boundary between them (one in processes, for memory) keeps the order that has one.
+        #[cfg(feature = "tracing")]
+        let mut session = {
+            let one_session = self.flips_contexts()
+                && !(crate::result_store::active() && crate::memory_limit::resumable())
+                && !self.unit_is_done("contexts")
+                && !self.unit_is_done("leaves");
+            if one_session {
+                let mut all = paths.to_vec();
+                all.extend(super::contexts::leaf_files(graph)?);
+                Some(self.begin_session(&all))
+            } else {
+                None
+            }
+        };
+        #[cfg(not(feature = "tracing"))]
+        let mut session: Option<super::contexts::FlipSession> = None;
         if !self.unit_is_done("contexts") {
             let _contexts = crate::Segment::begin("contexts");
-            self.project_contexts(paths, outline.functions(), graph)?;
+            self.project_contexts(paths, outline.functions(), graph, session.as_mut())?;
             self.stage_done(graph, None, "contexts");
         }
         crate::process_memory::log("cfg contexts done");
         #[cfg(feature = "tracing")]
         {
+            // Whether the leaf files were read, in the session that began with the contexts.
+            let mut leaves_read = false;
+            if session.is_some() {
+                {
+                    let _leaves = crate::Segment::begin("leaves");
+                    self.project_leaves(graph, session.as_mut())?;
+                    self.stage_done(graph, None, "leaves");
+                }
+                leaves_read = true;
+                crate::process_memory::log("leaf functions done");
+                if let Some(session) = session.take() {
+                    self.finish_session(session);
+                }
+            }
             if !self.unit_is_done("tracing-inventories") {
                 let _inventories = crate::Segment::begin("inventories");
                 self.prime_tracing_inventories(outline);
@@ -230,9 +264,9 @@ impl SourceDatabase {
                 self.stage_done(graph, None, "tracing-inventories");
             }
             crate::process_memory::log("tracing inventories done");
-            if !self.unit_is_done("leaves") {
+            if !leaves_read && !self.unit_is_done("leaves") {
                 let _leaves = crate::Segment::begin("leaves");
-                self.project_leaves(graph)?;
+                self.project_leaves(graph, None)?;
                 self.stage_done(graph, None, "leaves");
             }
             crate::process_memory::log("leaf functions done");

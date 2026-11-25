@@ -58,7 +58,34 @@ impl Ordinary {
     }
 }
 
+/// A flipped session: the crates it is over, with their ordinary cfgs, and what the flips have changed so far. The
+/// contexts pass and the leaf pass are two parts of one session when the run can be, so that the ordinary cfg is put
+/// back, what the flips changed forgotten and the maps settled once, when the last of them is done, and the second
+/// part begins from the flipped state the first leaves.
+pub(in crate::loader::database) struct FlipSession {
+    pub(super) cfgs: LocalCfgs,
+    pub(super) run: Option<FlipRun>,
+}
+
 impl SourceDatabase {
+    /// Begin a flipped session over the crates the files in `paths` reach (and every crate cfg contexts are about, when
+    /// contexts are copied and not flipped).
+    #[instrument(level = "debug", skip(self, paths))]
+    pub(in crate::loader::database) fn begin_session(&mut self, paths: &[std::path::PathBuf]) -> FlipSession {
+        let reach = if self.flips_contexts() { self.crates_reaching(paths) } else { self.analysed_crates() };
+        let cfgs = LocalCfgs::capture(&self.db, &reach);
+        let run = self.begin_flips(&cfgs);
+        FlipSession { cfgs, run }
+    }
+
+    /// End a session: the ordinary cfg is back, what the flips changed forgotten, and the maps settled.
+    #[instrument(level = "debug", skip(self, session))]
+    pub(in crate::loader::database) fn finish_session(&mut self, session: FlipSession) {
+        if let Some(run) = session.run {
+            self.finish_flips(&session.cfgs, run);
+        }
+    }
+
     /// Give each local crate the cfg `context` makes of its ordinary one, and say which crates they are.
     #[instrument(level = "debug", skip(self, cfgs))]
     #[hotpath::measure(impl_type = "SourceDatabase")]
@@ -225,7 +252,7 @@ impl SourceDatabase {
     }
 
     /// Whether a context is analysed by flipping the ordinary crates' cfg, as the options say.
-    pub(super) fn flips_contexts(&self) -> bool {
+    pub(in crate::loader::database) fn flips_contexts(&self) -> bool {
         self.cargo_options
             .as_ref()
             .is_some_and(|options| *options.cfg_context_mode() == crate::CfgContextMode::Flips)

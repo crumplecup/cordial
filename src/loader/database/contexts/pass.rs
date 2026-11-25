@@ -202,19 +202,23 @@ impl SourceDatabase {
         paths: &[PathBuf],
         nodes: &FunctionNodes,
         graph: &mut CrateIr,
+        session: Option<&mut super::flip::FlipSession>,
     ) -> CordialResult<()> {
         // A flipped context is written into, settled over and planned from the crates the target reaches, and not
         // every crate of the workspace: what a target's facts depend on is its own crates and what they depend on.
-        let reach = if self.flips_contexts() {
-            self.crates_reaching(paths)
-        } else {
-            self.analysed_crates()
+        // The session is the caller's when the leaf pass goes on from it, and this pass's own when it does not.
+        let mut own = None;
+        let session = match session {
+            Some(session) => session,
+            None => own.insert(self.begin_session(paths)),
         };
-        let cfgs = LocalCfgs::capture(&self.db, &reach);
         let mut analysed = Vec::new();
         // A process that takes up a run an earlier one began goes on from the contexts it analysed.
         let resume = self.resume_contexts.take();
-        let outcome = self.analyse_contexts(&cfgs, paths, nodes, graph, &mut analysed, resume);
+        let outcome = self.analyse_contexts(session, paths, nodes, graph, &mut analysed, resume);
+        if let Some(own) = own {
+            self.finish_session(own);
+        }
         self.release_shared_copies("cfg contexts");
         // Gated code is extra evidence: failing to analyse it must not fail a run
         // that asked for nothing else. The plan says it is incomplete, and the log
@@ -244,13 +248,15 @@ impl SourceDatabase {
     #[hotpath::measure]
     fn analyse_contexts(
         &mut self,
-        cfgs: &LocalCfgs,
+        session: &mut super::flip::FlipSession,
         paths: &[PathBuf],
         nodes: &FunctionNodes,
         graph: &mut CrateIr,
         analysed: &mut Vec<SemanticContextKey>,
         resume: Option<ContextsState>,
     ) -> CordialResult<bool> {
+        let super::flip::FlipSession { cfgs, run } = session;
+        let cfgs: &LocalCfgs = cfgs;
         let options = self.cargo_options.clone().unwrap_or_default();
         let automatic = *options.cfg_planning() == CfgPlanning::Automatic;
         let ordinary = SemanticContextKey::ordinary();
@@ -297,7 +303,6 @@ impl SourceDatabase {
             ));
             crate::process_memory::log("planning scan done");
         }
-        let mut run = self.begin_flips(cfgs);
         let mut failure = None;
         // The context the cfg is as of: a flip is written over it, so the nearest one is taken next.
         let mut current = ordinary.clone();
@@ -417,9 +422,6 @@ impl SourceDatabase {
                 "cfg context analysed"
             );
             crate::process_memory::log("cfg context analysed");
-        }
-        if let Some(run) = run {
-            self.finish_flips(cfgs, run);
         }
         if let Some(error) = failure {
             return Err(error);

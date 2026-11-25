@@ -195,16 +195,16 @@ fn every_region_of_the_context_pass_says_what_it_cost_in_both_modes() -> Result<
         assert!(said.iter().all(|said| said.scope == "gated"), "the package is said in every region: {said:?}");
         let flips = [
             "projection/contexts/context/enter/flip_write",
-            "projection/contexts/finish_flips",
-            "projection/contexts/finish_flips/restore",
-            "projection/contexts/finish_flips/forget_flipped",
-            "projection/contexts/finish_flips/forget_changed",
-            "projection/contexts/finish_flips/settle_flipped",
-            "projection/contexts/finish_flips/settle_flipped/settle",
-            "projection/contexts/finish_flips/settle_flipped/settle/maps",
-            "projection/contexts/finish_flips/settle_flipped/settle/bodies",
-            "projection/contexts/finish_flips/settle_flipped/settle/blocks",
-            "projection/contexts/finish_flips/settle_flipped/forget_undeclared",
+            "projection/finish_flips",
+            "projection/finish_flips/restore",
+            "projection/finish_flips/forget_flipped",
+            "projection/finish_flips/forget_changed",
+            "projection/finish_flips/settle_flipped",
+            "projection/finish_flips/settle_flipped/settle",
+            "projection/finish_flips/settle_flipped/settle/maps",
+            "projection/finish_flips/settle_flipped/settle/bodies",
+            "projection/finish_flips/settle_flipped/settle/blocks",
+            "projection/finish_flips/settle_flipped/forget_undeclared",
         ];
         for expected in flips {
             assert_eq!(
@@ -282,4 +282,36 @@ impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for Forgets {
             }
         }
     }
+}
+
+/// A crate with a `#[cfg(test)]` module and an integration-test file, so that the context pass and the leaf pass both
+/// flip `test`.
+fn crate_with_unit_and_leaf_tests() -> [(&'static str, String); 2] {
+    [
+        (
+            "src/lib.rs",
+            String::from(
+                "pub fn plain() -> u32 { 1 }\n#[cfg(test)]\nmod tests {\n    #[test]\n    fn unit() { assert_eq!(super::plain(), 1); }\n}\n",
+            ),
+        ),
+        ("tests/leaf.rs", String::from("#[test]\nfn leaf() { assert_eq!(gated::plain(), 1); }\n")),
+    ]
+}
+
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn the_context_pass_and_the_leaf_pass_are_one_flipped_session() -> Result<()> {
+    let _serial = SERIAL.lock().unwrap();
+    cordial::init_tracing();
+    let files = crate_with_unit_and_leaf_tests();
+    let borrowed: Vec<(&str, &str)> = files.iter().map(|(path, text)| (*path, text.as_str())).collect();
+    let said = regions_of(CfgContextMode::Flips, SemanticContextKey::enabling(["test"]), &borrowed)?;
+    let finishes: Vec<&str> =
+        said.iter().map(|said| said.label.as_str()).filter(|label| label.ends_with("/finish_flips")).collect();
+    // The cfg is put back, what the flips changed forgotten and the maps settled once, when the last flip is done:
+    // the flipped state the context pass leaves is the one the leaf pass starts from, and written over it.
+    assert_eq!(finishes.len(), 1, "one finish for the whole flipped session: {finishes:?}");
+    let leaf_flips = said.iter().filter(|said| said.label.ends_with("leaf/enter/flip_write")).count();
+    assert!(leaf_flips >= 1, "the leaf stage still flips its contexts");
+    Ok(())
 }

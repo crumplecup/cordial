@@ -5,7 +5,6 @@
 //! function's calls from the context's copied crates. The ordinary build's
 //! inputs stay unchanged. Nothing here adds a node to the library's graph.
 
-use super::LocalCfgs;
 use super::copy_functions::copy_functions;
 use super::flips::{Flips, Reach};
 use super::pass::functions_by_range;
@@ -75,18 +74,12 @@ impl SourceDatabase {
     pub(in crate::loader::database) fn project_leaves(
         &mut self,
         graph: &mut CrateIr,
+        session: Option<&mut super::flip::FlipSession>,
     ) -> CordialResult<()> {
-        use crate::IrView;
-        let files: Vec<PathBuf> = graph
-            .source_observability()?
-            .files()
-            .iter()
-            .filter(|file| file.kind() == crate::ir::ObservabilityFileKind::Test)
-            .map(|file| file.snapshot().path().clone())
-            .collect();
+        let files = leaf_files(graph)?;
         let mut leaves: Vec<LeafFunction> = Vec::new();
         if !files.is_empty() {
-            let read = self.read_leaf_contexts(&files, &mut leaves);
+            let read = self.read_leaf_contexts(&files, &mut leaves, session);
             self.release_shared_copies("leaf contexts");
             read?;
         }
@@ -102,24 +95,27 @@ impl SourceDatabase {
     /// only where that gate holds, and the gates are taken one clause at a time:
     /// merging them, as the library's planning does, can set one atom both ways
     /// for a file that needs it on. Repeats until no gate asks for more.
-    #[instrument(level = "debug", skip(self, files, leaves), err(level = "warn"))]
+    #[instrument(level = "debug", skip(self, files, leaves, session), err(level = "warn"))]
     #[hotpath::measure]
     fn read_leaf_contexts(
         &mut self,
         files: &[PathBuf],
         leaves: &mut Vec<LeafFunction>,
+        session: Option<&mut super::flip::FlipSession>,
     ) -> CordialResult<()> {
         let mut only = BTreeSet::new();
         for path in files {
             only.insert(self.file_id(path)?);
         }
         let base = SemanticContextKey::enabling(["test"]);
-        let reach = if self.flips_contexts() {
-            self.crates_reaching(files)
-        } else {
-            self.analysed_crates()
+        // The session is the caller's when this goes on from the contexts pass, and this stage's own when it does not.
+        let mut own = None;
+        let session = match session {
+            Some(session) => session,
+            None => own.insert(self.begin_session(files)),
         };
-        let cfgs = LocalCfgs::capture(&self.db, &reach);
+        let super::flip::FlipSession { cfgs, run } = session;
+        let cfgs = &*cfgs;
         let in_base: Vec<CfgOptions> = cfgs.pairs(&base).into_iter().map(|(_, cfg)| cfg).collect();
         let mut covered = Covered::default();
         let mut seen = vec![base.clone()];
@@ -144,7 +140,6 @@ impl SourceDatabase {
         }
         let mut outcome = Ok(());
         let flips = self.flips_contexts();
-        let mut run = self.begin_flips(&cfgs);
         let mut current = SemanticContextKey::ordinary();
         while let Some(context) = next_leaf_context(&mut queue, flips.then_some(&current)) {
             current = context.clone();
@@ -152,7 +147,7 @@ impl SourceDatabase {
             let stage = std::time::Instant::now();
             let enter = crate::Segment::begin("enter");
             let added = match if flips {
-                Ok(self.flip_context(&cfgs, &context))
+                Ok(self.flip_context(cfgs, &context))
             } else {
                 self.add_context_crates(&context)
             } {
@@ -190,7 +185,7 @@ impl SourceDatabase {
             );
             merge(leaves, found);
             if outcome.is_err() {
-                self.end_context(&added, "failed leaf context", &cfgs, run.as_mut());
+                self.end_context(&added, "failed leaf context", cfgs, run.as_mut());
                 break;
             }
             for next in asked(
@@ -208,7 +203,7 @@ impl SourceDatabase {
             }
             // Planning and persistence preparation finish before eviction.
             let end = crate::Segment::begin("end");
-            self.end_context(&added, "leaf context", &cfgs, run.as_mut());
+            self.end_context(&added, "leaf context", cfgs, run.as_mut());
             drop(end);
             // What a process that takes up the run needs to go on from here is kept, and the
             // process ends here if it is the kind that does.
@@ -227,8 +222,8 @@ impl SourceDatabase {
                 );
             }
         }
-        if let Some(run) = run {
-            self.finish_flips(&cfgs, run);
+        if let Some(own) = own {
+            self.finish_session(own);
         }
         outcome
     }
@@ -467,4 +462,16 @@ fn merge(leaves: &mut Vec<LeafFunction>, found: Vec<LeafFunction>) {
             None => leaves.push(leaf),
         }
     }
+}
+
+/// The files of the crate's integration tests, which the leaf stage reads.
+pub(in crate::loader::database) fn leaf_files(graph: &CrateIr) -> CordialResult<Vec<PathBuf>> {
+    use crate::IrView;
+    Ok(graph
+        .source_observability()?
+        .files()
+        .iter()
+        .filter(|file| file.kind() == crate::ir::ObservabilityFileKind::Test)
+        .map(|file| file.snapshot().path().clone())
+        .collect())
 }
