@@ -308,7 +308,7 @@ fn an_item_says_why_the_definition_map_no_longer_declares_it() {
     );
     assert_eq!(
         function_declaration(&db, ids["inside"]),
-        Declaration::Absent(Absence::ModuleGone(salsa::Existence::Deleted))
+        Declaration::Absent(Absence::NotDeclared)
     );
 }
 
@@ -353,19 +353,19 @@ fn an_impl_a_trait_and_an_enum_say_why_the_definition_map_no_longer_declares_the
     assert_eq!(
         why,
         vec![
-            Declaration::Absent(Absence::ModuleGone(salsa::Existence::Deleted)),
+            Declaration::Absent(Absence::NotDeclared),
             Declaration::Absent(Absence::NotDeclared),
             Declaration::Declared,
         ],
-        "the impl in the module that is gone, the one the cfg no longer declares, and the one that remains"
+        "the impl in the module the map no longer has, the one the cfg no longer declares, and the one that remains"
     );
     assert_eq!(
         trait_declaration(&db, traits[0]),
-        Declaration::Absent(Absence::ModuleGone(salsa::Existence::Deleted))
+        Declaration::Absent(Absence::NotDeclared)
     );
     assert_eq!(
         enum_declaration(&db, enums[0]),
-        Declaration::Absent(Absence::ModuleGone(salsa::Existence::Deleted))
+        Declaration::Absent(Absence::NotDeclared)
     );
 }
 
@@ -896,4 +896,34 @@ fn a_module_that_reads_another_crate_is_made_again_when_what_it_read_changes_and
             }
         }
     }
+}
+
+#[test]
+fn a_module_that_a_flip_made_vanish_can_still_be_asked_what_it_is() {
+    use ra_ap_hir_def::declaration::{Absence, Declaration, function_declaration};
+    use ra_ap_hir_def::{ItemContainerId, nameres::stable};
+    let _serial = SERIAL.lock().unwrap();
+    let (mut db, krate) = crate_of(&GATED, atoms(&["a"]));
+    let ids = function_ids(&db, krate);
+    let container = |db: &RootDatabase| match ids["inside"].loc(db).container {
+        ItemContainerId::ModuleId(module) => module,
+        other => panic!("`inside` is declared in a module: {other:?}"),
+    };
+    // The module is there, and the item's id names it.
+    let module = container(&db);
+    assert_eq!(module.name(&db).map(|name| name.as_str().to_owned()).as_deref(), Some("proofs"));
+    let _ = stable::module_fingerprints(&db, krate);
+
+    // The atom goes off and the crate's map is made again without the module. Nothing else holds the module, and
+    // what holds its id (the id of `inside`, and everything keyed by that) is not told: it is asked what it names.
+    krate.set_cfg_options(&mut db).to(CfgOptions::default());
+    let _ = crate_def_map(&db, krate);
+    assert_eq!(module.name(&db).map(|name| name.as_str().to_owned()).as_deref(), Some("proofs"));
+    assert_eq!(module.krate(&db), krate);
+    // And the map says plainly that the module is not in it.
+    assert_eq!(
+        function_declaration(&db, ids["inside"]),
+        Declaration::Absent(Absence::NotDeclared),
+        "the module is not declared by the map, and it is not a module that cannot be read"
+    );
 }

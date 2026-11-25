@@ -535,9 +535,12 @@ mod tracked_struct_token {
     }
 }
 
-#[salsa::tracked(constructor = new_, persist)]
+/// A block expression that has a map of its own. An id that is never deleted: items hold it for good (the id of an
+/// item in a block holds the block), and a tracked struct is deleted when the query that made it stops making it,
+/// which left what held it reading a struct that was gone (or, once its slot was reused, another's).
+#[salsa::interned(constructor = new_, revisions = usize::MAX, persist)]
 #[derive(PartialOrd, Ord)]
-pub struct BlockIdLt<'db> {
+pub struct BlockIdLt {
     #[returns(copy)]
     pub ast_id: AstId<ast::BlockExpr>,
     /// The containing module.
@@ -579,9 +582,11 @@ impl BlockId {
     }
 }
 
-#[salsa::tracked(debug, persist)]
+/// A module. An id that is never deleted, for the reason a block's is not (see [`BlockIdLt`]): a module that a cfg
+/// does not declare any more is a module that is not in its crate's map, and an item's id still names it.
+#[salsa::interned(debug, revisions = usize::MAX, persist)]
 #[derive(PartialOrd, Ord)]
-pub struct ModuleIdLt<'db> {
+pub struct ModuleIdLt {
     /// The crate this module belongs to.
     #[returns(copy)]
     pub krate: Crate,
