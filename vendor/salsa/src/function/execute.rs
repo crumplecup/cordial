@@ -45,7 +45,11 @@ where
         let id = database_key_index.key_index();
         let memo_ingredient_index = self.memo_ingredient_index(zalsa, id);
 
-        crate::tracing::info!("{:?}: executing query", database_key_index);
+        crate::tracing::info!(
+            "{:?}: executing query (depth {})",
+            database_key_index,
+            claim_guard.zalsa_local().query_depth()
+        );
         if C::PERSIST {
             crate::flatten::note_persisted_execution();
         }

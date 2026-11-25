@@ -46,6 +46,25 @@ pub struct ZalsaLocal {
     most_recent_pages: UnsafeCell<FxHashMap<IngredientIndex, PageIndex>>,
 
     cancelled: CancellationToken,
+
+    /// How many scopes are reading without recording what they read (see `keyed::unrecorded`).
+    unrecorded: std::cell::Cell<u32>,
+
+    /// How deep the query stack was when the outermost of them began: what is read in a deeper frame, a query
+    /// that ran inside the scope, is recorded as it always is.
+    unrecorded_frame: std::cell::Cell<usize>,
+
+    /// The lowest durability of what the scopes that do not record have read.
+    unrecorded_durability: std::cell::Cell<Durability>,
+}
+
+/// While alive, what the thread reads is not recorded as a dependency of the running query.
+pub(crate) struct UnrecordedScope<'a>(&'a std::cell::Cell<u32>);
+
+impl Drop for UnrecordedScope<'_> {
+    fn drop(&mut self) {
+        self.0.set(self.0.get() - 1);
+    }
 }
 
 /// A cancellation token that can be used to cancel a query computation for a specific local `Database`.
@@ -91,7 +110,41 @@ impl ZalsaLocal {
             query_stack: RefCell::new(QueryStack::default()),
             most_recent_pages: UnsafeCell::new(FxHashMap::default()),
             cancelled: CancellationToken::default(),
+            unrecorded: std::cell::Cell::new(0),
+            unrecorded_frame: std::cell::Cell::new(0),
+            unrecorded_durability: std::cell::Cell::new(Durability::NEVER_CHANGE),
         }
+    }
+
+    pub(crate) fn unrecorded_scope(&self) -> UnrecordedScope<'_> {
+        if self.unrecorded.get() == 0 {
+            self.unrecorded_durability.set(Durability::NEVER_CHANGE);
+            self.unrecorded_frame.set(self.stack_len());
+        }
+        self.unrecorded.set(self.unrecorded.get() + 1);
+        UnrecordedScope(&self.unrecorded)
+    }
+
+    /// How many queries are running on this thread, the one that is starting not counted: how deep a chain of
+    /// queries is, for the event that says a query began.
+    pub(crate) fn query_depth(&self) -> usize {
+        self.stack_len()
+    }
+
+    fn stack_len(&self) -> usize {
+        // SAFETY: We do not access the query stack reentrantly.
+        unsafe { self.with_query_stack_unchecked(|stack| stack.len()) }
+    }
+
+    /// Whether what the running query reads is not to be recorded: a scope is open and it is the frame that
+    /// opened it that reads.
+    fn not_recording(&self) -> bool {
+        self.unrecorded.get() > 0 && self.stack_len() == self.unrecorded_frame.get()
+    }
+
+    /// The lowest durability of what was read in the scopes that did not record it, since the outermost began.
+    pub(crate) fn unrecorded_durability(&self) -> Durability {
+        self.unrecorded_durability.get()
     }
 
     pub(crate) fn record_unfilled_pages(&mut self, table: &Table) {
@@ -328,6 +381,11 @@ impl ZalsaLocal {
         #[cfg(feature = "accumulator")] has_accumulated: bool,
         #[cfg(feature = "accumulator")] accumulated_inputs: &AtomicInputAccumulatedValues,
     ) {
+        if self.not_recording() {
+            // A query is read inside a scope that says it reads fields only. It is recorded: a read that is not
+            // would leave the running query without the cycles and the changes of what it read.
+            crate::tracing::info!("a query was read inside an unrecorded scope; the read is recorded: {input:?}");
+        }
         crate::tracing::debug!(
             "report_tracked_read(input={:?}, durability={:?}, changed_at={:?})",
             input,
@@ -362,6 +420,10 @@ impl ZalsaLocal {
         durability: Durability,
         changed_at: Revision,
     ) {
+        if self.not_recording() {
+            self.unrecorded_durability.set(self.unrecorded_durability.get().min(durability));
+            return;
+        }
         crate::tracing::debug!(
             "report_tracked_read(input={:?}, durability={:?}, changed_at={:?})",
             input,
@@ -382,6 +444,9 @@ impl ZalsaLocal {
     /// Update the active query's changed revision without recording a dependency edge.
     #[inline(always)]
     pub(crate) fn report_tracked_read_revision(&self, changed_at: Revision) {
+        if self.not_recording() {
+            return;
+        }
         // SAFETY: We do not access the query stack reentrantly.
         unsafe {
             self.with_query_stack_unchecked_mut(|stack| {

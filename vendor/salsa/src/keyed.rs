@@ -43,11 +43,17 @@ impl Jar for KeyedJar {
 pub struct KeyedIngredient {
     index: IngredientIndex,
     changed: std::sync::RwLock<FxHashMap<Id, Revision>>,
+    /// The revision every key changed in at the latest, whatever it says: set when what changed is not known.
+    floor: std::sync::atomic::AtomicUsize,
 }
 
 impl KeyedIngredient {
     fn new(index: IngredientIndex) -> Self {
-        Self { index, changed: std::sync::RwLock::new(FxHashMap::default()) }
+        Self {
+            index,
+            changed: std::sync::RwLock::new(FxHashMap::default()),
+            floor: std::sync::atomic::AtomicUsize::new(Revision::start().as_usize()),
+        }
     }
 
     fn of(zalsa: &Zalsa) -> &Self {
@@ -58,7 +64,12 @@ impl KeyedIngredient {
     /// The revision `key` last changed in: the start for a key that never was touched.
     fn changed_at(&self, key: Id) -> Revision {
         let changed = self.changed.read().unwrap_or_else(|poisoned| poisoned.into_inner());
-        changed.get(&key).copied().unwrap_or_else(Revision::start)
+        let touched = changed.get(&key).copied().unwrap_or_else(Revision::start);
+        touched.max(Revision::from(self.floor.load(std::sync::atomic::Ordering::Acquire)))
+    }
+
+    fn raise_floor(&self, revision: Revision) {
+        self.floor.fetch_max(revision.as_usize(), std::sync::atomic::Ordering::AcqRel);
     }
 
     fn touch(&self, key: Id, revision: Revision) {
@@ -80,10 +91,31 @@ pub fn read(db: &dyn Database, key: Id, durability: Durability) {
     );
 }
 
+/// Runs `read`, which only reads fields, without the running query depending on what it reads. A reader that does
+/// this says what it depends on instead, with [`read`]. Nothing that runs a query belongs inside it: what such a
+/// query read would not be recorded either.
+///
+/// It also says the lowest durability of the fields read, which is the durability of what the reader depends on.
+pub fn unrecorded<R>(db: &dyn Database, read: impl FnOnce() -> R) -> (R, Durability) {
+    let zalsa_local = db.zalsa_local();
+    let scope = zalsa_local.unrecorded_scope();
+    let read = read();
+    let durability = zalsa_local.unrecorded_durability();
+    drop(scope);
+    (read, durability)
+}
+
 /// Say that `key` changed in the current revision: it was added, removed or given another value.
 pub fn touch(db: &dyn Database, key: Id) {
     let zalsa = db.zalsa();
     KeyedIngredient::of(zalsa).touch(key, zalsa.current_revision());
+}
+
+/// Say that every key changed in the current revision, because what changed is not known: there is no map to
+/// say it against, as after a restore.
+pub fn touch_all(db: &dyn Database) {
+    let zalsa = db.zalsa();
+    KeyedIngredient::of(zalsa).raise_floor(zalsa.current_revision());
 }
 
 /// The revision `key` last changed in, as a reader of it would find it.
