@@ -1354,3 +1354,58 @@ fn the_modules_of_a_blocks_map_are_the_blocks_and_not_the_crates() {
     assert!(in_crate > 1, "the crate has modules of its own: {in_crate}");
     assert_eq!(in_block, [Some(block)], "a block's map holds the block's module and no module of the crate");
 }
+
+/// What executes during a flip of the feature `a`, and when the ordinary cfg is put back with what the flip changed
+/// forgotten, in a crate whose first line is `header` and that has `functions` functions that call a macro.
+fn flipped_with_a_crate_attribute(header: &str, functions: usize) -> [std::collections::BTreeMap<String, usize>; 2] {
+    let executed = Runs::default();
+    let subscriber = tracing_subscriber::registry().with(executed.clone());
+    tracing::subscriber::with_default(subscriber, || {
+        let text: String = format!("{header}\nmacro_rules! twice {{ ($e:expr) => {{ $e + $e }}; }}\n")
+            + &(0..functions).map(|n| format!("pub fn plain_{n}() -> u32 {{ twice!({n}) }}\n")).collect::<String>();
+        let (mut db, krate) = crate_of(&[("lib.rs", text.as_str())], CfgOptions::default());
+        let _ = read_bodies(&db, krate);
+        let start = salsa::plumbing::current_revision(&db);
+
+        let before = executed.now();
+        krate.set_cfg_options(&mut db).to(atoms(&["a"]));
+        let _ = read_bodies(&db, krate);
+        let flip = executed.since(&before);
+
+        let before = executed.now();
+        krate.set_cfg_options(&mut db).to(CfgOptions::default());
+        let _ = <dyn salsa::Database>::forget_memos_changed_after(&mut db, start);
+        let _ = read_bodies(&db, krate);
+        [flip, executed.since(&before)]
+    })
+}
+
+/// The bodies and expansions in what `flipped_with_a_crate_attribute` counted.
+fn bodies_and_expansions(counts: &std::collections::BTreeMap<String, usize>) -> usize {
+    counts
+        .iter()
+        .filter(|(name, _)| name.contains("expansion") || name.contains("macro_arg") || name.contains("Body::"))
+        .map(|(_, count)| *count)
+        .sum()
+}
+
+#[test]
+fn flipping_an_attribute_that_turns_on_a_feature_runs_none_of_the_bodies_that_do_not_read_features() {
+    let _serial = SERIAL.lock().unwrap();
+    let header = "#![cfg_attr(feature = \"a\", feature(test))]";
+    let [small_flip, small_settle] = flipped_with_a_crate_attribute(header, 4);
+    let [large_flip, large_settle] = flipped_with_a_crate_attribute(header, 40);
+    assert_eq!(bodies_and_expansions(&large_flip), 0, "the flip: {small_flip:?} {large_flip:?}");
+    assert_eq!(bodies_and_expansions(&large_settle), 0, "putting it back: {small_settle:?} {large_settle:?}");
+}
+
+#[test]
+fn flipping_an_attribute_that_sets_the_recursion_limit_runs_the_expansions_that_read_it_and_the_same_number_in_a_larger_crate() {
+    let _serial = SERIAL.lock().unwrap();
+    let header = "#![cfg_attr(feature = \"a\", recursion_limit = \"512\")]";
+    let [small_flip, _] = flipped_with_a_crate_attribute(header, 4);
+    let [large_flip, _] = flipped_with_a_crate_attribute(header, 40);
+    // An expansion reads the limit, so each runs again: this is what the field is read for, and it must not be lost.
+    assert!(bodies_and_expansions(&small_flip) > 0, "{small_flip:?}");
+    assert!(bodies_and_expansions(&large_flip) > bodies_and_expansions(&small_flip), "{small_flip:?} {large_flip:?}");
+}

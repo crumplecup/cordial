@@ -1414,7 +1414,7 @@ impl<'db> DefCollector<'db> {
                         *expand_to,
                         self.def_map.krate,
                         directive.depth,
-                        self.def_map.recursion_limit(),
+                        self.def_map.recursion_limit(self.db),
                         resolver_def_id,
                         &mut |ptr, call_id| {
                             eager_callback_buffer.push((directive.module_id, ptr, call_id));
@@ -1464,7 +1464,7 @@ impl<'db> DefCollector<'db> {
                         // Record its helper attributes.
                         if def_id.krate != self.def_map.krate {
                             let def_map = crate_def_map(self.db, def_id.krate);
-                            if let Some(helpers) = def_map.data.exported_derives.get(&macro_id) {
+                            if let Some(helpers) = def_map.exported_derive(self.db, macro_id) {
                                 self.def_map
                                     .derive_helpers_in_scope
                                     .entry(ast_id.ast_id.map(|it| it.upcast()))
@@ -1631,7 +1631,7 @@ impl<'db> DefCollector<'db> {
                                         if def_id.krate != self.def_map.krate {
                                             let def_map = crate_def_map(self.db, def_id.krate);
                                             if let Some(helpers) =
-                                                def_map.data.exported_derives.get(&macro_id)
+                                                def_map.exported_derive(self.db, macro_id)
                                             {
                                                 let derive_helpers = self
                                                     .def_map
@@ -1778,7 +1778,7 @@ impl<'db> DefCollector<'db> {
         container: ItemContainerId,
         attr_macro_item: Option<AstId<ast::Item>>,
     ) {
-        if depth > self.def_map.recursion_limit() {
+        if depth > self.def_map.recursion_limit(self.db) {
             cov_mark::hit!(macro_expansion_overflow);
             tracing::warn!("macro expansion is too deep");
             return;
@@ -1849,7 +1849,7 @@ impl<'db> DefCollector<'db> {
                         *expand_to,
                         self.def_map.krate,
                         directive.depth,
-                        self.def_map.recursion_limit(),
+                        self.def_map.recursion_limit(self.db),
                         |path| {
                             let resolved_res = self.def_map.resolve_path_fp_with_macro(
                                 self.crate_local_def_map.unwrap_or(&self.local_def_map),
@@ -3112,7 +3112,7 @@ impl ModCollector<'_, '_> {
             expand_to,
             self.def_collector.def_map.krate,
             self.macro_depth + 1,
-            self.def_collector.def_map.recursion_limit(),
+            self.def_collector.def_map.recursion_limit(self.def_collector.db),
             |path| {
                 path.as_ident().and_then(|name| {
                     let def_map = &self.def_collector.def_map;

@@ -498,7 +498,7 @@ fn resolve_impl_trait_item<'db>(
     // FIXME: resolve type aliases (which are not yielded by iterate_path_candidates)
     let interner = DbInterner::new_with(db, param_env.krate);
     let infcx = interner.infer_ctxt().build(TypingMode::PostAnalysis);
-    let features = resolver.top_level_def_map().features();
+    let features = resolver.top_level_def_map().features(db);
     let ctx = MethodResolutionContext {
         infcx: &infcx,
         resolver: &resolver,

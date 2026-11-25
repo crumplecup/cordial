@@ -1109,8 +1109,9 @@ pub fn derive_macro_2(_item: TokenStream) -> TokenStream {
     let krate = *all_crates(&db).last().expect("no crate graph present");
     let def_map = crate_def_map(&db, krate);
 
-    assert_eq!(def_map.data.exported_derives.len(), 1);
-    match def_map.data.exported_derives.values().next() {
+    let exported_derives = def_map.crate_data(&db).exported_derives.clone();
+    assert_eq!(exported_derives.len(), 1);
+    match exported_derives.values().next() {
         Some(helpers) => match &**helpers {
             [attr] => assert_eq!(attr.display(&db, Edition::CURRENT).to_string(), "helper_attr"),
             _ => unreachable!(),
@@ -1484,7 +1485,7 @@ fn proc_attr(a: TokenStream, b: TokenStream) -> TokenStream { a }
     );
 
     let actual = def_map
-        .macro_use_prelude
+        .macro_use_prelude(&db)
         .keys()
         .map(|name| name.display(&db, Edition::CURRENT).to_string())
         .sorted()

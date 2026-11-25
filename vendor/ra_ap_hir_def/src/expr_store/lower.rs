@@ -3519,7 +3519,7 @@ fn pat_literal_to_hir(lit: &ast::LiteralPat) -> Option<(Literal, ast::Literal)> 
 
 impl<'db> ExprCollector<'db> {
     fn features(&self) -> &'db UnstableFeatures {
-        self.def_map.features()
+        self.def_map.features(self.db)
     }
 
     fn with_fresh_binding_expr_root(&mut self, f: impl FnOnce(&mut Self) -> ExprId) -> ExprId {

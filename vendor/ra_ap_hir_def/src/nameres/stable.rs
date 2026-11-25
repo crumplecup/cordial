@@ -189,13 +189,14 @@ impl StableHash for DefMap {
             modules: _,
             cells: _,
             frozen: _,
-            prelude,
-            macro_use_prelude,
+            facts: _,
+            prelude: _,
+            macro_use_prelude: _,
             derive_helpers_in_scope: _,
             macro_def_to_macro_id: _,
             diagnostics: _,
             diagnostics_cell: _,
-            data,
+            data: _,
         } = self;
         cx.tag("def map");
         krate.stable_hash(cx);
@@ -205,8 +206,8 @@ impl StableHash for DefMap {
             id.stable_hash(cx);
             data.stable_hash(cx);
         });
-        prelude.stable_hash(cx);
-        cx.unordered(macro_use_prelude.iter(), |cx, (name, (macro_id, extern_crate))| {
+        self.prelude(cx.db).stable_hash(cx);
+        cx.unordered(self.macro_use_prelude(cx.db).iter(), |cx, (name, (macro_id, extern_crate))| {
             name.stable_hash(cx);
             macro_id.stable_hash(cx);
             extern_crate.stable_hash(cx);
@@ -225,7 +226,7 @@ impl StableHash for DefMap {
             macro_id.stable_hash(cx);
         });
         self.diagnostics(cx.db).stable_hash(cx);
-        data.stable_hash(cx);
+        self.crate_data(cx.db).stable_hash(cx);
     }
 }
 

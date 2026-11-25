@@ -42,7 +42,7 @@ pub fn crate_lang_items(db: &dyn SourceDatabase, krate: Crate) -> Option<Box<Lan
 
     let crate_def_map = crate_def_map(db, krate);
 
-    if !crate_def_map.features().lang_items {
+    if !crate_def_map.features(db).lang_items {
         return None;
     }
 

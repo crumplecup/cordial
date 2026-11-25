@@ -684,7 +684,7 @@ fn extend_with_attrs<'a, 'db>(
                                 let exp = expander.get_or_insert_with(|| {
                                     let resolver = make_resolver();
                                     let def_map = resolver.top_level_def_map();
-                                    let recursion_limit = def_map.recursion_limit();
+                                    let recursion_limit = def_map.recursion_limit(db);
                                     DocMacroExpander {
                                         db,
                                         krate,

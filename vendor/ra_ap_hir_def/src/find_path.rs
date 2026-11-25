@@ -62,7 +62,7 @@ pub fn find_path(
 
     let from_crate = from.krate(db);
     cfg.prefer_no_std =
-        cfg.prefer_no_std || from_def_map.is_no_std() || crate_supports_no_std(db, from_crate);
+        cfg.prefer_no_std || from_def_map.is_no_std(db) || crate_supports_no_std(db, from_crate);
 
     find_path_inner(
         &FindPathCtx {
@@ -292,7 +292,7 @@ fn find_in_prelude(
     item: ItemInNs,
     from: ModuleIdLt<'_>,
 ) -> Option<Choice> {
-    let (prelude_module, _) = local_def_map.prelude()?;
+    let (prelude_module, _) = local_def_map.prelude(db)?;
     let prelude_def_map = prelude_module.def_map(db);
     let prelude_scope = &prelude_def_map.module_data(db, prelude_module).scope;
     let (name, vis, _declared) = prelude_scope.name_of(item)?;

@@ -263,7 +263,7 @@ pub fn is_inherent_impl_coherent(db: &dyn HirDatabase, def_map: &DefMap, impl_id
         | TyKind::Char
         | TyKind::Int(_)
         | TyKind::Uint(_)
-        | TyKind::Float(_) => def_map.is_rustc_coherence_is_core(),
+        | TyKind::Float(_) => def_map.is_rustc_coherence_is_core(db),
 
         TyKind::Adt(adt_def, _) => adt_def.def_id().module(db).krate(db) == def_map.krate(),
         TyKind::Dynamic(it, _) => it

@@ -661,7 +661,7 @@ impl DefMap {
             }
             self.resolve_name_in_extern_prelude(local_def_map, name)
         };
-        let macro_use_prelude = || self.resolve_in_macro_use_prelude(name);
+        let macro_use_prelude = || self.resolve_in_macro_use_prelude(db, name);
         let prelude = || {
             if self.block.is_some() && module == self.root {
                 return PerNs::none();
@@ -686,7 +686,7 @@ impl DefMap {
         //  - extern prelude / macro_use prelude
         //  - std prelude
         let extern_prelude = self.resolve_name_in_extern_prelude(local_def_map, name);
-        let macro_use_prelude = || self.resolve_in_macro_use_prelude(name);
+        let macro_use_prelude = || self.resolve_in_macro_use_prelude(db, name);
         let prelude = || self.resolve_in_prelude(db, name);
 
         extern_prelude.or_else(macro_use_prelude).or_else(prelude)
@@ -702,8 +702,8 @@ impl DefMap {
         })
     }
 
-    fn resolve_in_macro_use_prelude(&self, name: &Name) -> PerNs {
-        self.macro_use_prelude.get(name).map_or(PerNs::none(), |&(it, extern_crate)| {
+    fn resolve_in_macro_use_prelude(&self, db: &dyn SourceDatabase, name: &Name) -> PerNs {
+        self.macro_use_prelude(db).get(name).map_or(PerNs::none(), |&(it, extern_crate)| {
             PerNs::macros(
                 it,
                 Visibility::Public,
@@ -738,7 +738,7 @@ impl DefMap {
     }
 
     fn resolve_in_prelude(&self, db: &dyn SourceDatabase, name: &Name) -> PerNs {
-        if let Some((prelude, _use)) = self.prelude {
+        if let Some((prelude, _use)) = self.prelude(db) {
             let def_map = if prelude.krate(db) == self.krate { self } else { prelude.def_map(db) };
             def_map.scope_get(db, prelude, name)
         } else {

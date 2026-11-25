@@ -1449,7 +1449,7 @@ impl<'db> InferenceContext<'db> {
             target_features: OnceCell::new(),
             data_layout: OnceCell::new(),
             lang_items: table.interner().lang_items(),
-            features: resolver.top_level_def_map().features(),
+            features: resolver.top_level_def_map().features(db),
             edition: resolver.krate().data(db).edition,
             table,
             tuple_field_accesses_rev: Default::default(),

@@ -585,7 +585,7 @@ impl<'db> InferenceContext<'db> {
         // this check out of this branch. Alternatively, this loop could be implemented with
         // autoderef and this check removed. For now though, don't break code compiling on
         // stable with lots of `&`s and a low recursion limit, if anyone's done that.
-        if pat_adjustments.len() < self.resolver.top_level_def_map().recursion_limit() as usize {
+        if pat_adjustments.len() < self.resolver.top_level_def_map().recursion_limit(self.db) as usize {
             // Preserve the smart pointer type for THIR lowering and closure upvar analysis.
             pat_adjustments.push(PatAdjustment { kind: pat_adjust_kind, source: expected.store() });
         } else {

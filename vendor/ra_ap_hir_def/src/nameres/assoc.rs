@@ -363,7 +363,7 @@ impl<'db> AssocItemCollector<'db> {
                     ExpandTo::Items,
                     self.module_id.krate(self.db),
                     self.macro_depth + 1,
-                    self.def_map.recursion_limit(),
+                    self.def_map.recursion_limit(self.db),
                     resolver,
                     &mut |ptr, call_id| {
                         self.macro_calls.push((ptr.map(|(_, it)| it.upcast()), call_id))
@@ -394,7 +394,7 @@ impl<'db> AssocItemCollector<'db> {
     }
 
     fn collect_macro_items(&mut self, macro_call_id: MacroCallId) {
-        if self.macro_depth > self.def_map.recursion_limit() {
+        if self.macro_depth > self.def_map.recursion_limit(self.db) {
             tracing::warn!("macro expansion is too deep");
             return;
         }

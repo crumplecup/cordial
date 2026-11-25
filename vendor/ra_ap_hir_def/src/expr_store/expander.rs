@@ -35,7 +35,7 @@ impl<'db> Expander<'db> {
         current_file_id: HirFileId,
         def_map: &'db DefMap,
     ) -> Expander<'db> {
-        let recursion_limit = def_map.recursion_limit();
+        let recursion_limit = def_map.recursion_limit(db);
         let recursion_limit = if cfg!(test) {
             // Without this, `body::tests::your_stack_belongs_to_me` stack-overflows in debug
             std::cmp::min(32, recursion_limit)

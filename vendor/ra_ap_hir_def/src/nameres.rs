@@ -188,6 +188,9 @@ pub struct DefMap {
     cells: FxIndexMap<ModuleId, ModuleCell>,
     /// Whether the map is a crate's and finished, and its modules are cells that `crate_module_cell` finds.
     frozen: bool,
+    /// What a finished crate's map says of the crate's attributes and preludes, a field each (see `CrateFactsLt`);
+    /// those of `data` and the preludes are not in the map then, but the edition, which no cfg changes.
+    facts: Option<CrateFacts>,
     /// The prelude module for this crate. This either comes from an import
     /// marked with the `prelude_import` attribute, or (in the normal case) from
     /// a dependency (`std` or `core`).
@@ -218,7 +221,7 @@ pub struct DefMap {
 
 /// Data that belongs to a crate which is shared between a crate's def map and all its block def maps.
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-struct DefMapCrateData {
+pub(crate) struct DefMapCrateData {
     /// Side table for resolving derive helpers.
     exported_derives: FxHashMap<MacroId, Box<[Name]>>,
     fn_proc_macro_mapping: FxHashMap<FunctionId, ProcMacroId>,
@@ -397,6 +400,40 @@ impl DefMap {
 
     /// Makes the finished map's modules cells, so that what reads one depends on that one, and says what each
     /// holds.
+    /// Makes what the crate's attributes and preludes say a cell of the map, and leaves the map the edition only.
+    fn keep_facts_in_a_cell(&mut self, db: &dyn SourceDatabase) {
+        let edition = self.data.edition;
+        let data = std::mem::replace(&mut self.data, Arc::new(DefMapCrateData::new(edition)));
+        let DefMapCrateData {
+            exported_derives,
+            fn_proc_macro_mapping,
+            fn_proc_macro_mapping_back,
+            registered_tools,
+            unstable_features,
+            rustc_coherence_is_core,
+            no_core,
+            no_std,
+            edition: _,
+            recursion_limit,
+        } = Arc::try_unwrap(data).unwrap_or_else(|shared| (*shared).clone());
+        let cell = CrateFactsLt::new(
+            db,
+            unsafe { self.root.to_db(db) },
+            self.prelude.take(),
+            Arc::new(std::mem::take(&mut self.macro_use_prelude)),
+            no_std,
+            no_core,
+            rustc_coherence_is_core,
+            recursion_limit,
+            Arc::new(unstable_features),
+            Arc::new(registered_tools),
+            Arc::new(exported_derives),
+            Arc::new(fn_proc_macro_mapping),
+            Arc::new(fn_proc_macro_mapping_back),
+        );
+        self.facts = Some(unsafe { cell.to_static() });
+    }
+
     /// A crate's map hands its cells back, to be kept beside the map; a block's keeps them.
     pub(crate) fn freeze(
         &mut self,
@@ -424,6 +461,7 @@ impl DefMap {
                 macro_def_to_macro_id: std::mem::take(&mut self.macro_def_to_macro_id),
                 derive_helpers_in_scope: std::mem::take(&mut self.derive_helpers_in_scope),
             };
+            self.keep_facts_in_a_cell(db);
             (held, cells, extras)
         }
     }
@@ -603,6 +641,59 @@ fn touch_changed_names(
         modules_now = now.len() as u64,
         "the names of a map that are not what they were"
     );
+}
+
+/// What a crate's attributes and its preludes say, a field each, as tracked fields: a reader of the limit on
+/// recursion does not depend on the features the crate enables, and a flip that turns `feature(test)` on runs none
+/// of what reads the preludes or the limit. One cell a crate, found again by its root module when the map is made
+/// again; its fields keep the revision they last changed in when equal.
+#[salsa::tracked(debug, persist)]
+pub struct CrateFactsLt<'db> {
+    #[returns(copy)]
+    pub root: ModuleIdLt<'db>,
+    #[tracked]
+    #[returns(copy)]
+    pub prelude: Option<(ModuleId, Option<UseId>)>,
+    #[tracked]
+    #[returns(ref)]
+    pub macro_use_prelude: Arc<FxHashMap<Name, (MacroId, Option<ExternCrateId>)>>,
+    #[tracked]
+    #[returns(copy)]
+    pub no_std: bool,
+    #[tracked]
+    #[returns(copy)]
+    pub no_core: bool,
+    #[tracked]
+    #[returns(copy)]
+    pub rustc_coherence_is_core: bool,
+    #[tracked]
+    #[returns(copy)]
+    pub recursion_limit: Option<u32>,
+    #[tracked]
+    #[returns(ref)]
+    pub unstable_features: Arc<UnstableFeatures>,
+    #[tracked]
+    #[returns(ref)]
+    pub registered_tools: Arc<Vec<Symbol>>,
+    #[tracked]
+    #[returns(ref)]
+    pub exported_derives: Arc<FxHashMap<MacroId, Box<[Name]>>>,
+    #[tracked]
+    #[returns(ref)]
+    pub fn_proc_macro_mapping: Arc<FxHashMap<FunctionId, ProcMacroId>>,
+    #[tracked]
+    #[returns(ref)]
+    pub fn_proc_macro_mapping_back: Arc<FxHashMap<ProcMacroId, FunctionId>>,
+}
+pub type CrateFacts = CrateFactsLt<'static>;
+
+impl<'db> CrateFactsLt<'db> {
+    /// # Safety
+    ///
+    /// The cell is kept in the map of the query that made it, and read through the database that made it.
+    unsafe fn to_static(self) -> CrateFacts {
+        unsafe { std::mem::transmute(self) }
+    }
 }
 
 /// A finished map's diagnostics. They hold the crate's options, so they differ under any flip of the cfg: a
@@ -861,15 +952,18 @@ pub fn block_def_map<'db>(db: &'db dyn SourceDatabase, block_id: BlockIdLt<'db>)
         parent_module = ?module,
         "computing the def map of a block"
     );
-    let crate_data = crate_def_map(db, krate).data.clone();
+    // A block's map shares the crate's cell of facts and reads from it what it needs, a field at a time: it does not
+    // depend on the crate's attributes it does not read.
+    let crate_map = crate_def_map(db, krate);
     let local_def_map = local_def_map(db, krate);
-    let def_map = DefMap::empty(
+    let mut def_map = DefMap::empty(
         db,
         krate,
-        crate_data,
+        Arc::new(DefMapCrateData::new(crate_map.data.edition)),
         module_data,
         Some(BlockInfo { block: block_id, parent: module }),
     );
+    def_map.facts = crate_map.facts;
 
     let (def_map, _, _) = collector::collect_defs(
         db,
@@ -913,6 +1007,7 @@ impl DefMap {
             modules,
             cells: FxIndexMap::default(),
             frozen: false,
+            facts: None,
             krate,
             prelude: None,
             macro_use_prelude: FxHashMap::default(),
@@ -932,6 +1027,7 @@ impl DefMap {
             modules,
             cells,
             frozen: _,
+            facts: _,
             derive_helpers_in_scope,
             root: _,
             block: _,
@@ -1085,33 +1181,81 @@ impl DefMap {
         }
     }
 
-    pub fn registered_tools(&self) -> &[Symbol] {
-        &self.data.registered_tools
+    pub fn registered_tools<'a>(&'a self, db: &'a dyn SourceDatabase) -> &'a [Symbol] {
+        match self.facts {
+            Some(facts) => facts.registered_tools(db),
+            None => &self.data.registered_tools,
+        }
     }
 
     #[inline]
-    pub fn features(&self) -> &UnstableFeatures {
-        &self.data.unstable_features
+    pub fn features<'a>(&'a self, db: &'a dyn SourceDatabase) -> &'a UnstableFeatures {
+        match self.facts {
+            Some(facts) => facts.unstable_features(db),
+            None => &self.data.unstable_features,
+        }
     }
 
-    pub fn is_rustc_coherence_is_core(&self) -> bool {
-        self.data.rustc_coherence_is_core
+    pub fn is_rustc_coherence_is_core(&self, db: &dyn SourceDatabase) -> bool {
+        match self.facts {
+            Some(facts) => facts.rustc_coherence_is_core(db),
+            None => self.data.rustc_coherence_is_core,
+        }
     }
 
-    pub fn is_no_std(&self) -> bool {
-        self.data.no_std || self.data.no_core
+    pub fn is_no_std(&self, db: &dyn SourceDatabase) -> bool {
+        match self.facts {
+            Some(facts) => facts.no_std(db) || facts.no_core(db),
+            None => self.data.no_std || self.data.no_core,
+        }
     }
 
-    pub fn is_no_core(&self) -> bool {
-        self.data.no_core
+    pub fn is_no_core(&self, db: &dyn SourceDatabase) -> bool {
+        match self.facts {
+            Some(facts) => facts.no_core(db),
+            None => self.data.no_core,
+        }
     }
 
-    pub fn fn_as_proc_macro(&self, id: FunctionId) -> Option<ProcMacroId> {
-        self.data.fn_proc_macro_mapping.get(&id).copied()
+    pub fn fn_as_proc_macro(&self, db: &dyn SourceDatabase, id: FunctionId) -> Option<ProcMacroId> {
+        match self.facts {
+            Some(facts) => facts.fn_proc_macro_mapping(db).get(&id).copied(),
+            None => self.data.fn_proc_macro_mapping.get(&id).copied(),
+        }
     }
 
-    pub fn proc_macro_as_fn(&self, id: ProcMacroId) -> Option<FunctionId> {
-        self.data.fn_proc_macro_mapping_back.get(&id).copied()
+    pub fn proc_macro_as_fn(&self, db: &dyn SourceDatabase, id: ProcMacroId) -> Option<FunctionId> {
+        match self.facts {
+            Some(facts) => facts.fn_proc_macro_mapping_back(db).get(&id).copied(),
+            None => self.data.fn_proc_macro_mapping_back.get(&id).copied(),
+        }
+    }
+
+    /// The names a derive of `macro_id` makes helper attributes of.
+    pub(crate) fn exported_derive<'a>(&'a self, db: &'a dyn SourceDatabase, macro_id: MacroId) -> Option<&'a [Name]> {
+        match self.facts {
+            Some(facts) => facts.exported_derives(db).get(&macro_id).map(|names| &**names),
+            None => self.data.exported_derives.get(&macro_id).map(|names| &**names),
+        }
+    }
+
+    /// What the crate's attributes say, as a plain value: the map of a block is made with it, and a hash says it.
+    pub(crate) fn crate_data(&self, db: &dyn SourceDatabase) -> Arc<DefMapCrateData> {
+        match self.facts {
+            None => Arc::clone(&self.data),
+            Some(facts) => Arc::new(DefMapCrateData {
+                exported_derives: (**facts.exported_derives(db)).clone(),
+                fn_proc_macro_mapping: (**facts.fn_proc_macro_mapping(db)).clone(),
+                fn_proc_macro_mapping_back: (**facts.fn_proc_macro_mapping_back(db)).clone(),
+                registered_tools: (**facts.registered_tools(db)).clone(),
+                unstable_features: (**facts.unstable_features(db)).clone(),
+                rustc_coherence_is_core: facts.rustc_coherence_is_core(db),
+                no_core: facts.no_core(db),
+                no_std: facts.no_std(db),
+                edition: self.data.edition,
+                recursion_limit: facts.recursion_limit(db),
+            }),
+        }
     }
 
     pub fn krate(&self) -> Crate {
@@ -1159,9 +1303,13 @@ impl DefMap {
         }
     }
 
-    pub fn recursion_limit(&self) -> u32 {
+    pub fn recursion_limit(&self, db: &dyn SourceDatabase) -> u32 {
         // 128 is the default in rustc
-        self.data.recursion_limit.unwrap_or(128)
+        match self.facts {
+            Some(facts) => facts.recursion_limit(db),
+            None => self.data.recursion_limit,
+        }
+        .unwrap_or(128)
     }
 
     // FIXME: this can use some more human-readable format (ideally, an IR
@@ -1203,12 +1351,21 @@ impl DefMap {
         self.block.map(|block| block.block)
     }
 
-    pub(crate) fn prelude(&self) -> Option<(ModuleId, Option<UseId>)> {
-        self.prelude
+    pub(crate) fn prelude(&self, db: &dyn SourceDatabase) -> Option<(ModuleId, Option<UseId>)> {
+        match self.facts {
+            Some(facts) if self.frozen => facts.prelude(db),
+            _ => self.prelude,
+        }
     }
 
-    pub(crate) fn macro_use_prelude(&self) -> &FxHashMap<Name, (MacroId, Option<ExternCrateId>)> {
-        &self.macro_use_prelude
+    pub(crate) fn macro_use_prelude<'a>(
+        &'a self,
+        db: &'a dyn SourceDatabase,
+    ) -> &'a FxHashMap<Name, (MacroId, Option<ExternCrateId>)> {
+        match self.facts {
+            Some(facts) if self.frozen => facts.macro_use_prelude(db),
+            _ => &self.macro_use_prelude,
+        }
     }
 
     pub(crate) fn resolve_path(

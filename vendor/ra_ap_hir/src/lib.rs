@@ -1846,7 +1846,7 @@ impl Function {
             return None;
         };
         let def_map = crate_def_map(db, HasModule::krate(&id, db));
-        def_map.fn_as_proc_macro(id).map(|id| Macro { id: id.into() })
+        def_map.fn_as_proc_macro(db, id).map(|id| Macro { id: id.into() })
     }
 
     pub fn eval(
@@ -3486,14 +3486,14 @@ impl ToolModule {
     pub(crate) fn by_name(db: &dyn HirDatabase, krate: Crate, name: &str) -> Option<Self> {
         let krate = krate.id;
         let idx =
-            crate_def_map(db, krate).registered_tools().iter().position(|it| it.as_str() == name)?
+            crate_def_map(db, krate).registered_tools(db).iter().position(|it| it.as_str() == name)?
                 as u32;
         Some(ToolModule { krate, idx })
     }
 
     pub fn name(&self, db: &dyn HirDatabase) -> Name {
         Name::new_symbol_root(
-            crate_def_map(db, self.krate).registered_tools()[self.idx as usize].clone(),
+            crate_def_map(db, self.krate).registered_tools(db)[self.idx as usize].clone(),
         )
     }
 
@@ -5435,7 +5435,7 @@ impl<'db> Type<'db> {
             TypingMode::non_body_analysis()
         };
         let infcx = interner.infer_ctxt().build(typing_mode);
-        let features = resolver.top_level_def_map().features();
+        let features = resolver.top_level_def_map().features(db);
         let environment = self.param_env(db);
         let ctx = MethodResolutionContext {
             infcx: &infcx,

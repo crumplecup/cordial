@@ -638,7 +638,7 @@ impl<'db> Resolver<'db> {
                 res.add(name, ScopeDef::ModuleDef(ModuleDefId::MacroId(mac)));
             })
         });
-        def_map.macro_use_prelude().iter().sorted_by_key(|&(k, _)| k.clone()).for_each(
+        def_map.macro_use_prelude(db).iter().sorted_by_key(|&(k, _)| k.clone()).for_each(
             |(name, &(def, _extern_crate))| {
                 res.add(name, ScopeDef::ModuleDef(def.into()));
             },
@@ -649,7 +649,7 @@ impl<'db> Resolver<'db> {
         BUILTIN_SCOPE.iter().for_each(|(name, &def)| {
             res.add_per_ns(name, def);
         });
-        if let Some((prelude, _use)) = def_map.prelude() {
+        if let Some((prelude, _use)) = def_map.prelude(db) {
             let prelude_def_map = prelude.def_map(db);
             for (name, def) in prelude_def_map.module_data(db, prelude).scope.entries() {
                 res.add_per_ns(name, def)
@@ -708,7 +708,7 @@ impl<'db> Resolver<'db> {
         }
 
         // Fill in the prelude traits
-        if let Some((prelude, _use)) = self.module_scope.def_map.prelude() {
+        if let Some((prelude, _use)) = self.module_scope.def_map.prelude(db) {
             let prelude_def_map = prelude.def_map(db);
             traits.extend(prelude_def_map.module_data(db, prelude).scope.traits());
         }
@@ -1197,7 +1197,7 @@ impl<'db> ModuleItemMap<'db> {
         );
         match unresolved_idx {
             None => {
-                let (value, vis) = to_value_ns(module_def, self.def_map)?;
+                let (value, vis) = to_value_ns(db, module_def, self.def_map)?;
                 Some((ResolveValueResult::ValueNs(value), prefix_info, vis))
             }
             Some(unresolved_idx) => {
@@ -1243,7 +1243,7 @@ impl<'db> ModuleItemMap<'db> {
     }
 }
 
-fn to_value_ns(per_ns: PerNs, def_map: &DefMap) -> Option<(ValueNs, Visibility)> {
+fn to_value_ns(db: &dyn SourceDatabase, per_ns: PerNs, def_map: &DefMap) -> Option<(ValueNs, Visibility)> {
     let (def, vis) = per_ns.take_values_full().map(|res| (res.def, res.vis)).or_else(|| {
         let Some(MacrosItem { def: MacroId::ProcMacroId(proc_macro), vis, .. }) =
             per_ns.take_macros_full()
@@ -1252,7 +1252,7 @@ fn to_value_ns(per_ns: PerNs, def_map: &DefMap) -> Option<(ValueNs, Visibility)>
         };
         // If we cannot resolve to value ns, but we can resolve to a proc macro, and this is the crate
         // defining this proc macro - inside this crate, we should treat the macro as a function.
-        let def = ModuleDefId::FunctionId(def_map.proc_macro_as_fn(proc_macro)?);
+        let def = ModuleDefId::FunctionId(def_map.proc_macro_as_fn(db, proc_macro)?);
         Some((def, vis))
     })?;
     let res = match def {

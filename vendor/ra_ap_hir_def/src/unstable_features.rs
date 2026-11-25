@@ -49,7 +49,7 @@ impl UnstableFeatures {
     /// Otherwise, use this, to not draw a dependency to the def map.
     #[salsa::tracked(returns(ref))]
     pub fn query(db: &dyn SourceDatabase, krate: Crate) -> UnstableFeatures {
-        crate::crate_def_map(db, krate).features().clone()
+        crate::crate_def_map(db, krate).features(db).clone()
     }
 }
 
