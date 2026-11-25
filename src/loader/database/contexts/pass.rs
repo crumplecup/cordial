@@ -469,6 +469,10 @@ impl SourceDatabase {
             // their facts, and the first few named, so that the log says what a kept function changed.
             let mut differing: BTreeMap<crate::FactPart, usize> = BTreeMap::new();
             let mut named = 0usize;
+            // The same, by the set of parts that differ together; and for a function whose identity changed, how
+            // the ordinary build's definition was made and how this context's was.
+            let mut differing_together: BTreeMap<String, usize> = BTreeMap::new();
+            let mut identity_changes: BTreeMap<String, usize> = BTreeMap::new();
             // How many functions each file has in this context, said once the file is done, so that two runs of a
             // crate can be told apart by file when their totals are not the same.
             let mut file_started: Option<(&std::path::Path, usize)> = None;
@@ -629,6 +633,15 @@ impl SourceDatabase {
                             for part in &parts {
                                 *differing.entry(*part).or_default() += 1;
                             }
+                            *differing_together.entry(format!("{parts:?}")).or_default() += 1;
+                            if parts.contains(&crate::FactPart::Definition) {
+                                let change = format!(
+                                    "{:?} -> {:?}",
+                                    item_key::made_how(&self.db, *ordinary.definition()),
+                                    item_key::made_how(&self.db, *here.definition())
+                                );
+                                *identity_changes.entry(change).or_default() += 1;
+                            }
                             if named < KEPT_NAMED {
                                 named += 1;
                                 tracing::info!(
@@ -636,10 +649,13 @@ impl SourceDatabase {
                                     %context,
                                     function = here.label(),
                                     parts = ?parts,
-                                    first_part = parts
-                                        .first()
-                                        .map(|part| ordinary.difference_in(&here, *part))
-                                        .unwrap_or_default(),
+                                    detail = parts
+                                        .iter()
+                                        .map(|part| format!("{part:?}: {}", ordinary.difference_in(&here, *part)))
+                                        .collect::<Vec<_>>()
+                                        .join(" | "),
+                                    ordinary_definition = item_key::description_of(&self.db, *ordinary.definition()),
+                                    context_definition = item_key::description_of(&self.db, *here.definition()),
                                     "a function the ordinary build has, whose facts this context changes"
                                 );
                             }
@@ -678,6 +694,8 @@ impl SourceDatabase {
                 new_here,
                 kept,
                 differing = ?differing,
+                differing_together = ?differing_together,
+                identity_changes = ?identity_changes,
                 "the files of a context's copy: read from saved lists, and through rust-analyzer"
             );
             let mut edges: BTreeSet<(NodeId, NodeId)> = BTreeSet::new();

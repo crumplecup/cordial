@@ -917,29 +917,44 @@ fn a_block_in_a_module_only_the_context_has_is_not_held_when_the_flips_are_finis
     Ok(())
 }
 
-/// What a context's harvest said about the functions it kept: how many it kept, how many exist only there, and which
-/// parts of the facts of the others differ; and the functions it named, with the part that differs and how.
+/// What a context's harvest said about the functions it kept.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct KeptTotals {
+    kept: u64,
+    new_here: u64,
+    /// The parts of the facts that differ, each with how many functions differ in it.
+    differing: String,
+    /// The sets of parts that differ together.
+    together: String,
+    /// How the definition was made, before and after, for each function whose identity changed.
+    identity: String,
+}
+
+/// The totals of a harvest and the functions it named, with the part that differs and how.
 #[derive(Clone, Default)]
-struct KeptReport(Arc<Mutex<Vec<(u64, u64, String)>>>, Arc<Mutex<Vec<(String, String)>>>);
+struct KeptReport(Arc<Mutex<Vec<KeptTotals>>>, Arc<Mutex<Vec<(String, String)>>>);
 
 impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for KeptReport {
     fn on_event(&self, event: &tracing::Event<'_>, _: tracing_subscriber::layer::Context<'_, S>) {
         #[derive(Default)]
         struct Fields {
-            kept: Option<u64>,
-            new_here: Option<u64>,
-            differing: Option<String>,
+            totals: KeptTotals,
+            seen: [bool; 5],
         }
         impl tracing::field::Visit for Fields {
             fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
-                if field.name() == "differing" {
-                    self.differing = Some(format!("{value:?}"));
+                let text = format!("{value:?}");
+                match field.name() {
+                    "differing" => (self.totals.differing, self.seen[2]) = (text, true),
+                    "differing_together" => (self.totals.together, self.seen[3]) = (text, true),
+                    "identity_changes" => (self.totals.identity, self.seen[4]) = (text, true),
+                    _ => {}
                 }
             }
             fn record_u64(&mut self, field: &tracing::field::Field, value: u64) {
                 match field.name() {
-                    "kept" => self.kept = Some(value),
-                    "new_here" => self.new_here = Some(value),
+                    "kept" => (self.totals.kept, self.seen[0]) = (value, true),
+                    "new_here" => (self.totals.new_here, self.seen[1]) = (value, true),
                     _ => {}
                 }
             }
@@ -951,7 +966,7 @@ impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for KeptReport {
                 fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
                     match field.name() {
                         "parts" => self.0 = format!("{value:?}"),
-                        "first_part" => self.1 = format!("{value:?}"),
+                        "detail" => self.1 = format!("{value:?}"),
                         _ => {}
                     }
                 }
@@ -966,14 +981,14 @@ impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for KeptReport {
         }
         let mut fields = Fields::default();
         event.record(&mut fields);
-        if let (Some(kept), Some(new_here), Some(differing)) = (fields.kept, fields.new_here, fields.differing) {
-            self.0.lock().unwrap().push((kept, new_here, differing));
+        if fields.seen.iter().all(|seen| *seen) {
+            self.0.lock().unwrap().push(fields.totals);
         }
     }
 }
 
 /// What a run reported of a context's kept functions, and the functions it named with the part that differs.
-type KeptOfARun = ((u64, u64, String), Vec<(String, String)>);
+type KeptOfARun = (KeptTotals, Vec<(String, String)>);
 
 /// What the one context `kani` kept of `library`: kept, new here, and the parts that differ.
 fn kept_of_a_run(library: &str) -> Result<KeptOfARun> {
@@ -998,16 +1013,25 @@ fn a_function_the_context_does_not_change_is_not_kept_and_one_whose_call_resolve
     // Nothing the context flips is read by `plain`: it is not kept, and nothing differs.
     let unaffected =
         kept_of_a_run("pub fn plain() -> u32 { 1 }\n#[cfg(kani)]\npub fn harness() -> u32 { 2 }\n")?;
-    assert_eq!(unaffected.0, (1, 1, "{}".to_owned()), "only `harness` is kept, and it is new here");
+    assert_eq!(
+        (unaffected.0.kept, unaffected.0.new_here, unaffected.0.differing.as_str()),
+        (1, 1, "{}"),
+        "only `harness` is kept, and it is new here"
+    );
     // `caller` calls the `helper` that the context's cfg selects, which is another function: it is kept, and what
     // differs is the target of its call and nothing else.
     let changed = kept_of_a_run(
         "#[cfg(not(kani))]\npub fn helper() -> u32 { 1 }\n#[cfg(kani)]\npub fn helper() -> u32 { 2 }\npub fn caller() -> u32 { helper() }\n",
     )?;
-    assert_eq!(changed.0, (2, 1, "{CallsTarget: 1}".to_owned()), "`helper` is new here, `caller` is kept");
+    assert_eq!(
+        (changed.0.kept, changed.0.new_here, changed.0.differing.as_str(), changed.0.together.as_str()),
+        (2, 1, "{CallsTarget: 1}", "{\"[CallsTarget]\": 1}"),
+        "`helper` is new here, `caller` is kept, and its call is what differs"
+    );
+    assert_eq!(changed.0.identity, "{}", "no identity changed");
     assert_eq!(changed.1.len(), 1, "the one function the ordinary build has is named: {:?}", changed.1);
     assert_eq!(changed.1[0].0, "[CallsTarget]");
-    assert!(changed.1[0].1.contains("Function("), "and what its call was and is: {:?}", changed.1);
+    assert!(changed.1[0].1.contains("CallsTarget: ") && changed.1[0].1.contains("Function("), "and what its call was and is: {:?}", changed.1);
     assert!(unaffected.1.is_empty(), "nothing is named when nothing differs: {:?}", unaffected.1);
     Ok(())
 }
@@ -1163,4 +1187,23 @@ impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for FunctionsReport {
             _ => {}
         }
     }
+}
+
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn a_cfg_attr_in_front_of_an_attribute_macro_changes_the_identity_of_the_function_and_nothing_else() -> Result<()> {
+    let _serial = SERIAL.lock().unwrap();
+    cordial::init_tracing();
+    // The macro call is made from the item and the index of the attribute among its attributes, so the context that
+    // adds one in front of it makes another call, and the function it expands to is made in another file: the same
+    // function, written in one place, has another identity, and what it says is the same.
+    let (totals, named) = kept_of_a_run(
+        "#[rustc_builtin_macro]\npub macro global_allocator($item:item) {}\n#[cfg_attr(kani, inline)]\n#[global_allocator]\npub fn f() -> u32 { 1 }\n",
+    )?;
+    assert_eq!((totals.kept, totals.new_here), (1, 0), "`f` is kept, and the ordinary build has it");
+    assert_eq!(totals.differing, "{Definition: 1}");
+    assert_eq!(totals.together, "{\"[Definition]\": 1}");
+    assert_eq!(named.len(), 1, "{named:?}");
+    assert!(totals.identity.contains("Generated"), "the definition is one a macro made: {}", totals.identity);
+    Ok(())
 }
