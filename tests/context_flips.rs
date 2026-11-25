@@ -1207,3 +1207,19 @@ fn a_cfg_attr_in_front_of_an_attribute_macro_changes_the_identity_of_the_functio
     assert!(totals.identity.contains("Generated"), "the definition is one a macro made: {}", totals.identity);
     Ok(())
 }
+
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn an_attribute_macro_the_context_turns_off_makes_the_function_one_that_is_written_and_not_one_a_macro_made() -> Result<()> {
+    let _serial = SERIAL.lock().unwrap();
+    cordial::init_tracing();
+    // `#[cfg_attr(not(kani), tracing::instrument)]` is on thousands of functions of amenable: without `kani` a macro
+    // wraps the function, and with it the function stands as it is written. The context's facts are those of the
+    // function as written, which are not the ordinary ones, and keeping them is right.
+    let (totals, _) = kept_of_a_run(
+        "#[rustc_builtin_macro]\npub macro global_allocator($item:item) {}\n#[cfg_attr(not(kani), global_allocator)]\npub fn f() -> u32 { 1 }\n",
+    )?;
+    assert_eq!((totals.kept, totals.new_here), (1, 0), "`f` is kept, and the ordinary build has it");
+    assert_eq!(totals.identity, "{\"Generated -> Written\": 1}", "a macro made it, and now it is written");
+    Ok(())
+}
