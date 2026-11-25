@@ -405,7 +405,7 @@ fn an_attribute_macro_only_a_flipped_context_applies_does_not_stop_the_state_fro
 
 /// What the state is saved with when a flipped context made each of these, in one fixture each. A save verifies
 /// every persisted memo, so each is a shape that a memo of the flipped state can be in when the cfg is back.
-const SHAPES: [(&str, &str); 7] = [
+const SHAPES: [(&str, &str); 8] = [
     (
         "an impl in a block inside a function only the context has",
         "pub fn ordinary() -> u32 { 1 }\n#[cfg(kani)]\npub fn harness() -> u32 {\n    struct Local(u32);\n    impl Local { #[kani::proof] fn get(&self) -> u32 { self.0 } }\n    Local(ordinary()).get()\n}\n",
@@ -429,6 +429,10 @@ const SHAPES: [(&str, &str); 7] = [
     (
         "a function that is there without the context and uses a generic struct of a module only the context has",
         "pub fn alive() -> u32 {\n    #[cfg(kani)]\n    {\n        let _ = crate::proofs::W(1u8);\n    }\n    1\n}\n#[cfg(kani)]\npub mod proofs { pub struct W<T>(pub T); }\n#[cfg(kani)]\npub fn harness() -> u32 { alive() }\n",
+    ),
+    (
+        "a block with an item and a macro call, in a function of a module only the context has",
+        "pub fn alive() -> u32 { 1 }\n#[cfg(kani)]\npub mod proofs { pub fn inside() { { struct B; unknown_macro!(); } } }\n",
     ),
     (
         "a function whose body has closures, blocks and a macro call, only the context has",

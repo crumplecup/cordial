@@ -124,10 +124,13 @@ fn declared(db: &dyn SourceDatabase, function: FunctionId) -> Result<(), Absence
     }
 }
 
-/// Makes the definition map of `block` (or finds it made), for what must have run before it is read.
+/// Makes the definition map of `block` (or finds it made), for what must have run before it is read. A block in a
+/// module the crate's map does not have is not asked: its map is made by looking that module up in the crate's.
 pub fn settle_block_map(db: &dyn SourceDatabase, block: crate::BlockId) {
-    // SAFETY: the block is of this database, and the map is not kept.
-    let _ = crate::nameres::block_def_map(db, unsafe { block.to_db(db) });
+    if block_declaration(db, block).is_declared() {
+        // SAFETY: the block is of this database, and the map is not kept.
+        let _ = crate::nameres::block_def_map(db, unsafe { block.to_db(db) });
+    }
 }
 
 /// Makes again the body of every function, const and static the crate's definition map declares, on this thread, so

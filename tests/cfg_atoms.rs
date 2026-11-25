@@ -927,3 +927,35 @@ fn a_module_that_a_flip_made_vanish_can_still_be_asked_what_it_is() {
         "the module is not declared by the map, and it is not a module that cannot be read"
     );
 }
+
+/// A crate whose gated module has a function with a block that has an item, so that the block has a map of its own.
+const GATED_BLOCK: [(&str, &str); 2] = [
+    ("lib.rs", "#[cfg(feature = \"a\")]\nmod proofs;\npub fn plain() {}\n"),
+    ("proofs.rs", "pub fn inside() { { struct B; unknown_macro!(); } }\n"),
+];
+
+/// What the block of a function in a module that only the flipped atom declares is asked, once the atom is off.
+fn block_of_a_vanished_module() -> (RootDatabase, ra_ap_hir_def::BlockId) {
+    let (mut db, krate) = crate_of(&GATED_BLOCK, atoms(&["a"]));
+    let inside = function_ids(&db, krate)["inside"];
+    let block = {
+        let (body, _) = Body::with_source_map(&db, DefWithBodyId::FunctionId(inside));
+        let blocks: Vec<_> = body.blocks(&db).map(|(block, _)| block).collect();
+        assert_eq!(blocks.len(), 1, "the block that has an item has a map of its own");
+        blocks[0]
+    };
+    krate.set_cfg_options(&mut db).to(CfgOptions::default());
+    let _ = crate_def_map(&db, krate);
+    (db, block)
+}
+
+#[test]
+fn the_map_of_a_block_in_a_module_the_map_no_longer_has_is_not_made() {
+    use ra_ap_hir_def::declaration::{Absence, Declaration, block_declaration, settle_block_map};
+    let _serial = SERIAL.lock().unwrap();
+    let (db, block) = block_of_a_vanished_module();
+    assert_eq!(block_declaration(&db, block), Declaration::Absent(Absence::NotDeclared));
+    // Settling the maps of the blocks that are held is asked of this one too, and the map of its block is not made:
+    // it would look its module up in a map that does not have it.
+    settle_block_map(&db, block);
+}
