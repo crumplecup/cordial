@@ -217,3 +217,30 @@ that differ are the tracing etiquette's (`tracing-instrument.csv` and its summar
 `TRACING-PROOF-INSTRUMENT` on `KaniVerifier::name` and `CanaryVerifier::name` only in flips. All four are the same
 `#[cfg_attr(not(kani), ...)]` trait method; which mode is right depends on the call graph's proof-only reachability
 (`call_graph/exclusion.rs`), whose callers here are inside a `macro_rules!` expansion. Not yet adjudicated.
+
+## Status (2026-11-25, where flips' time goes, shown in unit tests)
+
+**Measuring.** Every region of the projection, the context pass, the leaf stage and the flips is a `Segment`
+(`src/segment.rs`): time, queries, memos re-validated and edges walked, the queries re-validated most, and by
+durability. `metrics.json` adds up each path, so two runs are compared region by region. `tests/segments.rs`.
+
+**The cost, found by a unit test and not by a run.** A context that flips an atom nothing reads, in a crate of five
+functions, made harvest re-validate 112,800 memos and walk 427,446 edges (copies: 17). 112,695 were of medium
+durability: the library's (the sysroot's impl signatures, attributes and item trees). The cause is in salsa's
+`input.rs`: a write to a field whose durability is above low is reported as a write at that durability, and a local
+crate's cfg was created at medium, so the first write to each crate's cfg invalidated every medium memo, once for each
+crate flipped for the first time (`the_first_flip_of_a_crates_cfg_does_not_make_the_library_verify_again`: the pass for
+`a` and `b`, again for `c`, and none for `a` again). A local crate's cfg is now created low (`ra_ap_base_db`'s
+`cfg_durability`): the same harvest verifies 106 memos and walks 692 edges, and a crate ten times the size costs about
+eighteen memos for each function more (`a_flip_that_changes_nothing_verifies_memos_in_proportion_to_the_crate_...`).
+
+**Scope.** A pass flips, settles and plans over the crates the target holds and what they depend on, not the
+workspace's (`crates_reaching`; `tests/flip_scope.rs`). By the amenable workspace's graph the ten packages go from
+1,100 crate-passes to 143.
+
+**Shown not to be waste:** the steps of a flipped pass run the same queries in a crate ten times the size, and a flip of
+an atom nothing reads runs no macro expansion again, in the crate or in a crate that uses its macros
+(`tests/cfg_atoms.rs`).
+
+**Left, with a number to beat:** `finish_flips` re-validates about nine memos for each function (456 for 50), the
+settle of every body of every crate it reaches, which copies never does.

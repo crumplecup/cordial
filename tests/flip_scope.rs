@@ -97,3 +97,79 @@ fn a_target_flips_the_crates_it_holds_and_depends_on_and_not_the_rest_of_the_wor
     );
     Ok(())
 }
+
+/// What a harvest re-validated: how many memos, and how many of them were of low, medium and high durability.
+type Verified = (u64, [u64; 3]);
+
+/// What each pass said it re-validated in its harvest.
+#[derive(Clone, Default)]
+struct Harvests(Arc<Mutex<Vec<Verified>>>);
+
+impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for Harvests {
+    fn on_event(&self, event: &tracing::Event<'_>, _: tracing_subscriber::layer::Context<'_, S>) {
+        #[derive(Default)]
+        struct Fields {
+            label: String,
+            memos: u64,
+            by: [u64; 3],
+        }
+        impl tracing::field::Visit for Fields {
+            fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
+                if field.name() == "label" {
+                    self.label = format!("{value:?}");
+                }
+            }
+            fn record_u64(&mut self, field: &tracing::field::Field, value: u64) {
+                match field.name() {
+                    "verified_memos" => self.memos = value,
+                    "verified_low" => self.by[0] = value,
+                    "verified_medium" => self.by[1] = value,
+                    "verified_high" => self.by[2] = value,
+                    _ => {}
+                }
+            }
+        }
+        if event.metadata().target() == "cordial::segment" {
+            let mut fields = Fields::default();
+            event.record(&mut fields);
+            if fields.label == "projection/contexts/context/harvest" {
+                self.0.lock().unwrap().push((fields.memos, fields.by));
+            }
+        }
+    }
+}
+
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn the_first_flip_of_a_crates_cfg_does_not_make_the_library_verify_again() -> Result<()> {
+    let _serial = SERIAL.lock().unwrap();
+    cordial::init_tracing();
+    let root = workspace()?;
+    let options = SemanticCargoOptions::default()
+        .with_cfg_contexts(vec![SemanticContextKey::enabling(["kani"])])
+        .with_cfg_planning(CfgPlanning::Explicit)
+        .with_cfg_context_mode(CfgContextMode::Flips);
+    let harvests = Harvests::default();
+    let subscriber = tracing_subscriber::registry().with(harvests.clone());
+    tracing::subscriber::with_default(subscriber, || -> Result<()> {
+        let mut session = SourceDatabase::load_saved(root.path(), &options, None).into_diagnostic()?;
+        // `a` and `b` are flipped for the first time by the first pass, `c` by the second, and `a` again by the third.
+        for name in ["a", "c", "a"] {
+            let dir = root.path().join(name);
+            session
+                .project(&CrateTarget::new(name, &dir), &[dir.join("src/lib.rs")])
+                .into_diagnostic()?;
+        }
+        Ok(())
+    })?;
+    let harvests = harvests.0.lock().unwrap().clone();
+    assert_eq!(harvests.len(), 3, "one harvest for each pass: {harvests:?}");
+    // The library's memos (the sysroot's impls, attributes and item trees) are of medium durability, and the cfg of
+    // a local crate is of low: writing it must not be a write that the library's memos have to be verified against.
+    // Written at medium, the first write to each crate cost about 113,000 memos, over and over again.
+    for (memos, by_durability) in &harvests {
+        assert_eq!(by_durability[1], 0, "no memo of medium durability is verified by a flip of a local cfg: {harvests:?}");
+        assert!(*memos < 5_000, "a pass over a few functions verifies a few memos, not the library: {harvests:?}");
+    }
+    Ok(())
+}

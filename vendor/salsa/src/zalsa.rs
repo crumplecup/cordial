@@ -530,6 +530,7 @@ impl Zalsa {
                 self.ingredients_requiring_reset.push(expected_index);
             }
 
+            crate::flatten::note_ingredient_name(expected_index, ingredient.debug_name());
             self.ingredients_vec.push(ingredient);
 
             let actual_index = self.ingredients_vec.len() - 1;

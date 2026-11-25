@@ -158,6 +158,12 @@ pub struct CrateBuilder {
     ws_data: Arc<CrateWorkspaceData>,
 }
 
+/// The durability of a crate's cfg: low for a crate of the project, which is what a cfg context changes, and medium
+/// for the rest.
+fn cfg_durability(origin: &CrateOrigin) -> Durability {
+    if matches!(origin, CrateOrigin::Local { .. }) { Durability::LOW } else { Durability::MEDIUM }
+}
+
 impl fmt::Debug for CrateGraphBuilder {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_map()
@@ -759,7 +765,7 @@ impl CrateGraphBuilder {
                         named("cfg_options");
                         old_crate
                             .set_cfg_options(db)
-                            .with_durability(Durability::MEDIUM)
+                            .with_durability(cfg_durability(&krate.basic.origin))
                             .to(krate.cfg_options.clone());
                     }
                     if krate.env != *old_crate.env(db) {
@@ -799,6 +805,13 @@ impl CrateGraphBuilder {
                     )
                     .durability(Durability::MEDIUM)
                     .new(db);
+                    // The cfg of a crate of the project is the one input of it that changes while the project is
+                    // analysed (a cfg context writes it), and a write to a field of medium durability is a write
+                    // that every memo of medium durability must be verified against, which is the whole library.
+                    // Made low at the start, before anything has read it, the first write to it is no such write.
+                    if cfg_durability(&krate.basic.origin) == Durability::LOW {
+                        input.set_cfg_options(db).with_durability(Durability::LOW).to(krate.cfg_options.clone());
+                    }
                     entry.insert(input);
                     input
                 }

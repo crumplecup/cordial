@@ -36,6 +36,8 @@ pub struct Segment {
     executed: u64,
     verified: (u64, u64),
     before: HashMap<String, u64>,
+    verified_before: HashMap<&'static str, (u64, u64)>,
+    durability_before: [u64; 4],
 }
 
 impl Segment {
@@ -54,6 +56,8 @@ impl Segment {
             executed: live.executed(),
             verified: salsa::deep_verifications(),
             before: live.counts(),
+            verified_before: salsa::deep_verifications_by_ingredient(),
+            durability_before: salsa::deep_verifications_by_durability(),
         }
     }
 
@@ -66,6 +70,26 @@ impl Segment {
     }
 }
 
+impl Segment {
+    /// The queries whose memos this region re-validated most, with how many and how many dependencies they had.
+    fn verified_top(&self) -> String {
+        let mut more: Vec<(&'static str, u64, u64)> = salsa::deep_verifications_by_ingredient()
+            .into_iter()
+            .filter_map(|(name, (memos, edges))| {
+                let before = self.verified_before.get(name).copied().unwrap_or_default();
+                let memos = memos.saturating_sub(before.0);
+                (memos > 0).then(|| (name, memos, edges.saturating_sub(before.1)))
+            })
+            .collect();
+        more.sort_by_key(|(name, memos, _)| (std::cmp::Reverse(*memos), *name));
+        more.iter()
+            .take(TOP)
+            .map(|(name, memos, edges)| format!("{name}={memos}/{edges}"))
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+}
+
 impl Drop for Segment {
     fn drop(&mut self) {
         OPEN.with(|open| {
@@ -74,6 +98,8 @@ impl Drop for Segment {
         let live = LiveStatus::global();
         let verified = salsa::deep_verifications();
         let scope = SCOPE.with(|scope| scope.borrow().clone());
+        let now = salsa::deep_verifications_by_durability();
+        let durability: [u64; 4] = std::array::from_fn(|at| now[at].saturating_sub(self.durability_before[at]));
         tracing::info!(
             target: "cordial::segment",
             label = %self.path,
@@ -84,6 +110,10 @@ impl Drop for Segment {
             verified_memos = verified.0.saturating_sub(self.verified.0),
             verified_edges = verified.1.saturating_sub(self.verified.1),
             top = %live.top_since(&self.before, TOP),
+            verified_top = %self.verified_top(),
+            verified_low = durability[0],
+            verified_medium = durability[1],
+            verified_high = durability[2],
             "a region of the run"
         );
     }

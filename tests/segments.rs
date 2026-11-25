@@ -15,6 +15,13 @@ struct Said {
     label: String,
     scope: String,
     micros: u64,
+    queries: u64,
+    verified_memos: u64,
+    verified_edges: u64,
+    /// The queries whose memos it re-validated most, as `name=memos/edges`.
+    verified_top: String,
+    /// How many memos of low, medium and high durability it re-validated.
+    by_durability: [u64; 3],
 }
 
 #[derive(Clone, Default)]
@@ -23,25 +30,52 @@ struct Segments(Arc<Mutex<Vec<Said>>>);
 impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for Segments {
     fn on_event(&self, event: &tracing::Event<'_>, _: tracing_subscriber::layer::Context<'_, S>) {
         #[derive(Default)]
-        struct Fields(String, String, u64);
+        struct Fields {
+            label: String,
+            scope: String,
+            verified_top: String,
+            by_durability: [u64; 3],
+            /// micros, queries, verified memos, verified edges.
+            numbers: [u64; 4],
+        }
         impl tracing::field::Visit for Fields {
             fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
                 match field.name() {
-                    "label" => self.0 = format!("{value:?}"),
-                    "scope" => self.1 = format!("{value:?}"),
+                    "label" => self.label = format!("{value:?}"),
+                    "scope" => self.scope = format!("{value:?}"),
+                    "verified_top" => self.verified_top = format!("{value:?}").trim_matches('"').to_owned(),
                     _ => {}
                 }
             }
             fn record_u64(&mut self, field: &tracing::field::Field, value: u64) {
-                if field.name() == "micros" {
-                    self.2 = value;
+                let by = ["verified_low", "verified_medium", "verified_high"]
+                    .iter()
+                    .position(|name| *name == field.name());
+                if let Some(by) = by {
+                    self.by_durability[by] = value;
+                }
+                let at = ["micros", "queries", "verified_memos", "verified_edges"]
+                    .iter()
+                    .position(|name| *name == field.name());
+                if let Some(at) = at {
+                    self.numbers[at] = value;
                 }
             }
         }
         if event.metadata().target() == "cordial::segment" {
             let mut fields = Fields::default();
             event.record(&mut fields);
-            self.0.lock().unwrap().push(Said { label: fields.0, scope: fields.1, micros: fields.2 });
+            let [micros, queries, verified_memos, verified_edges] = fields.numbers;
+            self.0.lock().unwrap().push(Said {
+                label: fields.label,
+                scope: fields.scope,
+                micros,
+                queries,
+                verified_memos,
+                verified_edges,
+                verified_top: fields.verified_top,
+                by_durability: fields.by_durability,
+            });
         }
     }
 }
@@ -70,6 +104,14 @@ fn a_segment_inside_another_has_its_name_in_front_and_ends_first_and_says_the_sc
 
 /// A crate with a gate the context `kani` turns on, in `mode`, and what its run said of its regions.
 fn regions_of_a_run(mode: CfgContextMode) -> Result<Vec<Said>> {
+    regions_of_a_crate(
+        mode,
+        "pub fn alive() -> u32 { 1 }\n#[cfg(kani)]\npub fn harness() -> u32 { alive() }\n",
+    )
+}
+
+/// The regions a run of the context `kani` says of the crate whose root is `library`, in `mode`.
+fn regions_of_a_crate(mode: CfgContextMode, library: &str) -> Result<Vec<Said>> {
     let root = tempfile::tempdir().into_diagnostic()?;
     std::fs::create_dir_all(root.path().join("src")).into_diagnostic()?;
     std::fs::write(
@@ -77,11 +119,7 @@ fn regions_of_a_run(mode: CfgContextMode) -> Result<Vec<Said>> {
         "[package]\nname='gated'\nversion='0.1.0'\nedition='2024'\n[workspace]\n",
     )
     .into_diagnostic()?;
-    std::fs::write(
-        root.path().join("src/lib.rs"),
-        "pub fn alive() -> u32 { 1 }\n#[cfg(kani)]\npub fn harness() -> u32 { alive() }\n",
-    )
-    .into_diagnostic()?;
+    std::fs::write(root.path().join("src/lib.rs"), library).into_diagnostic()?;
     let options = SemanticCargoOptions::default()
         .with_cfg_contexts(vec![SemanticContextKey::enabling(["kani"])])
         .with_cfg_planning(CfgPlanning::Explicit)
@@ -142,5 +180,39 @@ fn every_region_of_the_context_pass_says_what_it_cost_in_both_modes() -> Result<
             );
         }
     }
+    Ok(())
+}
+
+/// A crate of `functions` plain functions, each calling a macro, and a function only the context `kani` has.
+fn plain_crate(functions: usize) -> String {
+    let mut text = String::from("macro_rules! twice { ($e:expr) => { $e + $e }; }\n");
+    for n in 0..functions {
+        text.push_str(&format!("pub fn plain_{n}() -> u32 {{ twice!({n}) }}\n"));
+    }
+    text.push_str("#[cfg(kani)]\npub fn harness() -> u32 { 1 }\n");
+    text
+}
+
+fn totals(said: &[Said], label: &str) -> (u64, u64, u64) {
+    said.iter()
+        .filter(|said| said.label == label)
+        .fold((0, 0, 0), |sum, said| (sum.0 + said.queries, sum.1 + said.verified_memos, sum.2 + said.verified_edges))
+}
+
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn a_flip_that_changes_nothing_verifies_memos_in_proportion_to_the_crate_and_not_the_library() -> Result<()> {
+    let _serial = SERIAL.lock().unwrap();
+    cordial::init_tracing();
+    let harvest = "projection/contexts/context/harvest";
+    let small = totals(&regions_of_a_crate(CfgContextMode::Flips, &plain_crate(5))?, harvest).1;
+    let large = totals(&regions_of_a_crate(CfgContextMode::Flips, &plain_crate(50))?, harvest).1;
+    // The library's memos (about 113,000 of them) were verified by the first write of a local crate's cfg, which was
+    // a write at medium durability: five functions cost 112,800 memos and fifty cost 113,610.
+    assert!(small < 500, "a crate of 5 functions has its own memos verified, not the library's: {small}");
+    assert!(
+        large - small <= 25 * 45,
+        "each of the 45 functions more costs a few memos, and not a share of the library: {small} for 5, {large} for 50"
+    );
     Ok(())
 }

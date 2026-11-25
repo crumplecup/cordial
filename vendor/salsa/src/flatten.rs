@@ -52,10 +52,70 @@ pub fn edges_expanded() -> u64 {
 static DEEP_VERIFICATIONS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 static EDGES_CHECKED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
-/// Record that a memo was deep-verified, with the number of dependencies it has to check.
-pub(crate) fn note_deep_verification(edges: usize) {
+/// How many ingredients the per-ingredient counts below have a place for: more than a database has.
+const INGREDIENTS_COUNTED: usize = 8192;
+
+static DEEP_BY_INGREDIENT: [std::sync::atomic::AtomicU64; INGREDIENTS_COUNTED] =
+    [const { std::sync::atomic::AtomicU64::new(0) }; INGREDIENTS_COUNTED];
+static EDGES_BY_INGREDIENT: [std::sync::atomic::AtomicU64; INGREDIENTS_COUNTED] =
+    [const { std::sync::atomic::AtomicU64::new(0) }; INGREDIENTS_COUNTED];
+
+/// Record that a memo of `ingredient` was deep-verified, with the number of dependencies it has to check.
+pub(crate) fn note_deep_verification(
+    ingredient: crate::IngredientIndex,
+    durability: Durability,
+    edges: usize,
+) {
+    if let Some(count) = DEEP_BY_DURABILITY.get(durability.index()) {
+        count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    }
     DEEP_VERIFICATIONS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     EDGES_CHECKED.fetch_add(edges as u64, std::sync::atomic::Ordering::Relaxed);
+    let at = ingredient.as_u32() as usize;
+    if at < INGREDIENTS_COUNTED {
+        DEEP_BY_INGREDIENT[at].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        EDGES_BY_INGREDIENT[at].fetch_add(edges as u64, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
+static DEEP_BY_DURABILITY: [std::sync::atomic::AtomicU64; 4] =
+    [const { std::sync::atomic::AtomicU64::new(0) }; 4];
+
+/// How many memos of each durability this process has deep-verified: low, medium, high, never changing. A memo of
+/// a higher durability is verified at all only when an input of that durability was written after it was last
+/// verified, and not when only low ones were.
+pub fn deep_verifications_by_durability() -> [u64; 4] {
+    std::array::from_fn(|at| DEEP_BY_DURABILITY[at].load(std::sync::atomic::Ordering::Relaxed))
+}
+
+static NAMES: std::sync::Mutex<Vec<&'static str>> = std::sync::Mutex::new(Vec::new());
+
+/// Remember the name of the ingredient at `index`, so that a count by index can be said by name.
+pub(crate) fn note_ingredient_name(index: crate::IngredientIndex, name: &'static str) {
+    if let Ok(mut names) = NAMES.lock() {
+        let at = index.as_u32() as usize;
+        if names.len() <= at {
+            names.resize(at + 1, "");
+        }
+        names[at] = name;
+    }
+}
+
+/// How many memos of each query this process has deep-verified and how many dependencies those had, by the
+/// name of the query: two readings say what a stretch of the run re-validated, by query.
+pub fn deep_verifications_by_ingredient() -> std::collections::HashMap<&'static str, (u64, u64)> {
+    let names = NAMES.lock().map(|names| names.clone()).unwrap_or_default();
+    let mut counted = std::collections::HashMap::new();
+    for (at, name) in names.iter().enumerate().take(INGREDIENTS_COUNTED) {
+        let memos = DEEP_BY_INGREDIENT[at].load(std::sync::atomic::Ordering::Relaxed);
+        if memos > 0 {
+            let edges = EDGES_BY_INGREDIENT[at].load(std::sync::atomic::Ordering::Relaxed);
+            let entry: &mut (u64, u64) = counted.entry(*name).or_default();
+            entry.0 += memos;
+            entry.1 += edges;
+        }
+    }
+    counted
 }
 
 /// How many memos this process has deep-verified (found out of date or not by walking their
