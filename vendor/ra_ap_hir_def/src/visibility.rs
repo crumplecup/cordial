@@ -68,9 +68,7 @@ impl Visibility {
         def_map: &'db DefMap,
         from_module: ModuleIdLt<'db>,
     ) -> bool {
-        if cfg!(debug_assertions) {
-            _ = def_map.module_data(db, from_module);
-        }
+        debug_assert!(def_map.has_module(db, from_module), "the module is in the map it is asked from");
         let to_module = match self {
             Visibility::Module(m, _) => m,
             Visibility::PubCrate(krate) => return from_module.krate(db) == krate,
@@ -130,7 +128,7 @@ impl Visibility {
             if from_module == to_module {
                 return true;
             }
-            match def_map.module_data(db, from_module).parent {
+            match *from_module.containing_module_inside_def_map(db) {
                 Some(parent) => from_module = parent,
                 None => {
                     match def_map.parent() {
@@ -195,14 +193,14 @@ impl Visibility {
                     return None;
                 }
 
-                let mut a_ancestors = iter::successors(Some(mod_a), |&m| def_map.module_data(db, m).parent);
+                let mut a_ancestors = iter::successors(Some(mod_a), |&m| *m.containing_module_inside_def_map(db));
 
                 if a_ancestors.any(|m| m == mod_b) {
                     // B is above A
                     return Some(Visibility::Module(mod_b, expl_b));
                 }
 
-                let mut b_ancestors = iter::successors(Some(mod_b), |&m| def_map.module_data(db, m).parent);
+                let mut b_ancestors = iter::successors(Some(mod_b), |&m| *m.containing_module_inside_def_map(db));
                 if b_ancestors.any(|m| m == mod_a) {
                     // A is above B
                     return Some(Visibility::Module(mod_a, expl_a));
@@ -261,14 +259,14 @@ impl Visibility {
                     return None;
                 }
 
-                let mut a_ancestors = iter::successors(Some(mod_a), |&m| def_map.module_data(db, m).parent);
+                let mut a_ancestors = iter::successors(Some(mod_a), |&m| *m.containing_module_inside_def_map(db));
 
                 if a_ancestors.any(|m| m == mod_b) {
                     // B is above A
                     return Some(Visibility::Module(mod_a, expl_a));
                 }
 
-                let mut b_ancestors = iter::successors(Some(mod_b), |&m| def_map.module_data(db, m).parent);
+                let mut b_ancestors = iter::successors(Some(mod_b), |&m| *m.containing_module_inside_def_map(db));
                 if b_ancestors.any(|m| m == mod_a) {
                     // A is above B
                     return Some(Visibility::Module(mod_b, expl_b));

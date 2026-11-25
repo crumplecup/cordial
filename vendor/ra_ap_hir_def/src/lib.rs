@@ -103,7 +103,7 @@ use crate::{
     nameres::{
         LocalDefMap,
         assoc::{ImplItems, TraitItems},
-        block_def_map, crate_def_map, crate_local_def_map, local_def_map,
+        block_def_map, crate_def_map, local_def_map,
         diagnostics::DefDiagnostics,
     },
     signatures::{EnumVariants, InactiveEnumVariantCode, VariantFields},
@@ -626,8 +626,8 @@ impl<'db> ModuleIdLt<'db> {
         match self.block(db) {
             Some(block) => (block_def_map(db, block), self.only_local_def_map(db)),
             None => {
-                let def_map = crate_local_def_map(db, self.krate(db));
-                (&def_map.def_map, &def_map.local)
+                let krate = self.krate(db);
+                (crate_def_map(db, krate), local_def_map(db, krate))
             }
         }
     }

@@ -215,6 +215,17 @@ impl ItemScope {
             .map(move |name| (name, self.get(name)))
     }
 
+    /// Every name a lookup finds something by in this scope: the three namespaces and the legacy macros.
+    pub(crate) fn lookup_names(&self) -> impl Iterator<Item = &Name> + '_ {
+        self.types.keys().chain(self.values.keys()).chain(self.macros.keys()).chain(self.legacy_macros.keys())
+    }
+
+    /// What a lookup of `name` finds here, in every namespace and among the legacy macros: what two scopes
+    /// are compared by to say whether a reader of the name has anything to read again.
+    pub(crate) fn found(&self, name: &Name) -> (PerNs, Option<&[MacroId]>) {
+        (self.get(name), self.get_legacy_macro(name))
+    }
+
     pub fn values(&self) -> impl Iterator<Item = (&Name, Item<ModuleDefId, ImportOrGlob>)> + '_ {
         self.values.iter().map(|(n, &i)| (n, i))
     }

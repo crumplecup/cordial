@@ -303,7 +303,7 @@ fn find_in_prelude(
     // Check if the name is in current scope and it points to the same def.
     let found_and_same_def =
         local_def_map.with_ancestor_maps(db, from, &mut |def_map, local_id| {
-            let per_ns = def_map.module_data(db, local_id).scope.get(name);
+            let per_ns = def_map.scope_get(db, local_id, name);
             let same_def = match item {
                 ItemInNs::Types(it) => per_ns.take_types()? == it,
                 ItemInNs::Values(it) => per_ns.take_values()? == it,

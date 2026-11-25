@@ -1379,7 +1379,7 @@ impl<'db> SourceAnalyzer<'db> {
                         if let Some(helpers) = self
                             .resolver
                             .def_map()
-                            .derive_helpers_in_scope(InFile::new(self.file_id, ast_id))
+                            .derive_helpers_in_scope(db, InFile::new(self.file_id, ast_id))
                         {
                             // FIXME: Multiple derives can have the same helper
                             let name_ref = name_ref.as_name();

@@ -188,10 +188,11 @@ impl StableHash for DefMap {
             root,
             modules: _,
             cells: _,
+            frozen: _,
             prelude,
             macro_use_prelude,
-            derive_helpers_in_scope,
-            macro_def_to_macro_id,
+            derive_helpers_in_scope: _,
+            macro_def_to_macro_id: _,
             diagnostics: _,
             diagnostics_cell: _,
             data,
@@ -210,7 +211,7 @@ impl StableHash for DefMap {
             macro_id.stable_hash(cx);
             extern_crate.stable_hash(cx);
         });
-        cx.unordered(derive_helpers_in_scope.iter(), |cx, (item, helpers)| {
+        cx.unordered(self.derive_helpers(cx.db).iter(), |cx, (item, helpers)| {
             item.stable_hash(cx);
             cx.write_u64(helpers.len() as u64);
             for (name, macro_id, call) in helpers {
@@ -219,7 +220,7 @@ impl StableHash for DefMap {
                 call.stable_hash(cx);
             }
         });
-        cx.unordered(macro_def_to_macro_id.iter(), |cx, (definition, macro_id)| {
+        cx.unordered(self.macro_definitions(cx.db).iter(), |cx, (definition, macro_id)| {
             definition.stable_hash(cx);
             macro_id.stable_hash(cx);
         });

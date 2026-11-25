@@ -182,8 +182,12 @@ pub struct DefMap {
     pub root: ModuleId,
     /// The modules and their data declared in this crate.
     modules: ModulesMap,
-    /// The modules of a finished map, a cell each: empty while the collector builds, and then `modules` is.
+    /// The modules of a finished block's map, a cell each: empty while the collector builds, and then `modules` is.
+    /// A crate's map does not hold its cells (`frozen`): they are what `crate_module_cells` says, so that a map
+    /// that gains a module is the map it was, and what reads it does not run again for that.
     cells: FxIndexMap<ModuleId, ModuleCell>,
+    /// Whether the map is a crate's and finished, and its modules are cells that `crate_module_cell` finds.
+    frozen: bool,
     /// The prelude module for this crate. This either comes from an import
     /// marked with the `prelude_import` attribute, or (in the normal case) from
     /// a dependency (`std` or `core`).
@@ -317,6 +321,55 @@ impl DefMap {
         })
     }
 
+    /// The scope of a module, for a reader of `name` in it and of nothing else: the reader depends on the key of
+    /// the name, found or not, and not on the module's scope as a whole. A map that is being made, and a block's
+    /// map, are read whole.
+    fn scope_read<'a>(&'a self, db: &'a dyn SourceDatabase, id: ModuleIdLt<'_>, name: &Name) -> &'a ItemScope {
+        let id = unsafe { id.to_static() };
+        tracing::trace!(
+            target: "cordial::scope",
+            module = ?id,
+            name = name.as_str(),
+            frozen = self.frozen,
+            block = self.block.is_some(),
+            "a name of a module is read"
+        );
+        if !self.frozen || self.block.is_some() {
+            return &self.module_data(db, id).scope;
+        }
+        previous::note_read(self.krate, id);
+        let Some(cell) = self.cell_of(db, id) else {
+            return &self.module_data(db, id).scope;
+        };
+        let (data, durability) = salsa::keyed::unrecorded(db, || &**cell.data(db));
+        let key = ScopeKeyLt::new(db, unsafe { id.to_db(db) }, name.clone());
+        salsa::keyed::read(db, key.as_id(), durability);
+        &data.scope
+    }
+
+    /// What `name` is in the scope of a module, in every namespace; legacy macros are not included. The reader
+    /// depends on that name of that module.
+    pub fn scope_get(&self, db: &dyn SourceDatabase, id: ModuleIdLt<'_>, name: &Name) -> PerNs {
+        self.scope_read(db, id, name).get(name)
+    }
+
+    /// The legacy macros `name` is in the textual scope of a module. The reader depends on that name of that
+    /// module.
+    pub(crate) fn scope_legacy_macro<'a>(
+        &'a self,
+        db: &'a dyn SourceDatabase,
+        id: ModuleIdLt<'_>,
+        name: &Name,
+    ) -> Option<&'a [MacroId]> {
+        self.scope_read(db, id, name).get_legacy_macro(name)
+    }
+
+    /// Whether the map has the module. A reader of it depends on that, and not on what the module holds.
+    pub(crate) fn has_module(&self, db: &dyn SourceDatabase, id: ModuleIdLt<'_>) -> bool {
+        let id = unsafe { id.to_static() };
+        if !self.frozen && self.cells.is_empty() { self.modules.contains_key(&id) } else { self.cell_of(db, id).is_some() }
+    }
+
     /// A module's data if the map has the module.
     pub fn try_module_data<'a>(
         &'a self,
@@ -325,28 +378,54 @@ impl DefMap {
     ) -> Option<&'a ModuleData> {
         let id = unsafe { id.to_static() };
         previous::note_read(self.krate, id);
-        if self.cells.is_empty() {
+        if !self.frozen && self.cells.is_empty() {
             self.modules.get(&id)
         } else {
-            self.cells.get(&id).map(|cell| &**cell.data(db))
+            self.cell_of(db, id).map(|cell| &**cell.data(db))
         }
+    }
+
+    /// The cell of a module of a finished map. For a crate's map it is found by `crate_module_cell`, which says
+    /// the same cell when other modules are added or dropped, so a reader of one module does not depend on them.
+    fn cell_of(&self, db: &dyn SourceDatabase, id: ModuleId) -> Option<ModuleCell> {
+        if let Some(cell) = self.cells.get(&id) {
+            return Some(*cell);
+        }
+        tracing::trace!(target: "cordial::scope", module = ?id, frozen = self.frozen, "the cell of a module is asked for");
+        if self.frozen { crate_module_cell(db, unsafe { id.to_db(db) }) } else { None }
     }
 
     /// Makes the finished map's modules cells, so that what reads one depends on that one, and says what each
     /// holds.
-    pub(crate) fn freeze(&mut self, db: &dyn SourceDatabase) -> FxHashMap<ModuleId, Arc<ModuleData>> {
+    /// A crate's map hands its cells back, to be kept beside the map; a block's keeps them.
+    pub(crate) fn freeze(
+        &mut self,
+        db: &dyn SourceDatabase,
+    ) -> (FxHashMap<ModuleId, Arc<ModuleData>>, FxIndexMap<ModuleId, ModuleCell>, DefMapExtras) {
         let diagnostics = std::mem::take(&mut self.diagnostics);
         let cell = DiagnosticsCellLt::new(db, self.root, diagnostics);
         self.diagnostics_cell = Some(unsafe { cell.to_static() });
         let modules = std::mem::replace(&mut self.modules, ModulesMap::new());
         let mut held = FxHashMap::default();
+        let mut cells = FxIndexMap::default();
         for (id, data) in modules.inner {
             let data = Arc::new(data);
             held.insert(id, Arc::clone(&data));
             let cell = ModuleCellLt::new(db, id, data);
-            self.cells.insert(id, unsafe { cell.to_static() });
+            cells.insert(id, unsafe { cell.to_static() });
         }
-        held
+        // Only a crate's map is frozen in this sense: a block's keeps its cells.
+        self.frozen = self.block.is_none();
+        if self.block.is_some() {
+            self.cells = cells;
+            (held, FxIndexMap::default(), DefMapExtras::default())
+        } else {
+            let extras = DefMapExtras {
+                macro_def_to_macro_id: std::mem::take(&mut self.macro_def_to_macro_id),
+                derive_helpers_in_scope: std::mem::take(&mut self.derive_helpers_in_scope),
+            };
+            (held, cells, extras)
+        }
     }
 }
 
@@ -464,6 +543,68 @@ impl<'db> ModuleCellLt<'db> {
     }
 }
 
+/// A name in a module: what a reader of one name of a module's scope depends on, and not on the scope as a whole.
+///
+/// A reader says it read the key (`salsa::keyed::read`), found or not, and the map says which keys changed when it
+/// is made again (`touch_changed_names`). A module that gains `mod tests` when `test` is on changes the key of
+/// `tests` and no other, so what looked up `twice` in that module is not run again.
+#[salsa::interned(debug, revisions = usize::MAX, persist)]
+pub struct ScopeKeyLt {
+    #[returns(copy)]
+    pub module: ModuleIdLt<'db>,
+    #[returns(ref)]
+    pub name: Name,
+}
+
+/// What a lookup of `name` finds in `scope`, if there is one.
+fn found_in<'a>(scope: Option<&'a ItemScope>, name: &Name) -> Option<(PerNs, Option<&'a [MacroId]>)> {
+    scope.map(|scope| scope.found(name))
+}
+
+/// Says which keys of the modules of a map changed from the map made before it: every key of a module that was
+/// added or dropped, and every one a changed module finds something else by. With no map before, nothing says what
+/// changed, and every key has.
+fn touch_changed_names(
+    db: &dyn SourceDatabase,
+    before: Option<&FxHashMap<ModuleId, Arc<ModuleData>>>,
+    now: &FxHashMap<ModuleId, Arc<ModuleData>>,
+) {
+    let Some(before) = before else {
+        salsa::keyed::touch_all(db);
+        return;
+    };
+    let mut touched = 0u64;
+    let mut touch = |module: ModuleId, old: Option<&ItemScope>, new: Option<&ItemScope>| {
+        let names: rustc_hash::FxHashSet<&Name> =
+            old.into_iter().chain(new).flat_map(ItemScope::lookup_names).collect();
+        for name in names {
+            if found_in(old, name) != found_in(new, name) {
+                let key = ScopeKeyLt::new(db, unsafe { module.to_db(db) }, name.clone());
+                salsa::keyed::touch(db, key.as_id());
+                touched += 1;
+            }
+        }
+    };
+    for (&module, new) in now {
+        match before.get(&module) {
+            Some(old) if Arc::ptr_eq(old, new) || old == new => {}
+            old => touch(module, old.map(|data| &data.scope), Some(&new.scope)),
+        }
+    }
+    for (&module, old) in before {
+        if !now.contains_key(&module) {
+            touch(module, Some(&old.scope), None);
+        }
+    }
+    tracing::debug!(
+        target: "cordial::nameres",
+        keys_that_changed = touched,
+        modules_before = before.len() as u64,
+        modules_now = now.len() as u64,
+        "the names of a map that are not what they were"
+    );
+}
+
 /// A finished map's diagnostics. They hold the crate's options, so they differ under any flip of the cfg: a
 /// reader of a module does not depend on them, and a reader of them (the diagnostics of a module) does.
 #[salsa::tracked(debug, persist)]
@@ -543,7 +684,7 @@ fn def_map_declared_query_keys(
     let mut keys: Vec<_> = map.declared_query_keys(db).collect();
     keys.extend(map.item_tree_query_keys(db));
     let krate = map.krate;
-    keys.extend(map.macro_def_to_macro_id.values().filter_map(|&mac| {
+    keys.extend(map.macro_definitions(db).values().filter_map(|&mac| {
         mac.declarative_expander_key(db).map(|key| key.as_id())
     }));
     let owners: Vec<_> = map.own_modules(db).flat_map(|(_, module)| {
@@ -617,6 +758,20 @@ fn def_map_declared_query_keys(
 pub(crate) struct DefMapPair {
     pub(crate) def_map: Arc<DefMap>,
     pub(crate) local: Arc<LocalDefMap>,
+    /// The cells of the map's modules: not in the map, which is the same when a module is added or dropped.
+    pub(crate) cells: Arc<FxIndexMap<ModuleId, ModuleCell>>,
+    /// What the map says that no name resolution reads, so that a map that says something more of it (a macro
+    /// defined, a derive with helpers, in a module the cfg adds) is the map it was.
+    pub(crate) extras: Arc<DefMapExtras>,
+}
+
+/// What a crate's map says of macro definitions and derive helpers, read by whoever asks for them and by no
+/// resolution of a name.
+#[derive(Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub(crate) struct DefMapExtras {
+    pub(crate) macro_def_to_macro_id: FxHashMap<ErasedAstId, MacroId>,
+    pub(crate) derive_helpers_in_scope:
+        FxHashMap<AstId<ast::Item>, Vec<(Name, MacroId, Either<MacroCallId, BuiltinDeriveImplId>)>>,
 }
 
 // Independent projections backdate external and local changes separately. They share
@@ -624,6 +779,17 @@ pub(crate) struct DefMapPair {
 #[salsa::tracked(returns(ref))]
 fn external_def_map(db: &dyn SourceDatabase, crate_id: Crate) -> Arc<DefMap> {
     Arc::clone(&crate_local_def_map(db, crate_id).def_map)
+}
+
+
+/// The cell of one module of a crate's finished map. It is the cell it was when modules are added or dropped, so
+/// what reads it does not run again for them, and it is not there when the module is not in the map.
+///
+/// It reads the persisted owner directly, as the readers of the whole set do, and is persisted itself, so that a
+/// restored run is told the cell and does not ask for it.
+#[salsa::tracked(returns(copy), persist)]
+fn crate_module_cell<'db>(db: &'db dyn SourceDatabase, module: ModuleIdLt<'db>) -> Option<ModuleCell> {
+    crate_local_def_map(db, module.krate(db)).cells.get(&unsafe { module.to_static() }).copied()
 }
 
 #[salsa::tracked(returns(ref))]
@@ -670,10 +836,11 @@ pub(crate) fn crate_local_def_map(db: &dyn SourceDatabase, crate_id: Crate) -> D
     for diagnostic in &def_map.diagnostics {
         said.entry(diagnostic.in_module).or_default().push(diagnostic.clone());
     }
-    let held = def_map.freeze(db);
+    let (held, cells, extras) = def_map.freeze(db);
+    touch_changed_names(db, previous::recall(db, crate_id).as_deref().map(|built| &built.modules), &held);
     let def_map = Arc::new(def_map);
     previous::remember(db, crate_id, &def_map, held, reads, said, read);
-    DefMapPair { def_map, local: Arc::new(local_def_map) }
+    DefMapPair { def_map, local: Arc::new(local_def_map), cells: Arc::new(cells), extras: Arc::new(extras) }
 }
 
 #[salsa::tracked(returns(ref), persist)]
@@ -694,11 +861,12 @@ pub fn block_def_map<'db>(db: &'db dyn SourceDatabase, block_id: BlockIdLt<'db>)
         parent_module = ?module,
         "computing the def map of a block"
     );
-    let local_def_map = crate_local_def_map(db, krate);
+    let crate_data = crate_def_map(db, krate).data.clone();
+    let local_def_map = local_def_map(db, krate);
     let def_map = DefMap::empty(
         db,
         krate,
-        local_def_map.def_map.data.clone(),
+        crate_data,
         module_data,
         Some(BlockInfo { block: block_id, parent: module }),
     );
@@ -707,7 +875,7 @@ pub fn block_def_map<'db>(db: &'db dyn SourceDatabase, block_id: BlockIdLt<'db>)
         db,
         def_map,
         TreeId::new(ast_id.file_id, Some(block_id)),
-        Some(&local_def_map.local),
+        Some(local_def_map),
     );
     let mut def_map = def_map;
     let _ = def_map.freeze(db);
@@ -744,6 +912,7 @@ impl DefMap {
             root,
             modules,
             cells: FxIndexMap::default(),
+            frozen: false,
             krate,
             prelude: None,
             macro_use_prelude: FxHashMap::default(),
@@ -762,6 +931,7 @@ impl DefMap {
             diagnostics_cell: _,
             modules,
             cells,
+            frozen: _,
             derive_helpers_in_scope,
             root: _,
             block: _,
@@ -803,7 +973,13 @@ impl DefMap {
         db: &'a dyn SourceDatabase,
     ) -> impl Iterator<Item = (ModuleId, &'a ModuleData)> + 'a {
         let cells = self.cells.iter().map(move |(&id, cell)| (id, &**cell.data(db)));
-        self.modules.iter().chain(cells)
+        let crate_cells = self
+            .frozen
+            .then(|| &crate_local_def_map(db, self.krate).cells)
+            .into_iter()
+            .flat_map(|cells| cells.iter())
+            .map(move |(&id, cell)| (id, &**cell.data(db)));
+        self.modules.iter().chain(cells).chain(crate_cells)
     }
 
     /// The modules this map made: not the original's modules that a copy of a crate was given (see
@@ -832,7 +1008,7 @@ impl DefMap {
             .collect();
         self.own_modules(db).flat_map(|(id, module)| {
             std::iter::once(id.as_id()).chain(module.scope.declared_query_keys())
-        }).chain(self.macro_def_to_macro_id.values().map(|id| id.as_id()))
+        }).chain(self.macro_definitions(db).values().map(|id| id.as_id()))
             .filter(move |key| !foreign.contains(key))
     }
 
@@ -880,11 +1056,33 @@ impl DefMap {
             .map(|(id, _)| id)
     }
 
-    pub fn derive_helpers_in_scope(
-        &self,
+    pub fn derive_helpers_in_scope<'a>(
+        &'a self,
+        db: &'a dyn SourceDatabase,
         id: AstId<ast::Adt>,
-    ) -> Option<&[(Name, MacroId, Either<MacroCallId, BuiltinDeriveImplId>)]> {
-        self.derive_helpers_in_scope.get(&id.map(|it| it.upcast())).map(Deref::deref)
+    ) -> Option<&'a [(Name, MacroId, Either<MacroCallId, BuiltinDeriveImplId>)]> {
+        self.derive_helpers(db).get(&id.map(|it| it.upcast())).map(Deref::deref)
+    }
+
+    /// The derive helpers in scope of each item: a finished crate's map says them beside itself.
+    pub(crate) fn derive_helpers<'a>(
+        &'a self,
+        db: &'a dyn SourceDatabase,
+    ) -> &'a FxHashMap<AstId<ast::Item>, Vec<(Name, MacroId, Either<MacroCallId, BuiltinDeriveImplId>)>> {
+        if self.frozen && self.block.is_none() {
+            &crate_local_def_map(db, self.krate).extras.derive_helpers_in_scope
+        } else {
+            &self.derive_helpers_in_scope
+        }
+    }
+
+    /// The macro each macro definition made: a finished crate's map says it beside itself.
+    pub(crate) fn macro_definitions<'a>(&'a self, db: &'a dyn SourceDatabase) -> &'a FxHashMap<ErasedAstId, MacroId> {
+        if self.frozen && self.block.is_none() {
+            &crate_local_def_map(db, self.krate).extras.macro_def_to_macro_id
+        } else {
+            &self.macro_def_to_macro_id
+        }
     }
 
     pub fn registered_tools(&self) -> &[Symbol] {
@@ -947,8 +1145,8 @@ impl DefMap {
         db: &dyn SourceDatabase,
         local_mod: ModuleIdLt<'_>,
     ) -> Option<ModuleId> {
-        match self.module_data(db, local_mod).parent {
-            Some(parent) => Some(parent),
+        match *unsafe { local_mod.to_static() }.containing_module_inside_def_map(db) {
+            Some(parent) => Some(unsafe { parent.to_static() }),
             None => self.block.map(|BlockInfo { parent, .. }| parent),
         }
     }

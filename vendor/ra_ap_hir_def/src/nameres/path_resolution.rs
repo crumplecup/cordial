@@ -503,14 +503,10 @@ impl DefMap {
                         );
                     }
 
-                    let module_data = if module.block(db) == self.block_id() {
-                        &self.module_data(db, module)
-                    } else {
-                        &module.def_map(db).module_data(db, module)
-                    };
+                    let def_map = if module.block(db) == self.block_id() { self } else { module.def_map(db) };
 
                     // Since it is a qualified path here, it should not contains legacy macros
-                    module_data.scope.get(segment)
+                    def_map.scope_get(db, module, segment)
                 }
                 ModuleDefId::AdtId(AdtId::EnumId(e)) => {
                     // enum variant
@@ -634,15 +630,14 @@ impl DefMap {
         //  - current module / scope
         //  - extern prelude / macro_use prelude
         //  - std prelude
-        let from_legacy_macro = self.module_data(db, module)
-            .scope
-            .get_legacy_macro(name)
+        let from_legacy_macro = self
+            .scope_legacy_macro(db, module, name)
             // FIXME: shadowing
             .and_then(|it| it.last())
             .copied()
             .filter(|&id| sub_namespace_match(db, id, expected_macro_subns))
             .map_or_else(PerNs::none, |m| PerNs::macros(m, Visibility::Public, None));
-        let from_scope = self.module_data(db, module).scope.get(name).filter_macro(db, expected_macro_subns);
+        let from_scope = self.scope_get(db, module, name).filter_macro(db, expected_macro_subns);
         let from_builtin = match self.block {
             Some(_) => {
                 // Only resolve to builtins in the root `DefMap`.
@@ -727,9 +722,9 @@ impl DefMap {
         let from_crate_root = match self.block {
             Some(_) => {
                 let def_map = self.crate_root(db).def_map(db);
-                def_map.module_data(db, def_map.root).scope.get(name)
+                def_map.scope_get(db, def_map.root, name)
             }
-            None => self.module_data(db, self.root).scope.get(name),
+            None => self.scope_get(db, self.root, name),
         };
         let from_extern_prelude = || {
             if self.block.is_some() && module == self.root {
@@ -745,7 +740,7 @@ impl DefMap {
     fn resolve_in_prelude(&self, db: &dyn SourceDatabase, name: &Name) -> PerNs {
         if let Some((prelude, _use)) = self.prelude {
             let def_map = if prelude.krate(db) == self.krate { self } else { prelude.def_map(db) };
-            def_map.module_data(db, prelude).scope.get(name)
+            def_map.scope_get(db, prelude, name)
         } else {
             PerNs::none()
         }

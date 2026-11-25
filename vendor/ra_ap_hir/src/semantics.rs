@@ -693,7 +693,7 @@ impl<'db> SemanticsImpl<'db> {
         let result = sa
             .resolver
             .def_map()
-            .derive_helpers_in_scope(InFile::new(sa.file_id, id))?
+            .derive_helpers_in_scope(self.db, InFile::new(sa.file_id, id))?
             .iter()
             .map(|(name, macro_, _)| {
                 let macro_name = Macro::from(*macro_).name(self.db).symbol().clone();
@@ -716,7 +716,7 @@ impl<'db> SemanticsImpl<'db> {
         let res: Vec<_> = sa
             .resolver
             .def_map()
-            .derive_helpers_in_scope(InFile::new(sa.file_id, id))?
+            .derive_helpers_in_scope(self.db, InFile::new(sa.file_id, id))?
             .iter()
             .filter(|&(name, _, _)| *name == attr_name)
             .filter_map(|&(_, macro_, call)| Some((macro_.into(), call.left()?)))
@@ -1490,7 +1490,7 @@ impl<'db> SemanticsImpl<'db> {
                             let id = expansion.ast_id_map(db).ast_id(&adt);
                             let helpers = resolver
                                 .def_map()
-                                .derive_helpers_in_scope(InFile::new(expansion, id))?;
+                                .derive_helpers_in_scope(db, InFile::new(expansion, id))?;
 
                             if !helpers.is_empty() {
                                 let text_range = attr.syntax().text_range();

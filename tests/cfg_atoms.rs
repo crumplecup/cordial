@@ -1277,3 +1277,80 @@ fn what_was_first_computed_during_a_flip_and_does_not_depend_on_it_is_not_forgot
         "nor do the expansions: {small:?} {large:?}"
     );
 }
+
+/// What executes during a flip of the atom `test`, and when the ordinary cfg is put back with what the flip changed
+/// forgotten, in a crate of one module that holds a `#[cfg(test)] mod tests` and `functions` functions that call a
+/// macro and name nothing of it.
+fn flipped_for_a_test_module(functions: usize, one_names_it: bool) -> [std::collections::BTreeMap<String, usize>; 2] {
+    let executed = Runs::default();
+    let subscriber = tracing_subscriber::registry().with(executed.clone());
+    tracing::subscriber::with_default(subscriber, || {
+        let text: String = String::from(
+            "macro_rules! twice { ($e:expr) => { $e + $e }; }\n#[cfg(test)]\nmod tests {\n    pub fn helper() {}\n    #[macro_export]\n    macro_rules! made { () => { 1 }; }\n}\n",
+        ) + &(0..functions)
+            .map(|n| format!("pub fn plain_{n}() -> u32 {{ twice!({n}) }}\n"))
+            .collect::<String>()
+            + if one_names_it { "pub fn names_it() -> u32 { crate::made!() }\n" } else { "" };
+        let (mut db, krate) = crate_of(&[("lib.rs", text.as_str())], CfgOptions::default());
+        let _ = read_bodies(&db, krate);
+        let start = salsa::plumbing::current_revision(&db);
+
+        let before = executed.now();
+        let mut flipped = CfgOptions::default();
+        flipped.insert_atom(Symbol::intern("test"));
+        krate.set_cfg_options(&mut db).to(flipped);
+        let _ = read_bodies(&db, krate);
+        let flip = executed.since(&before);
+
+        let before = executed.now();
+        krate.set_cfg_options(&mut db).to(CfgOptions::default());
+        let _ = <dyn salsa::Database>::forget_memos_changed_after(&mut db, start);
+        let _ = read_bodies(&db, krate);
+        [flip, executed.since(&before)]
+    })
+}
+
+#[test]
+fn flipping_the_test_atom_runs_none_of_the_expansions_of_functions_that_name_nothing_of_the_test_module() {
+    let _serial = SERIAL.lock().unwrap();
+    let [small_flip, small_settle] = flipped_for_a_test_module(4, false);
+    let [large_flip, large_settle] = flipped_for_a_test_module(40, false);
+    let work = |counts: &std::collections::BTreeMap<String, usize>| -> usize {
+        counts
+            .iter()
+            .filter(|(name, _)| name.contains("expansion") || name.contains("macro_arg") || name.contains("Body::"))
+            .map(|(_, count)| *count)
+            .sum()
+    };
+    assert_eq!(work(&large_flip), work(&small_flip), "the flip: {small_flip:?} {large_flip:?}");
+    assert_eq!(work(&large_settle), work(&small_settle), "putting it back: {small_settle:?} {large_settle:?}");
+    assert_eq!(work(&large_settle), 0, "no body or expansion runs again: {large_settle:?}");
+}
+
+#[test]
+fn flipping_the_test_atom_runs_the_function_that_names_the_test_module_and_only_that_one() {
+    let _serial = SERIAL.lock().unwrap();
+    let bodies = |counts: &std::collections::BTreeMap<String, usize>| {
+        counts.get("Body::with_source_map_").copied().unwrap_or(0)
+    };
+    let [without_flip, without_settle] = flipped_for_a_test_module(40, false);
+    let [with_flip, with_settle] = flipped_for_a_test_module(40, true);
+    assert_eq!(bodies(&with_flip), bodies(&without_flip) + 1, "the flip: {with_flip:?} {without_flip:?}");
+    assert_eq!(bodies(&with_settle), bodies(&without_settle) + 1, "putting it back: {with_settle:?} {without_settle:?}");
+}
+
+#[test]
+fn the_modules_of_a_blocks_map_are_the_blocks_and_not_the_crates() {
+    let _serial = SERIAL.lock().unwrap();
+    let (db, krate) = crate_of(&GATED_BLOCK, atoms(&["a"]));
+    let inside = function_ids(&db, krate)["inside"];
+    let (body, _) = Body::with_source_map(&db, DefWithBodyId::FunctionId(inside));
+    let block = body.blocks(&db).map(|(block, _)| block).next().expect("the function has a block with an item");
+    let in_crate = crate_def_map(&db, krate).modules(&db).count();
+    let in_block: Vec<_> = ra_ap_hir_def::nameres::block_def_map(&db, block)
+        .modules(&db)
+        .map(|(module, _)| module.block(&db))
+        .collect();
+    assert!(in_crate > 1, "the crate has modules of its own: {in_crate}");
+    assert_eq!(in_block, [Some(block)], "a block's map holds the block's module and no module of the crate");
+}

@@ -2754,7 +2754,7 @@ impl<'db> ExprCollector<'db> {
                 };
                 let name = name.as_name();
                 let macro_id =
-                    self.def_map.module_data(self.db, self.def_map.root).scope.get(&name).take_macros();
+                    self.def_map.scope_get(self.db, self.def_map.root, &name).take_macros();
                 self.collect_macro_def(statements, macro_id);
             }
             ast::Stmt::Item(ast::Item::MacroRules(macro_)) => {
