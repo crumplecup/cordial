@@ -177,3 +177,22 @@ memory after a flip back (1d); save and restore with flips (1e); the amenable me
 **Known conservative cases** (a module is made again where it could have been taken): a module that has anything
 unresolved, calls a macro when any macro-defining file changed, has a macro call resolved through another crate, or
 reads a module of another crate that changed.
+
+## Status (2026-11-25, amenable run 7)
+
+**Works as designed on amenable:** all 10 cfg contexts and 21 leaf contexts, no copies, no panic, no dead read, no
+error, the state saved and the 82 reports written. The per-context counts (`functions`, `new_here`, `kept`) are
+identical to run 3.
+
+**What the runs found, each now a test:** (1) module ids are interned and never deleted, so an item's id can always
+read its module (`a_module_that_a_flip_made_vanish_can_still_be_asked_what_it_is`); the map says whether it has the
+module. (2) The map of a block in a module the map does not have is not made
+(`the_map_of_a_block_in_a_module_the_map_no_longer_has_is_not_made`). (3) Block ids stay tracked: a block dies with the
+body that made it, and that is what says a block in an expansion that is not any more is gone
+(`the_map_of_a_block_in_an_expansion_that_is_not_any_more_is_not_made`, with its failing counterpart). Interning blocks
+too was tried and rejected by run 6.
+
+**Measured, not tuned:** module ids are never freed (30,823 after the first context, 42,989 at the end, most of the
+growth in the leaf stage's `+test`); block ids and cells do not grow. 4,572 of 44,788 modules are taken from the map
+before. The whole run takes 13m35s against 4m03s for copies; peak 4.3 GB against 4.1 GB. Phase 3 stays gated on the
+parity of findings, which has not been compared yet.
