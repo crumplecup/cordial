@@ -196,3 +196,24 @@ too was tried and rejected by run 6.
 growth in the leaf stage's `+test`); block ids and cells do not grow. 4,572 of 44,788 modules are taken from the map
 before. The whole run takes 13m35s against 4m03s for copies; peak 4.3 GB against 4.1 GB. Phase 3 stays gated on the
 parity of findings, which has not been compared yet.
+
+## Status (2026-11-25, amenable run 9 and `elicit_doc`)
+
+**Over-kept facts: not a bug.** Of the functions the biggest context keeps that the ordinary build has too, 1,034 of
+1,035 changed identity from macro-generated to written: amenable has `#[cfg_attr(not(kani), tracing::instrument)]` on
+2,142 lines, so without `kani` a macro wraps the function and with it the function stands as written, with no tracing
+calls (22 calls become 1). The exact comparison is right; the copies run kept fewer because it kept by words. Shown by
+`an_attribute_macro_the_context_turns_off_makes_the_function_one_that_is_written_...`.
+
+**Third-context gap: the copy design over-counts.** 32 files under `amenable_creusot/src/rust_std_witness/` (177
+functions) are in a module declared `#[cfg(not(creusot))]`; the third context enables `creusot`, so flips has 0 of them
+and copies, which takes a file whose words no gate names as it is, counts them all active (216 against 39). Same on
+`elicit_doc`: `src/quality/exceptions.rs`, which no module declares, 13 functions in copies and 0 in flips. Shown by
+`a_file_only_a_disabled_atom_...` and `a_file_no_module_declares_...` with their copy-design counterparts.
+
+**Parity of findings.** `elicit_doc`: the 85 findings files are identical. Amenable: 82 files, 78 identical; the four
+that differ are the tracing etiquette's (`tracing-instrument.csv` and its summaries), by four findings of 1,059:
+`TRACING-MISSING-INSTRUMENT` on `ChronoVerifier::name` and `JiffVerifier::name` only in copies, and
+`TRACING-PROOF-INSTRUMENT` on `KaniVerifier::name` and `CanaryVerifier::name` only in flips. All four are the same
+`#[cfg_attr(not(kani), ...)]` trait method; which mode is right depends on the call graph's proof-only reachability
+(`call_graph/exclusion.rs`), whose callers here are inside a `macro_rules!` expansion. Not yet adjudicated.
