@@ -239,11 +239,26 @@ pub(super) fn expanded_definition(
     let mut current = function.clone();
     for depth in 0..MAX_ATTRIBUTE_MACRO_DEPTH {
         let expansion = sema.expand_attr_macro(&ast::Item::Fn(current.clone()));
+        // The crate that made the call, and the cfg that crate has now: a call made while a cfg applied an attribute
+        // macro is not one the crate makes when the cfg does not, and expanding it is expanding what is not there.
+        let call_crate = expansion.as_ref().and_then(|expansion| {
+            let call = expansion.value.file_id.macro_file()?;
+            let krate = call.loc(sema.db).krate;
+            let cfg = format!("{:?}", krate.cfg_options(sema.db));
+            Some((
+                ra_ap_hir::Crate::from(krate)
+                    .display_name(sema.db)
+                    .map_or_else(|| "?".to_owned(), |name| name.to_string()),
+                cfg.chars().take(240).collect::<String>(),
+            ))
+        });
         tracing::debug!(
             target: "cordial::semantic::harvest",
             function = %name.text(),
             depth = depth as u64,
             expanded = expansion.is_some(),
+            call_crate = %call_crate.as_ref().map_or("", |(name, _)| name.as_str()),
+            call_crate_cfg = %call_crate.as_ref().map_or("", |(_, cfg)| cfg.as_str()),
             "an attribute macro's expansion of a function is asked for"
         );
         let expansion = expansion?;

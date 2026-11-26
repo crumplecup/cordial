@@ -679,3 +679,48 @@ fn execute_assert_events(
     }
     expect.assert_debug_eq(&events);
 }
+
+/// How many invocations of attribute macros the modules of the crate's map hold.
+fn attribute_macro_invocations(db: &TestDB, krate: base_db::Crate) -> usize {
+    crate_def_map(db, krate).modules(db).map(|(_, module)| module.scope.attr_macro_invocs().count()).sum()
+}
+
+/// The crates of the fixture that are not proc-macro crates it brings in.
+fn local_crates(db: &TestDB) -> Vec<base_db::Crate> {
+    all_crates(db)
+        .iter()
+        .copied()
+        .filter(|krate| matches!(krate.data(db).origin, CrateOrigin::Local { .. }))
+        .collect()
+}
+
+/// An attribute macro that a `cfg_attr` applies is in the map while the cfg applies it, and is not when the cfg is flipped
+/// so that it does not: in each crate that has the file, as if the map had been made for the flipped cfg from nothing.
+#[test]
+fn flipping_a_cfg_that_turns_off_an_attribute_macro_takes_its_invocation_out_of_the_map_of_every_crate_that_has_the_file() {
+    use salsa::Setter as _;
+    let fixture = r#"
+//- proc_macros: identity
+//- /a.rs crate:a
+mod m;
+//- /b.rs crate:b
+#[path = "m.rs"]
+mod m;
+//- /m.rs
+#[cfg_attr(not(flag), proc_macros::identity)]
+pub fn f() {}
+"#;
+    let (mut db, _) = TestDB::with_many_files(fixture);
+    // The crates that have the file, which the macro applies in while `flag` is not set.
+    let crates: Vec<_> =
+        local_crates(&db).into_iter().filter(|krate| attribute_macro_invocations(&db, *krate) == 1).collect();
+    assert_eq!(crates.len(), 2, "the file is in two crates: {crates:?}");
+    for &krate in &crates {
+        let mut flipped = krate.cfg_options(&db).clone();
+        flipped.insert_atom(Symbol::intern("flag"));
+        krate.set_cfg_options(&mut db).to(flipped);
+    }
+    for &krate in &crates {
+        assert_eq!(attribute_macro_invocations(&db, krate), 0, "and does not when it is, in {krate:?}");
+    }
+}
