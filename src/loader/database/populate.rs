@@ -237,8 +237,16 @@ pub(super) fn expanded_definition(
 ) -> Option<ra_ap_hir::Function> {
     let name = function.name()?;
     let mut current = function.clone();
-    for _ in 0..MAX_ATTRIBUTE_MACRO_DEPTH {
-        let expansion = sema.expand_attr_macro(&ast::Item::Fn(current.clone()))?;
+    for depth in 0..MAX_ATTRIBUTE_MACRO_DEPTH {
+        let expansion = sema.expand_attr_macro(&ast::Item::Fn(current.clone()));
+        tracing::debug!(
+            target: "cordial::semantic::harvest",
+            function = %name.text(),
+            depth = depth as u64,
+            expanded = expansion.is_some(),
+            "an attribute macro's expansion of a function is asked for"
+        );
+        let expansion = expansion?;
         let generated = expansion
             .value
             .value

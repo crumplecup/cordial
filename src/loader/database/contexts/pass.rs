@@ -454,6 +454,50 @@ impl SourceDatabase {
         }
     }
 
+    /// Say which crates a file is in, and which of them the context flipped: a file that several crates splice in is
+    /// read through the first of them, and a definition found through one the context did not flip is the ordinary
+    /// build's.
+    #[instrument(level = "trace", skip(self, context))]
+    fn say_the_crates_of_a_file(&self, path: &std::path::Path, file: ra_ap_ide_db::base_db::FileId, context: &crate::ContextCrates) {
+        let crates = ra_ap_ide_db::base_db::relevant_crates(&self.db, file);
+        let flipped = context.crate_set();
+        let name = |krate: &ra_ap_ide_db::base_db::Crate| {
+            ra_ap_hir::Crate::from(*krate).display_name(&self.db).map_or_else(|| "?".to_owned(), |name| name.to_string())
+        };
+        tracing::debug!(
+            target: "cordial::semantic::harvest",
+            file = %path.display(),
+            crates = crates.len() as u64,
+            crates_flipped = crates.iter().filter(|krate| flipped.contains(*krate)).count() as u64,
+            first = %crates.first().map_or_else(String::new, name),
+            first_flipped = crates.first().is_some_and(|krate| flipped.contains(krate)),
+            "the crates a file is in, and how many of them the context flipped"
+        );
+    }
+
+    /// Say how the definition of a function of a flipped context was found (what is written, or what an attribute
+    /// macro made of it), how it was made, and whether its crate is one the context flipped.
+    #[instrument(level = "trace", skip(self, function, definition, context))]
+    fn say_how_a_function_was_found(
+        &self,
+        function: &ast::Fn,
+        definition: ra_ap_hir::Function,
+        via_to_def: bool,
+        context: &crate::ContextCrates,
+    ) {
+        let krate = definition.module(&self.db).krate(&self.db);
+        let identity = types::identity(&self.db, definition.into());
+        tracing::debug!(
+            target: "cordial::semantic::harvest",
+            function = %ast::HasName::name(function).map_or_else(String::new, |name| name.text().to_string()),
+            found_by = if via_to_def { "what is written" } else { "the attribute macro's expansion" },
+            made = ?item_key::made_how(&self.db, identity),
+            krate = %krate.display_name(&self.db).map_or_else(|| "?".to_owned(), |name| name.to_string()),
+            krate_flipped = context.crate_set().contains(&krate.base()),
+            "a function of the context is found"
+        );
+    }
+
     /// Copy the active context's facts into `graph`.
     ///
     /// Every function that resolves records that it is active in this context.
@@ -609,6 +653,9 @@ impl SourceDatabase {
                     "a copy's functions are read through rust-analyzer"
                 );
                 rust_analyzer_files += 1;
+                if in_place {
+                    self.say_the_crates_of_a_file(path, file, files.context);
+                }
                 let tree = sema.parse(sema.attach_first_edition(file));
                 let flips = Flips::collect(&tree, pairs, Reach::Written);
                 for function in tree.syntax().descendants().filter_map(ast::Fn::cast) {
@@ -616,12 +663,16 @@ impl SourceDatabase {
                     let Some(node) = files.nodes.get(path, range) else {
                         continue;
                     };
-                    let Some(definition) = sema
-                        .to_def(&function)
-                        .or_else(|| expanded_definition(&sema, &function))
-                    else {
-                        continue;
+                    let (definition, via_to_def) = match sema.to_def(&function) {
+                        Some(definition) => (definition, true),
+                        None => match expanded_definition(&sema, &function) {
+                            Some(definition) => (definition, false),
+                            None => continue,
+                        },
                     };
+                    if in_place {
+                        self.say_how_a_function_was_found(&function, definition, via_to_def, files.context);
+                    }
                     definitions.insert(
                         canonical_id(types::identity(&self.db, definition.into())),
                         node,

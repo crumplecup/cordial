@@ -455,6 +455,12 @@ fn a_run_says_what_each_stage_wrote_started_walked_and_forgot() -> Result<()> {
     let told_by = |message: &str| told.iter().find(|(said, _)| said.contains(message)).map(|(_, fields)| fields.clone());
     let settled = told_by("the blocks the bodies made again no longer make").expect("the settle says its blocks");
     assert!(settled.contains(&"blocks_held") && settled.contains(&"blocks_gone_after_bodies"), "{settled:?}");
+    // The harvest of a flipped context says which crates a file is in and how each function's definition was found and
+    // made, so that a definition from the ordinary build in a flipped context is told by reading.
+    let crates = told_by("the crates a file is in, and how many of them the context flipped").expect("the crates of a file");
+    assert!(crates.contains(&"crates_flipped") && crates.contains(&"first_flipped"), "{crates:?}");
+    let found = told_by("a function of the context is found").expect("how a function was found");
+    assert!(found.contains(&"made") && found.contains(&"found_by") && found.contains(&"krate_flipped"), "{found:?}");
     let forgotten = told_by("saved queries keyed by what the definition map no longer declares").expect("the forget");
     assert!(forgotten.contains(&"blocks_absent_because") && forgotten.contains(&"revision_after"), "{forgotten:?}");
     Ok(())
