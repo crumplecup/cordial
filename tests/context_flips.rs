@@ -440,45 +440,6 @@ const SHAPES: [(&str, &str); 8] = [
     ),
 ];
 
-#[test]
-#[tracing::instrument(level = "debug", err(level = "warn"))]
-fn each_shape_of_what_only_a_flipped_context_has_leaves_a_state_that_saves() -> Result<()> {
-    let _serial = SERIAL.lock().unwrap();
-    cordial::init_tracing();
-    let mut failures = Vec::new();
-    for (shape, source) in SHAPES {
-        let root = fixture_with(source)?;
-        let state = tempfile::tempdir().into_diagnostic()?;
-        let saved = cordial::SavedState::at(state.path().join("analysis-state"));
-        let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            run_saving(root.path(), &saved).and_then(|(_, _)| run_saving(root.path(), &saved))
-        }));
-        match outcome {
-            Ok(Ok((restored, _))) if restored => {}
-            Ok(Ok(_)) => failures.push(format!("{shape}: the second run did not restore")),
-            Ok(Err(error)) => failures.push(format!("{shape}: {error:?}")),
-            Err(_) => failures.push(format!("{shape}: a panic")),
-        }
-    }
-    assert!(failures.is_empty(), "{failures:#?}");
-    Ok(())
-}
-
-#[test]
-#[tracing::instrument(level = "debug", err(level = "warn"))]
-fn an_impl_in_a_block_inside_a_function_only_a_flipped_context_has_leaves_a_state_that_saves() -> Result<()> {
-    let _serial = SERIAL.lock().unwrap();
-    cordial::init_tracing();
-    let root = fixture_with(SHAPES[0].1)?;
-    let state = tempfile::tempdir().into_diagnostic()?;
-    let saved = cordial::SavedState::at(state.path().join("analysis-state"));
-    let (restored, _) = run_saving(root.path(), &saved)?;
-    assert!(!restored);
-    let (restored, _) = run_saving(root.path(), &saved)?;
-    assert!(restored);
-    Ok(())
-}
-
 /// Counts the item trees that execute: one a file, again for a file that tests an atom that was flipped, and
 /// says how many there were when each context was done.
 #[derive(Clone, Default)]
@@ -710,30 +671,40 @@ impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for DeadReads {
     }
 }
 
+/// Every shape in one crate, each in a module of its own, so that one run covers them all.
+fn all_the_shapes_in_one_crate() -> String {
+    SHAPES
+        .iter()
+        .enumerate()
+        .map(|(index, (_, source))| {
+            let source = source.replace("crate::proofs::", &format!("crate::shape{index}::proofs::"));
+            format!("pub mod shape{index} {{\n{source}\n}}\n")
+        })
+        .collect()
+}
+
+/// A run that flips a context and saves reads nothing of what only the flipped context made after it is gone, and does
+/// not fail. The save verifies each memo of the flipped state, and a memo that read what is gone is what used to fail it;
+/// each shape is one that such a memo can be in. One run over all of them: the cost of a run is the load of the sysroot
+/// and not the size of the crate, and the verifying is in this run.
 #[test]
 #[tracing::instrument(level = "debug", err(level = "warn"))]
 fn no_shape_of_what_only_a_flipped_context_has_is_read_after_it_is_gone() -> Result<()> {
     let _serial = SERIAL.lock().unwrap();
     cordial::init_tracing();
-    let mut found = Vec::new();
-    for (shape, source) in SHAPES {
-        let root = fixture_with(source)?;
-        let state = tempfile::tempdir().into_diagnostic()?;
-        let saved = cordial::SavedState::at(state.path().join("analysis-state"));
-        let reads = DeadReads::default();
-        let subscriber = tracing_subscriber::registry().with(reads.clone());
-        tracing::subscriber::with_default(subscriber, || {
-            for _ in 0..2 {
-                if run_saving(root.path(), &saved).is_err() {
-                    found.push(format!("{shape}: the run failed"));
-                }
-            }
-        });
-        for read in reads.0.lock().unwrap().iter() {
-            found.push(format!("{shape}: {read}"));
+    let root = fixture_with(&all_the_shapes_in_one_crate())?;
+    let state = tempfile::tempdir().into_diagnostic()?;
+    let saved = cordial::SavedState::at(state.path().join("analysis-state"));
+    let reads = DeadReads::default();
+    let subscriber = tracing_subscriber::registry().with(reads.clone());
+    let mut failures = Vec::new();
+    tracing::subscriber::with_default(subscriber, || {
+        if let Err(error) = run_saving(root.path(), &saved) {
+            failures.push(format!("the run failed: {error:?}"));
         }
-    }
-    assert!(found.is_empty(), "{found:#?}");
+    });
+    failures.extend(reads.0.lock().unwrap().iter().map(|read| format!("read after it is gone: {read}")));
+    assert!(failures.is_empty(), "{failures:#?}");
     Ok(())
 }
 

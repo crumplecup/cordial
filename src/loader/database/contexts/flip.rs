@@ -58,9 +58,6 @@ impl Ordinary {
     }
 }
 
-/// What a block made by a macro is said to belong to, since it is in no file of its own.
-const MACRO_OWNER: &str = "in what a macro made";
-
 /// A flipped session: the crates it is over, with their ordinary cfgs, and what the flips have changed so far. The
 /// contexts pass and the leaf pass are two parts of one session when the run can be, so that the ordinary cfg is put
 /// back, what the flips changed forgotten and the maps settled once, when the last of them is done, and the second
@@ -138,11 +135,10 @@ impl SourceDatabase {
         let revision = self.revision();
         let db = &self.db;
         let mut remade = 0u64;
-        // Who each block that is held belongs to, while it can still be read: a block that a body made again without
-        // is deleted, and nothing of it can be read after.
-        let owners: Vec<(salsa::Id, String)> = attach_db(db, || {
-            blocks.iter().map(|key| (*key, self.block_owner(BlockId::from_id(*key)))).collect()
-        });
+        // The blocks that are held now, by id and not by what they are of: a block that a body made again without is
+        // deleted, and one that was read in the revision cannot be deleted in it, so nothing reads a block here until the
+        // bodies are made again.
+        let held = blocks.clone();
         attach_db(db, || {
             {
                 let _maps = crate::Segment::begin("maps");
@@ -159,18 +155,15 @@ impl SourceDatabase {
                     ra_ap_hir_def::declaration::settle_bodies(db, *krate);
                 }
             }
-            let gone: Vec<&str> = owners
+            let gone = held
                 .iter()
-                .filter(|(key, _)| salsa::Database::existence(db, *key) != salsa::Existence::Exists)
-                .map(|(_, owner)| owner.as_str())
-                .collect();
+                .filter(|key| salsa::Database::existence(db, **key) != salsa::Existence::Exists)
+                .count();
             tracing::info!(
                 target: "cordial::def_map",
                 revision = ?revision,
-                blocks_held = owners.len() as u64,
-                blocks_gone_after_bodies = gone.len() as u64,
-                gone_in_macros = gone.iter().filter(|owner| **owner == MACRO_OWNER).count() as u64,
-                gone_owners = %Self::owners_top(&gone),
+                blocks_held = held.len() as u64,
+                blocks_gone_after_bodies = gone as u64,
                 "the blocks the bodies made again no longer make: deleted before the blocks are read"
             );
             let _blocks = crate::Segment::begin("blocks");
@@ -363,26 +356,6 @@ impl SourceDatabase {
         self.settle_ordinary(cfgs);
         self.forget_undeclared_roots();
         self.settle_ordinary(cfgs);
-    }
-
-    /// Where a block is, as text: the file whose code it is in, or that it is in what a macro made.
-    #[instrument(level = "trace", skip(self))]
-    fn block_owner(&self, block: ra_ap_hir_def::BlockId) -> String {
-        match block.ast_id(&self.db).file_id.file_id() {
-            Some(file) => self.vfs.file_path(file.file_id(&self.db)).to_string(),
-            None => MACRO_OWNER.to_owned(),
-        }
-    }
-
-    /// The owners of `blocks` with how many each has, most first.
-    fn owners_top(blocks: &[&str]) -> String {
-        let mut counted: std::collections::BTreeMap<&str, u64> = std::collections::BTreeMap::new();
-        for owner in blocks {
-            *counted.entry(owner).or_default() += 1;
-        }
-        let mut sorted: Vec<(&str, u64)> = counted.into_iter().collect();
-        sorted.sort_by_key(|(owner, count)| (std::cmp::Reverse(*count), *owner));
-        sorted.iter().take(5).map(|(owner, count)| format!("{owner}={count}")).collect::<Vec<_>>().join(" ")
     }
 
     /// The database's revision now, which a context's flips are measured from.
