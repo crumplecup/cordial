@@ -315,6 +315,11 @@ pub fn cap_lru_capacities(cap: usize) {
     crate::function::cap_capacities(cap);
 }
 
+/// Keep every value of every query that has a capacity, or (`false`) keep what each is marked with again.
+pub fn lift_lru_capacities(lifted: bool) {
+    crate::function::lift_capacities(lifted);
+}
+
 static EVICTION_LABEL: std::sync::Mutex<String> = std::sync::Mutex::new(String::new());
 
 /// Say what the program is doing around an eviction, so that the events of the values it drops

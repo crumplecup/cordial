@@ -63,9 +63,11 @@ static CHUNK_BACKOFF: std::sync::Mutex<crate::Backoff> =
 
 /// Apply the cap the environment asks for, if it does.
 pub(super) fn cap_from_environment() {
-    if let Some(cap) = environment_cap() {
+    let asked = environment_cap();
+    if let Some(cap) = asked {
         salsa::cap_lru_capacities(cap);
     }
+    crate::memory_limit::hold_lru_values_unless_pressed(asked.is_some());
 }
 
 impl SourceDatabase {
@@ -413,7 +415,10 @@ impl SourceDatabase {
         let before = crate::process_memory::sample();
         let started = std::time::Instant::now();
         salsa::set_eviction_label(after);
+        // An eviction the run asked for evicts, whatever the policy says about the writes between.
+        salsa::lift_lru_capacities(false);
         salsa::Database::trigger_lru_eviction(&mut self.db);
+        crate::memory_limit::apply_lru_policy();
         salsa::set_eviction_label("");
         if crate::memory_limit::pressured() {
             let (files, bytes) = self.drop_library_texts();

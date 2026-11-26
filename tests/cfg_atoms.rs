@@ -1724,3 +1724,56 @@ fn dropping_the_scaffolding_does_not_make_what_a_flip_does_not_reach_run_again()
     let dropped = executed_by_a_flip_after(Dropped::TheScaffolding, 8);
     assert_eq!(without_scaffolding(dropped), without_scaffolding(kept), "trees, expansions and arguments that were dropped have the value they had");
 }
+
+/// The id map of every file of a crate that a module declares.
+fn read_id_maps(db: &RootDatabase, krate: Crate) {
+    let files: Vec<_> = crate_def_map(db, krate)
+        .modules(db)
+        .filter_map(|(_, module)| module.origin.file_id())
+        .collect();
+    for file in files {
+        let _ = ra_ap_hir_expand::HirFileId::from(file).ast_id_map(db);
+    }
+}
+
+/// How many id maps are made again when they are all read again after an input is written, as a flip writes one, in
+/// a crate of more files than the LRU of id maps keeps (1,024), with the policy of a run or without it, and with the run short of memory or not.
+fn id_maps_made_again(policy_of_a_run: bool, pressed: bool) -> usize {
+    let executed = Runs::default();
+    let subscriber = tracing_subscriber::registry().with(executed.clone());
+    tracing::subscriber::with_default(subscriber, || {
+        if policy_of_a_run {
+            cordial::hold_lru_values_unless_pressed(false);
+        }
+        if pressed {
+            cordial::feel_pressure(true);
+        }
+        let files: Vec<(String, String)> = std::iter::once((
+            "lib.rs".to_owned(),
+            (0..1100).map(|n| format!("mod m{n};\n")).collect::<String>(),
+        ))
+        .chain((0..1100).map(|n| (format!("m{n}.rs"), "pub fn f() {}\n".to_owned())))
+        .collect();
+        let borrowed: Vec<(&str, &str)> = files.iter().map(|(name, text)| (name.as_str(), text.as_str())).collect();
+        let (mut db, krate) = crate_of(&borrowed, CfgOptions::default());
+        read_id_maps(&db, krate);
+        krate.set_cfg_options(&mut db).to(atoms(&["a"]));
+        let before = executed.now();
+        read_id_maps(&db, krate);
+        executed.since(&before).get("HirFileId::ast_id_map_").copied().unwrap_or(0)
+    })
+}
+
+#[test]
+fn a_write_does_not_drop_the_id_maps_of_a_run_that_is_not_short_of_memory() {
+    let _serial = SERIAL.lock().unwrap();
+    // The control: with the marks the editor uses, what is over the 1,024 is dropped by the write.
+    assert!(id_maps_made_again(false, false) > 0, "the marks drop id maps when an input is written");
+    assert_eq!(id_maps_made_again(true, false), 0, "a run keeps them while it has the memory");
+}
+
+#[test]
+fn a_write_drops_the_id_maps_over_the_marks_of_a_run_that_is_short_of_memory() {
+    let _serial = SERIAL.lock().unwrap();
+    assert!(id_maps_made_again(true, true) > 0, "pressure puts the marks back, and the memory is given back");
+}

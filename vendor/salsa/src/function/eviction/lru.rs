@@ -22,6 +22,17 @@ pub fn cap_capacities(cap: usize) {
     CAPACITY_CAP.store(cap, std::sync::atomic::Ordering::Relaxed);
 }
 
+/// Whether no LRU evicts anything, whatever its mark. Each still records what it sees, so that the caps take
+/// effect on the order of use when they are asked for again.
+static LIFTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Keep every value of every query that has a capacity (or go back to keeping what each is marked with). For a
+/// program that is not an editor: it has no reason to drop a value while it has the memory, and each value it drops
+/// and then needs is computed again. Takes effect at the next eviction.
+pub fn lift_capacities(lifted: bool) {
+    LIFTED.store(lifted, std::sync::atomic::Ordering::Relaxed);
+}
+
 /// Least Recently Used eviction policy.
 ///
 /// When the number of memoized values exceeds the configured capacity,
@@ -65,6 +76,9 @@ impl EvictionPolicy for Lru {
         let Some(cap) = self.capacity else {
             return;
         };
+        if LIFTED.load(std::sync::atomic::Ordering::Relaxed) {
+            return;
+        }
         let cap = match CAPACITY_CAP.load(std::sync::atomic::Ordering::Relaxed) {
             0 => cap.get(),
             capped => cap.get().min(capped),

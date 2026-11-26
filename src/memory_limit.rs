@@ -821,11 +821,32 @@ pub fn nearing_now() -> bool {
         || meter_kib().is_some_and(|held| nearing(held, LIMIT_BYTES.load(Ordering::Relaxed)))
 }
 
+/// Whether the environment asked for a cap on what the LRU of each query keeps.
+static LRU_CAP_ASKED: AtomicBool = AtomicBool::new(false);
+
+/// Let the LRU of each query hold what it has seen, as long as the run is not short of memory and nothing asked for a
+/// cap: the marks on the queries (512 expansions, 1,024 id maps, 512 bodies) are what an editor keeps, and a write
+/// (every flip of a cfg is one) drops everything over them, which each query that then needs a value makes again.
+/// `cap_asked` says that the environment asked for a cap.
+#[instrument(level = "debug")]
+pub fn hold_lru_values_unless_pressed(cap_asked: bool) {
+    LRU_CAP_ASKED.store(cap_asked, Ordering::Relaxed);
+    apply_lru_policy();
+}
+
+/// Say to the queries whether they may drop what they hold: not while nothing asked for a cap and the run has the
+/// memory. Said again whenever the pressure changes.
+#[instrument(level = "debug")]
+pub(crate) fn apply_lru_policy() {
+    salsa::lift_lru_capacities(!LRU_CAP_ASKED.load(Ordering::Relaxed) && !pressured());
+}
+
 /// Make the run feel pressure (or stop feeling it), for the tests of what the work does under it.
 #[instrument(level = "debug")]
 pub fn feel_pressure(on: bool) {
     PRESSURE_FORCED.store(on, Ordering::Relaxed);
     LEVEL_FORCED.store(u8::from(on), Ordering::Relaxed);
+    apply_lru_policy();
 }
 
 /// How much more than at the last release a process holds before it lets go of the scaffolding
@@ -850,6 +871,7 @@ pub fn scaffolding_step_kib() -> u64 {
 pub fn feel_pressure_at(level: Pressure) {
     PRESSURE_FORCED.store(level > Pressure::None, Ordering::Relaxed);
     LEVEL_FORCED.store(level as u8, Ordering::Relaxed);
+    apply_lru_policy();
 }
 
 /// The rung the run is on now: the watchdog's, or the one a test asked for if it is higher.
@@ -958,6 +980,7 @@ fn watch(budget: &Budget) {
         let now = judge(was, held, budget.ladder_bytes());
         if now != was {
             PRESSURE.store(now, Ordering::Relaxed);
+            apply_lru_policy();
             tracing::info!(
                 target: "cordial::eviction",
                 pressured = now,
