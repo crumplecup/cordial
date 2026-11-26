@@ -343,3 +343,18 @@ each (a module cell's whole data); `crate_module_cells` 624; `cfg_options` 339. 
 **Policy while flips is fixed:** hold memory and do not evict; judge by queries executed and stale memos, not peak or wall
 time. Eviction policy (the forward cone of the next flip, cost over size, regret counters) comes after sharing is right.
 
+**Tried and reverted (2026-11-26): `resolve <- generated_in`.** 895 of the 944 stale `resolve` memos are in the save: the flips
+leave `generated_in` (the crate's index from a description to what a macro generated, `item_key.rs`) holding the last flip's value,
+the restore makes it change back, and each `resolve` that fell back to the whole index runs again. A projection query for one
+description (`generated_definition`) took `resolve <- generated_in` to 0 with findings identical, but the work did not fall:
+the save executed 4,673 queries against 1,328 and took the same 7.0 s, and the run executed 8.5k more queries in all
+(first runs of the projections). Reverted, with no test (two fixtures, a derive and a `macro_rules!` definition, did not make the old
+code run more `resolve`, and each took 130 s in a debug build, longer than the elicit_doc run). What is left of it is the
+general one: a memo holds one value, so a flip and its restore (A to B to A) changes every whole-crate memo twice, and what
+read them whole runs again at the restore. That is question 3 of "What is not known", and it is not specific to `generated_in`.
+
+**Where `elicit_doc` stands:** the context regions execute fewer queries than copies and take less time (contexts 4.0 s against
+5.9 s; the whole projection 28 s against 30 s); the one region where flips is slower is observability, 2.5 s against 1.6 s
+with fewer queries (8,892 against 12,149), which the metrics do not explain. `elicit_doc` has few contexts, so it does not
+stress the design: the next evidence is amenable (parity of findings, peak and time against 4.1 GB and 3 min 35 s).
+
