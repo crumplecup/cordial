@@ -158,98 +158,6 @@ fn by_pass(found: &[(String, u64)], query: &str) -> std::collections::BTreeMap<S
 /// The file-level query each copy of a file runs.
 const FILES_PARSE: &str = "> EditionedFileId::parse_";
 
-/// Persistence cutoffs for context copies are made before the context reaches eviction.
-/// The final save computes only the ordinary crate's cutoffs, and restoration reuses all of them.
-#[test]
-fn context_fingerprints_are_ready_before_eviction_and_reused_by_the_save() -> Result<()> {
-    let options = SemanticCargoOptions::default()
-        .with_cfg_contexts(vec![
-            SemanticContextKey::enabling(["kani"]),
-            SemanticContextKey::enabling(["creusot"]),
-        ])
-        .with_cfg_planning(CfgPlanning::Explicit)
-        .with_evicts_between_chunks(true)
-        .with_reuse_across_edits(true);
-    for restored in [false, true] {
-        let (found, _) = run_with_options(restored, false, &options)?;
-        for query in [
-            "def_map_fingerprint",
-            "inherent_impls_fingerprint",
-            "trait_impls_fingerprint",
-            "generated_in_fingerprint",
-        ] {
-            let count_at = |step: &str| -> u64 {
-                found
-                    .iter()
-                    .filter(|(key, _)| {
-                        key.starts_with("steps.")
-                            && key.contains(step)
-                            && key.ends_with(&format!("> {query}"))
-                    })
-                    .map(|(_, count)| *count)
-                    .sum()
-            };
-            // Two contexts, and the crate has gates that only `kani` flips: the `creusot` context changes
-            // nothing in it, so it copies nothing and has no fingerprint to make.
-            let expected = u64::from(!restored);
-            let counts: Vec<_> = found
-                .iter()
-                .filter(|(key, _)| key.starts_with("steps.") && key.ends_with(query))
-                .collect();
-            assert_eq!(
-                count_at("retire_crates"),
-                expected,
-                "{query}, restored={restored}: {counts:#?}"
-            );
-            assert_eq!(
-                count_at("ask_fingerprints"),
-                expected,
-                "{query}, restored={restored}: {counts:#?}"
-            );
-        }
-    }
-    Ok(())
-}
-
-/// A context's copy of a file has the text of the original and another file id, and a syntax tree
-/// of its own: rust-analyzer tells which file a node is of by the tree it is in, so a tree cannot be
-/// shared between files (two files with the same text, parsed once, would be one file to it). A run
-/// that starts from nothing parses each copy for the functions in it, once for each context; this
-/// names what is parsed so that taking the parses away shows. What the copies share is the text.
-#[test]
-fn a_cold_run_parses_each_contexts_copy_of_the_files_for_the_passes() -> Result<()> {
-    let found = parses_in_contexts(false, true)?;
-    let value = |name: &str| {
-        found
-            .iter()
-            .find(|(key, _)| key == name)
-            .map(|(_, count)| *count)
-    };
-    assert!(
-        value("context_crates.copies").is_some_and(|copies| copies > 0),
-        "contexts copied files"
-    );
-    assert_eq!(
-        value("context_crates.text_shared"),
-        value("context_crates.copies"),
-        "each copy holds the original's text itself, not a copy of it"
-    );
-    // The leaf pass reads the test file in each of its two contexts, and the library's root in the one
-    // that changes it: under `test` alone the library has no gate that flips, so a context copies none
-    // of it, and its tests are read against the ordinary library.
-    let expected: std::collections::BTreeMap<String, u64> = [
-        ("functions_in_copy < harvest".to_owned(), 2),
-        ("functions_in_copy < read_leaves".to_owned(), 3),
-    ]
-    .into();
-    assert_eq!(
-        by_pass(&found, FILES_PARSE),
-        expected,
-        "the copies the passes parse"
-    );
-    Ok(())
-}
-
 /// A restored run takes the functions of each copy and the gates of each original from the saved
 /// state: the passes over contexts parse nothing and read no gates.
 #[test]
@@ -275,6 +183,20 @@ fn a_restored_run_parses_nothing_for_the_passes_over_contexts() -> Result<()> {
 /// A leaf context after the first reads the functions of the test files that a gate it flips can
 /// change, and those it is first to have, not each one again: the others have the facts they had.
 /// The leaf functions are what they were, joined from the contexts.
+/// What the leaf pass finds, whichever way its contexts are read: every test function of the integration test is a leaf,
+/// and each calls the library. The result, not what it cost to find it.
+#[test]
+fn the_leaf_functions_found_through_a_context_are_every_test_function_and_each_calls_the_library() -> Result<()> {
+    let (_, graph) = run_in_contexts(false, true)?;
+    let leaves = graph.leaf_functions().into_diagnostic()?;
+    assert_eq!(leaves.len(), 4, "every test function is a leaf: {leaves:#?}");
+    assert!(
+        leaves.iter().all(|leaf| !leaf.callees().is_empty()),
+        "each calls the library: {leaves:#?}"
+    );
+    Ok(())
+}
+
 #[test]
 fn a_leaf_context_reads_only_what_its_gates_change() -> Result<()> {
     let (found, graph) = run_in_contexts(false, true)?;

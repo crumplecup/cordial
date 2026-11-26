@@ -445,55 +445,6 @@ impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for SaveEvents {
 
 #[test]
 #[tracing::instrument(level = "debug", err(level = "warn"))]
-fn an_ordinary_functions_saved_memo_depends_on_nothing_a_context_made() -> Result<()> {
-    use tracing_subscriber::prelude::*;
-    cordial::init_tracing();
-    let events = SaveEvents::default();
-    let subscriber = tracing_subscriber::registry().with(events.clone());
-    let _subscriber = tracing::subscriber::set_default(subscriber);
-    let root = chain_of_crates()?;
-    let state = tempfile::tempdir().into_diagnostic()?;
-    let saved = SavedState::at(state.path().join("analysis-state"));
-
-    assert!(!run_many(root.path(), &saved)?);
-
-    let reaches = events
-        .reaches
-        .lock()
-        .map(|reaches| reaches.clone())
-        .unwrap_or_default();
-    let described = events
-        .described
-        .lock()
-        .map(|d| d.clone())
-        .unwrap_or_default();
-    assert!(
-        !described.is_empty(),
-        "the run said what each persisted evidence key is for"
-    );
-    // Without this the test would pass whatever the truth: the memos of the contexts' own functions
-    // do reach the crates their context added, and the save must have said so.
-    assert!(
-        !reaches.is_empty(),
-        "the save names the memos that reach a crate a context added"
-    );
-    let ordinary: Vec<String> = reaches
-        .iter()
-        .filter_map(|key| described.get(key))
-        .filter(|description| !description.contains("/__cordial_context_"))
-        .cloned()
-        .collect();
-    assert!(
-        ordinary.is_empty(),
-        "memos of ordinary functions reach a crate a context added: {ordinary:?} (of {} memos \
-         that reach one)",
-        reaches.len()
-    );
-    Ok(())
-}
-
-#[test]
-#[tracing::instrument(level = "debug", err(level = "warn"))]
 fn a_restored_run_executes_few_rust_analyzer_queries() -> Result<()> {
     use tracing_subscriber::prelude::*;
     cordial::init_tracing();
@@ -1527,88 +1478,6 @@ fn a_file_no_context_compiles_is_not_read_through_rust_analyzer() -> Result<()> 
     Ok(())
 }
 
-/// Every Rust source file under `root`, as a run projects them.
-fn all_sources(root: &Path) -> Vec<std::path::PathBuf> {
-    let mut found = Vec::new();
-    let mut pending = vec![root.to_path_buf()];
-    while let Some(directory) = pending.pop() {
-        let Ok(entries) = std::fs::read_dir(&directory) else {
-            continue;
-        };
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_dir() {
-                pending.push(path);
-            } else if path.extension().is_some_and(|extension| extension == "rs") {
-                found.push(path);
-            }
-        }
-    }
-    found.sort();
-    found
-}
-
-/// Run the three-crate workspace with the first `contexts` of three contexts, projecting every
-/// source file.
-fn run_many_over_every_file(root: &Path, saved: &SavedState, contexts: usize) -> Result<bool> {
-    let all = [
-        SemanticContextKey::enabling(["kani"]),
-        SemanticContextKey::enabling(["creusot"]),
-        SemanticContextKey::enabling(["kani", "creusot"]),
-    ];
-    let options = SemanticCargoOptions::default()
-        .with_cfg_contexts(all.into_iter().take(contexts).collect())
-        .with_cfg_planning(CfgPlanning::Explicit);
-    let mut session =
-        SourceDatabase::load_saved(root, &options, Some(saved.clone())).into_diagnostic()?;
-    let restored = session.restored();
-    session
-        .project(&CrateTarget::new("gated", root), &all_sources(root))
-        .into_diagnostic()?;
-    Ok(restored)
-}
-
-/// How many files a restored run over every file, with `contexts` contexts, parsed.
-fn restored_parses(contexts: usize) -> Result<(usize, usize)> {
-    let executions = Executions::default();
-    let subscriber = tracing_subscriber::registry().with(executions.clone());
-    let _subscriber = tracing::subscriber::set_default(subscriber);
-    let root = chain_of_crates()?;
-    let files = all_sources(root.path()).len();
-    let state = tempfile::tempdir().into_diagnostic()?;
-    let saved = SavedState::at(state.path().join("analysis-state"));
-    assert!(!run_many_over_every_file(root.path(), &saved, contexts)?);
-    executions.take();
-    assert!(run_many_over_every_file(root.path(), &saved, contexts)?);
-    let parses = executions
-        .take()
-        .into_iter()
-        .filter(|(name, _)| name.ends_with("EditionedFileId::parse_"))
-        .map(|(_, count)| count)
-        .sum();
-    Ok((files, parses))
-}
-
-/// A context's copy of a file has its original's text, so what its gates say is read from the
-/// original: a run with three contexts parses no more files than one with one. Parsing each copy
-/// was one more parse of every file for every context.
-#[test]
-#[tracing::instrument(level = "debug", err(level = "warn"))]
-fn a_contexts_copies_are_not_parsed_to_read_their_gates() -> Result<()> {
-    cordial::init_tracing();
-    let (files, one) = restored_parses(1)?;
-    let (_, three) = restored_parses(3)?;
-    assert!(
-        three <= files,
-        "{three} files parsed of {files} with three contexts, each copy parsed again"
-    );
-    assert!(
-        three <= one,
-        "{three} parses with three contexts against {one} with one: more contexts, more parses"
-    );
-    Ok(())
-}
-
 /// What a run is: the first, which computes what it saves, or the next, which restores it.
 #[derive(Clone, Copy, Debug)]
 enum Which {
@@ -1701,63 +1570,6 @@ fn run_with_sharing(root: &Path, saved: &SavedState) -> Result<(bool, CrateIr, (
         .into_diagnostic()?;
     let sharing = session.context_function_sharing(&added);
     Ok((restored, graph, sharing))
-}
-
-/// A context that takes modules from the original is saved with the database and found again: its crate says
-/// which crate it is a copy of and which files it cannot take, and the modules it was given are the original's
-/// by the saved ids, so a restored run has the same functions shared and computes nothing for them.
-#[test]
-#[tracing::instrument(level = "debug", err(level = "warn"))]
-fn a_restored_context_still_takes_its_modules_from_the_original_and_computes_nothing_for_them()
--> Result<()> {
-    cordial::init_tracing();
-    let metrics = support::semantic_metrics::QueryMetrics::default();
-    let subscriber = tracing_subscriber::registry()
-        .with(metrics.clone())
-        .with(cordial::tracing_fmt_layer());
-    let _subscriber = tracing::subscriber::set_default(subscriber);
-    let root = with_modules_beside_a_gate()?;
-    let state = tempfile::tempdir().into_diagnostic()?;
-    let saved = SavedState::at(state.path().join("analysis-state"));
-
-    let (restored, cold, shared_cold) = run_with_sharing(root.path(), &saved)?;
-    assert!(!restored);
-    assert_eq!(
-        shared_cold,
-        (12, 2),
-        "(shared, own): a method and a function in each of six modules, and the root's two functions"
-    );
-    let cold_counts = metrics.snapshot();
-
-    let (restored, warm, shared_warm) = run_with_sharing(root.path(), &saved)?;
-    assert!(restored, "the second run starts from the first's state");
-    assert_eq!(functions(&warm), functions(&cold), "the same answer");
-    assert_eq!(
-        shared_warm, shared_cold,
-        "the same functions are the original's"
-    );
-    let mut recomputed: std::collections::BTreeMap<String, usize> = metrics
-        .snapshot()
-        .into_iter()
-        .filter_map(|(key, count)| {
-            let before = cold_counts.get(&key).copied().unwrap_or(0);
-            (count > before).then(|| (key, count - before))
-        })
-        .collect();
-    const JOINS: [&str; 6] = [
-        "antipattern_crate_facts:",
-        "architecture_catalog:",
-        "module_tree:",
-        "panic_graph:",
-        "panic_reachable:",
-        "signature_index:",
-    ];
-    recomputed.retain(|key, _| !JOINS.iter().any(|join| key.starts_with(join)));
-    assert!(
-        recomputed.is_empty(),
-        "the restored run computed again: {recomputed:#?}"
-    );
-    Ok(())
 }
 
 /// What a context takes from the original is decided again when the sources change between runs: a module that

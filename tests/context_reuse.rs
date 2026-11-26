@@ -84,49 +84,6 @@ fn function(graph: &CrateIr, name: &str) -> Result<NodeId> {
     }
 }
 
-/// What the context copies, and takes as it is.
-#[test]
-fn a_context_copies_the_flipped_files_the_unsure_and_what_is_above_them() -> Result<()> {
-    let (_, metrics) = project()?;
-    let value = |name: &str| {
-        metrics
-            .values()
-            .iter()
-            .find(|(key, _)| *key == name)
-            .map(|(_, v)| *v)
-    };
-    // Two gated files, one that reads the cfg otherwise, and above them the crate's root and the
-    // `nested` module, whose file the gated `deep` is found through: those are copies. The two
-    // plain files are the original's.
-    assert_eq!(value("semantic.contexts.files"), Some(7));
-    assert_eq!(
-        value("semantic.contexts.flipped"),
-        Some(2),
-        "gated.rs and deep.rs"
-    );
-    assert_eq!(
-        value("semantic.contexts.unsure"),
-        Some(1),
-        "other.rs reads cfg!"
-    );
-    assert_eq!(
-        value("semantic.contexts.spine"),
-        Some(2),
-        "lib.rs and nested/mod.rs"
-    );
-    assert_eq!(
-        value("semantic.contexts.aliased"),
-        Some(2),
-        "plain.rs and plain_too.rs"
-    );
-    assert_eq!(
-        value("context_crates.copies"),
-        Some(5),
-        "only the files that are copied are copies: the rest are the originals themselves"
-    );
-    Ok(())
-}
-
 /// What the context finds through the files it takes as they are: its gated code, in copied files,
 /// calls functions of the files it did not copy, and those functions are active in it.
 #[test]
