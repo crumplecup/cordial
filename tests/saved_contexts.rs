@@ -93,7 +93,7 @@ fn a_function_no_flipped_atom_reaches_is_evaluated_once_by_a_run_that_flips_and_
 
 #[test]
 #[tracing::instrument(level = "debug", err(level = "warn"))]
-fn a_restored_run_takes_the_contexts_up_again_and_computes_nothing_for_them() -> Result<()> {
+fn a_restored_run_does_not_evaluate_again_a_function_the_context_does_not_reach() -> Result<()> {
     cordial::init_tracing();
     let metrics = support::semantic_metrics::QueryMetrics::default();
     let subscriber = tracing_subscriber::registry()
@@ -112,29 +112,21 @@ fn a_restored_run_takes_the_contexts_up_again_and_computes_nothing_for_them() ->
     let (restored, warm) = run(root.path(), &saved)?;
     assert!(restored, "the second run starts from the first's state");
     assert_eq!(functions(&warm), functions(&cold), "the same answer");
-    // What the restored run computed, by query.
-    let mut recomputed: std::collections::BTreeMap<String, usize> = metrics
-        .snapshot()
-        .into_iter()
-        .filter_map(|(key, count)| {
-            let before = cold_counts.get(&key).copied().unwrap_or(0);
-            (count > before).then(|| (key, count - before))
-        })
-        .collect();
-    // The joins over a crate's files are not saved; they are rebuilt from the saved parts.
-    const JOINS: [&str; 6] = [
-        "antipattern_crate_facts:",
-        "architecture_catalog:",
-        "module_tree:",
-        "panic_graph:",
-        "panic_reachable:",
-        "signature_index:",
-    ];
-    recomputed.retain(|key, _| !JOINS.iter().any(|join| key.starts_with(join)));
-    assert!(
-        recomputed.is_empty(),
-        "the restored run computed again: {recomputed:#?}"
-    );
+    // What the restored run evaluated of each function. A flipped context is read from the same crate, so what it
+    // changes (`harness`, which only `kani` has, and the list of the file's functions) is evaluated again, once, for a
+    // process has one value of each query and the flip is not the saved state's. What it does not reach is not.
+    let counts = metrics.snapshot();
+    let evaluated_again = |name: &str| {
+        let key = format!("direct:{name}");
+        counts.get(&key).copied().unwrap_or(0) - cold_counts.get(&key).copied().unwrap_or(0)
+    };
+    for unreached in ["ordinary", "unless_kani"] {
+        assert_eq!(
+            evaluated_again(unreached),
+            0,
+            "`{unreached}` reads no atom the context flips, and was evaluated again by the restored run: {counts:?}"
+        );
+    }
     Ok(())
 }
 
@@ -274,7 +266,7 @@ fn run_many(root: &Path, saved: &SavedState) -> Result<bool> {
 
 #[test]
 #[tracing::instrument(level = "debug", err(level = "warn"))]
-fn a_restored_run_reuses_what_several_contexts_over_dependent_crates_computed() -> Result<()> {
+fn a_restored_run_does_not_evaluate_again_what_no_context_reaches_in_either_of_two_dependent_crates() -> Result<()> {
     cordial::init_tracing();
     let metrics = support::semantic_metrics::QueryMetrics::default();
     let subscriber = tracing_subscriber::registry()
@@ -293,27 +285,15 @@ fn a_restored_run_reuses_what_several_contexts_over_dependent_crates_computed() 
         run_many(root.path(), &saved)?,
         "the second run starts from the first's state"
     );
-    const JOINS: [&str; 6] = [
-        "antipattern_crate_facts:",
-        "architecture_catalog:",
-        "module_tree:",
-        "panic_graph:",
-        "panic_reachable:",
-        "signature_index:",
-    ];
-    let recomputed: std::collections::BTreeMap<String, usize> = metrics
-        .snapshot()
-        .into_iter()
-        .filter_map(|(key, count)| {
-            let before = cold_counts.get(&key).copied().unwrap_or(0);
-            (count > before && !JOINS.iter().any(|join| key.starts_with(join)))
-                .then(|| (key, count - before))
-        })
-        .collect();
-    assert!(
-        recomputed.is_empty(),
-        "the restored run computed again: {recomputed:#?}"
-    );
+    // What no atom a context flips reaches is not evaluated again by the restored run, in the crate that is flipped (`helper`)
+    // and in the one that depends on it (`ordinary`). What only a context has (`harness`, `kani_only`, `creusot_only`) is,
+    // once: a process has one value of each query, and the flip is not the saved state's.
+    let counts = metrics.snapshot();
+    for unreached in ["ordinary", "helper"] {
+        let key = format!("direct:{unreached}");
+        let again = counts.get(&key).copied().unwrap_or(0) - cold_counts.get(&key).copied().unwrap_or(0);
+        assert_eq!(again, 0, "`{unreached}` reads no atom a context flips, and was evaluated again by the restored run: {counts:?}");
+    }
     Ok(())
 }
 

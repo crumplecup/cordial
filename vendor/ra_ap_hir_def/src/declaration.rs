@@ -123,28 +123,29 @@ impl Wanted {
 }
 
 /// Whether the module's scope has what is wanted. A query of the item, so that what asks is out of date when the answer
-/// changes and not when the scope does.
+/// changes and not when the scope does. They are persisted: a restored run compares what they say now to what they said
+/// when they were saved, and a query that was not saved has nothing to be the same as, so it reads as changed.
 fn scope_has(db: &dyn SourceDatabase, module: ModuleId, wanted: &Wanted) -> bool {
     module_declares(db, module).as_ref().is_some_and(|declared| wanted.in_(declared))
 }
 
-#[salsa::tracked(returns(copy))]
+#[salsa::tracked(returns(copy), persist)]
 fn function_in_scope(db: &dyn SourceDatabase, function: FunctionId) -> bool {
     let (module, wanted) = container_scope(db, function);
     scope_has(db, module, &wanted)
 }
 
-#[salsa::tracked(returns(copy))]
+#[salsa::tracked(returns(copy), persist)]
 fn impl_in_scope(db: &dyn SourceDatabase, implementation: ImplId) -> bool {
     scope_has(db, implementation.loc(db).container, &Wanted::Impl(implementation))
 }
 
-#[salsa::tracked(returns(copy))]
+#[salsa::tracked(returns(copy), persist)]
 fn trait_in_scope(db: &dyn SourceDatabase, declared_trait: TraitId) -> bool {
     scope_has(db, declared_trait.loc(db).container, &Wanted::Declaration(ModuleDefId::TraitId(declared_trait)))
 }
 
-#[salsa::tracked(returns(copy))]
+#[salsa::tracked(returns(copy), persist)]
 fn enum_in_scope(db: &dyn SourceDatabase, declared_enum: EnumId) -> bool {
     scope_has(
         db,

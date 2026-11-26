@@ -409,8 +409,33 @@ impl DefMap {
         if !self.frozen && self.cells.is_empty() {
             self.modules.get(&id)
         } else {
-            self.cell_of(db, id).map(|cell| &**cell.data(db))
+            self.cell_of(db, id).map(|cell| {
+                Self::say_a_whole_module_is_read(id);
+                &**cell.data(db)
+            })
         }
+    }
+
+    /// Say, when asked for by the `cordial::whole_module` target, that a module of a finished map is read as a whole (its
+    /// parent, children and every name in it), with the queries that asked, for the reads made while the facts of a
+    /// function are being made: what asks one function a question about a module and is made again when any name in the
+    /// module changes. The stack says which question.
+    fn say_a_whole_module_is_read(id: ModuleId) {
+        if !tracing::enabled!(target: "cordial::whole_module", tracing::Level::DEBUG) {
+            return;
+        }
+        let Some(stack) = salsa::Backtrace::capture().map(|stack| stack.to_string()) else {
+            return;
+        };
+        if !stack.contains("direct_facts") {
+            return;
+        }
+        tracing::debug!(
+            target: "cordial::whole_module",
+            module = ?id,
+            queries = %stack.lines().take(14).collect::<Vec<_>>().join(" | "),
+            "a module is read as a whole by the facts of a function"
+        );
     }
 
     /// The cell of a module of a finished map. For a crate's map it is found by `crate_module_cell`, which says
