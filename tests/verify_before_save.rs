@@ -329,124 +329,6 @@ const AUDITED: &[&str] = &[
     "verus_file",
 ];
 
-/// Each context's input writes advance the revision. What the earlier contexts' per-file queries
-/// were keyed by must outlive that, or the memos that read the keys go out of date and the save's
-/// verification runs their queries again: more of them with each context, and unrelated to what
-/// changed.
-#[test]
-fn verifying_after_several_contexts_runs_nothing_again() -> Result<()> {
-    cordial::init_tracing();
-    let writes = Writes::default();
-    let verified = verification_seen(CONTEXTS, Setup::default(), &writes)?;
-    assert_eq!(verified.analysed, CONTEXTS as u64);
-    assert!(verified.memos > 0, "something was there to verify");
-    for kind in AUDITED {
-        assert!(
-            verified.kinds.contains(*kind),
-            "{kind} has no memos, so nothing audits it: {:?}",
-            verified.kinds
-        );
-    }
-    assert_eq!(
-        verified.queries,
-        0,
-        "verifying ran these again: [{}]; out of date: {:?}",
-        verified.top,
-        writes.0.lock().expect("a lock")
-    );
-    // And no memo is found out of date: the contexts changed nothing a memo of an earlier one read.
-    let stale: Vec<String> = writes
-        .0
-        .lock()
-        .expect("a lock")
-        .keys()
-        .filter(|name| name.starts_with("stale"))
-        .cloned()
-        .collect();
-    assert!(
-        stale.is_empty(),
-        "out of date although nothing it read changed: {stale:?}"
-    );
-    Ok(())
-}
-
-/// The same with a procedural macro in the crates: what a derive expands to, and what is built
-/// from that, must not run again at the save either.
-#[test]
-fn verifying_after_several_contexts_with_a_proc_macro_runs_nothing_again() -> Result<()> {
-    cordial::init_tracing();
-    let writes = Writes::default();
-    let verified = verification_seen(
-        CONTEXTS,
-        Setup {
-            macros: true,
-            ..Setup::default()
-        },
-        &writes,
-    )?;
-    assert_eq!(verified.analysed, CONTEXTS as u64);
-    assert!(
-        writes
-            .0
-            .lock()
-            .expect("a lock")
-            .keys()
-            .any(|name| name.starts_with("exec expand_proc_macro")),
-        "a procedural macro was expanded, or this audits nothing"
-    );
-    assert!(verified.memos > 0, "something was there to verify");
-    assert_eq!(
-        verified.queries,
-        0,
-        "verifying ran these again: [{}]; out of date: {:?}",
-        verified.top,
-        writes.0.lock().expect("a lock")
-    );
-    Ok(())
-}
-
-/// The same with an integration test binary in the package: the leaf pass enters contexts of its
-/// own after the library's, and the save verifies after all of them.
-#[test]
-fn verifying_after_the_leaf_pass_runs_nothing_again() -> Result<()> {
-    cordial::init_tracing();
-    let writes = Writes::default();
-    let verified = verification_seen(
-        CONTEXTS,
-        Setup {
-            tests: true,
-            ..Setup::default()
-        },
-        &writes,
-    )?;
-    if verified.queries > 0 {
-        // Where the writes the memos went out of date for came in the run.
-        let order = writes.1.lock().expect("a lock");
-        let mut shown: Vec<String> = Vec::new();
-        for event in order.iter() {
-            let interesting = event.starts_with("explain")
-                || event.starts_with("--")
-                || event.starts_with("stale")
-                || (event.starts_with("write")
-                    && !event.contains("SourceRootInput")
-                    && !event.contains("ToolRoots"));
-            if interesting && shown.last() != Some(event) {
-                shown.push(event.clone());
-            }
-        }
-        println!("order: {shown:#?}");
-    }
-    assert!(verified.memos > 0, "something was there to verify");
-    assert_eq!(
-        verified.queries,
-        0,
-        "verifying ran these again: [{}]; out of date: {:?}",
-        verified.top,
-        writes.0.lock().expect("a lock")
-    );
-    Ok(())
-}
-
 /// Everything at once: a derive, an integration test binary and a second package that builds on the
 /// first, which is what a real workspace has.
 #[test]
@@ -472,6 +354,13 @@ fn verifying_a_workspace_with_everything_runs_nothing_again() -> Result<()> {
         "a procedural macro was expanded, or this audits nothing"
     );
     assert!(verified.memos > 0, "something was there to verify");
+    for kind in AUDITED {
+        assert!(
+            verified.kinds.contains(*kind),
+            "{kind} has no memos, so nothing audits it: {:?}",
+            verified.kinds
+        );
+    }
     assert_eq!(
         verified.queries,
         0,

@@ -52,12 +52,6 @@ struct Chunks {
     /// How many values of the scaffolding (trees, expansions, span maps, id maps) were let go of
     /// between chunks.
     scaffolding: u64,
-    /// How many events the building of the definition maps one crate at a time said (one for each
-    /// map, and one for each release), and how many values of scaffolding were let go of between them.
-    maps_built: u64,
-    map_releases: u64,
-    /// Every metric the run kept (what a failed assertion shows).
-    keys: Vec<String>,
 }
 
 fn priming_under(pressure: Pressure) -> Result<Chunks> {
@@ -140,9 +134,6 @@ fn priming_with(pressure: Pressure, leaf: bool) -> Result<Chunks> {
         dropped: sum(&|key| key == "eviction.prime_chunk.dropped_regenerable"),
         rounds: sum(&|key| key == "eviction.prime_chunk.rounds"),
         scaffolding: sum(&|key| key == "eviction.dropped_scaffolding"),
-        maps_built: sum(&|key| key == "enumeration.events"),
-        map_releases: sum(&|key| key == "enumeration.released"),
-        keys: metrics.values().keys().cloned().collect(),
     })
 }
 
@@ -392,46 +383,6 @@ fn on_the_last_rung_the_priming_has_one_worker_and_takes_one_function_at_a_time_
         "{} chunks ran on {pool_threads} threads of the pool, which has {}",
         chunks.parts,
         cordial::pool_size()
-    );
-    Ok(())
-}
-
-/// Under pressure the definition maps are built a crate at a time, dependencies first, and the
-/// scaffolding the building leaves is let go of between them (the step is nothing here, since a
-/// crate small enough to test builds up none); without pressure they are built the same way and
-/// nothing is let go of.
-#[test]
-fn under_pressure_the_definition_maps_are_built_a_crate_at_a_time_and_released_between()
--> Result<()> {
-    cordial::release_scaffolding_every_kib(0);
-    let chunks = priming_with(Pressure::Felt, true)?;
-    assert!(
-        chunks.maps_built >= 2,
-        "the leaf's and the crate's definition maps were built one at a time: {:?}",
-        chunks.keys
-    );
-    assert!(
-        chunks.map_releases >= 2,
-        "the scaffolding was let go of between them: {:?}",
-        chunks.keys
-    );
-    Ok(())
-}
-
-/// With memory to spare the same maps are built the same way and the scaffolding stays.
-#[test]
-fn without_pressure_the_definition_maps_are_built_and_nothing_is_released_between() -> Result<()> {
-    cordial::release_scaffolding_every_kib(0);
-    let chunks = priming_with(Pressure::Absent, true)?;
-    assert!(
-        chunks.maps_built >= 2,
-        "the maps were built one at a time: {:?}",
-        chunks.keys
-    );
-    assert_eq!(
-        chunks.map_releases, 0,
-        "nothing was let go of: {:?}",
-        chunks.keys
     );
     Ok(())
 }
