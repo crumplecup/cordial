@@ -1202,6 +1202,10 @@ where
         }
     }
 
+    fn live_struct_ids(&self, zalsa: &Zalsa) -> Vec<Id> {
+        self.entries(zalsa).map(|entry| entry.key().key_index()).collect()
+    }
+
     fn slot_count(&self, zalsa: &Zalsa) -> Option<u64> {
         Some(zalsa.table().slots_of::<Value<C>>().count() as u64)
     }

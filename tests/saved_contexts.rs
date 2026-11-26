@@ -152,13 +152,12 @@ fn a_restored_run_does_not_evaluate_again_a_function_the_context_does_not_reach(
         let key = format!("direct:{name}");
         counts.get(&key).copied().unwrap_or(0) - cold_counts.get(&key).copied().unwrap_or(0)
     };
-    for unreached in ["ordinary", "unless_kani"] {
-        assert_eq!(
-            evaluated_again(unreached),
-            0,
-            "`{unreached}` reads no atom the context flips, and was evaluated again by the restored run: {counts:?}"
-        );
-    }
+    // `unless_kani` is gated by the atom (`cfg(not(kani))`): declared, then not, then declared again, so it is evaluated again.
+    assert_eq!(
+        evaluated_again("ordinary"),
+        0,
+        "`ordinary` reads no atom the context flips, and was evaluated again by the restored run: {counts:?}"
+    );
     Ok(())
 }
 

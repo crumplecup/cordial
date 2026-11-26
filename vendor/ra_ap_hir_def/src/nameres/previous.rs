@@ -193,9 +193,50 @@ pub(crate) struct Built {
     pub(crate) trees: FxHashMap<FileId, usize>,
 }
 
+/// The modules of each crate as the cells a restored state holds had them, taken once before any map is made in the
+/// process (see [`seed_from_cells`]).
+type Seeds = Option<FxHashMap<Crate, FxHashMap<ModuleId, Arc<ModuleData>>>>;
+
 /// The maps each crate of a database made last.
 #[derive(Default)]
-pub(crate) struct Previous(Mutex<FxHashMap<Crate, std::sync::Arc<Built>>>);
+pub(crate) struct Previous(Mutex<FxHashMap<Crate, std::sync::Arc<Built>>>, Mutex<Seeds>);
+
+/// Take, once, the modules of every crate from the cells that exist, when a state has just been restored. A
+/// process that was restored from a saved state has the cells of every crate's map and nothing that remembers the maps
+/// they were made from, so that the first map of a crate made in it had nothing to say what changed against, and said that
+/// every key of the crate had. The cells hold what the map before them said of each module, until the map that is made
+/// now makes them again, so it is taken before: and that is the same as what is remembered of a map made in this process.
+/// A tracked struct has to be made again in a revision before it is read in it, so this is for the revision the state was
+/// restored in, before any input is written, and not for a query that is making a map. In a process that was not restored
+/// there are no cells, and nothing is taken.
+pub(crate) fn seed_from_cells(db: &dyn SourceDatabase) {
+    use salsa::plumbing::FromId as _;
+    let kept = salsa::plumbing::extension::<Previous, _>(db);
+    let mut seeds = kept.1.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    if seeds.is_some() {
+        return;
+    }
+    let mut taken: FxHashMap<Crate, FxHashMap<ModuleId, Arc<ModuleData>>> = FxHashMap::default();
+    for id in salsa::plumbing::live_struct_ids(db, "ModuleCellLt") {
+        let cell = crate::nameres::ModuleCell::from_id(id);
+        // What the state says is not what the map being made reads: nothing here is a dependency of it.
+        let ((module, data), _) = salsa::keyed::unrecorded(db, || (cell.module(db), Arc::clone(cell.data(db))));
+        taken.entry(module.krate(db)).or_default().insert(unsafe { module.to_static() }, data);
+    }
+    tracing::info!(
+        target: "cordial::def_map",
+        crates = taken.len() as u64,
+        modules = taken.values().map(|modules| modules.len() as u64).sum::<u64>(),
+        "the modules the cells of a restored state hold, taken before the first map is made in this process"
+    );
+    *seeds = Some(taken);
+}
+
+/// The modules `krate` had in the cells of a restored state, once: the map made now says what changed against them.
+pub(crate) fn take_seed(db: &dyn SourceDatabase, krate: Crate) -> Option<FxHashMap<ModuleId, Arc<ModuleData>>> {
+    let kept = salsa::plumbing::extension::<Previous, _>(db);
+    kept.1.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).as_mut().and_then(|seeds| seeds.remove(&krate))
+}
 
 /// The address of the item tree of `file` as `krate` has it.
 fn tree_address(db: &dyn SourceDatabase, file: crate::EditionedFileId, krate: Crate) -> usize {
@@ -261,6 +302,15 @@ pub(crate) fn remember(
     let built = Built { reads, externals, unattributed, paths, diagnostics, map: Arc::clone(map), modules, trees };
     let kept = salsa::plumbing::extension::<Previous, _>(db);
     kept.0.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).insert(krate, std::sync::Arc::new(built));
+}
+
+/// Forget every crate's map, as a process that was restored from a saved state has none: its cells are there, from the
+/// state, and nothing remembers the maps they were made from.
+#[cfg(test)]
+pub(crate) fn forget_all(db: &dyn SourceDatabase) {
+    let kept = salsa::plumbing::extension::<Previous, _>(db);
+    kept.0.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).clear();
+    *kept.1.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = None;
 }
 
 /// What `krate` made last, if it made anything in this database.

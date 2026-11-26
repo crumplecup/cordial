@@ -417,7 +417,7 @@ fn attrs_source(
         AttrDefId::ModuleId(id) => {
             let def_map = id.def_map(db);
             let krate = def_map.krate();
-            let (definition, declaration, extra_crate_attrs) = match def_map.module_data(db, id).origin {
+            let (definition, declaration, extra_crate_attrs) = match def_map.module_origin(db, id) {
                 ModuleOrigin::CrateRoot { definition } => {
                     let definition_source = definition.parse(db).tree();
                     let definition = InFile::new(definition.into(), definition_source.into());

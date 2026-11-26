@@ -675,6 +675,15 @@ impl Zalsa {
         keys
     }
 
+    /// The ids of the structs that exist of the tracked struct ingredient named by its debug name. Nothing of them is read.
+    #[doc(hidden)]
+    pub fn live_struct_ids(&self, name: &str) -> Vec<Id> {
+        self.ingredients()
+            .filter(|ingredient| ingredient.debug_name() == name)
+            .flat_map(|ingredient| ingredient.live_struct_ids(self))
+            .collect()
+    }
+
     /// How many slots each struct ingredient named holds (see `Database::struct_slots`).
     #[doc(hidden)]
     pub fn struct_slots(&self, only: &[&str]) -> Vec<(&'static str, u64)> {

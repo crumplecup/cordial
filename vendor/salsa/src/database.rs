@@ -298,6 +298,12 @@ impl<T: Database> AsDynDatabase for T {
     }
 }
 
+/// The ids of the tracked structs of the ingredient named `name` that exist, without reading any of them: what a state that
+/// was restored holds of a struct before the query that makes it again has.
+pub fn live_struct_ids<Db: ?Sized + Database>(db: &Db, name: &str) -> Vec<crate::Id> {
+    db.zalsa().live_struct_ids(name)
+}
+
 pub fn current_revision<Db: ?Sized + Database>(db: &Db) -> Revision {
     db.zalsa().current_revision()
 }

@@ -400,7 +400,7 @@ pub mod plumbing {
     pub use crate::accumulator::Accumulator;
     pub use crate::attach::{attach, with_attached_database};
     pub use crate::cycle::CycleRecoveryStrategy;
-    pub use crate::database::{Database, current_revision, extension};
+    pub use crate::database::{Database, current_revision, extension, live_struct_ids};
     pub use crate::durability::Durability;
     pub use crate::id::{AsId, FromId, FromIdWithDb, Id};
     pub use crate::ingredient::{Ingredient, Jar, Location};

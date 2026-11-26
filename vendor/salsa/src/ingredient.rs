@@ -203,6 +203,12 @@ pub trait Ingredient: Any + fmt::Debug + Send + Sync {
         None
     }
 
+    /// The ids of the structs of this ingredient that exist, or none for what is not a tracked struct. Read from the table:
+    /// nothing is read of a struct or marked as read.
+    fn live_struct_ids(&self, _zalsa: &Zalsa) -> Vec<Id> {
+        Vec::new()
+    }
+
     /// What became of `id`, an id of this ingredient. Only a tracked struct is ever deleted.
     fn existence(&self, _zalsa: &Zalsa, _id: Id) -> crate::Existence {
         crate::Existence::Exists

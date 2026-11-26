@@ -19,10 +19,10 @@ pub enum CfgPlanning {
 #[serde(rename_all = "lowercase")]
 pub enum CfgContextMode {
     /// Add a copy of each crate the context changes, with its own files, and read the context from the copies.
-    #[default]
     Copies,
     /// Change the cfg of the workspace's own crates in place, read the context from the same crates and files,
     /// and put the cfg back. What did not read an atom the context flips is not run again.
+    #[default]
     Flips,
 }
 

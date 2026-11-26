@@ -303,6 +303,37 @@ fn crate_label(krate: Crate) -> String {
 }
 
 impl DefMap {
+    /// Say, when asked for by the `cordial::whole_module` target, that the modules of a workspace crate's map are
+    /// enumerated: each is read as a whole, so what enumerates them is made again when any name in any of them changes.
+    fn say_the_modules_are_read(db: &dyn SourceDatabase, krate: Crate, caller: &std::panic::Location<'_>) {
+        if !tracing::enabled!(target: "cordial::whole_module", tracing::Level::DEBUG)
+            || !matches!(krate.data(db).origin, base_db::CrateOrigin::Local { .. })
+        {
+            return;
+        }
+        let Some(stack) = salsa::Backtrace::capture().map(|stack| stack.to_string()) else {
+            return;
+        };
+        tracing::debug!(
+            target: "cordial::whole_module",
+            krate = ?krate,
+            caller = %caller,
+            queries = %stack.lines().take(4).collect::<Vec<_>>().join(" | "),
+            "the modules of a crate are enumerated, each read as a whole"
+        );
+    }
+
+    /// Where a module comes from. A reader of it depends on that and not on what the module holds: the cell has the origin
+    /// as a field of its own, which a name added to the module does not change.
+    pub fn module_origin(&self, db: &dyn SourceDatabase, id: ModuleIdLt<'_>) -> ModuleOrigin {
+        let id = unsafe { id.to_static() };
+        if self.frozen && self.block.is_none() && let Some(cell) = self.cell_of(db, id) {
+            previous::note_read(self.krate, id);
+            return cell.origin(db);
+        }
+        self.module_data(db, id).origin
+    }
+
     /// A module's data. Reading a finished map's module depends on that module's cell and on no other.
     #[track_caller]
     pub fn module_data<'a>(&'a self, db: &'a dyn SourceDatabase, id: ModuleIdLt<'_>) -> &'a ModuleData {
@@ -413,26 +444,26 @@ impl DefMap {
             self.modules.get(&id)
         } else {
             self.cell_of(db, id).map(|cell| {
-                Self::say_a_whole_module_is_read(id, caller);
+                Self::say_a_whole_module_is_read(db, id, caller);
                 &**cell.data(db)
             })
         }
     }
 
-    /// Say, when asked for by the `cordial::whole_module` target, that a module of a finished map is read as a whole (its
-    /// parent, children and every name in it), with the queries that asked, for the reads made while the facts of a
-    /// function are being made: what asks one function a question about a module and is made again when any name in the
-    /// module changes. The stack says which question.
-    fn say_a_whole_module_is_read(id: ModuleId, caller: &std::panic::Location<'_>) {
+    /// Say, when asked for by the `cordial::whole_module` target, that a module of a workspace crate's finished map is read
+    /// as a whole (its parent, children and every name in it), with the call site and the queries that asked: what reads a
+    /// module so is made again when any name in it changes.
+    fn say_a_whole_module_is_read(db: &dyn SourceDatabase, id: ModuleId, caller: &std::panic::Location<'_>) {
         if !tracing::enabled!(target: "cordial::whole_module", tracing::Level::DEBUG) {
+            return;
+        }
+        // The crates of the workspace: a library's are not changed by a flip, and there are thousands of their reads.
+        if !matches!(id.krate(db).data(db).origin, base_db::CrateOrigin::Local { .. }) {
             return;
         }
         let Some(stack) = salsa::Backtrace::capture().map(|stack| stack.to_string()) else {
             return;
         };
-        if !stack.contains("direct_facts") {
-            return;
-        }
         tracing::debug!(
             target: "cordial::whole_module",
             module = ?id,
@@ -545,6 +576,44 @@ pub enum ModuleOrigin {
 }
 
 impl ModuleOrigin {
+    /// Same as `definition_source` but only returns the file id to prevent parsing the AST.
+    pub fn definition_source_file_id(&self) -> HirFileId {
+        match *self {
+            ModuleOrigin::File { definition, .. } | ModuleOrigin::CrateRoot { definition } => definition.into(),
+            ModuleOrigin::Inline { definition_tree_id, .. } => definition_tree_id.file_id(),
+            ModuleOrigin::BlockExpr { block, .. } => block.file_id,
+        }
+    }
+
+    pub fn definition_source_range(&self, db: &dyn SourceDatabase) -> InFile<TextRange> {
+        match self {
+            &ModuleOrigin::File { definition, .. } | &ModuleOrigin::CrateRoot { definition } => InFile::new(
+                definition.into(),
+                ErasedAstId::new(definition.into(), ROOT_ERASED_FILE_AST_ID).to_range(db),
+            ),
+            &ModuleOrigin::Inline { definition, definition_tree_id } => InFile::new(
+                definition_tree_id.file_id(),
+                AstId::new(definition_tree_id.file_id(), definition).to_range(db),
+            ),
+            ModuleOrigin::BlockExpr { block, .. } => InFile::new(block.file_id, block.to_range(db)),
+        }
+    }
+
+    /// Returns a node which declares this module, either a `mod foo;` or a `mod foo {}`.
+    /// `None` for the crate root or block.
+    pub fn declaration_source(&self, db: &dyn SourceDatabase) -> Option<InFile<ast::Module>> {
+        let decl = self.declaration()?;
+        let value = decl.to_node(db);
+        Some(InFile { file_id: decl.file_id, value })
+    }
+
+    /// Returns the range which declares this module, either a `mod foo;` or a `mod foo {}`.
+    /// `None` for the crate root or block.
+    pub fn declaration_source_range(&self, db: &dyn SourceDatabase) -> Option<InFile<TextRange>> {
+        let decl = self.declaration()?;
+        Some(InFile { file_id: decl.file_id, value: decl.to_range(db) })
+    }
+
     pub fn declaration(&self) -> Option<AstId<ast::Module>> {
         match self {
             &ModuleOrigin::File { declaration, declaration_tree_id, .. } => {
@@ -651,6 +720,15 @@ pub struct ScopeKeyLt {
     pub module: ModuleIdLt<'db>,
     #[returns(ref)]
     pub name: Name,
+}
+
+/// Take what the cells of a state that has just been restored hold of each crate's modules, so that the first map made of a
+/// crate says what changed against them and not that everything has. Called once, after the state is restored and before
+/// anything is written. A revision is begun after the cells are read, because a tracked struct has to be made again in a
+/// revision before it is read in it, and what makes them again may be asked for in the revision this is called in.
+pub fn seed_previous_maps_from_cells(db: &mut dyn SourceDatabase) {
+    previous::seed_from_cells(db);
+    salsa::Database::synthetic_write(db, salsa::Durability::LOW);
 }
 
 /// The name of the key of a module's traits. It is not a name that can be written, so that no lookup is of it.
@@ -1097,7 +1175,11 @@ pub(crate) fn crate_local_def_map(db: &dyn SourceDatabase, crate_id: Crate) -> D
         said.entry(diagnostic.in_module).or_default().push(diagnostic.clone());
     }
     let (held, cells, extras) = def_map.freeze(db);
-    touch_changed_names(db, crate_id, previous::recall(db, crate_id).as_deref().map(|built| &built.modules), &held);
+    // The map before it: the one this process made, or, in a process that was restored, the one the cells it was restored
+    // with were made from.
+    let recalled = previous::recall(db, crate_id);
+    let seeded = if recalled.is_none() { previous::take_seed(db, crate_id) } else { None };
+    touch_changed_names(db, crate_id, recalled.as_deref().map(|built| &built.modules).or(seeded.as_ref()), &held);
     let def_map = Arc::new(def_map);
     previous::remember(db, crate_id, &def_map, held, reads, said, read);
     DefMapPair { def_map, local: Arc::new(local_def_map), cells: Arc::new(cells), extras: Arc::new(extras) }
@@ -1240,10 +1322,12 @@ impl DefMap {
         building.chain(block_cells).filter_map(in_this_file).chain(crate_ids)
     }
 
+    #[track_caller]
     pub fn modules<'a>(
         &'a self,
         db: &'a dyn SourceDatabase,
     ) -> impl Iterator<Item = (ModuleId, &'a ModuleData)> + 'a {
+        Self::say_the_modules_are_read(db, self.krate, std::panic::Location::caller());
         let cells = self.cells.iter().map(move |(&id, cell)| (id, &**cell.data(db)));
         let crate_cells = self
             .frozen
@@ -1635,44 +1719,23 @@ impl ModuleData {
 
     /// Same as [`ModuleData::definition_source`] but only returns the file id to prevent parsing the ASt.
     pub fn definition_source_file_id(&self) -> HirFileId {
-        match self.origin {
-            ModuleOrigin::File { definition, .. } | ModuleOrigin::CrateRoot { definition } => {
-                definition.into()
-            }
-            ModuleOrigin::Inline { definition_tree_id, .. } => definition_tree_id.file_id(),
-            ModuleOrigin::BlockExpr { block, .. } => block.file_id,
-        }
+        self.origin.definition_source_file_id()
     }
 
     pub fn definition_source_range(&self, db: &dyn SourceDatabase) -> InFile<TextRange> {
-        match &self.origin {
-            &ModuleOrigin::File { definition, .. } | &ModuleOrigin::CrateRoot { definition } => {
-                InFile::new(
-                    definition.into(),
-                    ErasedAstId::new(definition.into(), ROOT_ERASED_FILE_AST_ID).to_range(db),
-                )
-            }
-            &ModuleOrigin::Inline { definition, definition_tree_id } => InFile::new(
-                definition_tree_id.file_id(),
-                AstId::new(definition_tree_id.file_id(), definition).to_range(db),
-            ),
-            ModuleOrigin::BlockExpr { block, .. } => InFile::new(block.file_id, block.to_range(db)),
-        }
+        self.origin.definition_source_range(db)
     }
 
     /// Returns a node which declares this module, either a `mod foo;` or a `mod foo {}`.
     /// `None` for the crate root or block.
     pub fn declaration_source(&self, db: &dyn SourceDatabase) -> Option<InFile<ast::Module>> {
-        let decl = self.origin.declaration()?;
-        let value = decl.to_node(db);
-        Some(InFile { file_id: decl.file_id, value })
+        self.origin.declaration_source(db)
     }
 
     /// Returns the range which declares this module, either a `mod foo;` or a `mod foo {}`.
     /// `None` for the crate root or block.
     pub fn declaration_source_range(&self, db: &dyn SourceDatabase) -> Option<InFile<TextRange>> {
-        let decl = self.origin.declaration()?;
-        Some(InFile { file_id: decl.file_id, value: decl.to_range(db) })
+        self.origin.declaration_source_range(db)
     }
 }
 

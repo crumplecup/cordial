@@ -1623,7 +1623,10 @@ impl Complete {
 }
 
 // return: macro call id and include file id
-#[salsa::tracked(returns(ref))]
+//
+// Persisted: it reads every module of the crate, so what asks for it would depend on all of them when the state is saved,
+// and a restored process could not say that its answer (almost always none) is the same.
+#[salsa::tracked(returns(ref), persist)]
 pub fn include_macro_invoc(
     db: &dyn SourceDatabase,
     krate: Crate,

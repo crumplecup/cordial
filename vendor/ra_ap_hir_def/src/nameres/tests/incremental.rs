@@ -1117,3 +1117,107 @@ pub fn appears() {}
         "what asked for the function was run again, for a name it did not ask for: {executed:?}"
     );
 }
+
+/// A process restored from a saved state has the cells of every crate's map and not the maps they were made from. The
+/// first time a map is made in it, nothing says what changed from the map before, so every key of the crate has: a flip
+/// that adds a name to a root makes every reader of any name of it run again, `helper` included.
+#[test]
+fn resolving_a_path_into_another_crate_does_not_run_again_when_a_name_is_added_to_a_root_after_a_restore() {
+    use salsa::Setter as _;
+    let fixture = r#"
+//- /inner.rs crate:inner
+pub fn helper() {}
+
+#[cfg(flag)]
+pub fn appears_in_inner() {}
+//- /gated.rs crate:gated deps:inner
+pub fn ordinary() { inner::helper(); }
+"#;
+    let (mut db, _) = TestDB::with_many_files(fixture);
+    let crates = local_crates(&db);
+    let gated = *crates.iter().find(|krate| value_named(&db, **krate, "ordinary").is_some()).expect("crate gated");
+    assert!(resolves_a_path_into_another_crate(&db, gated), "not vacuous: the path resolves");
+
+    // The state is restored: the cells are there and nothing remembers the maps, and what they hold is taken before anything
+    // is written.
+    super::super::previous::forget_all(&db);
+    crate::nameres::seed_previous_maps_from_cells(&mut db);
+    for krate in &crates {
+        let mut flipped = krate.cfg_options(&db).clone();
+        flipped.insert_atom(Symbol::intern("flag"));
+        krate.set_cfg_options(&mut db).to(flipped);
+    }
+    let inner = *crates.iter().find(|krate| **krate != gated).expect("crate inner");
+    assert!(value_named(&db, inner, "appears_in_inner").is_some(), "not vacuous: the flip added a name to the root");
+    let executed = db.log_executed(|| {
+        assert!(resolves_a_path_into_another_crate(&db, gated), "and the path still resolves");
+    });
+    assert!(
+        !executed.iter().any(|event| event.contains("resolves_a_path_into_another_crate")),
+        "what resolved the path was run again, for a name it did not ask for: {executed:?}"
+    );
+}
+
+/// Where a module comes from, asked of the root of a crate.
+#[salsa::tracked]
+fn asks_where_the_root_comes_from(db: &dyn SourceDatabase, krate: base_db::Crate) -> bool {
+    let map = crate_def_map(db, krate);
+    matches!(map.module_origin(db, map.root_module_id()), crate::nameres::ModuleOrigin::CrateRoot { .. })
+}
+
+/// Asking where a module comes from does not run again when a name is added to it: the origin is a field of the cell that
+/// a name does not change.
+#[test]
+fn asking_where_a_module_comes_from_does_not_run_again_when_a_name_is_added_to_it() {
+    use salsa::Setter as _;
+    let fixture = r#"
+//- /a.rs crate:a
+pub fn stays() {}
+
+#[cfg(flag)]
+pub fn appears() {}
+"#;
+    let (mut db, _) = TestDB::with_many_files(fixture);
+    let krate = local_crates(&db)[0];
+    assert!(asks_where_the_root_comes_from(&db, krate), "not vacuous: the root is the crate's root");
+    let mut flipped = krate.cfg_options(&db).clone();
+    flipped.insert_atom(Symbol::intern("flag"));
+    krate.set_cfg_options(&mut db).to(flipped);
+    assert!(value_named(&db, krate, "appears").is_some(), "not vacuous: the flip added a name to the root");
+    let executed = db.log_executed(|| {
+        assert!(asks_where_the_root_comes_from(&db, krate));
+    });
+    assert!(
+        !executed.iter().any(|event| event.contains("asks_where_the_root_comes_from")),
+        "what asked where the module comes from was run again, for a name it did not ask for: {executed:?}"
+    );
+}
+
+/// What the first map of a crate made after a restore says changed is what changed: a name that the file no longer has is
+/// said to have changed, so what read it runs again and no longer finds it. (The restore says nothing changed that did not,
+/// and everything that did.)
+#[test]
+fn a_name_that_a_file_loses_after_a_restore_makes_what_read_it_run_again() {
+    let fixture = r#"
+//- /inner.rs crate:inner
+pub fn helper() {}
+//- /gated.rs crate:gated deps:inner
+pub fn ordinary() { inner::helper(); }
+"#;
+    let (mut db, files) = TestDB::with_many_files(fixture);
+    let crates = local_crates(&db);
+    let gated = *crates.iter().find(|krate| value_named(&db, **krate, "ordinary").is_some()).expect("crate gated");
+    assert!(resolves_a_path_into_another_crate(&db, gated), "not vacuous: the path resolves");
+
+    super::super::previous::forget_all(&db);
+    crate::nameres::seed_previous_maps_from_cells(&mut db);
+    db.set_file_text(files[0].file_id(&db), "pub fn renamed() {}\n");
+
+    let executed = db.log_executed(|| {
+        assert!(!resolves_a_path_into_another_crate(&db, gated), "`helper` is gone, so the path resolves to nothing");
+    });
+    assert!(
+        executed.iter().any(|event| event.contains("resolves_a_path_into_another_crate")),
+        "what read `helper` was not run again after the file lost it: {executed:?}"
+    );
+}

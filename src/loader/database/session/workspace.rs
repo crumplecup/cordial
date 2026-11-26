@@ -253,7 +253,10 @@ fn load_database(
             }
             // A restored memo can depend on a persisted query that nothing has called yet in this
             // process (a definition map's fingerprint), and verifying it needs the query set up.
-            let database = restored.database;
+            let mut database = restored.database;
+            // What the cells of the state hold of each crate's modules, before anything is written: the first map made of a
+            // crate says what changed against them, and not that every key of the crate has.
+            ra_ap_hir_def::nameres::seed_previous_maps_from_cells(&mut database);
             let semantic: &dyn super::super::queries::SemanticDatabase = &database;
             let _ = super::super::queries::SemanticDatabase::zalsa_register_downcaster(semantic);
             // The same for the queries rust-analyzer saves (what is in a crate's lang items and its impl indexes).

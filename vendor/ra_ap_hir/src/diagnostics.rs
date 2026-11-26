@@ -1348,7 +1348,7 @@ impl<'a, 'db> DiagnosticsCollector<'a, 'db> {
         match def {
             ModuleDefId::ModuleId(def) => {
                 // Only add diagnostics from inline modules
-                if def_map.module_data(self.db, def).origin.is_inline() {
+                if def_map.module_origin(self.db, def).is_inline() {
                     self.collect_module(def);
                 }
             }
