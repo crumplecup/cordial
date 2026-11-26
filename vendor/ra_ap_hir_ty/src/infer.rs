@@ -1093,7 +1093,22 @@ impl PartialOrd for UpvarCapture {
 impl<'db> InferenceResult<'db> {
     #[salsa::tracked(returns(ref), cycle_result = infer_cycle_result)]
     fn for_body(db: &dyn HirDatabase, def: DefWithBodyId) -> InferenceResult<'_> {
-        infer_query(db, def)
+        let inferred = infer_query(db, def);
+        if tracing::enabled!(target: "cordial::semantic::reach", tracing::Level::DEBUG) {
+            // What the inference of a body read, in the order it read it: the order its memo is verified in, and
+            // verifying stops at the first that changed.
+            tracing::debug!(
+                target: "cordial::semantic::reach",
+                body = ?def,
+                read_in_order = %salsa::current_query_inputs_in_order()
+                    .iter()
+                    .map(|(name, key)| format!("{name}#{key:x}"))
+                    .collect::<Vec<_>>()
+                    .join(" "),
+                "the inference of a body was made, and this is what it read"
+            );
+        }
+        inferred
     }
 
     /// Infer types for all const expressions in an item's signature.

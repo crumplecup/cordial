@@ -165,6 +165,11 @@ fn direct_facts<'db>(db: &'db dyn SemanticDatabase, key: FunctionKey<'db>) -> Op
             function = ?function,
             found = facts.is_some(),
             reads = %read,
+            read_in_order = %salsa::current_query_inputs_in_order()
+                .iter()
+                .map(|(name, key)| format!("{name}#{key:x}"))
+                .collect::<Vec<_>>()
+                .join(" "),
             "the direct facts of a function were computed, and this is what they read"
         );
     }

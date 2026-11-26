@@ -557,6 +557,34 @@ pub fn current_query_inputs() -> Vec<(&'static str, u64)> {
     .unwrap_or_default()
 }
 
+/// What the query that is running has read so far, in the order it read it, by the name of what it read and its number:
+/// the order a memo's dependencies are verified in, and verifying stops at the first that changed. Empty when no query is
+/// running.
+pub fn current_query_inputs_in_order() -> Vec<(&'static str, u64)> {
+    crate::with_attached_database(|db| {
+        let zalsa = db.zalsa();
+        db.zalsa_local()
+            .try_with_query_stack(|stack| {
+                stack
+                    .last()
+                    .map(|active| {
+                        active
+                            .read_keys()
+                            .map(|key| {
+                                (
+                                    zalsa.lookup_ingredient(key.ingredient_index()).debug_name(),
+                                    crate::plumbing::AsId::as_id(&key.key_index()).as_bits(),
+                                )
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default()
+            })
+            .unwrap_or_default()
+    })
+    .unwrap_or_default()
+}
+
 pub struct Backtrace(Box<[CapturedQuery]>);
 
 impl Backtrace {

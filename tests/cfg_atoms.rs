@@ -1942,6 +1942,9 @@ fn a_region_says_how_many_revisions_started_in_it_and_which_inputs_were_written(
 #[salsa::tracked(returns(clone))]
 fn what_a_query_read(db: &dyn ra_ap_ide_db::base_db::SourceDatabase, krate: Crate) -> Vec<(String, u64)> {
     let _ = crate_def_map(db, krate);
+    let in_order: Vec<String> =
+        salsa::current_query_inputs_in_order().into_iter().map(|(name, _)| name.to_owned()).collect();
+    assert_eq!(in_order.first().map(String::as_str), Some("external_def_map"), "it read the map first: {in_order:?}");
     salsa::current_query_inputs().into_iter().map(|(name, count)| (name.to_owned(), count)).collect()
 }
 
