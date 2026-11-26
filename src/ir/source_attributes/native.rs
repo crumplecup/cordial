@@ -190,6 +190,30 @@ fn attach(
     });
 }
 
+/// The attributes the compiler has built in. An import cannot take one of these names (it would be ambiguous with the
+/// builtin), so a path that is one of them is never `instrument`, whatever scope it is in.
+const BUILTIN_ATTRIBUTES: &[&str] = &[
+    "allow", "automatically_derived", "bench", "cfg", "cfg_attr", "cfg_eval", "cold", "collapse_debuginfo",
+    "crate_name", "crate_type", "debugger_visualizer", "deny", "deprecated", "derive", "doc", "export_name",
+    "expect", "forbid", "global_allocator", "ignore", "inline", "instruction_set", "link", "link_name",
+    "link_section", "macro_export", "macro_use", "must_use", "no_implicit_prelude", "no_link", "no_main",
+    "no_mangle", "no_std", "non_exhaustive", "panic_handler", "path", "proc_macro", "proc_macro_attribute",
+    "proc_macro_derive", "recursion_limit", "repr", "rustfmt", "should_panic", "target_feature", "test",
+    "test_case", "track_caller", "type_length_limit", "used", "warn", "windows_subsystem",
+];
+
+/// Whether `path` is one word that is a builtin attribute.
+fn is_builtin_attribute(path: &ast::Path) -> bool {
+    path.qualifier().is_none()
+        && path
+            .segment()
+            .and_then(|segment| segment.name_ref())
+            .is_some_and(|name| {
+                let text = name.text();
+                BUILTIN_ATTRIBUTES.contains(&std::ops::Deref::deref(&text))
+            })
+}
+
 /// Whether the attribute `meta` is `tracing`'s `instrument`, by the macro its
 /// path resolves to: an alias, a re-export or an import all count, and a
 /// look-alike from another crate does not. Inside a lone `cfg_attr` it is the
@@ -205,7 +229,7 @@ fn is_instrument(meta: &ast::Meta, identify: AttributeIdentity<'_>) -> (bool, bo
                 .any(|krate| found.is(krate, &["instrument"])),
             false,
         ),
-        AttributePathIdentity::NotInScope => (false, true),
+        AttributePathIdentity::NotInScope => (false, !is_builtin_attribute(&path)),
         AttributePathIdentity::NotAMacro => (false, false),
     };
     match meta {

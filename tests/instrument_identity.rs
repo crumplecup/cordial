@@ -71,19 +71,25 @@ fn instrument_states(library: &str) -> Result<std::collections::BTreeMap<String,
 }
 
 /// What an attribute path names is not decided where the code has no scope: an item whose `cfg` guard is off is
-/// unresolved, and is not the same as a path that resolves to something that is not `instrument`.
+/// unresolved, and is not the same as a path that resolves to something that is not `instrument`. The guard is one that
+/// no context can turn on (`any()` is never true), for a context that has the scope says what the path names.
 #[test]
 fn an_attribute_in_code_with_no_scope_is_unresolved_and_not_a_path_that_names_something_else() -> Result<()> {
     cordial::init_tracing();
     let states = instrument_states(
-        "#[cfg(feature = \"off\")]\n#[tracing::instrument]\npub fn guarded() {}\n\n\
+        "#[cfg(any())]\n#[tracing::instrument]\npub fn guarded() {}\n\n\
          #[tracing::instrument]\npub fn written_out() {}\n\n\
          #[instrument]\npub fn imported_nowhere() {}\n\n\
-         #[inline]\npub fn other_attribute() {}\n",
+         #[inline]\npub fn other_attribute() {}\n\n\
+         #[cfg(any())]\n#[inline]\n#[derive(Debug)]\npub struct GuardedBuiltin;\n\n\
+         #[cfg(any())]\n#[inline]\npub fn guarded_builtin() {}\n",
     )?;
     assert_eq!(states.get("written_out"), Some(&(true, false)), "{states:?}");
     assert_eq!(states.get("imported_nowhere"), Some(&(false, false)), "{states:?}");
     assert_eq!(states.get("other_attribute"), Some(&(false, false)), "{states:?}");
     assert_eq!(states.get("guarded"), Some(&(false, true)), "the guard is off, so it is not decided: {states:?}");
+    // A builtin attribute cannot be an import's name, so it is never `instrument` and nothing is undecided about it,
+    // however far out of scope the item is. (Else every item behind a guard that is off has its file read again.)
+    assert_eq!(states.get("guarded_builtin"), Some(&(false, false)), "{states:?}");
     Ok(())
 }
