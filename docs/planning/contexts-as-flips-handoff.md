@@ -110,7 +110,23 @@ longer a cause (it was 17,496). What remains, by cause:
 
 ## 4. How to run and read the measurements
 
-Binary: `cargo build --release` (the one on disk is from `e7df5745`, older than HEAD). The project is
+**Building the measuring binary.** A plain `cargo build --release` builds only the default features (`full`, `quick`) and
+has **no hotpath**: no timing capture, no allocation meter, no `ProcessProfile` report (`src/profiling/capture.rs` sets
+`timing_enabled`/`allocation_enabled` from `cfg!(feature = "hotpath")`/`"hotpath-alloc"`; `src/storage.rs`,
+`projection.rs`, `session.rs` and `perf/environment.rs` also branch on it). The features are opt-in
+(`Cargo.toml [features]`): `hotpath` is timing; `hotpath-alloc` implies `hotpath` and adds allocation traffic and declares
+the one `hotpath::CountingAllocator` (`src/profiling.rs`). For the runs below, build with both:
+
+```
+cargo build --release --features hotpath-alloc     # default features stay on; hotpath-alloc pulls in hotpath
+```
+
+Binary: `target/release/cordial`. Perf records list `hotpath` among the features that were on (`perf/environment.rs`; it does not list
+`hotpath-alloc`), and never compare a hotpath-alloc run's wall time with a plain one:
+the counting allocator slows allocation. `just install` bakes in only `features := "full"` (no hotpath); do not use it for
+measurement. Reference: [memory-profiling.md](../memory-profiling.md). Which `metrics.json` values need hotpath and which
+are present in a plain build has **not** been checked: do that before relying on either. There is no release binary in `target/` as of
+HEAD `5a7b92ac`, and the `e7df5745` numbers above were taken with a binary whose features were not recorded. The project is
 `/home/erik/repos/elicit_doc`; its store is `~/.cordial/elicit_doc/` (`metrics.json`, `findings/`, `perf/runs.csv`,
 whose 11th column is wall seconds).
 

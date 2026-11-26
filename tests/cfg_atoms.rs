@@ -1585,3 +1585,142 @@ fn finding_the_modules_of_a_file_does_not_run_again_when_a_module_is_added_in_an
         "what finds the modules of one file does not depend on the modules of the others"
     );
 }
+
+/// The inference of every function of the crate.
+fn infer_bodies(db: &RootDatabase, krate: Crate) {
+    let functions: Vec<_> = crate_def_map(db, krate)
+        .modules(db)
+        .flat_map(|(_, module)| module.scope.declarations().collect::<Vec<_>>())
+        .filter_map(|def| match def {
+            ModuleDefId::FunctionId(id) => Some(DefWithBodyId::from(id)),
+            _ => None,
+        })
+        .collect();
+    for function in functions {
+        let _ = ra_ap_hir_ty::InferenceResult::of(db, function);
+    }
+}
+
+/// What an eviction between two reads can drop, as `evict_regenerable` does after each context.
+#[derive(Clone, Copy)]
+enum Dropped {
+    Nothing,
+    TheLru,
+    TheScaffolding,
+}
+
+/// The queries the eviction of a run lets go of as scaffolding (`SCAFFOLDING` in `src/loader/database/eviction.rs`).
+const SCAFFOLDING: [&str; 5] = [
+    "EditionedFileId::parse_",
+    "MacroCallId::parse_macro_expansion_",
+    "HirFileId::ast_id_map_",
+    "MacroCallId::macro_arg_",
+    "real_span_map",
+];
+
+/// How many values of the queries `only` the database holds.
+fn held(db: &mut RootDatabase, only: &[&str]) -> u64 {
+    let mut held = 0;
+    <dyn salsa::Database>::values_in_memory(db, false, true, only, &mut |_, n| held += n);
+    held
+}
+
+/// What executes when the crate of `files` is flipped to `flipped` after the bodies and their inference were read,
+/// and the inference is read again; with `dropped` dropped between the reads.
+fn executed_by_flipping_after(
+    dropped: Dropped,
+    files: &[(String, String)],
+    flipped: &CfgOptions,
+) -> std::collections::BTreeMap<String, usize> {
+    let executed = Runs::default();
+    let subscriber = tracing_subscriber::registry().with(executed.clone());
+    tracing::subscriber::with_default(subscriber, || {
+        let borrowed: Vec<(&str, &str)> = files.iter().map(|(name, text)| (name.as_str(), text.as_str())).collect();
+        let (mut db, krate) = crate_of(&borrowed, CfgOptions::default());
+        infer_bodies(&db, krate);
+        let (queries, before): (&[&str], u64) = match dropped {
+            Dropped::Nothing => (&[], 0),
+            Dropped::TheLru => (&["Body::with_source_map_"], held(&mut db, &["Body::with_source_map_"])),
+            Dropped::TheScaffolding => (&SCAFFOLDING, held(&mut db, &SCAFFOLDING)),
+        };
+        match dropped {
+            Dropped::Nothing => {}
+            Dropped::TheLru => {
+                salsa::cap_lru_capacities(1);
+                <dyn salsa::Database>::trigger_lru_eviction(&mut db);
+                salsa::cap_lru_capacities(0);
+            }
+            Dropped::TheScaffolding => {
+                <dyn salsa::Database>::values_in_memory(&mut db, true, false, &SCAFFOLDING, &mut |_, _| {});
+            }
+        }
+        if !queries.is_empty() {
+            let after = held(&mut db, queries);
+            assert!(after < before, "nothing was dropped, so this shows nothing: {before} held, {after} held after");
+        }
+        krate.set_cfg_options(&mut db).to(flipped.clone());
+        let before = executed.now();
+        infer_bodies(&db, krate);
+        executed.since(&before)
+    })
+}
+
+/// What executes when the atom `a`, which only the first of `modules` modules tests, is flipped.
+fn executed_by_a_flip_after(dropped: Dropped, modules: usize) -> std::collections::BTreeMap<String, usize> {
+    let mut flipped = CfgOptions::default();
+    flag(&mut flipped, "a");
+    executed_by_flipping_after(dropped, &macro_modules(modules), &flipped)
+}
+
+/// What executes when the recursion limit, which every expansion reads, is changed by a flip.
+fn executed_by_a_limit_flip_after(dropped: Dropped, functions: usize) -> std::collections::BTreeMap<String, usize> {
+    let text = String::from(
+        "#![cfg_attr(feature = \"a\", recursion_limit = \"512\")]\nmacro_rules! twice { ($e:expr) => { $e + $e }; }\n",
+    ) + &(0..functions).map(|n| format!("pub fn plain_{n}() -> u32 {{ twice!({n}) }}\n")).collect::<String>();
+    let mut flipped = CfgOptions::default();
+    flag(&mut flipped, "a");
+    executed_by_flipping_after(dropped, &[("lib.rs".to_owned(), text)], &flipped)
+}
+
+/// A body that was dropped has no value to be compared with when it runs again, so what read it directly runs once
+/// more (`Body::of_`, which returns it as it was); what read that does not, because that comes out the same.
+#[test]
+fn dropping_the_bodies_makes_only_the_query_that_reads_them_run_when_they_come_out_the_same() {
+    let _serial = SERIAL.lock().unwrap();
+    let kept = executed_by_a_limit_flip_after(Dropped::Nothing, 8);
+    let dropped = executed_by_a_limit_flip_after(Dropped::TheLru, 8);
+    let work = |counts: &std::collections::BTreeMap<String, usize>, name: &str| counts.get(name).copied().unwrap_or(0);
+    // The bodies read the limit, so each runs again, and comes out as it was: what read it does not run.
+    assert_eq!(work(&kept, "Body::with_source_map_"), 8, "every body reads the limit: {kept:?}");
+    assert_eq!(the_inference_that_ran(&kept), 0, "and the same body stops what read it: {kept:?}");
+    assert_eq!(work(&kept, "Body::of_"), 0, "{kept:?}");
+    // Seven of the eight were dropped (the LRU keeps the last one it saw): each makes `Body::of_` run, and no more.
+    assert_eq!(work(&dropped, "Body::of_"), 7, "kept {kept:?} dropped {dropped:?}");
+    assert_eq!(the_inference_that_ran(&dropped), 0, "kept {kept:?} dropped {dropped:?}");
+}
+
+/// What ran, without the scaffolding, which is made again when it is read after it was dropped, by design.
+fn without_scaffolding(counts: std::collections::BTreeMap<String, usize>) -> std::collections::BTreeMap<String, usize> {
+    counts.into_iter().filter(|(name, _)| !SCAFFOLDING.contains(&name.as_str())).collect()
+}
+
+fn the_inference_that_ran(counts: &std::collections::BTreeMap<String, usize>) -> usize {
+    counts.get("InferenceResult < 'db >::for_body_").copied().unwrap_or(0)
+}
+
+#[test]
+fn dropping_the_values_the_lru_keeps_does_not_make_what_a_flip_does_not_reach_run_again() {
+    let _serial = SERIAL.lock().unwrap();
+    let kept = executed_by_a_flip_after(Dropped::Nothing, 8);
+    let dropped = executed_by_a_flip_after(Dropped::TheLru, 8);
+    assert!(the_inference_that_ran(&kept) > 0, "the flip reaches the first module: {kept:?}");
+    assert_eq!(without_scaffolding(dropped), without_scaffolding(kept), "bodies that were dropped have the value they had");
+}
+
+#[test]
+fn dropping_the_scaffolding_does_not_make_what_a_flip_does_not_reach_run_again() {
+    let _serial = SERIAL.lock().unwrap();
+    let kept = executed_by_a_flip_after(Dropped::Nothing, 8);
+    let dropped = executed_by_a_flip_after(Dropped::TheScaffolding, 8);
+    assert_eq!(without_scaffolding(dropped), without_scaffolding(kept), "trees, expansions and arguments that were dropped have the value they had");
+}
