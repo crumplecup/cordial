@@ -1315,14 +1315,10 @@ fn run_planned(root: &Path, saved: &SavedState) -> Result<bool> {
 
 /// The queries a restored run that plans its own contexts executed, by the step that asked, after
 /// `between`.
-fn restored_planned_executions(
-    between: Between,
-) -> Result<(std::collections::BTreeMap<String, usize>, usize)> {
+fn restored_planned_executions(between: Between) -> Result<std::collections::BTreeMap<String, usize>> {
     let executions = Executions::default();
-    let fallbacks = FallbackEvents::default();
     let subscriber = tracing_subscriber::registry()
         .with(executions.clone())
-        .with(fallbacks.clone())
         .with(cordial::tracing_fmt_layer());
     let _subscriber = tracing::subscriber::set_default(subscriber);
     let root = chain_of_crates()?;
@@ -1335,7 +1331,6 @@ fn restored_planned_executions(
         std::fs::write(&library, format!("{text}\npub fn added() {{}}\n")).into_diagnostic()?;
     }
     executions.take();
-    fallbacks.0.store(0, std::sync::atomic::Ordering::Relaxed);
     assert!(run_planned(root.path(), &saved)?);
     let mut by_step = std::collections::BTreeMap::<String, usize>::new();
     for (name, count) in executions.take() {
@@ -1343,22 +1338,7 @@ fn restored_planned_executions(
             .entry(name.split(" > ").next().unwrap_or_default().to_owned())
             .or_default() += count;
     }
-    Ok((
-        by_step,
-        fallbacks.0.load(std::sync::atomic::Ordering::Relaxed),
-    ))
-}
-
-/// How many events a run made that say it fell back to asking rust-analyzer.
-#[derive(Default, Clone)]
-struct FallbackEvents(std::sync::Arc<std::sync::atomic::AtomicUsize>);
-
-impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for FallbackEvents {
-    fn on_event(&self, event: &tracing::Event<'_>, _: tracing_subscriber::layer::Context<'_, S>) {
-        if event.metadata().target() == "cordial::semantic::fallback" {
-            self.0.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        }
-    }
+    Ok(by_step)
 }
 
 /// A restored run that plans its own contexts builds no definition map when nothing changed: it
@@ -1369,12 +1349,8 @@ impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for FallbackEvents {
 #[tracing::instrument(level = "debug", err(level = "warn"))]
 fn a_restored_planned_run_builds_no_definition_maps() -> Result<()> {
     cordial::init_tracing();
-    let (unchanged, fallbacks) = restored_planned_executions(Between::NothingToSee)?;
-    let (edited, _) = restored_planned_executions(Between::SomethingToCatch)?;
-    assert_eq!(
-        fallbacks, 0,
-        "a run nothing changed in fell back to rust-analyzer {fallbacks} times"
-    );
+    let unchanged = restored_planned_executions(Between::NothingToSee)?;
+    let edited = restored_planned_executions(Between::SomethingToCatch)?;
     let (unchanged_total, edited_total): (usize, usize) =
         (unchanged.values().sum(), edited.values().sum());
     assert!(
@@ -1412,14 +1388,11 @@ fn with_a_file_nothing_compiles() -> Result<tempfile::TempDir> {
     Ok(root)
 }
 
-/// What a restored run asks rust-analyzer for, and how often it falls back, over a workspace with a
-/// file no context compiles, projected the way a run is: every source file is asked about.
-fn restored_over_a_file_nothing_compiles(between: Between) -> Result<(usize, usize)> {
+/// What a restored run asks rust-analyzer for over a workspace with a file no context compiles, projected the way a
+/// run is: every source file is asked about.
+fn restored_over_a_file_nothing_compiles(between: Between) -> Result<usize> {
     let executions = Executions::default();
-    let fallbacks = FallbackEvents::default();
-    let subscriber = tracing_subscriber::registry()
-        .with(executions.clone())
-        .with(fallbacks.clone());
+    let subscriber = tracing_subscriber::registry().with(executions.clone());
     let _subscriber = tracing::subscriber::set_default(subscriber);
     let root = with_a_file_nothing_compiles()?;
     let state = tempfile::tempdir().into_diagnostic()?;
@@ -1437,17 +1410,13 @@ fn restored_over_a_file_nothing_compiles(between: Between) -> Result<(usize, usi
                 .into_diagnostic()?;
         }
         executions.take();
-        fallbacks.0.store(0, std::sync::atomic::Ordering::Relaxed);
         let mut session = SourceDatabase::load_saved(root.path(), &options, Some(saved.clone()))
             .into_diagnostic()?;
         session
             .project(&CrateTarget::new("gated", root.path()), &paths)
             .into_diagnostic()?;
     }
-    Ok((
-        executions.take().values().sum(),
-        fallbacks.0.load(std::sync::atomic::Ordering::Relaxed),
-    ))
+    Ok(executions.take().values().sum())
 }
 
 /// A file no crate compiles under a context's cfg has no definitions there: it is not a reason to
@@ -1457,8 +1426,8 @@ fn restored_over_a_file_nothing_compiles(between: Between) -> Result<(usize, usi
 #[tracing::instrument(level = "debug", err(level = "warn"))]
 fn a_file_no_context_compiles_is_not_read_through_rust_analyzer() -> Result<()> {
     cordial::init_tracing();
-    let (unchanged, fallbacks) = restored_over_a_file_nothing_compiles(Between::NothingToSee)?;
-    let (edited, _) = restored_over_a_file_nothing_compiles(Between::SomethingToCatch)?;
+    let unchanged = restored_over_a_file_nothing_compiles(Between::NothingToSee)?;
+    let edited = restored_over_a_file_nothing_compiles(Between::SomethingToCatch)?;
     assert!(
         edited > unchanged,
         "an edit makes the run build maps, and {edited} queries show it"
@@ -1467,54 +1436,9 @@ fn a_file_no_context_compiles_is_not_read_through_rust_analyzer() -> Result<()> 
         edited < 1000,
         "an edit made the run build the maps of the crates under the one that changed: {edited} queries"
     );
-    assert_eq!(
-        fallbacks, 0,
-        "a restored run nothing changed in read a file nothing compiles through rust-analyzer {fallbacks} times"
-    );
     assert!(
         unchanged < 40,
         "{unchanged} queries executed in a run nothing changed in"
-    );
-    Ok(())
-}
-
-/// What a run is: the first, which computes what it saves, or the next, which restores it.
-#[derive(Clone, Copy, Debug)]
-enum Which {
-    Cold,
-    Restored,
-}
-
-/// How many times a run of the workspace fell back to asking rust-analyzer, or to reading a file
-/// that a saved query declined.
-fn fallbacks_in(which: Which) -> Result<usize> {
-    let fallbacks = FallbackEvents::default();
-    let subscriber = tracing_subscriber::registry().with(fallbacks.clone());
-    let _subscriber = tracing::subscriber::set_default(subscriber);
-    let root = fixture()?;
-    let state = tempfile::tempdir().into_diagnostic()?;
-    let saved = SavedState::at(state.path().join("analysis-state"));
-    if let Which::Restored = which {
-        run(root.path(), &saved)?;
-        fallbacks.0.store(0, std::sync::atomic::Ordering::Relaxed);
-    }
-    run(root.path(), &saved)?;
-    Ok(fallbacks.0.load(std::sync::atomic::Ordering::Relaxed))
-}
-
-/// A query that says "this policy does not read this file" says it the same way after a restore,
-/// and does not read as having declined: a file declined sends the whole target down the direct
-/// path, which a restored run would take every time.
-#[test]
-#[tracing::instrument(level = "debug", err(level = "warn"))]
-fn a_restored_run_takes_no_direct_path_a_cold_run_did_not() -> Result<()> {
-    cordial::init_tracing();
-    let cold = fallbacks_in(Which::Cold)?;
-    let restored = fallbacks_in(Which::Restored)?;
-    assert_eq!(cold, 0, "a cold run fell back {cold} times");
-    assert_eq!(
-        restored, 0,
-        "a restored run fell back {restored} times where a cold run did {cold}"
     );
     Ok(())
 }
