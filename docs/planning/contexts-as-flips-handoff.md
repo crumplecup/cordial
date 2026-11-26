@@ -5,7 +5,18 @@ the design and the status sections in order; this file is the state of the work,
 and how Erik wants the work done. `/tmp` (including the session's scratchpad) is RAM and is gone after a restart: what
 mattered is here or in the repository.
 
-## 1. Where things stand
+## 0. Update (2026-11-26): read this first
+
+HEAD `2e6c3cbb` and later. The repeated work in contexts was salsa's LRU eviction at the editor's marks on every write (fixed:
+`salsa::lift_lru_capacities`, see the last status section of [contexts-as-flips.md](contexts-as-flips.md)). On `elicit_doc` flips
+now executes fewer queries than copies in every context region, findings are identical, and the projection takes 28 s against
+30 s. Sections 1 to 3 below are from before that: their numbers (84,121 queries in contexts, 7,379 stale `Body::of_`, "why
+flips drops twice the bodies") are out of date, and step 2 of section 2 is done (the cause was the LRU, not `evict_quietly`).
+Next: the remaining stale causes in the plan's last status section, then amenable parity (needs Erik's go-ahead and a
+stated prediction). Erik's rule for now: hold memory, no eviction work, judge by query counts. Do not run `cargo fmt` (it
+rewrites the whole workspace, vendor included). Logs of the runs are in `~/.cache/flips-runs/`.
+
+## 1. Where things stand (as of 2026-11-25, before the LRU fix)
 
 **Goal.** Contexts (cfg variants such as `test`, `kani`, `creusot`) are analysed as *flips* of the one base crate's cfg,
 not as copies of crates (`CfgContextMode::{Copies, Flips}`; copies is the default until flips is trusted). Salsa

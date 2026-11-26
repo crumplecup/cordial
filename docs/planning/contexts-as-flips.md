@@ -305,3 +305,41 @@ Stale memos in flips fell from 35,259 to 15,113 and none is now stale because of
    2,779; superseded memos 71,137 against 1,175 (`eviction.cfg_context.deferred_released`).
 
 For the state of the work, how to measure it and what to do next, see [the handoff](contexts-as-flips-handoff.md).
+
+## Status (2026-11-26, the LRU was the repeated work)
+
+**Cause.** A new revision runs salsa's LRU eviction at the editor's marks (512 expansions and bodies, 1,024 id maps, 128 trees),
+and every cfg flip is a write, whether or not the run is short of memory. The flips run dropped 88,000 expansions and 86,000
+id maps and each stage that executes something needing them made them again. Shown by
+`a_write_does_not_drop_the_id_maps_of_a_run_that_is_not_short_of_memory` (1,101 files, 77 made again with the marks, none with
+the run's policy) and by the three `dropping_the_*` tests, which show that dropping alone costs one `Body::of_` for each
+dropped body that a flip makes run again and nothing above it. Fix: `salsa::lift_lru_capacities`, lifted by the run
+(`memory_limit::hold_lru_values_unless_pressed`) unless the environment asked for a cap or the run is pressed.
+
+**Measured on `elicit_doc`, cold, release at `2e6c3cbb`, plain `cargo build --release` (no hotpath: query counts and stale
+events are ordinary tracing); copies and flips, queries executed:**
+
+| region | copies | flips |
+|---|---|---|
+| evidence | 342,800 | 342,809 |
+| ordinary | 22,790 | 22,790 |
+| contexts | 47,910 | 14,142 |
+| of which harvest | 35,395 | 4,971 |
+| finish_flips | none | 1,919 |
+| leaves | 10,221 | 2,056 |
+| inventories | 1,048 | 715 |
+
+Findings: 85 files, 0 differing. Stale memos in flips: 3,762 (15,113 before the LRU lift, 35,259 before the scoped floor).
+Projection time from the log: 28.2 s flips, 30.5 s copies; contexts 4.0 s against 5.9 s. Peak 2.21 GB against 2.22 GB (both
+with the LRU lifted). The wall time of the first run (97 s against 46 s) is `cargo doc` run cold before the projection
+and cached for the second run, not the analysis.
+
+**Left, by cause** (`stale.py` on the flips log): `resolve <- generated_in` 944; `direct_facts` and `resolve <- data` 368
+each (a module cell's whole data); `crate_module_cells` 624; `cfg_options` 339. Memos re-validated: harvest 216,833 and
+`finish_flips` 222,191 against 17,960 in copies; cheap in time (harvest 1.0 s against 3.5 s) but a number to beat.
+`contexts_context_observability` is 2.5 s in flips against 1.6 s in copies although it executes fewer queries (8,892 against
+12,149).
+
+**Policy while flips is fixed:** hold memory and do not evict; judge by queries executed and stale memos, not peak or wall
+time. Eviction policy (the forward cone of the next flip, cost over size, regret counters) comes after sharing is right.
+
