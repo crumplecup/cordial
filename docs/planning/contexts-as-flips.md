@@ -358,3 +358,29 @@ read them whole runs again at the restore. That is question 3 of "What is not kn
 with fewer queries (8,892 against 12,149), which the metrics do not explain. `elicit_doc` has few contexts, so it does not
 stress the design: the next evidence is amenable (parity of findings, peak and time against 4.1 GB and 3 min 35 s).
 
+## Status (2026-11-26, the narrative of a flips run: revisions, walks, the finish and the save)
+
+Read from one cold `elicit_doc` flips run with the new events (`93963127`: every region says `revisions`, `writes`, `writes_top`,
+`verified_unchanged`, `verified_changed`; the save and the observability have steps; the settle and the forgets say what they
+delete and why). One context (`+test`).
+
+**Revisions.** The flip is 33 revisions (one write of each crate's cfg) and the restore 33; the finish forgets three times
+(`forget_flipped`, `forget_changed`, `forget_undeclared`), a revision each. The settle walks the bodies and blocks once before
+the last forget and once after it: 110,525 and 111,666 memos. Inventories runs in the same revision as the second settle and starts
+none, so its 109k are memos the settle did not read, and not a repeat.
+
+**What the walks find.** Of 552,485 memos walked in the context regions, the finish, the inventories and the save, 550,354
+(99.6%) were found as they were: harvest 216,147 of 216,866, the bodies of the settle 73,315 of 73,617 and 74,648 of 74,714,
+the blocks 32,910 of 32,910 twice, the inventories 108,582 of 109,049. The flip's real cone is the 4,838 queries harvest
+executes. This is the headroom of option 2 (a reverse index from the keys a flip touches, so that what it did not reach is not
+walked): about 550,000 walks for about 3,000 changes. It costs little in time on `elicit_doc` (the second settle is 73 ms), and
+grows as contexts times the size of the local graph.
+
+**The 66 undeclared blocks** that start the last forget are `BlockGone(Replaced)`: a block whose slot a new one has taken. They are
+not deleted by the bodies the settle makes again (`blocks_gone_after_bodies` is 0 of 10,300 held at that point); the held count
+goes from 10,300 to 10,366 by the forget, so 66 blocks are made after the snapshot. What they are (their files, whether they are in
+what a macro made) and when they are replaced is not yet said: the owners were read only for the blocks that the bodies delete.
+
+**The save** is 6.3 s, 5.5 s of it `write` (serialising the state), 0.8 s `verify_persisted`, none `fingerprints`: not
+a flips cost. **The observability** of the context is 2.2 s, all of it `project` (8,854 queries; `merge` is 6 ms).
+
