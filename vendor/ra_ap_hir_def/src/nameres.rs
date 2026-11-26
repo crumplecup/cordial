@@ -664,6 +664,28 @@ fn touch_changed_names(
             touch(module, Some(&old.scope), None);
         }
     }
+    // The modules of a file are a key of their own: the files of the modules that came, went or moved.
+    let file_of = |data: &ModuleData| data.origin.file_id().map(|file_id| file_id.file_id(db));
+    let mut touch_file = |file: Option<FileId>| {
+        if let Some(file) = file {
+            salsa::keyed::touch(db, FileInCrateLt::new(db, krate, file).as_id());
+            touched += 1;
+        }
+    };
+    for (&module, new) in now {
+        match before.get(&module) {
+            Some(old) if file_of(old) == file_of(new) => {}
+            old => {
+                touch_file(old.and_then(|data| file_of(data)));
+                touch_file(file_of(new));
+            }
+        }
+    }
+    for (&module, old) in before {
+        if !now.contains_key(&module) {
+            touch_file(file_of(old));
+        }
+    }
     tracing::debug!(
         target: "cordial::nameres",
         keys_that_changed = touched,
@@ -916,6 +938,23 @@ fn crate_extras(db: &dyn SourceDatabase, crate_id: Crate) -> Arc<DefMapExtras> {
     Arc::clone(&crate_local_def_map(db, crate_id).extras)
 }
 
+/// The cells of a crate's modules, as a tracked field of a cell of its own: what reads the set a field at a time (the
+/// modules of one file) says it did not depend on the field and depends on a key, and what asks for the cell depends on
+/// the cell being the crate's, which it is whatever the set is.
+#[salsa::tracked(debug, persist)]
+pub struct CrateModulesLt<'db> {
+    #[returns(copy)]
+    pub krate: Crate,
+    #[tracked]
+    #[returns(ref)]
+    pub cells: Arc<FxIndexMap<ModuleId, ModuleCell>>,
+}
+
+#[salsa::tracked(returns(copy), persist)]
+fn crate_modules_cell(db: &dyn SourceDatabase, krate: Crate) -> CrateModulesLt<'_> {
+    CrateModulesLt::new(db, krate, Arc::clone(&crate_local_def_map(db, krate).cells))
+}
+
 /// A file of a crate: what the modules of a file are asked of.
 #[salsa::interned(debug, revisions = usize::MAX, persist)]
 pub struct FileInCrateLt {
@@ -930,11 +969,18 @@ pub struct FileInCrateLt {
 #[salsa::tracked(returns(ref), persist)]
 fn crate_modules_in_file<'db>(db: &'db dyn SourceDatabase, key: FileInCrateLt<'db>) -> Vec<ModuleId> {
     let (krate, file) = (key.krate(db), key.file(db));
-    let mut found: Vec<ModuleId> = crate_module_cells(db, krate)
-        .iter()
-        .filter(|(_, cell)| cell.origin(db).file_id().map(|file_id| file_id.file_id(db)) == Some(file))
-        .map(|(&id, _)| id)
-        .collect();
+    // The cell holds the set of modules in a field the reader does not depend on: it depends on the cell being the
+    // crate's, and on the key of its file, and not on the set of modules of the crate as a whole.
+    let modules = crate_modules_cell(db, krate);
+    let (mut found, durability): (Vec<ModuleId>, _) = salsa::keyed::unrecorded(db, || {
+        modules
+            .cells(db)
+            .iter()
+            .filter(|(_, cell)| cell.origin(db).file_id().map(|file_id| file_id.file_id(db)) == Some(file))
+            .map(|(&id, _)| id)
+            .collect()
+    });
+    salsa::keyed::read(db, krate.as_id(), key.as_id(), durability);
     found.sort_by_key(|id| id.as_id().as_bits());
     found
 }

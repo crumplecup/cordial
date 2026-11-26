@@ -571,8 +571,9 @@ m!(Z);
                 "expand_pure_macro_of",
                 "MacroCallId::macro_arg_",
                 "crate_modules_in_file",
-                "crate_module_cells",
+                "crate_modules_cell",
                 "crate_module_cell",
+                "crate_module_cells",
             ]
         "#]],
     );

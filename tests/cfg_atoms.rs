@@ -1777,3 +1777,57 @@ fn a_write_drops_the_id_maps_over_the_marks_of_a_run_that_is_short_of_memory() {
     let _serial = SERIAL.lock().unwrap();
     assert!(id_maps_made_again(true, true) > 0, "pressure puts the marks back, and the memory is given back");
 }
+
+/// What executes of the query that finds the modules of a file, when every file's modules are read again after the atom
+/// `a` adds a module in a file of its own, in a crate of `files` files that the atom does not reach.
+fn finding_the_modules_of_every_file_after_a_module_is_added(files: usize) -> std::collections::BTreeMap<String, usize> {
+    let executed = Runs::default();
+    let subscriber = tracing_subscriber::registry().with(executed.clone());
+    tracing::subscriber::with_default(subscriber, || {
+        let mut sources: Vec<(String, String)> = vec![(
+            "lib.rs".to_owned(),
+            (0..files).map(|n| format!("mod f{n};\n")).collect::<String>() + "#[cfg(feature = \"a\")]\nmod extra;\n",
+        )];
+        sources.extend((0..files).map(|n| (format!("f{n}.rs"), "pub fn x() {}\n".to_owned())));
+        sources.push(("extra.rs".to_owned(), "pub fn y() {}\n".to_owned()));
+        let borrowed: Vec<(&str, &str)> = sources.iter().map(|(name, text)| (name.as_str(), text.as_str())).collect();
+        let (mut db, krate) = crate_of(&borrowed, CfgOptions::default());
+        let every_file = |db: &RootDatabase| -> usize {
+            (0..sources.len())
+                .map(|id| modules_of_a_file(db, krate, FileId::from_raw(u32::try_from(id).unwrap())))
+                .sum()
+        };
+        let _ = every_file(&db);
+        let before = executed.now();
+        krate.set_cfg_options(&mut db).to(atoms(&["a"]));
+        let _ = every_file(&db);
+        executed.since(&before)
+    })
+}
+
+#[test]
+fn finding_the_modules_of_a_file_does_not_run_for_every_file_when_a_module_is_added_in_one() {
+    let _serial = SERIAL.lock().unwrap();
+    let ran = |counts: &std::collections::BTreeMap<String, usize>| counts.get("crate_modules_in_file").copied().unwrap_or(0);
+    let small = finding_the_modules_of_every_file_after_a_module_is_added(4);
+    let large = finding_the_modules_of_every_file_after_a_module_is_added(40);
+    assert_eq!(ran(&large), ran(&small), "the lists of the files the atom does not reach: {small:?} {large:?}");
+}
+
+#[test]
+fn the_modules_of_a_file_are_still_found_when_a_flip_adds_a_module_to_it_and_when_it_takes_it_away() {
+    let _serial = SERIAL.lock().unwrap();
+    let sources = [
+        ("lib.rs", "mod f0;\n#[cfg(feature = \"a\")]\nmod extra;\n"),
+        ("f0.rs", "pub fn x() {}\n"),
+        ("extra.rs", "pub fn y() {}\n"),
+    ];
+    let (mut db, krate) = crate_of(&sources, CfgOptions::default());
+    let (lib, f0, extra) = (FileId::from_raw(0), FileId::from_raw(1), FileId::from_raw(2));
+    let modules = |db: &RootDatabase| [lib, f0, extra].map(|file| modules_of_a_file(db, krate, file));
+    assert_eq!(modules(&db), [1, 1, 0], "before: `extra` is not declared");
+    krate.set_cfg_options(&mut db).to(atoms(&["a"]));
+    assert_eq!(modules(&db), [1, 1, 1], "the flip adds the module of `extra.rs`, and the others are as they were");
+    krate.set_cfg_options(&mut db).to(CfgOptions::default());
+    assert_eq!(modules(&db), [1, 1, 0], "and putting it back takes it away");
+}
