@@ -30,7 +30,14 @@ static LIFTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::ne
 /// program that is not an editor: it has no reason to drop a value while it has the memory, and each value it drops
 /// and then needs is computed again. Takes effect at the next eviction.
 pub fn lift_capacities(lifted: bool) {
-    LIFTED.store(lifted, std::sync::atomic::Ordering::Relaxed);
+    if LIFTED.swap(lifted, std::sync::atomic::Ordering::Relaxed) != lifted {
+        ::tracing::info!(
+            target: "salsa::eviction",
+            lifted,
+            "the LRU of each query now {}",
+            if lifted { "keeps every value" } else { "keeps what it is marked with" }
+        );
+    }
 }
 
 /// Least Recently Used eviction policy.

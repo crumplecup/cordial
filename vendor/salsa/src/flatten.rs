@@ -78,6 +78,77 @@ pub(crate) fn note_deep_verification(
     }
 }
 
+static REVISIONS_STARTED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Record that a revision has started: an input was written, something was forgotten, or the database was cancelled
+/// so many times that its count came round.
+pub(crate) fn note_revision() {
+    REVISIONS_STARTED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// How many revisions this process has started. Two readings say how many a stretch of the run did: each one makes
+/// every memo read after it be verified again, so a run that starts many in its stages walks the graph in each.
+pub fn revisions_started() -> u64 {
+    REVISIONS_STARTED.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+static INPUT_WRITES: std::sync::Mutex<Option<std::collections::HashMap<&'static str, u64>>> =
+    std::sync::Mutex::new(None);
+
+/// Record that a field of the input `name` was written.
+pub(crate) fn note_input_write(name: &'static str) {
+    if let Ok(mut writes) = INPUT_WRITES.lock() {
+        *writes.get_or_insert_with(Default::default).entry(name).or_default() += 1;
+    }
+}
+
+/// How many writes each input has had in this process, by name: two readings say which inputs a stretch of the run
+/// wrote.
+pub fn input_writes() -> std::collections::HashMap<&'static str, u64> {
+    INPUT_WRITES.lock().ok().and_then(|writes| writes.clone()).unwrap_or_default()
+}
+
+static DEEP_UNCHANGED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+static DEEP_CHANGED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+static UNCHANGED_BY_INGREDIENT: [std::sync::atomic::AtomicU64; INGREDIENTS_COUNTED] =
+    [const { std::sync::atomic::AtomicU64::new(0) }; INGREDIENTS_COUNTED];
+
+/// Record what the walk of a memo's dependencies found: that none had changed, so that the memo is as it was and
+/// nothing ran, or that one had.
+pub(crate) fn note_deep_outcome(ingredient: crate::IngredientIndex, unchanged: bool) {
+    if !unchanged {
+        DEEP_CHANGED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        return;
+    }
+    DEEP_UNCHANGED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let at = ingredient.as_u32() as usize;
+    if at < INGREDIENTS_COUNTED {
+        UNCHANGED_BY_INGREDIENT[at].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
+/// How many deep verifications found nothing changed, and how many found a change. A walk that finds nothing is
+/// the cost of a revision that did not reach the memo: the work that is not a query run.
+pub fn deep_verification_outcomes() -> (u64, u64) {
+    (
+        DEEP_UNCHANGED.load(std::sync::atomic::Ordering::Relaxed),
+        DEEP_CHANGED.load(std::sync::atomic::Ordering::Relaxed),
+    )
+}
+
+/// How many walks found nothing changed, by the name of the query.
+pub fn deep_unchanged_by_ingredient() -> std::collections::HashMap<&'static str, u64> {
+    let names = NAMES.lock().map(|names| names.clone()).unwrap_or_default();
+    let mut counted = std::collections::HashMap::new();
+    for (at, name) in names.iter().enumerate().take(INGREDIENTS_COUNTED) {
+        let memos = UNCHANGED_BY_INGREDIENT[at].load(std::sync::atomic::Ordering::Relaxed);
+        if memos > 0 {
+            *counted.entry(*name).or_default() += memos;
+        }
+    }
+    counted
+}
+
 static DEEP_BY_DURABILITY: [std::sync::atomic::AtomicU64; 4] =
     [const { std::sync::atomic::AtomicU64::new(0) }; 4];
 

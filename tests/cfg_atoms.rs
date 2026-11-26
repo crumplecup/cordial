@@ -1831,3 +1831,109 @@ fn the_modules_of_a_file_are_still_found_when_a_flip_adds_a_module_to_it_and_whe
     krate.set_cfg_options(&mut db).to(CfgOptions::default());
     assert_eq!(modules(&db), [1, 1, 0], "and putting it back takes it away");
 }
+
+#[test]
+fn the_counters_say_what_started_a_revision_what_was_written_and_what_a_walk_found() {
+    let _serial = SERIAL.lock().unwrap();
+    let files = macro_modules(4);
+    let borrowed: Vec<(&str, &str)> = files.iter().map(|(name, text)| (name.as_str(), text.as_str())).collect();
+    let (mut db, krate) = crate_of(&borrowed, CfgOptions::default());
+    infer_bodies(&db, krate);
+    let start = salsa::plumbing::current_revision(&db);
+    let (revisions, writes, memos, outcomes) = (
+        salsa::revisions_started(),
+        salsa::input_writes().get("Crate").copied().unwrap_or(0),
+        salsa::deep_verifications().0,
+        salsa::deep_verification_outcomes(),
+    );
+
+    // A write is a revision, and says which input it wrote.
+    krate.set_cfg_options(&mut db).to(atoms(&["a"]));
+    assert_eq!(salsa::revisions_started() - revisions, 1, "a write starts a revision");
+    assert_eq!(salsa::input_writes().get("Crate").copied().unwrap_or(0) - writes, 1, "and is a write of the crate");
+
+    // What is read after it is walked, and every walk finds the memo as it was or finds a change.
+    infer_bodies(&db, krate);
+    let walked = salsa::deep_verifications().0 - memos;
+    let (unchanged, changed) = (
+        salsa::deep_verification_outcomes().0 - outcomes.0,
+        salsa::deep_verification_outcomes().1 - outcomes.1,
+    );
+    assert!(walked > 0 && unchanged > 0, "the bodies are walked and most are as they were: {walked} {unchanged}");
+    assert_eq!(unchanged + changed, walked, "each walk finds one or the other");
+    assert!(
+        salsa::deep_unchanged_by_ingredient().get("Body::of_").copied().unwrap_or(0) > 0,
+        "and the walks that found nothing are said by query"
+    );
+
+    // A forget is a revision too.
+    let before = salsa::revisions_started();
+    let forgotten = <dyn salsa::Database>::forget_memos_changed_after(&mut db, start);
+    assert!(forgotten > 0, "the flip made something");
+    assert_eq!(salsa::revisions_started() - before, 1, "forgetting starts a revision");
+}
+
+/// What a segment said: its label, how many revisions started in it, how many inputs were written, and which.
+type SaidOfRevisions = (String, u64, u64, String);
+
+#[derive(Clone, Default)]
+struct SegmentSaid(Arc<Mutex<Vec<SaidOfRevisions>>>);
+
+impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for SegmentSaid {
+    fn on_event(&self, event: &tracing::Event<'_>, _: tracing_subscriber::layer::Context<'_, S>) {
+        #[derive(Default)]
+        struct Fields {
+            label: String,
+            writes_top: String,
+            revisions: u64,
+            writes: u64,
+        }
+        impl tracing::field::Visit for Fields {
+            fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
+                match field.name() {
+                    "label" => self.label = format!("{value:?}"),
+                    "writes_top" => self.writes_top = format!("{value:?}").trim_matches('"').to_owned(),
+                    _ => {}
+                }
+            }
+            fn record_u64(&mut self, field: &tracing::field::Field, value: u64) {
+                match field.name() {
+                    "revisions" => self.revisions = value,
+                    "writes" => self.writes = value,
+                    _ => {}
+                }
+            }
+        }
+        if event.metadata().target() == "cordial::segment" {
+            let mut fields = Fields::default();
+            event.record(&mut fields);
+            self.0.lock().unwrap().push((fields.label, fields.revisions, fields.writes, fields.writes_top));
+        }
+    }
+}
+
+#[test]
+fn a_region_says_how_many_revisions_started_in_it_and_which_inputs_were_written() {
+    let _serial = SERIAL.lock().unwrap();
+    let said = SegmentSaid::default();
+    let subscriber = tracing_subscriber::registry().with(said.clone());
+    tracing::subscriber::with_default(subscriber, || {
+        let (mut db, krate) = crate_of(&[("lib.rs", "pub fn f() {}\n")], CfgOptions::default());
+        {
+            let _quiet = cordial::Segment::begin("quiet");
+            infer_bodies(&db, krate);
+        }
+        {
+            let _outer = cordial::Segment::begin("outer");
+            let _written = cordial::Segment::begin("written");
+            krate.set_cfg_options(&mut db).to(atoms(&["a"]));
+            krate.set_cfg_options(&mut db).to(atoms(&["b"]));
+        }
+    });
+    let said = said.0.lock().unwrap().clone();
+    let of = |label: &str| said.iter().find(|(said, ..)| said == label).cloned().unwrap();
+    assert_eq!((of("quiet").1, of("quiet").2), (0, 0), "a region that writes nothing starts no revision: {said:?}");
+    assert_eq!((of("outer/written").1, of("outer/written").2), (2, 2), "two writes are two revisions: {said:?}");
+    assert_eq!(of("outer/written").3, "Crate=2", "and the input is named: {said:?}");
+    assert_eq!(of("outer").1, 2, "a region holds what the ones in it did: {said:?}");
+}

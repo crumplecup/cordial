@@ -297,6 +297,7 @@ impl Runtime {
         let r_old = self.current_revision();
         let r_new = r_old.next();
         self.revisions[0] = r_new;
+        crate::flatten::note_revision();
         *self.cancellation_count.get_mut() = 0;
         crate::tracing::info!("new_revision: {r_old:?} -> {r_new:?}");
         // Said as an execution is, so that the step of the program that asked for it is told.

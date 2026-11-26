@@ -838,7 +838,15 @@ pub fn hold_lru_values_unless_pressed(cap_asked: bool) {
 /// memory. Said again whenever the pressure changes.
 #[instrument(level = "debug")]
 pub(crate) fn apply_lru_policy() {
-    salsa::lift_lru_capacities(!LRU_CAP_ASKED.load(Ordering::Relaxed) && !pressured());
+    let (asked, pressed) = (LRU_CAP_ASKED.load(Ordering::Relaxed), pressured());
+    tracing::debug!(
+        target: "cordial::eviction",
+        cap_asked = asked,
+        pressed,
+        lifted = !asked && !pressed,
+        "the policy of the queries' LRU is applied"
+    );
+    salsa::lift_lru_capacities(!asked && !pressed);
 }
 
 /// Make the run feel pressure (or stop feeling it), for the tests of what the work does under it.

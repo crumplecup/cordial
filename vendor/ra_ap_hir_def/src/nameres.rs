@@ -666,10 +666,11 @@ fn touch_changed_names(
     }
     // The modules of a file are a key of their own: the files of the modules that came, went or moved.
     let file_of = |data: &ModuleData| data.origin.file_id().map(|file_id| file_id.file_id(db));
+    let mut files_touched = 0u64;
     let mut touch_file = |file: Option<FileId>| {
         if let Some(file) = file {
             salsa::keyed::touch(db, FileInCrateLt::new(db, krate, file).as_id());
-            touched += 1;
+            files_touched += 1;
         }
     };
     for (&module, new) in now {
@@ -689,6 +690,7 @@ fn touch_changed_names(
     tracing::debug!(
         target: "cordial::nameres",
         keys_that_changed = touched,
+        files_whose_modules_changed = files_touched,
         modules_before = before.len() as u64,
         modules_now = now.len() as u64,
         "the names of a map that are not what they were"
@@ -952,7 +954,14 @@ pub struct CrateModulesLt<'db> {
 
 #[salsa::tracked(returns(copy), persist)]
 fn crate_modules_cell(db: &dyn SourceDatabase, krate: Crate) -> CrateModulesLt<'_> {
-    CrateModulesLt::new(db, krate, Arc::clone(&crate_local_def_map(db, krate).cells))
+    let cells = Arc::clone(&crate_local_def_map(db, krate).cells);
+    tracing::trace!(
+        target: "cordial::scope",
+        krate = ?krate,
+        modules = cells.len() as u64,
+        "the cell of a crate's modules is made again"
+    );
+    CrateModulesLt::new(db, krate, cells)
 }
 
 /// A file of a crate: what the modules of a file are asked of.
@@ -982,6 +991,13 @@ fn crate_modules_in_file<'db>(db: &'db dyn SourceDatabase, key: FileInCrateLt<'d
     });
     salsa::keyed::read(db, krate.as_id(), key.as_id(), durability);
     found.sort_by_key(|id| id.as_id().as_bits());
+    tracing::trace!(
+        target: "cordial::scope",
+        krate = ?krate,
+        file = ?file,
+        modules = found.len() as u64,
+        "the modules of a file are found: read as the key of the file, not as the set of the crate's modules"
+    );
     found
 }
 

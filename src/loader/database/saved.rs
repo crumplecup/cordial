@@ -718,7 +718,10 @@ impl super::SourceDatabase {
         // What read a definition map is saved as depending on its fingerprint, which has to have been
         // asked for.
         crate::process_memory::log("save begun");
-        self.ask_fingerprints();
+        {
+            let _fingerprints = crate::Segment::begin("fingerprints");
+            self.ask_fingerprints();
+        }
         crate::process_memory::log("save: fingerprints asked");
         let verifying = std::time::Instant::now();
         let (queries_before, (memos_before, edges_before), counts_before) = (
@@ -732,7 +735,10 @@ impl super::SourceDatabase {
             threads = std::thread::available_parallelism().map_or(1, usize::from) as u64,
             "persisted memos are about to be verified before the save"
         );
-        self.verify_persisted_in_parallel();
+        {
+            let _verify = crate::Segment::begin("verify_persisted");
+            self.verify_persisted_in_parallel();
+        }
         let (memos_after, edges_after) = salsa::deep_verifications();
         crate::process_memory::log("save: persisted memos verified");
         tracing::info!(
@@ -747,7 +753,10 @@ impl super::SourceDatabase {
         );
         self.reporter.say("Saving the analysis state");
         let started = std::time::Instant::now();
-        let saved_state = saved.save(&mut self.db, &self.vfs, &self.context_crates);
+        let saved_state = {
+            let _write = crate::Segment::begin("write");
+            saved.save(&mut self.db, &self.vfs, &self.context_crates)
+        };
         crate::process_memory::log("save: state written");
         match saved_state {
             Ok(bytes) => {

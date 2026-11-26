@@ -39,6 +39,12 @@ pub struct Segment {
     verified_before: HashMap<&'static str, (u64, u64)>,
     durability_before: [u64; 4],
     keyed_before: (u64, u64),
+    /// How many revisions had been started, which inputs had been written and how many times, and how many walks had
+    /// found nothing changed and by query, when the region began.
+    revisions_before: u64,
+    writes_before: HashMap<&'static str, u64>,
+    outcomes_before: (u64, u64),
+    unchanged_before: HashMap<&'static str, u64>,
 }
 
 impl Segment {
@@ -60,6 +66,10 @@ impl Segment {
             verified_before: salsa::deep_verifications_by_ingredient(),
             durability_before: salsa::deep_verifications_by_durability(),
             keyed_before: salsa::keyed::counts(),
+            revisions_before: salsa::revisions_started(),
+            writes_before: salsa::input_writes(),
+            outcomes_before: salsa::deep_verification_outcomes(),
+            unchanged_before: salsa::deep_unchanged_by_ingredient(),
         }
     }
 
@@ -92,6 +102,35 @@ impl Segment {
     }
 }
 
+impl Segment {
+    /// What was written in this region, by input and how many times, most first: what started the revisions.
+    fn writes_top(&self) -> String {
+        let mut more: Vec<(&'static str, u64)> = salsa::input_writes()
+            .into_iter()
+            .filter_map(|(name, count)| {
+                let more = count.saturating_sub(self.writes_before.get(name).copied().unwrap_or_default());
+                (more > 0).then_some((name, more))
+            })
+            .collect();
+        more.sort_by_key(|(name, count)| (std::cmp::Reverse(*count), *name));
+        more.iter().take(TOP).map(|(name, count)| format!("{name}={count}")).collect::<Vec<_>>().join(" ")
+    }
+
+    /// The queries whose memos this region walked and found nothing changed in, most first: the walks that ran no
+    /// query, which a revision that did not reach the memo costs.
+    fn unchanged_top(&self) -> String {
+        let mut more: Vec<(&'static str, u64)> = salsa::deep_unchanged_by_ingredient()
+            .into_iter()
+            .filter_map(|(name, count)| {
+                let more = count.saturating_sub(self.unchanged_before.get(name).copied().unwrap_or_default());
+                (more > 0).then_some((name, more))
+            })
+            .collect();
+        more.sort_by_key(|(name, count)| (std::cmp::Reverse(*count), *name));
+        more.iter().take(TOP).map(|(name, count)| format!("{name}={count}")).collect::<Vec<_>>().join(" ")
+    }
+}
+
 impl Drop for Segment {
     fn drop(&mut self) {
         OPEN.with(|open| {
@@ -103,6 +142,10 @@ impl Drop for Segment {
         let now = salsa::deep_verifications_by_durability();
         let durability: [u64; 4] = std::array::from_fn(|at| now[at].saturating_sub(self.durability_before[at]));
         let keyed = salsa::keyed::counts();
+        let revisions = salsa::revisions_started();
+        let outcomes = salsa::deep_verification_outcomes();
+        let writes = self.writes_top();
+        let writes_total: u64 = salsa::input_writes().values().sum::<u64>() - self.writes_before.values().sum::<u64>();
         tracing::info!(
             target: "cordial::segment",
             label = %self.path,
@@ -119,6 +162,13 @@ impl Drop for Segment {
             verified_high = durability[2],
             keyed_reads = keyed.0.saturating_sub(self.keyed_before.0),
             keyed_touches = keyed.1.saturating_sub(self.keyed_before.1),
+            revisions = revisions.saturating_sub(self.revisions_before),
+            at_revision = %revisions,
+            writes = writes_total,
+            writes_top = %writes,
+            verified_unchanged = outcomes.0.saturating_sub(self.outcomes_before.0),
+            verified_changed = outcomes.1.saturating_sub(self.outcomes_before.1),
+            unchanged_top = %self.unchanged_top(),
             "a region of the run"
         );
     }

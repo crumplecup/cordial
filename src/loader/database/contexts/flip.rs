@@ -58,6 +58,9 @@ impl Ordinary {
     }
 }
 
+/// What a block made by a macro is said to belong to, since it is in no file of its own.
+const MACRO_OWNER: &str = "in what a macro made";
+
 /// A flipped session: the crates it is over, with their ordinary cfgs, and what the flips have changed so far. The
 /// contexts pass and the leaf pass are two parts of one session when the run can be, so that the ordinary cfg is put
 /// back, what the flips changed forgotten and the maps settled once, when the last of them is done, and the second
@@ -132,8 +135,14 @@ impl SourceDatabase {
             let _keys = crate::Segment::begin("block_keys");
             salsa::Database::memo_keys(&mut self.db, &["block_def_map"])
         };
+        let revision = self.revision();
         let db = &self.db;
         let mut remade = 0u64;
+        // Who each block that is held belongs to, while it can still be read: a block that a body made again without
+        // is deleted, and nothing of it can be read after.
+        let owners: Vec<(salsa::Id, String)> = attach_db(db, || {
+            blocks.iter().map(|key| (*key, self.block_owner(BlockId::from_id(*key)))).collect()
+        });
         attach_db(db, || {
             {
                 let _maps = crate::Segment::begin("maps");
@@ -150,6 +159,20 @@ impl SourceDatabase {
                     ra_ap_hir_def::declaration::settle_bodies(db, *krate);
                 }
             }
+            let gone: Vec<&str> = owners
+                .iter()
+                .filter(|(key, _)| salsa::Database::existence(db, *key) != salsa::Existence::Exists)
+                .map(|(_, owner)| owner.as_str())
+                .collect();
+            tracing::info!(
+                target: "cordial::def_map",
+                revision = ?revision,
+                blocks_held = owners.len() as u64,
+                blocks_gone_after_bodies = gone.len() as u64,
+                gone_in_macros = gone.iter().filter(|owner| **owner == MACRO_OWNER).count() as u64,
+                gone_owners = %Self::owners_top(&gone),
+                "the blocks the bodies made again no longer make: deleted before the blocks are read"
+            );
             let _blocks = crate::Segment::begin("blocks");
             for key in blocks {
                 settle_block_map(db, BlockId::from_id(key));
@@ -338,6 +361,26 @@ impl SourceDatabase {
         self.settle_ordinary(cfgs);
     }
 
+    /// Where a block is, as text: the file whose code it is in, or that it is in what a macro made.
+    #[instrument(level = "trace", skip(self))]
+    fn block_owner(&self, block: ra_ap_hir_def::BlockId) -> String {
+        match block.ast_id(&self.db).file_id.file_id() {
+            Some(file) => self.vfs.file_path(file.file_id(&self.db)).to_string(),
+            None => MACRO_OWNER.to_owned(),
+        }
+    }
+
+    /// The owners of `blocks` with how many each has, most first.
+    fn owners_top(blocks: &[&str]) -> String {
+        let mut counted: std::collections::BTreeMap<&str, u64> = std::collections::BTreeMap::new();
+        for owner in blocks {
+            *counted.entry(owner).or_default() += 1;
+        }
+        let mut sorted: Vec<(&str, u64)> = counted.into_iter().collect();
+        sorted.sort_by_key(|(owner, count)| (std::cmp::Reverse(*count), *owner));
+        sorted.iter().take(5).map(|(owner, count)| format!("{owner}={count}")).collect::<Vec<_>>().join(" ")
+    }
+
     /// The database's revision now, which a context's flips are measured from.
     pub(super) fn revision(&self) -> salsa::Revision {
         salsa::plumbing::current_revision(&self.db)
@@ -360,10 +403,13 @@ impl SourceDatabase {
     pub(super) fn forget_changed_since(&mut self, revision: salsa::Revision) {
         let _forget = crate::Segment::begin("forget_changed");
         let started = std::time::Instant::now();
+        let before = self.revision();
         let forgotten = salsa::Database::forget_memos_changed_after(&mut self.db, revision);
         tracing::info!(
             target: "cordial::eviction",
             forgotten,
+            revision_before = ?before,
+            revision_after = ?self.revision(),
             top = %Self::forgotten_top(),
             micros = u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX),
             "what a flipped context changed is forgotten"
@@ -405,9 +451,29 @@ impl SourceDatabase {
         for dead in [&dead_impls, &dead_traits, &dead_enums, &dead_blocks] {
             all.extend(dead.iter().copied());
         }
+        // Why each undeclared block is not declared, before the forget takes what says so: gone (and how), or in a
+        // module the map does not have.
+        let reasons = {
+            let db = &self.db;
+            attach_db(db, || {
+                let mut counted: std::collections::BTreeMap<String, u64> = std::collections::BTreeMap::new();
+                for key in &dead_blocks {
+                    if let ra_ap_hir_def::declaration::Declaration::Absent(absence) =
+                        ra_ap_hir_def::declaration::block_declaration(db, BlockId::from_id(*key))
+                    {
+                        *counted.entry(format!("{absence:?}")).or_default() += 1;
+                    }
+                }
+                counted.iter().map(|(reason, count)| format!("{reason}={count}")).collect::<Vec<_>>().join(" ")
+            })
+        };
+        let before = self.revision();
         let forgotten = salsa::Database::forget_memos_for_inputs(&mut self.db, &all);
         tracing::info!(
             target: "cordial::eviction",
+            revision_before = ?before,
+            revision_after = ?self.revision(),
+            blocks_absent_because = %reasons,
             impls = impls.len() as u64,
             impls_undeclared = dead_impls.len() as u64,
             traits = traits.len() as u64,
@@ -426,11 +492,14 @@ impl SourceDatabase {
     #[instrument(level = "debug", skip(self, items))]
     pub(super) fn forget_flipped(&mut self, items: &[salsa::Id]) {
         let _forget = crate::Segment::begin("forget_flipped");
+        let before = self.revision();
         let forgotten = salsa::Database::forget_memos_for_inputs(&mut self.db, items);
         tracing::info!(
             target: "cordial::eviction",
             items = items.len() as u64,
             forgotten,
+            revision_before = ?before,
+            revision_after = ?self.revision(),
             top = %Self::forgotten_top(),
             "memos of items only a flipped context has are forgotten"
         );

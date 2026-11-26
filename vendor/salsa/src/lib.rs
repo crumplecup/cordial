@@ -270,7 +270,7 @@ mod flatten;
 mod stamps;
 pub use flatten::{
     RunBuilder, Runs, deep_verifications, deep_verifications_by_durability, last_forgotten, deep_verifications_by_ingredient, edges_expanded, flatten_breadth, persisted_executions,
-    set_verifications,
+    set_verifications, revisions_started, input_writes, deep_verification_outcomes, deep_unchanged_by_ingredient,
 };
 mod function;
 mod hash;

@@ -203,6 +203,7 @@ impl<C: Configuration> IngredientImpl<C> {
         // Also, we don't access any other data from the table while `r` is active.
         let data = unsafe { &mut *data_raw };
 
+        crate::flatten::note_input_write(C::DEBUG_NAME);
         ::tracing::debug!(
             target: "salsa::write",
             input = C::DEBUG_NAME,

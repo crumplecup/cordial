@@ -522,6 +522,7 @@ impl MemoHeader {
                     database_key_index,
                 );
 
+                crate::flatten::note_deep_outcome(database_key_index.ingredient_index(), result.is_unchanged());
                 if result.is_unchanged() {
                     self.mark_as_verified(zalsa, database_key_index);
                 }

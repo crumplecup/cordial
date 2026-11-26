@@ -58,7 +58,11 @@ impl SourceDatabase {
     ) -> CordialResult<()> {
         use crate::IrView;
         let mut inventory = graph.source_observability()?;
-        let seen = self.project_observability(inventory.crate_root(), Some(context))?;
+        let seen = {
+            let _project = crate::Segment::begin("project");
+            self.project_observability(inventory.crate_root(), Some(context))?
+        };
+        let _merge = crate::Segment::begin("merge");
         inventory.merge_context(seen);
         graph.set_attr(
             graph.root(),
