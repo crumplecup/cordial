@@ -130,13 +130,13 @@ fn priming_with(pressure: Pressure, leaf: bool) -> Result<Chunks> {
             .sum()
     };
     Ok(Chunks {
-        taken: sum(&|key| key == "prime.events"),
-        waited: sum(&|key| key == "prime.remaining"),
+        taken: sum(&|key| key.starts_with("prime.") && key.ends_with(".events")),
+        waited: sum(&|key| key.starts_with("prime.") && key.ends_with(".remaining")),
         evictions: sum(&|key| key.starts_with("eviction.prime_chunk.") && key.ends_with(".events")),
         caps: sum(&|key| key == "eviction.prime_chunk.cap"),
         eviction_events: sum(&|key| key == "eviction.prime_chunk.events"),
         workers: sum(&|key| key == "semantic.priming.workers"),
-        parts: sum(&|key| key == "prime.events"),
+        parts: sum(&|key| key.starts_with("prime.") && key.ends_with(".events")),
         dropped: sum(&|key| key == "eviction.prime_chunk.dropped_regenerable"),
         rounds: sum(&|key| key == "eviction.prime_chunk.rounds"),
         scaffolding: sum(&|key| key == "eviction.dropped_scaffolding"),
