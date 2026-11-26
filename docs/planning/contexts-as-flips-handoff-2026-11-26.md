@@ -3,6 +3,20 @@
 Supersedes the status sections of `contexts-as-flips-handoff.md` (2026-11-25). Read `contexts-as-flips.md` for the plan and
 `CLAUDE.md` for the rules. This file is what a new agent needs to pick up the unfinished work without repeating this session.
 
+## Update (same day, later): sections 1, 2 and the blocked default switch are resolved
+
+Commit `7e44ed70` committed the whole working tree and **made `Flips` the default**. The restored cross-crate test is green. The causes, in the order they were found and
+fixed (each by the method in section 2): keyed floor (seed from the persisted cells at restore, `workspace.rs`); a whole-module `origin` read (`DefMap::module_origin`); and
+`include_macro_invoc` being a non-persisted query over every module (now `persist`). The single-crate restore test had asserted `unless_kani` was unreached; it is gated by
+`cfg(not(kani))` so it is legitimately evaluated again, and the assertion is only `ordinary` now. `verifying_a_workspace_with_everything_makes_no_functions_evidence_again` replaced the
+"runs nothing" assertion (flips must make the file and crate lists it changed and put back once; what must not repeat is a function's evidence). Passing under the new default:
+`hir_def` (513), `cfg_atoms` (43), `an_edit_between_runs_reaches_the_taken_up_contexts`, `a_restored_contexts_facts_name_the_ordinary_functions_they_call`, the edit-reuse cfg-context test,
+the save-verification test, both restore tests, the in-process tests. **Not re-run since the default switch:** the rest of the suite that uses contexts (about 80 tests; 87 of 107 passed under flips earlier
+in the day, the 20 failures are all deleted, restated or fixed). If one fails, apply the "what does a failure mean" rule before touching it.
+
+**Next: Phase 3 deletion (section 3, step 3)**, stages (a) to (e), named tests only, then the doc correction (step 4) and one amenable run (step 5). The `cfg_context_mode` key is to be **removed**
+(`copies` becomes an error). Everything in sections 1 and 2 below describes how the work got here; read it for the method and the traps, not as open work.
+
 ## 0. The goal, and where it stands
 
 **Goal:** analyse cfg contexts by flipping the one base crate's cfg (`CfgContextMode::Flips`), correctly and without repeating
