@@ -1937,3 +1937,22 @@ fn a_region_says_how_many_revisions_started_in_it_and_which_inputs_were_written(
     assert_eq!(of("outer/written").3, "Crate=2", "and the input is named: {said:?}");
     assert_eq!(of("outer").1, 2, "a region holds what the ones in it did: {said:?}");
 }
+
+/// What a query that is running has read so far, said from inside it.
+#[salsa::tracked(returns(clone))]
+fn what_a_query_read(db: &dyn ra_ap_ide_db::base_db::SourceDatabase, krate: Crate) -> Vec<(String, u64)> {
+    let _ = crate_def_map(db, krate);
+    salsa::current_query_inputs().into_iter().map(|(name, count)| (name.to_owned(), count)).collect()
+}
+
+#[test]
+fn a_query_can_say_what_it_has_read_so_far() {
+    let _serial = SERIAL.lock().unwrap();
+    let (db, krate) = crate_of(&[("lib.rs", "pub fn f() {}\n")], CfgOptions::default());
+    let read = what_a_query_read(&db, krate);
+    assert!(
+        read.iter().any(|(name, count)| name == "external_def_map" && *count >= 1),
+        "it read the definition map of the crate, which it says by name: {read:?}"
+    );
+    assert!(salsa::current_query_inputs().is_empty(), "outside any query there is nothing it has read");
+}

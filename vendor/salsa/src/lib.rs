@@ -339,7 +339,7 @@ pub(crate) fn eviction_label(ingredient: &str) -> String {
 
 #[cfg(feature = "accumulator")]
 pub use self::accumulator::Accumulator;
-pub use self::active_query::Backtrace;
+pub use self::active_query::{Backtrace, current_query_inputs};
 pub use self::cancelled::Cancelled;
 
 pub use self::cycle::Cycle;

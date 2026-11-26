@@ -19,6 +19,7 @@ mod contexts;
     feature = "cli_layout"
 ))]
 mod crate_files;
+mod crate_narrative;
 mod def_map_cutoff;
 mod edition;
 mod eviction;

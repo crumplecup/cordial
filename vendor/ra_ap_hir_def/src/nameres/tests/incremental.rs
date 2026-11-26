@@ -724,3 +724,93 @@ pub fn f() {}
         assert_eq!(attribute_macro_invocations(&db, krate), 0, "and does not when it is, in {krate:?}");
     }
 }
+
+/// A file that two crates have is lowered once, and each crate has its own cfg: flipping the cfg of one of them is not
+/// flipping the other's, and the other still has the attribute macro its own cfg applies.
+#[test]
+fn flipping_the_cfg_of_one_crate_that_has_a_file_leaves_the_attribute_macro_the_other_applies() {
+    use salsa::Setter as _;
+    let fixture = r#"
+//- proc_macros: identity
+//- /a.rs crate:a
+mod m;
+//- /b.rs crate:b
+#[path = "m.rs"]
+mod m;
+//- /m.rs
+#[cfg_attr(not(flag), proc_macros::identity)]
+pub fn f() {}
+"#;
+    let (mut db, _) = TestDB::with_many_files(fixture);
+    let crates: Vec<_> =
+        local_crates(&db).into_iter().filter(|krate| attribute_macro_invocations(&db, *krate) == 1).collect();
+    assert_eq!(crates.len(), 2, "the file is in two crates: {crates:?}");
+    let (flipped_crate, other) = (crates[0], crates[1]);
+    let mut flipped = flipped_crate.cfg_options(&db).clone();
+    flipped.insert_atom(Symbol::intern("flag"));
+    flipped_crate.set_cfg_options(&mut db).to(flipped);
+    assert_eq!(attribute_macro_invocations(&db, flipped_crate), 0, "the macro is off in the crate that was flipped");
+    assert_eq!(attribute_macro_invocations(&db, other), 1, "and still applies in the one that was not");
+}
+
+/// What the events of one target said, by message's target and the names of their fields.
+#[derive(Clone, Default)]
+struct EventsSaid(std::sync::Arc<std::sync::Mutex<Vec<(String, Vec<&'static str>)>>>);
+
+impl tracing::Subscriber for EventsSaid {
+    fn enabled(&self, _: &tracing::Metadata<'_>) -> bool {
+        true
+    }
+    fn new_span(&self, _: &tracing::span::Attributes<'_>) -> tracing::span::Id {
+        tracing::span::Id::from_u64(1)
+    }
+    fn record(&self, _: &tracing::span::Id, _: &tracing::span::Record<'_>) {}
+    fn record_follows_from(&self, _: &tracing::span::Id, _: &tracing::span::Id) {}
+    fn event(&self, event: &tracing::Event<'_>) {
+        let fields = event.metadata().fields().iter().map(|field| field.name()).collect();
+        self.0.lock().unwrap().push((event.metadata().target().to_owned(), fields));
+    }
+    fn enter(&self, _: &tracing::span::Id) {}
+    fn exit(&self, _: &tracing::span::Id) {}
+}
+
+/// The call of an attribute macro that a cfg applied, asked to be expanded after the cfg is flipped so that it does not
+/// apply it: it cannot be, and the call says which crate made it, under which cfg and for which attribute, before it
+/// fails, so that a log of a run that fails there says what the call was.
+#[test]
+fn an_attribute_macro_call_that_the_cfg_no_longer_has_says_what_it_is_before_it_fails() {
+    use salsa::Setter as _;
+    let fixture = r#"
+//- proc_macros: identity
+//- /main.rs crate:main
+#[cfg_attr(not(flag), proc_macros::identity)]
+pub fn f() {}
+"#;
+    let (mut db, _) = TestDB::with_many_files(fixture);
+    let krate = db.fetch_test_crate();
+    let call = crate_def_map(&db, krate)
+        .modules(&db)
+        .flat_map(|(_, module)| module.scope.attr_macro_invocs().map(|(_, call)| call).collect::<Vec<_>>())
+        .next()
+        .expect("the macro applies while `flag` is not set");
+    let mut flipped = krate.cfg_options(&db).clone();
+    flipped.insert_atom(Symbol::intern("flag"));
+    krate.set_cfg_options(&mut db).to(flipped);
+
+    let said = EventsSaid::default();
+    let result = tracing::subscriber::with_default(said.clone(), || {
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let kind = call.loc(&db).kind.clone();
+            let _ = call.macro_arg_considering_derives(&db, &kind);
+        }))
+    });
+    assert!(result.is_err(), "a call for an attribute the cfg no longer has cannot be expanded");
+    let said = said.0.lock().unwrap().clone();
+    let event = said
+        .iter()
+        .find(|(target, _)| target == "cordial::attrs")
+        .unwrap_or_else(|| panic!("the call said what it is before it failed: {said:?}"));
+    for field in ["call", "krate", "krate_name", "attr_index", "cfg_atoms_that_are_not_the_target", "in_file", "item"] {
+        assert!(event.1.contains(&field), "the event says `{field}`: {event:?}");
+    }
+}

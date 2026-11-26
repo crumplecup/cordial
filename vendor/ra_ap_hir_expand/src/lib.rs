@@ -624,6 +624,35 @@ impl MacroCallId {
             }
             MacroCallKind::Attr { ast_id, censored_attr_ids: attr_ids, .. } => {
                 let node = ast_id.to_ptr(db).to_node(&root);
+                if attr_ids.invoc_attr().find_attr_range_with_source_opt(db, loc.krate, &node).is_none() {
+                    // Said before it panics, and with everything about the call: which crate made it, under which cfg,
+                    // for which attribute, of which item, and what that crate has now.
+                    let atoms = format!("{:?}", loc.krate.cfg_options(db));
+                    tracing::error!(
+                        target: "cordial::attrs",
+                        call = format_args!("{:#x}", salsa::plumbing::AsId::as_id(&self).as_bits()),
+                        krate = ?loc.krate,
+                        krate_name = %loc
+                            .krate
+                            .extra_data(db)
+                            .display_name
+                            .as_ref()
+                            .map_or_else(|| "?".to_owned(), |name| name.to_string()),
+                        attr_index = attr_ids.invoc_attr().item_tree_index(),
+                        cfg_atoms_that_are_not_the_target = %atoms
+                            .split('"')
+                            .skip(1)
+                            .step_by(2)
+                            .filter(|atom| {
+                                !(atom.starts_with("target_") || atom.starts_with("panic") || *atom == "rust_analyzer")
+                            })
+                            .collect::<Vec<_>>()
+                            .join(" "),
+                        in_file = ?loc.kind.file_id(),
+                        item = %node.syntax().to_string().chars().take(160).collect::<String>(),
+                        "an attribute macro call whose attribute its crate's cfg does not have, about to be expanded"
+                    );
+                }
                 let (_, attr) =
                     attr_ids.invoc_attr().find_attr_range_with_source(db, loc.krate, &node);
                 let range = attr

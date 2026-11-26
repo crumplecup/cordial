@@ -285,6 +285,9 @@ impl SourceDatabase {
     /// flipped.
     pub(super) fn begin_flips(&mut self, cfgs: &LocalCfgs) -> Option<FlipRun> {
         let _begin = crate::Segment::begin("begin_flips");
+        if self.flips_contexts() {
+            self.say_the_crates("ordinary", None);
+        }
         self.flips_contexts().then(|| FlipRun {
             start: self.revision(),
             ordinary: self.ordinary_state(cfgs),
@@ -347,6 +350,7 @@ impl SourceDatabase {
         self.forget_flipped(&only);
         self.forget_changed_since(run.start);
         self.settle_flipped_crates(cfgs);
+        self.say_the_crates("restored", None);
         self.report_slots("flips finished");
     }
 

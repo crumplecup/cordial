@@ -150,12 +150,61 @@ struct DirectFacts {
 #[instrument(level = "debug", skip(db, key))]
 #[hotpath::measure]
 fn direct_facts<'db>(db: &'db dyn SemanticDatabase, key: FunctionKey<'db>) -> Option<DirectFacts> {
-    collect_direct(db.root_database(), key.function(db))
+    let function = key.function(db);
+    let facts = collect_direct(db.root_database(), function);
+    if tracing::enabled!(target: "cordial::semantic::reach", tracing::Level::DEBUG) {
+        // What this memo depends on, by what it read: when something it should have read has changed and it is not out
+        // of date, the thing is not here.
+        let read = salsa::current_query_inputs()
+            .iter()
+            .map(|(name, count)| format!("{name}={count}"))
+            .collect::<Vec<_>>()
+            .join(" ");
+        tracing::debug!(
+            target: "cordial::semantic::reach",
+            function = ?function,
+            found = facts.is_some(),
+            reads = %read,
+            "the direct facts of a function were computed, and this is what they read"
+        );
+    }
+    facts
+}
+
+/// Whether a context is flipped now, so that the reachable facts say each function they go on to read: in the ordinary
+/// pass there are hundreds of thousands, and it is the flipped ones that are asked about.
+static WALK_IS_FLIPPED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Say that a context is flipped (or not any more).
+pub(super) fn say_the_walk_is_flipped(flipped: bool) {
+    WALK_IS_FLIPPED.store(flipped, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// The crate a function is in: its name and its number, for the log.
+fn crate_of(db: &RootDatabase, function: Function) -> (String, u64) {
+    use salsa::plumbing::AsId as _;
+    let krate = function.module(db).krate(db);
+    (
+        krate.display_name(db).map_or_else(|| "?".to_owned(), |name| name.to_string()),
+        krate.base().as_id().as_bits(),
+    )
 }
 
 #[instrument(level = "debug", skip(db, function))]
 #[hotpath::measure]
 fn collect_direct(db: &RootDatabase, function: Function) -> Option<DirectFacts> {
+    // Said before anything is read of it: the ids of what is asked for are what a query stack names, and a function that
+    // an earlier cfg made can fail to be read at all.
+    if tracing::enabled!(target: "cordial::semantic::reach", tracing::Level::DEBUG) {
+        let (krate, krate_id) = crate_of(db, function);
+        tracing::debug!(
+            target: "cordial::semantic::reach",
+            function = ?function,
+            krate = %krate,
+            krate_id = format_args!("{krate_id:#x}"),
+            "the direct facts of a function are asked for"
+        );
+    }
     // A saved memo can hold a function that an edit removed or renamed, and verifying what read it
     // asks again: it has no facts, as one that was never there has none.
     // Nor does one that only a cfg declared, when that cfg is not set: its id still holds its module.
@@ -185,6 +234,22 @@ fn collect_direct(db: &RootDatabase, function: Function) -> Option<DirectFacts> 
             anchor: usize::from(source.value.syntax().text_range().start()),
         };
         walk.node(body.syntax(), None);
+    }
+    if tracing::enabled!(target: "cordial::semantic::reach", tracing::Level::DEBUG) {
+        // The functions of its own crate that its body calls, which are what the reachable facts go on to read: where a
+        // function enters the walk is here.
+        let (krate_name, krate_id) = crate_of(db, function);
+        tracing::debug!(
+            target: "cordial::semantic::reach",
+            function = ?function,
+            label = %label,
+            krate = %krate_name,
+            krate_id = format_args!("{krate_id:#x}"),
+            made_by_a_macro = expanded,
+            targets = source_targets.len() as u64,
+            target_ids = %source_targets.iter().map(|target| format!("{target:?}")).collect::<Vec<_>>().join(" "),
+            "the same-crate functions a function calls"
+        );
     }
     Some(DirectFacts {
         facts: SemanticFunction::new(types::identity(db, function.into()), label, output)
@@ -349,6 +414,13 @@ pub(super) fn function_evidence<'db>(
     db: &'db dyn SemanticDatabase,
     key: FunctionKey<'db>,
 ) -> Option<SemanticFunction> {
+    if tracing::enabled!(target: "cordial::semantic::reach", tracing::Level::DEBUG) {
+        tracing::debug!(
+            target: "cordial::semantic::reach",
+            function = ?key.function(db),
+            "the evidence of a function is asked for"
+        );
+    }
     collect_reachable(db, key)
 }
 
@@ -452,9 +524,26 @@ fn collect_reachable(db: &dyn SemanticDatabase, key: FunctionKey<'_>) -> Option<
     tracing::debug!(target: "cordial::semantic::queries", function = facts.label().as_str(), query = "reachable", "semantic query executed");
     let mut visited = HashSet::new();
     let mut pending = vec![key.function(db)];
+    let mut came_from: std::collections::HashMap<Function, Function> = std::collections::HashMap::new();
     while let Some(function) = pending.pop() {
         if !visited.insert(function) {
             continue;
+        }
+        // Said before the facts of the function are asked for, which verifies what a saved memo of it read: the
+        // function is named here by the id that a query stack names it by, and by the function that called it.
+        if WALK_IS_FLIPPED.load(std::sync::atomic::Ordering::Relaxed)
+            && tracing::enabled!(target: "cordial::semantic::reach", tracing::Level::DEBUG)
+        {
+            let (krate, krate_id) = crate_of(db.root_database(), function);
+            tracing::debug!(
+                target: "cordial::semantic::reach",
+                root = ?key.function(db),
+                function = ?function,
+                called_by = ?came_from.get(&function),
+                krate = %krate,
+                krate_id = format_args!("{krate_id:#x}"),
+                "a function the reachable facts of a function go on to read"
+            );
         }
         let Some(direct) = direct_facts(db, FunctionKey::new(db, function)) else {
             incomplete = true;
@@ -469,6 +558,9 @@ fn collect_reachable(db: &dyn SemanticDatabase, key: FunctionKey<'_>) -> Option<
             {
                 reachable_result_errors.push(error.clone());
             }
+        }
+        for target in &direct.source_targets {
+            came_from.entry(*target).or_insert(function);
         }
         pending.extend(&direct.source_targets);
     }

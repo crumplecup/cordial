@@ -461,6 +461,33 @@ fn a_run_says_what_each_stage_wrote_started_walked_and_forgot() -> Result<()> {
     assert!(crates.contains(&"crates_flipped") && crates.contains(&"first_flipped"), "{crates:?}");
     let found = told_by("a function of the context is found").expect("how a function was found");
     assert!(found.contains(&"made") && found.contains(&"found_by") && found.contains(&"krate_flipped"), "{found:?}");
+    // The crates, at the three moments, and what the walk of the reachable facts read and why.
+    let crate_says = told_by("what a crate has: its cfg, whether the context flipped it").expect("the crates are said");
+    for field in ["phase", "krate", "krate_id", "flipped", "flags", "modules", "attr_macro_calls", "calls"] {
+        assert!(crate_says.contains(&field), "a crate says `{field}`: {crate_says:?}");
+    }
+    let phases: Vec<&str> = told
+        .iter()
+        .filter(|(said, _)| said.contains("what a crate has: its cfg, whether the context flipped it"))
+        .map(|_| "crate")
+        .collect();
+    assert!(phases.len() >= 3, "before, in and after the context: {} crates said", phases.len());
+    for message in [
+        "the direct facts of a function are asked for",
+        "the same-crate functions a function calls",
+        "the evidence of a function is asked for",
+    ] {
+        told_by(message).unwrap_or_else(|| panic!("the walk says: {message}"));
+    }
+    let walked = told_by("a function the reachable facts of a function go on to read")
+        .expect("while a context is flipped the walk says each function it reads");
+    for field in ["root", "function", "called_by", "krate", "krate_id"] {
+        assert!(walked.contains(&field), "the walk says `{field}`: {walked:?}");
+    }
+    let computed = told_by("the direct facts of a function were computed, and this is what they read").expect("what they read");
+    assert!(computed.contains(&"reads") && computed.contains(&"function"), "{computed:?}");
+    let resolved = told_by("a description was resolved to a definition, and this is what that read").expect("resolve says");
+    assert!(resolved.contains(&"reads") && resolved.contains(&"made_how") && resolved.contains(&"revision"), "{resolved:?}");
     let forgotten = told_by("saved queries keyed by what the definition map no longer declares").expect("the forget");
     assert!(forgotten.contains(&"blocks_absent_because") && forgotten.contains(&"revision_after"), "{forgotten:?}");
     Ok(())

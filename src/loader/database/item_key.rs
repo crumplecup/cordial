@@ -392,6 +392,36 @@ pub(super) fn definition(db: &RootDatabase, id: SemanticItemId) -> Option<Module
 #[instrument(level = "debug", skip(db, key))]
 #[hotpath::measure]
 fn resolve<'db>(db: &'db dyn SemanticDatabase, key: ItemKey<'db>) -> Option<ModuleDef> {
+    let found = find_definition(db, key);
+    if tracing::enabled!(target: "cordial::semantic::resolve", tracing::Level::DEBUG) {
+        // Said when it runs, and so only when it is not as it was: what it found, how that was made, and what it read,
+        // which is everything a change of the cfg has to reach to make it run again.
+        let root = db.root_database();
+        let read = salsa::current_query_inputs()
+            .iter()
+            .map(|(name, count)| format!("{name}={count}"))
+            .collect::<Vec<_>>()
+            .join(" ");
+        tracing::debug!(
+            target: "cordial::semantic::resolve",
+            description = %description_of_text(key.descriptor(db)),
+            found = found.is_some(),
+            found_is = %found.map_or_else(String::new, |definition| format!("{definition:?}").chars().take(60).collect()),
+            made_how = ?Site::parse(key.descriptor(db)).map(|site| if site.chain.is_empty() { "written" } else { "generated" }),
+            revision = ?salsa::plumbing::current_revision(root),
+            reads = %read,
+            "a description was resolved to a definition, and this is what that read"
+        );
+    }
+    found
+}
+
+/// A description cut short, for the log.
+fn description_of_text(text: &str) -> String {
+    text.chars().take(200).collect()
+}
+
+fn find_definition<'db>(db: &'db dyn SemanticDatabase, key: ItemKey<'db>) -> Option<ModuleDef> {
     let root = db.root_database();
     let descriptor = key.descriptor(db);
     let site = Site::parse(descriptor)?;

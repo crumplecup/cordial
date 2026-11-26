@@ -515,6 +515,9 @@ impl SourceDatabase {
         files: &Files<'_>,
         graph: &mut CrateIr,
     ) -> CordialResult<()> {
+        if files.context.is_in_place() {
+            self.say_the_crates(&format!("flipped {context}"), Some(&files.context.crate_set()));
+        }
         attach_db(&self.db, || {
             let sema = Semantics::new(&self.db);
             let roots = self

@@ -524,6 +524,39 @@ impl fmt::Debug for CapturedQuery {
     }
 }
 
+impl ActiveQuery {
+    /// The queries and inputs this query has read so far.
+    fn read_keys(&self) -> impl Iterator<Item = DatabaseKeyIndex> + '_ {
+        self.input_outputs
+            .iter()
+            .filter(|edge| matches!(edge.kind(), crate::zalsa_local::QueryEdgeKind::Input))
+            .map(|edge| edge.key())
+    }
+}
+
+/// What the query that is running has read so far, by the name of what it read and how many times, most first: what
+/// the memo it will make depends on. Empty when no query is running. For saying, in the log, why a memo is not out of
+/// date when something it should have read has changed: the thing is not in this list.
+pub fn current_query_inputs() -> Vec<(&'static str, u64)> {
+    crate::with_attached_database(|db| {
+        let zalsa = db.zalsa();
+        db.zalsa_local()
+            .try_with_query_stack(|stack| {
+                let mut counted: std::collections::HashMap<&'static str, u64> = std::collections::HashMap::new();
+                if let Some(active) = stack.last() {
+                    for key in active.read_keys() {
+                        *counted.entry(zalsa.lookup_ingredient(key.ingredient_index()).debug_name()).or_default() += 1;
+                    }
+                }
+                let mut sorted: Vec<(&'static str, u64)> = counted.into_iter().collect();
+                sorted.sort_by_key(|(name, count)| (std::cmp::Reverse(*count), *name));
+                sorted
+            })
+            .unwrap_or_default()
+    })
+    .unwrap_or_default()
+}
+
 pub struct Backtrace(Box<[CapturedQuery]>);
 
 impl Backtrace {
