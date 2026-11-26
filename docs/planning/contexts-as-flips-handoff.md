@@ -14,7 +14,7 @@ now executes fewer queries than copies in every context region, findings are ide
 flips drops twice the bodies") are out of date, and step 2 of section 2 is done (the cause was the LRU, not `evict_quietly`).
 Next: the remaining stale causes in the plan's last status section, then amenable parity (needs Erik's go-ahead and a
 stated prediction). Erik's rule for now: hold memory, no eviction work, judge by query counts. Do not run `cargo fmt` (it
-rewrites the whole workspace, vendor included). Logs of the runs are in `~/.cache/flips-runs/`.
+rewrites the whole workspace, vendor included).
 
 ## 1. Where things stand (as of 2026-11-25, before the LRU fix)
 
@@ -88,7 +88,7 @@ longer a cause (it was 17,496). What remains, by cause:
    all. First write a unit test: a flipped pass whose bodies are read, then a context finished, then the bodies read
    again, counting `Body::with_source_map_` executions.
 3. **Harvest and inventories.** 30.9k macro expansions in the harvest (copies: 5.1k) and 19.4k in inventories (copies:
-   1.2k). After 1 and 2, re-read the stale causes by region (`byregion.py`); what is left is first-time work or a
+   1.2k). After 1 and 2, re-read the stale causes by region (`rg` the `salsa::stale` events between two segment events); what is left is first-time work or a
    dependency that is still too wide.
 4. **`finish_flips`** (53k queries): `settle_bodies` re-reads every body of every crate it reaches.
 5. **The latent attach hazard** (above): consider `ra_ap_hir::attach_db` at the entry points that run top-level salsa
@@ -156,10 +156,8 @@ cp ~/.cordial/elicit_doc/metrics.json flips-metrics.json; cp -r ~/.cordial/elici
 - Do not pass `CORDIAL_QUERY_STEPS` for timing: it turns on cordial's spans and costs what a profile does.
 - `metrics.json` has `segment.<region>.{micros,queries,verified_memos,verified_edges,keyed_reads,keyed_touches}` summed per
   region, and `notes` with `segment.<region>.top` (the six queries executed most) and `.verified_top`.
-- Analysis scripts (in `docs/planning/contexts-as-flips-tools/`, Python 3, no dependencies):
-  `sed 's/\x1b\[[0-9;]*m//g' flips.log | python3 stale.py` (stale memos by query and by cause);
-  `... | python3 byregion.py` (the same, attributed to the region that ends after each event);
-  `python3 cmp.py copies=copies-metrics.json flips=flips-metrics.json` (regions side by side, eviction counters).
+- Read a log with `rg`: `salsa::stale` events say which memo went stale and what changed (`memo="..." changed="..."`), and every
+  `cordial::segment` event says its region, its queries and its walks; compare two runs by their `metrics.json` values.
 - Regions are paths such as `projection/contexts/context/harvest`; a metric's name replaces `/` with `_`.
 - To debug a failing real run, read it at `RUST_LOG=cordial=debug` first: the span path in front of every event is the
   call chain; `salsa::function::execute` events say the query-stack depth (`depth 0` is a call from cordial code, with no

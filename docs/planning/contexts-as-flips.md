@@ -295,7 +295,7 @@ verifying a memo, with no `attach_db`. The floor is now a crate's (`touch_all(db
 phase is 338,336 in flips and 338,329 in copies (it had been 418,629: the floor); findings: 85 files each, none differing.
 Stale memos in flips fell from 35,259 to 15,113 and none is now stale because of a key.
 
-**Repeated work left, by cause (`RUST_LOG=salsa::stale=debug,cordial::segment=info`, `scratchpad/stale.py`):**
+**Repeated work left, by cause (`RUST_LOG=salsa::stale=debug,cordial::segment=info`):**
 1. `Body::of_` stale because `Body::with_source_map_` changed, 7,379: a memo that was dropped and computed again cannot
    backdate, so its dependents go stale though the value is the same. Bodies are dropped by the LRU eviction between
    stages (10,791 in flips against 4,950 in copies). Finding why flips drops twice as many is next.
@@ -334,7 +334,7 @@ Projection time from the log: 28.2 s flips, 30.5 s copies; contexts 4.0 s agains
 with the LRU lifted). The wall time of the first run (97 s against 46 s) is `cargo doc` run cold before the projection
 and cached for the second run, not the analysis.
 
-**Left, by cause** (`stale.py` on the flips log): `resolve <- generated_in` 944; `direct_facts` and `resolve <- data` 368
+**Left, by cause** (the `salsa::stale` events of the flips log): `resolve <- generated_in` 944; `direct_facts` and `resolve <- data` 368
 each (a module cell's whole data); `crate_module_cells` 624; `cfg_options` 339. Memos re-validated: harvest 216,833 and
 `finish_flips` 222,191 against 17,960 in copies; cheap in time (harvest 1.0 s against 3.5 s) but a number to beat.
 `contexts_context_observability` is 2.5 s in flips against 1.6 s in copies although it executes fewer queries (8,892 against
