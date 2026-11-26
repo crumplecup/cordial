@@ -56,6 +56,15 @@ macro_rules! readers {
             evidence::optional(self, id, crate::ir::ATTR_SOURCE_FILE_ATTRIBUTES)
         }
 
+        /// Read the attributes of an item in every cfg context that resolved what the ordinary build could not.
+        #[instrument(level = "trace", skip(self), err(level = "warn"))]
+        fn source_context_attributes(
+            &self,
+            id: NodeId,
+        ) -> CordialResult<Vec<crate::ir::SourceContextAttributes>> {
+            Ok(evidence::optional(self, id, crate::ir::ATTR_SOURCE_CONTEXT_ATTRIBUTES)?.unwrap_or_default())
+        }
+
         /// Read loader-projected tracing declarations without accessing source syntax.
         #[cfg(feature = "tracing")]
         #[instrument(level = "trace", skip(self), err(level = "warn"))]

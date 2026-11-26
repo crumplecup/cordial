@@ -303,6 +303,8 @@ impl SourceDatabase {
             ));
             crate::process_memory::log("planning scan done");
         }
+        // Read before any context is entered, while the crates have the ordinary cfg.
+        let unresolved = self.files_with_unresolved_attributes(paths);
         let mut failure = None;
         // The context the cfg is as of: a flip is written over it, so the nearest one is taken next.
         let mut current = ordinary.clone();
@@ -353,6 +355,7 @@ impl SourceDatabase {
                 paths,
                 nodes,
                 context: &added,
+                unresolved: &unresolved,
             };
             let stage = std::time::Instant::now();
             let harvest = crate::Segment::begin("harvest");
@@ -496,6 +499,70 @@ impl SourceDatabase {
             krate_flipped = context.crate_set().contains(&krate.base()),
             "a function of the context is found"
         );
+    }
+
+    /// The files, of those given, whose attributes the ordinary build could not resolve for want of a scope.
+    #[instrument(level = "debug", skip_all)]
+    fn files_with_unresolved_attributes(&self, paths: &[PathBuf]) -> BTreeSet<PathBuf> {
+        let unresolved: BTreeSet<PathBuf> = paths
+            .iter()
+            .filter(|path| {
+                let Ok(file) = self.file_id(path) else {
+                    return false;
+                };
+                let key = super::super::queries::FileKey::new(&self.db, file, path.to_path_buf());
+                super::super::queries::file_facts(&self.db, key)
+                    .as_ref()
+                    .is_some_and(|facts| facts.attributes().has_unresolved())
+            })
+            .cloned()
+            .collect();
+        tracing::info!(
+            target: "cordial::semantic::instrument",
+            files = paths.len() as u64,
+            unresolved = unresolved.len() as u64,
+            "the files whose attributes the ordinary build could not resolve"
+        );
+        unresolved
+    }
+
+    /// Record, on the node of each item of `path`, its attributes as this context reads them: the context is where
+    /// the file has a scope, so what the ordinary build could not say of an attribute path is said here.
+    #[instrument(level = "debug", skip(self, nodes, graph, context), err(level = "warn"))]
+    fn record_context_attributes(
+        &self,
+        path: &Path,
+        file: ra_ap_vfs::FileId,
+        context: &SemanticContextKey,
+        nodes: &FunctionNodes,
+        graph: &mut CrateIr,
+    ) -> CordialResult<()> {
+        let key = super::super::queries::FileKey::new(&self.db, file, path.to_path_buf());
+        let Some(facts) = super::super::queries::file_facts(&self.db, key).as_ref() else {
+            return Ok(());
+        };
+        let (mut items, mut resolved) = (0u64, 0u64);
+        for item in facts.attributes().items() {
+            let range = TextRange::new(
+                (item.range().start() as u32).into(),
+                (item.range().end() as u32).into(),
+            );
+            let Some(node) = nodes.get(path, range) else {
+                continue;
+            };
+            items += 1;
+            resolved += item.attributes().iter().filter(|attribute| !attribute.instrument_unresolved()).count() as u64;
+            push_attributes(graph, node, crate::SourceContextAttributes::new(context.clone(), item.clone()))?;
+        }
+        tracing::info!(
+            target: "cordial::semantic::instrument",
+            %context,
+            file = %path.display(),
+            items,
+            resolved,
+            "the attributes of a file's items as a context reads them"
+        );
+        Ok(())
     }
 
     /// Copy the active context's facts into `graph`.
@@ -658,6 +725,9 @@ impl SourceDatabase {
                 rust_analyzer_files += 1;
                 if in_place {
                     self.say_the_crates_of_a_file(path, file, files.context);
+                    if files.unresolved.contains(path) {
+                        self.record_context_attributes(path, file, context, files.nodes, graph)?;
+                    }
                 }
                 let tree = sema.parse(sema.attach_first_edition(file));
                 let flips = Flips::collect(&tree, pairs, Reach::Written);
@@ -832,6 +902,9 @@ struct Files<'a> {
     paths: &'a [PathBuf],
     nodes: &'a FunctionNodes,
     context: &'a crate::ContextCrates,
+    /// The files whose attributes the ordinary build could not resolve, which a context that has a scope for them
+    /// is asked to.
+    unresolved: &'a BTreeSet<PathBuf>,
 }
 
 /// Record that `node` is active in the context at `index`.
@@ -873,6 +946,22 @@ fn push_external_calls(
         node,
         crate::ATTR_EXTERNAL_CALLS,
         serde_json::to_value(calls)?,
+    )
+}
+
+/// Add one context's reading of the attributes of the item on `node` to those already recorded on it.
+#[instrument(level = "trace", skip(graph, entry, node), err(level = "warn"))]
+fn push_attributes(
+    graph: &mut CrateIr,
+    node: NodeId,
+    entry: crate::SourceContextAttributes,
+) -> CordialResult<()> {
+    let mut entries = crate::IrView::source_context_attributes(graph, node)?;
+    entries.push(entry);
+    graph.set_attr(
+        node,
+        crate::ATTR_SOURCE_CONTEXT_ATTRIBUTES,
+        serde_json::to_value(entries)?,
     )
 }
 

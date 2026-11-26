@@ -142,7 +142,7 @@ mod tracing_source;
 #[cfg(feature = "tracing")]
 pub use observability_source::{ATTR_SOURCE_OBSERVABILITY, SourceObservability};
 pub use source_attributes::{
-    ATTR_SOURCE_ATTRIBUTE, ATTR_SOURCE_FILE_ATTRIBUTES, SourceAttribute, SourceAttributeArgument,
+    ATTR_SOURCE_ATTRIBUTE, ATTR_SOURCE_CONTEXT_ATTRIBUTES, ATTR_SOURCE_FILE_ATTRIBUTES, SourceAttribute, SourceContextAttributes, SourceAttributeArgument,
     SourceAttributeArguments, SourceAttributedItem, SourceCrateLints, SourceFileAttributes,
     SourceInstrumentSyntax,
 };

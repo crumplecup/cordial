@@ -168,7 +168,21 @@ impl SourceDatabase {
                         "file facts",
                     ));
                 };
-                let attributes = facts.attributes();
+                // What the ordinary build could not resolve for want of a scope is what the contexts that had one say. The
+                // memoized inventory was made from the ordinary attributes, so a file that had any is read again.
+                let ordinary_unresolved = facts.attributes().has_unresolved();
+                let resolved;
+                let attributes = if ordinary_unresolved {
+                    resolved = resolved_attributes(outline, graph, path, facts.attributes())?;
+                    graph.set_attr(
+                        *module,
+                        crate::ATTR_SOURCE_FILE_ATTRIBUTES,
+                        serde_json::to_value(&resolved)?,
+                    )?;
+                    &resolved
+                } else {
+                    facts.attributes()
+                };
                 let ranges: Vec<_> = attributes
                     .items()
                     .iter()
@@ -193,7 +207,7 @@ impl SourceDatabase {
                     }
                 }
                 let inventory = match tracing_queries::tracing_inventory_file(&self.db, key) {
-                    Some(found) if !context_only => found.clone(),
+                    Some(found) if !context_only && !ordinary_unresolved => found.clone(),
                     // A context-only function, or a file the query declined: read
                     // it with the facts the graph holds, which reports why.
                     _ => {
@@ -220,6 +234,46 @@ impl SourceDatabase {
             Ok(())
         })
     }
+}
+
+/// `attributes` with each attribute the ordinary build could not resolve taken from the first cfg context that
+/// resolved it, as the node of the item recorded.
+#[cfg(feature = "tracing")]
+#[tracing::instrument(level = "debug", skip(outline, graph, attributes), err(level = "warn"))]
+fn resolved_attributes(
+    outline: &Outline,
+    graph: &CrateIr,
+    path: &Path,
+    attributes: &crate::SourceFileAttributes,
+) -> CordialResult<crate::SourceFileAttributes> {
+    let (mut unresolved, mut resolved) = (0u64, 0u64);
+    let mut items = Vec::with_capacity(attributes.items().len());
+    for item in attributes.items() {
+        if !item.has_unresolved() {
+            items.push(item.clone());
+            continue;
+        }
+        let range = ra_ap_syntax::TextRange::new(
+            (item.range().start() as u32).into(),
+            (item.range().end() as u32).into(),
+        );
+        let read = match outline.functions().get(path, range) {
+            Some(node) => crate::IrView::source_context_attributes(graph, node)?,
+            None => Vec::new(),
+        };
+        let now = item.resolved_by(read.iter().map(|entry| entry.item()));
+        unresolved += 1;
+        resolved += u64::from(!now.has_unresolved());
+        items.push(now);
+    }
+    tracing::info!(
+        target: "cordial::semantic::instrument",
+        file = %path.display(),
+        unresolved,
+        resolved,
+        "the items whose attributes the ordinary build could not resolve, and those a context did"
+    );
+    Ok(attributes.with_items(items))
 }
 
 /// The carrier of `file`'s text, parse and line index, refusing a file that did

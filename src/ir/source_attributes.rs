@@ -16,6 +16,9 @@ pub(crate) use native_types::type_key as native_type_key;
 pub const ATTR_SOURCE_FILE_ATTRIBUTES: &str = "source_file_attributes";
 /// Snapshot-bound syntax on a materialized attribute node.
 pub const ATTR_SOURCE_ATTRIBUTE: &str = "source_attribute";
+/// The attributes of an item as a cfg context read them, on the item's node, for the items whose attributes the ordinary
+/// build could not resolve.
+pub const ATTR_SOURCE_CONTEXT_ATTRIBUTES: &str = "source_context_attributes";
 
 /// Crate-root lint declarations, including conditional declarations.
 #[derive(
@@ -57,6 +60,49 @@ pub struct SourceAttributedItem {
     attributes: Vec<SourceAttribute>,
 }
 
+impl SourceAttributedItem {
+    /// This item with each attribute that was not resolved taken from the first of `others` that resolved it.
+    /// The others are the same item read in a cfg context, so an attribute is the one at the same place.
+    #[must_use]
+    pub(crate) fn resolved_by<'a>(&self, others: impl Iterator<Item = &'a SourceAttributedItem> + Clone) -> Self {
+        let attributes = self
+            .attributes
+            .iter()
+            .enumerate()
+            .map(|(index, attribute)| {
+                if !attribute.instrument_unresolved {
+                    return attribute.clone();
+                }
+                others
+                    .clone()
+                    .filter_map(|other| other.attributes.get(index))
+                    .find(|other| !other.instrument_unresolved && other.meta == attribute.meta)
+                    .unwrap_or(attribute)
+                    .clone()
+            })
+            .collect();
+        Self { attributes, ..self.clone() }
+    }
+
+    /// Whether any attribute of the item was not resolved.
+    pub(crate) fn has_unresolved(&self) -> bool {
+        self.attributes.iter().any(|attribute| attribute.instrument_unresolved)
+    }
+}
+
+/// An item's attributes as a cfg context read them.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_getters::Getters)]
+pub struct SourceContextAttributes {
+    context: crate::ir::SemanticContextKey,
+    item: SourceAttributedItem,
+}
+
+impl SourceContextAttributes {
+    pub(crate) fn new(context: crate::ir::SemanticContextKey, item: SourceAttributedItem) -> Self {
+        Self { context, item }
+    }
+}
+
 /// Attribute evidence collected during loading from the canonical file tree.
 /// Test-only modules and unsupported owners are excluded from item attachment,
 /// matching the attribute enricher's contract. This is not a census of all attrs.
@@ -72,6 +118,19 @@ pub struct SourceFileAttributes {
     #[getter(copy)]
     assume_specification: bool,
     items: Vec<SourceAttributedItem>,
+}
+
+impl SourceFileAttributes {
+    /// Whether any attribute of any item was not resolved.
+    pub(crate) fn has_unresolved(&self) -> bool {
+        self.items.iter().any(SourceAttributedItem::has_unresolved)
+    }
+
+    /// These attributes with `items` in place of the items.
+    #[must_use]
+    pub(crate) fn with_items(&self, items: Vec<SourceAttributedItem>) -> Self {
+        Self { items, ..self.clone() }
+    }
 }
 
 /// Canonical spacing for syntax tokens, without parsing a rendered attribute.
