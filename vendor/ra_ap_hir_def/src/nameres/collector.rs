@@ -1957,6 +1957,7 @@ impl<'db> DefCollector<'db> {
         }
         // What the finished map cannot show: what is unresolved, and the modules the globs import from.
         let mut reads = super::previous::Reads {
+            locals: Vec::new(),
             external_changed: FxHashSet::default(),
             carried_externals: FxHashMap::default(),
             unresolved: self
@@ -1979,6 +1980,9 @@ impl<'db> DefCollector<'db> {
         if let Some(Taken::Previous { built, .. }) = self.shared.as_ref().map(|shared| &shared.from) {
             reads.globs.extend(
                 built.reads.globs.iter().filter(|(importer, _)| self.taken_modules.contains(importer)),
+            );
+            reads.locals.extend(
+                built.reads.locals.iter().filter(|(reader, _)| self.taken_modules.contains(reader)),
             );
             reads
                 .unresolved
@@ -2091,6 +2095,7 @@ impl<'db> SharedWithOriginal<'db> {
         let reads = super::previous::Reads {
             unresolved: built.reads.unresolved.clone(),
             globs: built.reads.globs.clone(),
+            locals: built.reads.locals.clone(),
             external_changed: built.read_what_changed(db),
             carried_externals: FxHashMap::default(),
         };

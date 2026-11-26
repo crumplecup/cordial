@@ -18,6 +18,10 @@ pub(crate) struct Externals {
     pub(crate) by_module: FxHashMap<ModuleId, rustc_hash::FxHashSet<ModuleId>>,
     /// What was read on behalf of no module in particular.
     pub(crate) unattributed: rustc_hash::FxHashSet<ModuleId>,
+    /// The modules of the crate itself that were read while the map of the crate was made, by the module they were read
+    /// for: a module that imports a name through another module of its crate has read that module, whatever the name
+    /// is defined in.
+    pub(crate) local: FxHashMap<ModuleId, rustc_hash::FxHashSet<ModuleId>>,
 }
 
 struct Sink {
@@ -59,7 +63,7 @@ impl Collecting {
         let mine = Sink {
             krate,
             current: None,
-            found: Externals { by_module: FxHashMap::default(), unattributed: Default::default() },
+            found: Externals { by_module: FxHashMap::default(), unattributed: Default::default(), local: FxHashMap::default() },
         };
         let saved = SINK.with(|sink| sink.borrow_mut().replace(mine));
         Self { saved, ended: false }
@@ -72,6 +76,7 @@ impl Collecting {
         mine.map(|sink| sink.found).unwrap_or(Externals {
             by_module: FxHashMap::default(),
             unattributed: Default::default(),
+            local: FxHashMap::default(),
         })
     }
 }
@@ -129,6 +134,24 @@ pub(crate) fn note_read(owner: Crate, module: ModuleId) {
     });
 }
 
+/// `module`, of the map `owner` is making, is read: for the module whose imports are being resolved, if there is one. A
+/// module that reads another module of its own crate depends on it as it depends on a glob's source, and the names it
+/// imports through it are the ones that module has, not the ones the definitions say they are defined in.
+pub(crate) fn note_local_read(owner: Crate, module: ModuleId) {
+    if LOOKING_BACK.with(|count| count.get()) > 0 {
+        return;
+    }
+    SINK.with(|sink| {
+        if let Some(sink) = sink.borrow_mut().as_mut()
+            && sink.krate == owner
+            && let Some(reader) = sink.current
+            && reader != module
+        {
+            sink.found.local.entry(reader).or_default().insert(module);
+        }
+    });
+}
+
 /// What a finished map cannot show of what it was made of: what a module might have read and did not find, and the
 /// modules a glob import takes names from, which may have had none.
 #[derive(Default)]
@@ -138,6 +161,9 @@ pub(crate) struct Reads {
     pub(crate) unresolved: rustc_hash::FxHashSet<ModuleId>,
     /// Each glob import: the module that imports, and the module it imports from.
     pub(crate) globs: Vec<(ModuleId, ModuleId)>,
+    /// Each module of the crate that a module read while its names were resolved: the module that read, and the module it
+    /// read. What an import through a module has is what that module has.
+    pub(crate) locals: Vec<(ModuleId, ModuleId)>,
     /// The modules that read a module of another crate that has changed since. Not known when the map is made: it
     /// is said of the map made before, when the next is made.
     pub(crate) external_changed: rustc_hash::FxHashSet<ModuleId>,
@@ -194,6 +220,8 @@ pub(crate) fn remember(
     diagnostics: FxHashMap<ModuleId, Vec<super::diagnostics::DefDiagnostic>>,
     read: Externals,
 ) {
+    let mut reads = reads;
+    reads.locals.extend(read.local.iter().flat_map(|(reader, modules)| modules.iter().map(move |module| (*reader, *module))));
     tracing::info!(
         target: "cordial::def_map",
         modules_that_read_other_crates = read.by_module.len() as u64,

@@ -848,3 +848,95 @@ pub fn untouched() {}
         .unwrap_or_else(|| panic!("the map says what its reused modules held: {said:?}"));
     assert!(built.1.contains(&"taken_from_original"), "{built:?}");
 }
+
+/// The definition a crate's map gives a name in the module the crate has at its root, if it gives one in the value
+/// namespace.
+fn value_named(db: &TestDB, krate: base_db::Crate, name: &str) -> Option<crate::ModuleDefId> {
+    let name = hir_expand::name::Name::new_symbol_root(Symbol::intern(name));
+    crate_def_map(db, krate)
+        .modules(db)
+        .filter(|(_, module)| module.parent.is_none())
+        .find_map(|(_, module)| module.scope.get(&name).take_values())
+}
+
+/// A crate that re-exports a function of another, and the function an attribute macro made while a cfg applied it: both
+/// crates flipped so that the macro does not apply, the dependent's name is the function the other crate gives it, and
+/// not the one the macro made.
+#[test]
+fn a_crate_that_reexports_a_function_has_the_function_its_dependency_has_after_a_flip_turns_the_macro_off() {
+    use salsa::Setter as _;
+    let fixture = r#"
+//- proc_macros: identity
+//- /a.rs crate:a
+#[cfg_attr(not(flag), proc_macros::identity)]
+pub fn w() {}
+//- /b.rs crate:b deps:a
+pub use a::w;
+"#;
+    let (mut db, _) = TestDB::with_many_files(fixture);
+    let crates: Vec<_> = local_crates(&db);
+    let (a, b) = crates
+        .iter()
+        .copied()
+        .find_map(|a| crates.iter().copied().find(|b| *b != a && value_named(&db, *b, "w").is_some() && value_named(&db, a, "w").is_some()).map(|b| (a, b)))
+        .expect("both crates have a `w`");
+    // The crate with the attribute is the one whose map declares the call.
+    let (a, b) = if attribute_macro_invocations(&db, a) == 1 { (a, b) } else { (b, a) };
+    assert_eq!(value_named(&db, b, "w"), value_named(&db, a, "w"), "before the flip the dependent has the function its dependency has");
+    for krate in [a, b] {
+        let mut flipped = krate.cfg_options(&db).clone();
+        flipped.insert_atom(Symbol::intern("flag"));
+        krate.set_cfg_options(&mut db).to(flipped);
+    }
+    assert_eq!(attribute_macro_invocations(&db, a), 0, "the macro is off in the crate that has it");
+    assert_eq!(
+        value_named(&db, b, "w"),
+        value_named(&db, a, "w"),
+        "after the flip the dependent has the function its dependency has, and not the one the macro made"
+    );
+}
+
+/// The definition a module that is not the crate's root gives a name in the value namespace.
+fn value_named_below_the_root(db: &TestDB, krate: base_db::Crate, name: &str) -> Option<crate::ModuleDefId> {
+    let name = hir_expand::name::Name::new_symbol_root(Symbol::intern(name));
+    crate_def_map(db, krate)
+        .modules(db)
+        .filter(|(_, module)| module.parent.is_some())
+        .find_map(|(_, module)| module.scope.get(&name).take_values())
+}
+
+/// A child module of the dependent crate that imports what the crate's root re-exports from its dependency: both crates
+/// flipped so that the attribute macro of the function does not apply, the child has the function the dependency has, and
+/// not the one the macro made.
+#[test]
+fn a_module_that_imports_what_its_crate_reexports_has_the_function_its_dependency_has_after_a_flip() {
+    use salsa::Setter as _;
+    let fixture = r#"
+//- proc_macros: identity
+//- /a.rs crate:a
+#[cfg_attr(not(flag), proc_macros::identity)]
+pub fn w() {}
+//- /b.rs crate:b deps:a
+pub use a::w;
+mod m;
+//- /m.rs
+use crate::w;
+pub fn call() { w(); }
+"#;
+    let (mut db, _) = TestDB::with_many_files(fixture);
+    let crates: Vec<_> = local_crates(&db);
+    let a = *crates.iter().find(|krate| attribute_macro_invocations(&db, **krate) == 1).expect("crate a has the call");
+    let b = *crates.iter().find(|krate| value_named_below_the_root(&db, **krate, "w").is_some()).expect("crate b has `m`");
+    assert_eq!(value_named_below_the_root(&db, b, "w"), value_named(&db, a, "w"), "before the flip the child has the function `a` has");
+    for krate in [a, b] {
+        let mut flipped = krate.cfg_options(&db).clone();
+        flipped.insert_atom(Symbol::intern("flag"));
+        krate.set_cfg_options(&mut db).to(flipped);
+    }
+    assert_eq!(attribute_macro_invocations(&db, a), 0, "the macro is off in the crate that had it");
+    assert_eq!(
+        value_named_below_the_root(&db, b, "w"),
+        value_named(&db, a, "w"),
+        "after the flip the child has the function `a` has, and not the one the macro made"
+    );
+}

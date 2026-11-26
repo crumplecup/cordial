@@ -156,7 +156,7 @@ pub(super) fn close_over(
     }
     loop {
         let before = why.len();
-        for (importer, source) in &reads.globs {
+        for (importer, source) in reads.globs.iter().chain(&reads.locals) {
             if why.contains_key(source) {
                 why.entry(*importer).or_insert(Reason::Import(*source));
             }

@@ -366,7 +366,19 @@ impl DefMap {
     /// What `name` is in the scope of a module, in every namespace; legacy macros are not included. The reader
     /// depends on that name of that module.
     pub fn scope_get(&self, db: &dyn SourceDatabase, id: ModuleIdLt<'_>, name: &Name) -> PerNs {
-        self.scope_read(db, id, name).get(name)
+        let found = self.scope_read(db, id, name).get(name);
+        // The map of this crate is being made, and the name is one this module has by an import (a re-export): the module
+        // that is being resolved for has what that module has, and not what the definition's module has, so it depends on
+        // it. A name the module declares is the definition's module's own, and that is already followed.
+        if !self.frozen
+            && self.block.is_none()
+            && (found.types.is_some_and(|item| item.import.is_some())
+                || found.values.is_some_and(|item| item.import.is_some())
+                || found.macros.is_some_and(|item| item.import.is_some()))
+        {
+            previous::note_local_read(self.krate, unsafe { id.to_static() });
+        }
+        found
     }
 
     /// The legacy macros `name` is in the textual scope of a module. The reader depends on that name of that
