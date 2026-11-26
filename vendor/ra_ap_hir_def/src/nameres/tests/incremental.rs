@@ -940,3 +940,44 @@ pub fn call() { w(); }
         "after the flip the child has the function `a` has, and not the one the macro made"
     );
 }
+
+/// What a query that asks whether a function is declared reads of the module: a stand-in for what the tool asks of
+/// every function it evaluates.
+#[salsa::tracked]
+fn asks_whether_declared(db: &dyn SourceDatabase, function: crate::FunctionId) -> bool {
+    crate::declaration::function_declaration(db, function).is_declared()
+}
+
+/// A name added to a module (a function a cfg now declares) does not make what asks whether another function of the
+/// module is declared run again: the answer is the same, and it is the answer that is read, not the module's scope.
+#[test]
+fn what_asks_whether_a_function_is_declared_does_not_run_again_when_a_name_is_added_to_its_module() {
+    use salsa::Setter as _;
+    let fixture = r#"
+//- /a.rs crate:a
+pub fn stays() {}
+
+#[cfg(flag)]
+pub fn appears() {}
+"#;
+    let (mut db, _) = TestDB::with_many_files(fixture);
+    let krate = local_crates(&db)[0];
+    let Some(crate::ModuleDefId::FunctionId(stays)) = value_named(&db, krate, "stays") else {
+        panic!("the fixture has the function");
+    };
+    assert!(asks_whether_declared(&db, stays), "the function is declared");
+    assert!(value_named(&db, krate, "appears").is_none(), "not vacuous: the module does not have the other function yet");
+
+    let mut flipped = krate.cfg_options(&db).clone();
+    flipped.insert_atom(Symbol::intern("flag"));
+    krate.set_cfg_options(&mut db).to(flipped);
+    assert!(value_named(&db, krate, "appears").is_some(), "not vacuous: the flip added a name to the module");
+
+    let executed = db.log_executed(|| {
+        assert!(asks_whether_declared(&db, stays), "and the function is still declared");
+    });
+    let ran = |name: &str| executed.iter().filter(|event| event.contains(name)).count();
+    assert!(ran("module_declares") >= 1, "the module's declarations are read again, for they changed: {executed:?}");
+    assert_eq!(ran("function_in_scope"), 1, "and the answer for the function is made again, to be compared: {executed:?}");
+    assert_eq!(ran("asks_whether_declared"), 0, "what read the answer is not run again, for it is the same: {executed:?}");
+}

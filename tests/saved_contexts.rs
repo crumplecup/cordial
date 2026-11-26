@@ -60,6 +60,37 @@ fn functions(graph: &CrateIr) -> Vec<String> {
     names
 }
 
+/// A function that no cfg atom a context flips reaches is evaluated once by a run that flips the atom and puts it back:
+/// `ordinary` has an empty body and is not gated, so what the flip changes (a function `harness` that only `kani` has,
+/// and one `unless_kani` that only its absence has) is nothing that evaluating it reads. This is the repeated work
+/// the counts of a whole run cannot show: the same function, evaluated again for a result that is the same.
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn a_function_no_flipped_atom_reaches_is_evaluated_once_by_a_run_that_flips_and_restores() -> Result<()> {
+    cordial::init_tracing();
+    let metrics = support::semantic_metrics::QueryMetrics::default();
+    let subscriber = tracing_subscriber::registry()
+        .with(metrics.clone())
+        .with(cordial::tracing_fmt_layer());
+    let _subscriber = tracing::subscriber::set_default(subscriber);
+    let root = fixture()?;
+    let state = tempfile::tempdir().into_diagnostic()?;
+    let saved = SavedState::at(state.path().join("analysis-state"));
+    let (_, graph) = run(root.path(), &saved)?;
+    assert_eq!(functions(&graph), ["harness", "ordinary", "unless_kani"], "not vacuous: the run flipped `kani` and found the gated functions");
+    let counts = metrics.snapshot();
+    let evaluated = |name: &str| counts.get(&format!("direct:{name}")).copied().unwrap_or(0);
+    assert!(evaluated("harness") >= 1, "not vacuous: the flipped context evaluated what only it has: {counts:?}");
+    assert_eq!(
+        evaluated("ordinary"),
+        1,
+        "`ordinary` reads no atom the context flips, and was evaluated {} times: in the ordinary build, and again by the \
+         flip and by putting the cfg back: {counts:?}",
+        evaluated("ordinary")
+    );
+    Ok(())
+}
+
 #[test]
 #[tracing::instrument(level = "debug", err(level = "warn"))]
 fn a_restored_run_takes_the_contexts_up_again_and_computes_nothing_for_them() -> Result<()> {

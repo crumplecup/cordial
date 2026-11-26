@@ -160,9 +160,12 @@ fn direct_facts<'db>(db: &'db dyn SemanticDatabase, key: FunctionKey<'db>) -> Op
             .map(|(name, count)| format!("{name}={count}"))
             .collect::<Vec<_>>()
             .join(" ");
+        let (krate, _) = crate_of(db.root_database(), function);
         tracing::debug!(
             target: "cordial::semantic::reach",
             function = ?function,
+            name = %function.name(db.root_database()).as_str(),
+            krate = %krate,
             found = facts.is_some(),
             reads = %read,
             read_in_order = %salsa::current_query_inputs_in_order()

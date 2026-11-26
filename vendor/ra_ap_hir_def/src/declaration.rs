@@ -6,10 +6,14 @@
 //! has the module. A block's id is deleted with the body that made it, so that is asked before it is read. This says
 //! which, in a type.
 
-use crate::{BlockId, EnumId, FunctionId, ImplId, ItemContainerId, ModuleDefId, ModuleId, TraitId};
+use crate::{
+    BlockId, EnumId, ExternBlockId, FunctionId, ImplId, ItemContainerId, ModuleDefId, ModuleId, ModuleIdLt, TraitId,
+};
 use base_db::SourceDatabase;
+use rustc_hash::FxHashSet;
 use salsa::Existence;
 use salsa::plumbing::AsId;
+use triomphe::Arc;
 
 /// Whether an item is declared by the definition map now.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -61,88 +65,126 @@ pub fn block_declaration(db: &dyn SourceDatabase, block: BlockId) -> Declaration
     }
 }
 
+/// What the scope of a module of a finished map declares, as sets, or `None` when the crate's map has no such module.
+///
+/// Asking whether one item is declared must not be reading all of the scope: a reader of the scope is out of date when
+/// any name is added to it, and what asks about one function would run again for each one. The answer to each item is
+/// a query of its own (below) that reads these sets and is a `bool`, which is the same after a name is added, so what
+/// read it is not run again.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+struct DeclaredIn {
+    declarations: FxHashSet<ModuleDefId>,
+    impls: FxHashSet<ImplId>,
+    extern_blocks: FxHashSet<ExternBlockId>,
+}
+
+#[salsa::tracked(returns(ref))]
+fn module_declares<'db>(db: &'db dyn SourceDatabase, module: ModuleIdLt<'db>) -> Option<Arc<DeclaredIn>> {
+    // SAFETY: the module is of this database, and is not kept.
+    let module = unsafe { module.to_static() };
+    module.def_map(db).try_module_data(db, module).map(|data| {
+        Arc::new(DeclaredIn {
+            declarations: data.scope.declarations().collect(),
+            impls: data.scope.impls().collect(),
+            extern_blocks: data.scope.extern_blocks().collect(),
+        })
+    })
+}
+
+/// The module a function's declaring scope is of, and what that scope must hold for the function to be declared.
+fn container_scope(db: &dyn SourceDatabase, function: FunctionId) -> (ModuleId, Wanted) {
+    match function.loc(db).container {
+        ItemContainerId::ModuleId(module) => (module, Wanted::Declaration(ModuleDefId::FunctionId(function))),
+        ItemContainerId::ImplId(implementation) => {
+            (implementation.loc(db).container, Wanted::Impl(implementation))
+        }
+        ItemContainerId::TraitId(declared_trait) => {
+            (declared_trait.loc(db).container, Wanted::Declaration(ModuleDefId::TraitId(declared_trait)))
+        }
+        ItemContainerId::ExternBlockId(block) => (block.loc(db).container, Wanted::ExternBlock(block)),
+    }
+}
+
+/// What a scope has to have for an item to be declared by it.
+enum Wanted {
+    Declaration(ModuleDefId),
+    Impl(ImplId),
+    ExternBlock(ExternBlockId),
+}
+
+impl Wanted {
+    fn in_(&self, declared: &DeclaredIn) -> bool {
+        match self {
+            Self::Declaration(def) => declared.declarations.contains(def),
+            Self::Impl(implementation) => declared.impls.contains(implementation),
+            Self::ExternBlock(block) => declared.extern_blocks.contains(block),
+        }
+    }
+}
+
+/// Whether the module's scope has what is wanted. A query of the item, so that what asks is out of date when the answer
+/// changes and not when the scope does.
+fn scope_has(db: &dyn SourceDatabase, module: ModuleId, wanted: &Wanted) -> bool {
+    module_declares(db, module).as_ref().is_some_and(|declared| wanted.in_(declared))
+}
+
+#[salsa::tracked(returns(copy))]
+fn function_in_scope(db: &dyn SourceDatabase, function: FunctionId) -> bool {
+    let (module, wanted) = container_scope(db, function);
+    scope_has(db, module, &wanted)
+}
+
+#[salsa::tracked(returns(copy))]
+fn impl_in_scope(db: &dyn SourceDatabase, implementation: ImplId) -> bool {
+    scope_has(db, implementation.loc(db).container, &Wanted::Impl(implementation))
+}
+
+#[salsa::tracked(returns(copy))]
+fn trait_in_scope(db: &dyn SourceDatabase, declared_trait: TraitId) -> bool {
+    scope_has(db, declared_trait.loc(db).container, &Wanted::Declaration(ModuleDefId::TraitId(declared_trait)))
+}
+
+#[salsa::tracked(returns(copy))]
+fn enum_in_scope(db: &dyn SourceDatabase, declared_enum: EnumId) -> bool {
+    scope_has(
+        db,
+        declared_enum.loc(db).container,
+        &Wanted::Declaration(ModuleDefId::AdtId(crate::AdtId::EnumId(declared_enum))),
+    )
+}
+
 /// Whether the definition map declares the impl.
 pub fn impl_declaration(db: &dyn SourceDatabase, implementation: ImplId) -> Declaration {
-    let module = implementation.loc(db).container;
-    match in_scope(db, module, &|scope| scope.impls().any(|found| found == implementation)) {
-        Ok(()) => Declaration::Declared,
-        Err(absence) => Declaration::Absent(absence),
-    }
+    declaration_of(db, implementation.loc(db).container, || impl_in_scope(db, implementation))
 }
 
 /// Whether the definition map declares the trait.
 pub fn trait_declaration(db: &dyn SourceDatabase, declared_trait: TraitId) -> Declaration {
-    let module = declared_trait.loc(db).container;
-    match in_scope(db, module, &|scope| {
-        scope.declarations().any(|def| def == ModuleDefId::TraitId(declared_trait))
-    }) {
-        Ok(()) => Declaration::Declared,
-        Err(absence) => Declaration::Absent(absence),
-    }
+    declaration_of(db, declared_trait.loc(db).container, || trait_in_scope(db, declared_trait))
 }
 
 /// Whether the definition map declares the enum.
 pub fn enum_declaration(db: &dyn SourceDatabase, declared_enum: EnumId) -> Declaration {
-    let module = declared_enum.loc(db).container;
-    match in_scope(db, module, &|scope| {
-        scope
-            .declarations()
-            .any(|def| def == ModuleDefId::AdtId(crate::AdtId::EnumId(declared_enum)))
-    }) {
-        Ok(()) => Declaration::Declared,
-        Err(absence) => Declaration::Absent(absence),
-    }
-}
-
-/// Whether `module` is in the definition map and its scope, as the map has it now, says `found`. A module of a
-/// block is not asked: its scope is made by the block's map, which asking would run.
-fn in_scope(
-    db: &dyn SourceDatabase,
-    module: ModuleId,
-    found: &dyn Fn(&crate::item_scope::ItemScope) -> bool,
-) -> Result<(), Absence> {
-    if let Some(block) = module.block(db) {
-        // A module of a block is not asked: its scope is made by the block's map, which asking would run.
-        // SAFETY: the block is of this database, and is not kept.
-        return block_exists(db, unsafe { block.to_static() });
-    }
-    match module.def_map(db).try_module_data(db, module) {
-        Some(data) if found(&data.scope) => Ok(()),
-        _ => Err(Absence::NotDeclared),
-    }
+    declaration_of(db, declared_enum.loc(db).container, || enum_in_scope(db, declared_enum))
 }
 
 /// Whether the definition map declares `function`.
 pub fn function_declaration(db: &dyn SourceDatabase, function: FunctionId) -> Declaration {
-    match declared(db, function) {
-        Ok(()) => Declaration::Declared,
-        Err(absence) => Declaration::Absent(absence),
-    }
+    let (module, _) = container_scope(db, function);
+    declaration_of(db, module, || function_in_scope(db, function))
 }
 
-fn declared(db: &dyn SourceDatabase, function: FunctionId) -> Result<(), Absence> {
-    match function.loc(db).container {
-        ItemContainerId::ModuleId(module) => in_scope(db, module, &|scope| {
-            scope.declarations().any(|def| def == ModuleDefId::FunctionId(function))
-        }),
-        ItemContainerId::ImplId(implementation) => in_scope(
-            db,
-            implementation.loc(db).container,
-            &|scope| scope.impls().any(|found| found == implementation),
-        ),
-        ItemContainerId::TraitId(declared_trait) => in_scope(
-            db,
-            declared_trait.loc(db).container,
-            &|scope| {
-                scope
-                    .declarations()
-                    .any(|def| def == ModuleDefId::TraitId(declared_trait))
-            },
-        ),
-        ItemContainerId::ExternBlockId(block) => in_scope(db, block.loc(db).container, &|scope| {
-            scope.extern_blocks().any(|found| found == block)
-        }),
+/// Whether an item in `module` is declared. A module of a block is not asked for its scope: its scope is made by the
+/// block's map, which asking would run, and whether the block exists is not data a query can read, so it is said here.
+fn declaration_of(db: &dyn SourceDatabase, module: ModuleId, in_scope: impl FnOnce() -> bool) -> Declaration {
+    if let Some(block) = module.block(db) {
+        // SAFETY: the block is of this database, and is not kept.
+        return match block_exists(db, unsafe { block.to_static() }) {
+            Ok(()) => Declaration::Declared,
+            Err(absence) => Declaration::Absent(absence),
+        };
     }
+    if in_scope() { Declaration::Declared } else { Declaration::Absent(Absence::NotDeclared) }
 }
 
 /// Makes the definition map of `block` (or finds it made), for what must have run before it is read. A block in a
