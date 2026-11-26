@@ -284,7 +284,7 @@ impl Extracted {
                 tree,
                 root,
                 &|call| super::identity::macro_by_path(sema, call),
-                &|path, scope| super::identity::macro_at(sema, scope, path),
+                &|path, scope| super::identity::macro_resolution(sema, scope, path),
             )),
             #[cfg(feature = "verus_ir")]
             verus: Some(crate::ir::VerusFile::new(

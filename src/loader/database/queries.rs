@@ -132,7 +132,7 @@ fn collect_file_facts(
     Some(FileFacts {
         scope: crate::ir::SourceModuleScope::collect(&source),
         attributes: crate::ir::SourceFileAttributes::collect(&source, &|path, scope| {
-            identity::macro_at(&sema, scope, path)
+            identity::macro_resolution(&sema, scope, path)
         }),
     })
 }

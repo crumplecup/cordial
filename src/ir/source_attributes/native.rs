@@ -11,9 +11,29 @@ use ra_ap_syntax::{
 
 use tracing::instrument;
 
+/// What a written attribute path names, resolved from where it is written.
+pub(crate) enum AttributePathIdentity {
+    /// The macro it names.
+    Macro(crate::ir::SemanticMacroCall),
+    /// Not decided: there is no scope to resolve it from under the cfg the file is read in (a module of no crate's
+    /// tree, or an item whose `cfg` guard is off). What it names is not known, and is not "nothing".
+    NotInScope,
+    /// Decided: from where it is written it names no macro.
+    NotAMacro,
+}
+
+impl AttributePathIdentity {
+    /// The macro it names, when it names one.
+    pub(crate) fn into_macro(self) -> Option<crate::ir::SemanticMacroCall> {
+        match self {
+            Self::Macro(found) => Some(found),
+            Self::NotInScope | Self::NotAMacro => None,
+        }
+    }
+}
+
 /// Which macro a written attribute path names, resolved from where it is written.
-pub(crate) type AttributeIdentity<'a> =
-    &'a dyn Fn(&ast::Path, &SyntaxNode) -> Option<crate::ir::SemanticMacroCall>;
+pub(crate) type AttributeIdentity<'a> = &'a dyn Fn(&ast::Path, &SyntaxNode) -> AttributePathIdentity;
 
 impl SourceFileAttributes {
     #[instrument(level = "debug", skip(file, identify))]
@@ -149,6 +169,7 @@ fn attach(
                 meta: "doc = …".into(),
                 range: None,
                 instrument: false,
+                instrument_unresolved: false,
                 instrument_syntax: None,
             }),
             ast::AnyAttr::Attr(attr) => attr.meta().map(|meta| {
@@ -172,25 +193,31 @@ fn attach(
 /// Whether the attribute `meta` is `tracing`'s `instrument`, by the macro its
 /// path resolves to: an alias, a re-export or an import all count, and a
 /// look-alike from another crate does not. Inside a lone `cfg_attr` it is the
-/// wrapped attribute's path that is resolved.
+/// wrapped attribute's path that is resolved. The second answer is whether the
+/// path could not be resolved for want of a scope, which is not the same as
+/// resolving to something that is not `instrument`.
 #[instrument(level = "trace", skip(identify))]
-fn is_instrument(meta: &ast::Meta, identify: AttributeIdentity<'_>) -> bool {
-    let names_instrument = |path: ast::Path| {
-        identify(&path, meta.syntax()).is_some_and(|found| {
+fn is_instrument(meta: &ast::Meta, identify: AttributeIdentity<'_>) -> (bool, bool) {
+    let names_instrument = |path: ast::Path| match identify(&path, meta.syntax()) {
+        AttributePathIdentity::Macro(found) => (
             ["tracing_attributes", "tracing"]
                 .iter()
-                .any(|krate| found.is(krate, &["instrument"]))
-        })
+                .any(|krate| found.is(krate, &["instrument"])),
+            false,
+        ),
+        AttributePathIdentity::NotInScope => (false, true),
+        AttributePathIdentity::NotAMacro => (false, false),
     };
     match meta {
         ast::Meta::CfgAttrMeta(cfg) => {
             let metas: Vec<_> = cfg.metas().collect();
-            metas.first().is_some_and(|inner| {
-                (metas.len() == 1 || matches!(inner, ast::Meta::TokenTreeMeta(_)))
-                    && inner.path().is_some_and(names_instrument)
-            })
+            metas
+                .first()
+                .filter(|inner| metas.len() == 1 || matches!(inner, ast::Meta::TokenTreeMeta(_)))
+                .and_then(|inner| inner.path())
+                .map_or((false, false), names_instrument)
         }
-        _ => meta.path().is_some_and(names_instrument),
+        _ => meta.path().map_or((false, false), names_instrument),
     }
 }
 
@@ -221,12 +248,13 @@ fn attribute(meta: &ast::Meta, identify: AttributeIdentity<'_>) -> SourceAttribu
             format!("{name}({})", super::render_tokens(body.to_vec()))
         }
     };
-    let instrument = is_instrument(meta, identify);
+    let (instrument, instrument_unresolved) = is_instrument(meta, identify);
     SourceAttribute {
         path,
         meta: rendered,
         range: None,
         instrument,
+        instrument_unresolved,
         instrument_syntax: match meta {
             ast::Meta::CfgAttrMeta(cfg) => {
                 let metas: Vec<_> = cfg.metas().collect();

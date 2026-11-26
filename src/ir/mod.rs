@@ -158,6 +158,7 @@ pub(crate) use {
     },
     source_attributes::AttributeIdentity,
 };
+pub(crate) use source_attributes::AttributePathIdentity;
 #[cfg(feature = "homecoming_std")]
 mod trait_impls;
 mod view;

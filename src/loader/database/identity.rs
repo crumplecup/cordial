@@ -9,7 +9,7 @@ use ra_ap_hir::{
 use ra_ap_ide_db::RootDatabase;
 use ra_ap_syntax::{AstNode, WalkEvent, ast};
 
-use crate::ir::{SemanticCallee, SemanticMacroCall};
+use crate::ir::{AttributePathIdentity, SemanticCallee, SemanticMacroCall};
 
 /// Every macro invocation in `function`'s body, outside nested functions, with
 /// the macro it resolved to. Invocations inside closures count: an error event
@@ -118,22 +118,36 @@ pub(crate) fn macro_at(
     scope: &ra_ap_syntax::SyntaxNode,
     path: &ast::Path,
 ) -> Option<SemanticMacroCall> {
+    macro_resolution(sema, scope, path).into_macro()
+}
+
+/// What `path` names where `scope` is written, and when it cannot be said: code that has no scope under the cfg
+/// the crates have now is not resolved, which is not the same as resolving to no macro.
+#[tracing::instrument(level = "debug", skip(sema, scope, path))]
+#[hotpath::measure]
+pub(crate) fn macro_resolution(
+    sema: &Semantics<'_, RootDatabase>,
+    scope: &ra_ap_syntax::SyntaxNode,
+    path: &ast::Path,
+) -> AttributePathIdentity {
     // In inactive code the nearest scope may be an outer module. Its prelude is not evidence
     // of what a macro in the inactive module resolves to (a local macro may shadow it there).
-    let around = sema.scope(scope)?;
-    if around
-        .module()
-        .krate(sema.db)
-        .cfg(sema.db)
-        .check(&super::contexts::guard(scope))
-        == Some(false)
-    {
-        return None;
+    let Some(around) = sema.scope(scope) else {
+        say_instrument_unresolved(sema, scope, path, "the file has no scope in any crate's module tree", None);
+        return AttributePathIdentity::NotInScope;
+    };
+    let krate = around.module().krate(sema.db);
+    if krate.cfg(sema.db).check(&super::contexts::guard(scope)) == Some(false) {
+        say_instrument_unresolved(sema, scope, path, "the scope is inactive under the crate's cfg", Some(krate));
+        return AttributePathIdentity::NotInScope;
     }
     let mut kind = PathKind::Plain;
     let mut segments = Vec::new();
     for (index, segment) in path.segments().enumerate() {
-        match segment.kind()? {
+        let Some(segment_kind) = segment.kind() else {
+            return AttributePathIdentity::NotAMacro;
+        };
+        match segment_kind {
             ast::PathSegmentKind::Name(name) => segments.push(Name::new_root(name.text())),
             ast::PathSegmentKind::CrateKw => kind = PathKind::Crate,
             ast::PathSegmentKind::SelfKw => kind = PathKind::Super(0),
@@ -143,29 +157,32 @@ pub(crate) fn macro_at(
                     _ => PathKind::Super(1),
                 }
             }
-            _ => return None,
+            _ => return AttributePathIdentity::NotAMacro,
         }
         if index == 0 && segment.coloncolon_token().is_some() {
             kind = PathKind::Abs;
         }
     }
     // Where the path is resolved from: the module `Semantics` finds for the file, which is the first
-    // of the crates that hold it when there are several (a cfg context's copies of a crate name
-    // the files they do not change as the original's).
-    if let Some(around) = sema.scope(scope) {
-        tracing::debug!(
-            target: "cordial::semantic::identity",
-            written = %path.syntax().text(),
-            scope_crate = %super::edition::crate_label(sema.db, around.module().krate(sema.db).base()),
-            "resolving a macro path from a module"
-        );
-    }
-    let definition = sema
-        .resolve_mod_path(scope, &ModPath::from_segments(kind, segments))?
-        .find_map(|item| match item {
-            ItemInNs::Macros(definition) => Some(definition),
-            _ => None,
-        })?;
+    // of the crates that hold it when there are several.
+    tracing::debug!(
+        target: "cordial::semantic::identity",
+        written = %path.syntax().text(),
+        scope_crate = %super::edition::crate_label(sema.db, krate.base()),
+        "resolving a macro path from a module"
+    );
+    let Some(definition) = sema
+        .resolve_mod_path(scope, &ModPath::from_segments(kind, segments))
+        .and_then(|mut items| {
+            items.find_map(|item| match item {
+                ItemInNs::Macros(definition) => Some(definition),
+                _ => None,
+            })
+        })
+    else {
+        say_instrument_unresolved(sema, scope, path, "the path names no macro from the scope", Some(krate));
+        return AttributePathIdentity::NotAMacro;
+    };
     let found = SemanticMacroCall::new(
         definition.name(sema.db).as_str().to_owned(),
         definition
@@ -181,7 +198,31 @@ pub(crate) fn macro_at(
         krate = ?found.krate(),
         "macro path"
     );
-    Some(found)
+    AttributePathIdentity::Macro(found)
+}
+
+/// Say why a path that ends in `instrument` did not name a macro: only these, for they are what a function's
+/// instrumentation depends on, and a function that has `#[instrument]` and is reported as missing it has one of them
+/// behind it. The crate's cfg is what the answer was read under.
+fn say_instrument_unresolved(
+    sema: &Semantics<'_, RootDatabase>,
+    scope: &ra_ap_syntax::SyntaxNode,
+    path: &ast::Path,
+    why: &str,
+    krate: Option<ra_ap_hir::Crate>,
+) {
+    if path.segment().and_then(|segment| segment.name_ref()).is_none_or(|name| name.text() != "instrument") {
+        return;
+    }
+    tracing::debug!(
+        target: "cordial::semantic::instrument",
+        written = %path.syntax().text(),
+        why,
+        scope_crate = %krate.map_or_else(|| "none".to_owned(), |krate| super::edition::crate_label(sema.db, krate.base())),
+        cfg = %krate.map_or_else(String::new, |krate| format!("{:?}", krate.cfg(sema.db))),
+        file = ?sema.hir_file_for(scope),
+        "a path that ends in `instrument` did not name a macro"
+    );
 }
 
 /// What the function a call resolved to is: its own name, its crate, and the

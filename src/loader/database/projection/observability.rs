@@ -75,7 +75,7 @@ impl SourceDatabase {
                 tree,
                 root,
                 &|call| super::super::identity::macro_by_path(&sema, call),
-                &|path, scope| super::super::identity::macro_at(&sema, scope, path),
+                &|path, scope| super::super::identity::macro_resolution(&sema, scope, path),
             )
         }))
     }

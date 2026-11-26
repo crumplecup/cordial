@@ -6,6 +6,7 @@ mod instrument;
 mod native;
 #[cfg(feature = "tracing")]
 pub(crate) use native::AttributeIdentity;
+pub(crate) use native::AttributePathIdentity;
 mod native_types;
 pub use instrument::{SourceAttributeArgument, SourceAttributeArguments, SourceInstrumentSyntax};
 #[cfg(feature = "tracing")]
@@ -36,6 +37,12 @@ pub struct SourceAttribute {
     range: Option<super::SourceByteRange>,
     #[getter(copy)]
     instrument: bool,
+    /// Whether `instrument` could not be decided: the attribute is in code that has no scope in the cfg the file was read
+    /// under (a module of no crate's tree, or an item whose `cfg` guard is off), so what its path names was not
+    /// resolved. `instrument` is `false` then, and it is not an answer.
+    #[serde(default)]
+    #[getter(copy)]
+    instrument_unresolved: bool,
     /// Located argument evidence; absent when an instrument form is unsupported.
     instrument_syntax: Option<SourceInstrumentSyntax>,
 }
