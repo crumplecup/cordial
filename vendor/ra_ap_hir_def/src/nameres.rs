@@ -304,6 +304,7 @@ fn crate_label(krate: Crate) -> String {
 
 impl DefMap {
     /// A module's data. Reading a finished map's module depends on that module's cell and on no other.
+    #[track_caller]
     pub fn module_data<'a>(&'a self, db: &'a dyn SourceDatabase, id: ModuleIdLt<'_>) -> &'a ModuleData {
         let id = unsafe { id.to_static() };
         self.try_module_data(db, id).unwrap_or_else(|| {
@@ -399,6 +400,7 @@ impl DefMap {
     }
 
     /// A module's data if the map has the module.
+    #[track_caller]
     pub fn try_module_data<'a>(
         &'a self,
         db: &'a dyn SourceDatabase,
@@ -406,11 +408,12 @@ impl DefMap {
     ) -> Option<&'a ModuleData> {
         let id = unsafe { id.to_static() };
         previous::note_read(self.krate, id);
+        let caller = std::panic::Location::caller();
         if !self.frozen && self.cells.is_empty() {
             self.modules.get(&id)
         } else {
             self.cell_of(db, id).map(|cell| {
-                Self::say_a_whole_module_is_read(id);
+                Self::say_a_whole_module_is_read(id, caller);
                 &**cell.data(db)
             })
         }
@@ -420,7 +423,7 @@ impl DefMap {
     /// parent, children and every name in it), with the queries that asked, for the reads made while the facts of a
     /// function are being made: what asks one function a question about a module and is made again when any name in the
     /// module changes. The stack says which question.
-    fn say_a_whole_module_is_read(id: ModuleId) {
+    fn say_a_whole_module_is_read(id: ModuleId, caller: &std::panic::Location<'_>) {
         if !tracing::enabled!(target: "cordial::whole_module", tracing::Level::DEBUG) {
             return;
         }
@@ -433,7 +436,8 @@ impl DefMap {
         tracing::debug!(
             target: "cordial::whole_module",
             module = ?id,
-            queries = %stack.lines().take(14).collect::<Vec<_>>().join(" | "),
+            caller = %caller,
+            queries = %stack.lines().take(4).collect::<Vec<_>>().join(" | "),
             "a module is read as a whole by the facts of a function"
         );
     }

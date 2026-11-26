@@ -27,11 +27,13 @@ use hir_def::{
 };
 
 pub(crate) trait ChildBySource {
+    #[track_caller]
     fn child_by_source(&self, db: &dyn SourceDatabase, file_id: HirFileId) -> DynMap {
         let mut res = DynMap::default();
         self.child_by_source_to(db, &mut res, file_id);
         res
     }
+    #[track_caller]
     fn child_by_source_to(&self, db: &dyn SourceDatabase, map: &mut DynMap, file_id: HirFileId);
 }
 

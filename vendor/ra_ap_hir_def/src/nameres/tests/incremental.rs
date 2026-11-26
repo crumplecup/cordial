@@ -981,3 +981,139 @@ pub fn appears() {}
     assert_eq!(ran("function_in_scope"), 1, "and the answer for the function is made again, to be compared: {executed:?}");
     assert_eq!(ran("asks_whether_declared"), 0, "what read the answer is not run again, for it is the same: {executed:?}");
 }
+
+/// What a function that calls into another crate asks of the definition maps: the path `inner::helper`, from the root of
+/// the crate that calls it.
+#[salsa::tracked]
+fn resolves_a_path_into_another_crate(db: &dyn SourceDatabase, krate: base_db::Crate) -> bool {
+    use hir_expand::{mod_path::{ModPath, PathKind}, name::Name};
+
+    let map = crate_def_map(db, krate);
+    let path = ModPath::from_segments(
+        PathKind::Plain,
+        [Name::new_symbol_root(Symbol::intern("inner")), Name::new_symbol_root(Symbol::intern("helper"))],
+    );
+    let found = map.resolve_path_fp_with_macro(
+        crate::nameres::local_def_map(db, krate),
+        db,
+        crate::nameres::path_resolution::ResolveMode::Other,
+        map.root_module_id(),
+        &path,
+        crate::nameres::BuiltinShadowMode::Module,
+        None,
+    );
+    found.resolved_def.take_values().is_some()
+}
+
+/// Resolving a path into another crate does not run again when a name is added to the root of either crate: what it
+/// reads of each is the name it asks for.
+#[test]
+fn resolving_a_path_into_another_crate_does_not_run_again_when_a_name_is_added_to_a_root() {
+    use salsa::Setter as _;
+    let fixture = r#"
+//- /inner.rs crate:inner
+pub fn helper() {}
+
+#[cfg(flag)]
+pub fn appears_in_inner() {}
+//- /gated.rs crate:gated deps:inner
+pub fn ordinary() { inner::helper(); }
+
+#[cfg(flag)]
+pub fn appears_in_gated() {}
+"#;
+    let (mut db, _) = TestDB::with_many_files(fixture);
+    let crates = local_crates(&db);
+    let gated = *crates.iter().find(|krate| value_named(&db, **krate, "ordinary").is_some()).expect("crate gated");
+    assert!(resolves_a_path_into_another_crate(&db, gated), "not vacuous: the path resolves");
+
+    for krate in &crates {
+        let mut flipped = krate.cfg_options(&db).clone();
+        flipped.insert_atom(Symbol::intern("flag"));
+        krate.set_cfg_options(&mut db).to(flipped);
+    }
+    assert!(value_named(&db, gated, "appears_in_gated").is_some(), "not vacuous: the flip added a name to the root");
+    let executed = db.log_executed(|| {
+        assert!(resolves_a_path_into_another_crate(&db, gated), "and the path still resolves");
+    });
+    assert!(
+        !executed.iter().any(|event| event.contains("resolves_a_path_into_another_crate")),
+        "what resolved the path was run again, for a name it did not ask for: {executed:?}"
+    );
+}
+
+/// The function a syntax node is, found from where it is written: what the semantic layer asks to map a node to its
+/// definition.
+#[salsa::tracked]
+fn asks_for_the_function_written_here(db: &dyn SourceDatabase, function: crate::FunctionId) -> bool {
+    use crate::{AstIdLoc as _, ItemContainerId};
+    let loc = function.loc(db);
+    let ItemContainerId::ModuleId(module) = loc.container else { return false };
+    crate::declaration::declared_function(db, module, loc.ast_id()) == Some(function)
+}
+
+/// The function that a syntax node is, found from where it is written, is the function the module's scope declares, and
+/// there is none when a cfg switches the function off.
+#[test]
+fn the_function_a_node_is_found_from_where_it_is_written_is_the_one_the_scope_declares() {
+    use salsa::Setter as _;
+    let fixture = r#"
+//- /a.rs crate:a
+pub fn stays() {}
+
+#[cfg(flag)]
+pub fn appears() {}
+"#;
+    let (mut db, _) = TestDB::with_many_files(fixture);
+    let krate = local_crates(&db)[0];
+    let Some(crate::ModuleDefId::FunctionId(stays)) = value_named(&db, krate, "stays") else {
+        panic!("the fixture has the function");
+    };
+    assert!(asks_for_the_function_written_here(&db, stays), "the scope's function is the one found from its node");
+
+    let ordinary = krate.cfg_options(&db).clone();
+    let mut flipped = ordinary.clone();
+    flipped.insert_atom(Symbol::intern("flag"));
+    krate.set_cfg_options(&mut db).to(flipped);
+    let Some(crate::ModuleDefId::FunctionId(appears)) = value_named(&db, krate, "appears") else {
+        panic!("the flip declares the function");
+    };
+    assert!(asks_for_the_function_written_here(&db, appears), "and the function a cfg declares, while it does");
+    krate.set_cfg_options(&mut db).to(ordinary);
+    assert!(value_named(&db, krate, "appears").is_none(), "not vacuous: the cfg is back and the scope has no such function");
+    assert!(
+        !asks_for_the_function_written_here(&db, appears),
+        "the id of a function that a cfg no longer declares names no function"
+    );
+    assert!(asks_for_the_function_written_here(&db, stays), "and the other is as it was");
+}
+
+/// Finding the function a node is from where it is written does not run again when a name is added to its module.
+#[test]
+fn finding_the_function_a_node_is_does_not_run_again_when_a_name_is_added_to_its_module() {
+    use salsa::Setter as _;
+    let fixture = r#"
+//- /a.rs crate:a
+pub fn stays() {}
+
+#[cfg(flag)]
+pub fn appears() {}
+"#;
+    let (mut db, _) = TestDB::with_many_files(fixture);
+    let krate = local_crates(&db)[0];
+    let Some(crate::ModuleDefId::FunctionId(stays)) = value_named(&db, krate, "stays") else {
+        panic!("the fixture has the function");
+    };
+    assert!(asks_for_the_function_written_here(&db, stays));
+    let mut flipped = krate.cfg_options(&db).clone();
+    flipped.insert_atom(Symbol::intern("flag"));
+    krate.set_cfg_options(&mut db).to(flipped);
+    assert!(value_named(&db, krate, "appears").is_some(), "not vacuous: the flip added a name to the module");
+    let executed = db.log_executed(|| {
+        assert!(asks_for_the_function_written_here(&db, stays));
+    });
+    assert!(
+        !executed.iter().any(|event| event.contains("asks_for_the_function_written_here")),
+        "what asked for the function was run again, for a name it did not ask for: {executed:?}"
+    );
+}

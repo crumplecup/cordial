@@ -91,6 +91,38 @@ fn a_function_no_flipped_atom_reaches_is_evaluated_once_by_a_run_that_flips_and_
     Ok(())
 }
 
+/// A function that makes a call: `ordinary` calls `callee`, and the flip adds `harness` and takes `unless_kani` away, which
+/// are names in the module it is in and no concern of its. Its facts are not made again in the process that flipped.
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn a_function_that_makes_a_call_is_evaluated_once_by_a_run_that_flips_a_gate_in_its_module() -> Result<()> {
+    cordial::init_tracing();
+    let metrics = support::semantic_metrics::QueryMetrics::default();
+    let subscriber = tracing_subscriber::registry()
+        .with(metrics.clone())
+        .with(cordial::tracing_fmt_layer());
+    let _subscriber = tracing::subscriber::set_default(subscriber);
+    let root = fixture()?;
+    std::fs::write(
+        root.path().join("src/lib.rs"),
+        "pub fn callee() {}\npub fn ordinary() { callee(); }\n#[cfg(kani)]\npub fn harness() { ordinary(); }\n",
+    )
+    .into_diagnostic()?;
+    let state = tempfile::tempdir().into_diagnostic()?;
+    let saved = SavedState::at(state.path().join("analysis-state"));
+    run(root.path(), &saved)?;
+    let counts = metrics.snapshot();
+    let evaluated = |name: &str| counts.get(&format!("direct:{name}")).copied().unwrap_or(0);
+    assert!(evaluated("harness") >= 1, "not vacuous: the flip evaluated what only it has: {counts:?}");
+    assert_eq!(
+        evaluated("ordinary"),
+        1,
+        "`ordinary` reads no atom the context flips and was evaluated {} times: {counts:?}",
+        evaluated("ordinary")
+    );
+    Ok(())
+}
+
 #[test]
 #[tracing::instrument(level = "debug", err(level = "warn"))]
 fn a_restored_run_does_not_evaluate_again_a_function_the_context_does_not_reach() -> Result<()> {

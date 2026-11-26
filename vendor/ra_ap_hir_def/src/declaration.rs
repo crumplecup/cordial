@@ -40,6 +40,22 @@ impl Declaration {
     }
 }
 
+/// The function that `ast_id` is, written in `module`, when the module's scope declares it: what mapping a syntax node to
+/// its definition asks, without reading the scope as a whole. A function's id is made of where it is written (the module
+/// and the node) and not of what is declared, so it is known without the scope, and whether the scope declares it is the
+/// query of the function (`function_in_scope`), whose answer is the same when an unrelated name is added to the module.
+/// A module of a block is not asked: its scope is made by the block's map.
+pub fn declared_function(
+    db: &dyn SourceDatabase,
+    module: ModuleId,
+    ast_id: hir_expand::AstId<syntax::ast::Fn>,
+) -> Option<FunctionId> {
+    use crate::{AssocItemLoc, Intern as _};
+    debug_assert!(module.block(db).is_none(), "a module of a block is read through its map");
+    let function = AssocItemLoc { container: ItemContainerId::ModuleId(module), id: ast_id }.intern(db);
+    function_in_scope(db, function).then_some(function)
+}
+
 /// Whether `block` still exists, before anything of it is read, and the modules it is in up to the crate's.
 fn block_exists(db: &dyn SourceDatabase, block: BlockId) -> Result<(), Absence> {
     match salsa::Database::existence(db, block.as_id()) {

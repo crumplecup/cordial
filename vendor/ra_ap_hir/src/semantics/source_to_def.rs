@@ -268,6 +268,16 @@ impl<'db> SourceToDefCtx<'db, '_> {
         self.to_def(src, keys::IMPL)
     }
     pub(super) fn fn_to_def(&mut self, src: InFile<&ast::Fn>) -> Option<FunctionId> {
+        // A function written directly in a module is found from where it is written, which is what its id is made of.
+        // The map of everything the module declares, which is what the other containers are asked for it, is a
+        // dependency on every name in the module: a name added to it would make whatever asked about one function of it
+        // run again.
+        if let Some(ChildContainer::ModuleId(module)) = self.find_container(src.map(|it| it.syntax()))
+            && module.block(self.db).is_none()
+        {
+            let ast_id = src.file_id.ast_id_map(self.db).ast_id(src.value);
+            return hir_def::declaration::declared_function(self.db, module, InFile::new(src.file_id, ast_id));
+        }
         self.to_def(src, keys::FUNCTION)
     }
     pub(super) fn struct_to_def(&mut self, src: InFile<&ast::Struct>) -> Option<StructId> {

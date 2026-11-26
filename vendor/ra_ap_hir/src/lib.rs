@@ -587,6 +587,7 @@ impl Module {
     }
 
     /// Iterates over all child modules.
+    #[track_caller]
     pub fn children(self, db: &dyn HirDatabase) -> impl Iterator<Item = Module> {
         let def_map = self.id.def_map(db);
         let children = def_map.module_data(db, self.id)
@@ -655,6 +656,7 @@ impl Module {
     }
 
     /// Returns a `ModuleScope`: a set of items, visible in this module.
+    #[track_caller]
     pub fn scope(
         self,
         db: &dyn HirDatabase,
