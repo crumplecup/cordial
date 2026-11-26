@@ -814,3 +814,37 @@ pub fn f() {}
         assert!(event.1.contains(&field), "the event says `{field}`: {event:?}");
     }
 }
+
+/// A map made again after a flip says which attribute macro calls the modules it took from the map before held, so that a
+/// call of an attribute macro that the cfg turned off, still in the map, is told to be one that a reused module kept.
+#[test]
+fn a_map_made_again_says_which_attribute_macro_calls_its_reused_modules_held() {
+    use salsa::Setter as _;
+    let fixture = r#"
+//- proc_macros: identity
+//- /main.rs crate:main
+mod a;
+mod b;
+//- /a.rs
+#[cfg_attr(not(flag), proc_macros::identity)]
+pub fn f() {}
+//- /b.rs
+pub fn untouched() {}
+"#;
+    let (mut db, _) = TestDB::with_many_files(fixture);
+    let krate = db.fetch_test_crate();
+    let _ = crate_def_map(&db, krate);
+    let mut flipped = krate.cfg_options(&db).clone();
+    flipped.insert_atom(Symbol::intern("flag"));
+    krate.set_cfg_options(&mut db).to(flipped);
+    let said = EventsSaid::default();
+    tracing::subscriber::with_default(said.clone(), || {
+        let _ = crate_def_map(&db, krate);
+    });
+    let said = said.0.lock().unwrap().clone();
+    let built = said
+        .iter()
+        .find(|(target, fields)| target == "cordial::def_map" && fields.contains(&"taken_attr_macro_calls"))
+        .unwrap_or_else(|| panic!("the map says what its reused modules held: {said:?}"));
+    assert!(built.1.contains(&"taken_from_original"), "{built:?}");
+}

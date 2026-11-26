@@ -129,6 +129,21 @@ pub(super) fn collect_defs(
     collector.collect();
     let collected = started.elapsed();
     let taken = collector.shared_modules_taken;
+    // The attribute macro calls that the modules taken from the map made before hold: what a module that is taken says is
+    // what that map said, and a call of an attribute macro that a cfg has since turned off is in it if the module was
+    // taken though its cfg_attr changed.
+    let taken_calls: String = if tree_id.is_block() || !tracing::enabled!(target: "cordial::def_map", tracing::Level::DEBUG) {
+        String::new()
+    } else {
+        use salsa::plumbing::AsId as _;
+        collector
+            .taken_modules
+            .iter()
+            .filter_map(|module| collector.def_map.modules.get(module))
+            .flat_map(|data| data.scope.attr_macro_invocs().map(|(_, call)| format!("{:#x}", call.as_id().as_bits())))
+            .collect::<Vec<_>>()
+            .join(" ")
+    };
     let (mut def_map, mut local_def_map, reads) = collector.finish();
     def_map.shrink_to_fit();
     local_def_map.shrink_to_fit();
@@ -140,6 +155,7 @@ pub(super) fn collect_defs(
             root = ?def_map.krate.data(db).root_file_id,
             modules = def_map.modules.len() as u64,
             taken_from_original = taken,
+            taken_attr_macro_calls = %taken_calls,
             seed_micros = micros(seeded),
             resolve_micros = micros(collected - seeded),
             finish_micros = micros(started.elapsed() - collected),

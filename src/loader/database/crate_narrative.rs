@@ -26,6 +26,11 @@ fn flags_of(cfg: &str) -> String {
         .join(" ")
 }
 
+/// The attribute macro calls each crate declared before the contexts, to say what a context removed and added, and
+/// whether putting the cfg back gives the same ones.
+static ORDINARY_CALLS: std::sync::Mutex<Option<std::collections::HashMap<u64, std::collections::HashSet<u64>>>> =
+    std::sync::Mutex::new(None);
+
 impl SourceDatabase {
     /// Say, for each local crate, what it has now: its cfg flags, whether the context flipped it (`flipped` is the crates
     /// it did, and `None` before and after the contexts), and the numbers of the attribute macro calls its definition
@@ -53,6 +58,20 @@ impl SourceDatabase {
                     calls.extend(module.scope.attr_macro_invocs().map(|(_, call)| call.as_id().as_bits()));
                 }
                 calls.sort_unstable();
+                // Against the calls the crate declared before the contexts (said when there were none, and kept).
+                let id = krate.as_id().as_bits();
+                let now: std::collections::HashSet<u64> = calls.iter().copied().collect();
+                let (removed, added) = {
+                    let mut ordinary = ORDINARY_CALLS.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+                    let ordinary = ordinary.get_or_insert_with(Default::default);
+                    if phase == "ordinary" {
+                        ordinary.insert(id, now.clone());
+                        (0, 0)
+                    } else {
+                        let before = ordinary.get(&id).cloned().unwrap_or_default();
+                        (before.difference(&now).count() as u64, now.difference(&before).count() as u64)
+                    }
+                };
                 tracing::debug!(
                     target: "cordial::semantic::flip",
                     phase,
@@ -62,6 +81,8 @@ impl SourceDatabase {
                     flags = %flags_of(&format!("{:?}", krate.cfg_options(&self.db))),
                     modules,
                     attr_macro_calls = calls.len() as u64,
+                    calls_removed_since_ordinary = removed,
+                    calls_added_since_ordinary = added,
                     calls = %calls.iter().map(|call| format!("{call:#x}")).collect::<Vec<_>>().join(" "),
                     "what a crate has: its cfg, whether the context flipped it, and the attribute macro calls its map declares"
                 );

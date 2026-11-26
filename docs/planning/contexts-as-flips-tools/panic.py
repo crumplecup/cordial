@@ -15,7 +15,7 @@ import sys
 ORDER = {
     "the cfg": None,
     "about to be expanded": ["call", "krate", "krate_name", "attr_index", "cfg_atoms_that_are_not_the_target", "in_file", "item"],
-    "what a crate has": ["phase", "krate", "krate_id", "flipped", "flags", "modules", "attr_macro_calls", "calls"],
+    "what a crate has": ["phase", "krate", "krate_id", "flipped", "flags", "modules", "attr_macro_calls", "calls_removed_since_ordinary", "calls_added_since_ordinary", "calls"],
     "a function the reachable facts": ["root", "function", "called_by", "krate", "krate_id"],
     "the direct facts of a function are asked for": ["function", "krate", "krate_id"],
     "the same-crate functions a function calls": ["function", "label", "krate", "krate_id", "made_by_a_macro", "targets", "target_ids"],
@@ -82,9 +82,10 @@ def main(lines):
         for _, g in by("what a crate has"):
             if g.get("krate_id", "").replace("0x", "") == kid:
                 calls = set(g.get("calls", "").split())
-                print("  %-60s flipped=%s flags=[%s] modules=%s calls=%s has_the_call=%s" % (
-                    g.get("phase", "")[:60], g.get("flipped"), g.get("flags"), g.get("modules"),
-                    g.get("attr_macro_calls"), f.get("call") in calls))
+                print("  %-44s flipped=%s flags=[%s] modules=%s calls=%s removed=%s added=%s has_the_call=%s" % (
+                    g.get("phase", "")[:44], g.get("flipped"), g.get("flags"), g.get("modules"),
+                    g.get("attr_macro_calls"), g.get("calls_removed_since_ordinary"),
+                    g.get("calls_added_since_ordinary"), f.get("call") in calls))
     print("\n== the stack at the panic:", ids or "none")
     failing = ids.get("for_body_") or ids.get("InferenceResult < 'db >::for_body_")
     print("\n== how the failing function entered the walk")
@@ -97,6 +98,13 @@ def main(lines):
             if failing in f.get("target_ids", ""):
                 print("  listed by", f.get("label"), f.get("function"), "of", f.get("krate"), "at line", n,
                       "(after the flip)" if flip_at is not None and n > flip_at else "(before the flip)")
+        for n, f in by("the same-crate functions a function calls"):
+            if failing in f.get("target_ids", ""):
+                lister = f.get("function")
+                recomputed = [m for m, g in by("were computed, and this is what they read")
+                              if g.get("function") == lister and flip_at is not None and m > flip_at]
+                print("  its caller's direct facts were recomputed in the flipped phase:", bool(recomputed),
+                      "(if not, the saved value from the ordinary pass still lists it)")
         for n, f in by("the direct facts of a function are asked for"):
             if failing in f.get("function", ""):
                 print("  executed direct facts at line", n, f)
@@ -112,7 +120,7 @@ def main(lines):
 
 def selftest():
     sample = [
-        'T INFO cordial::semantic::flip: what a crate has: its cfg, whether the context flipped it, and the attribute macro calls its map declares phase="flipped +kani" krate=core krate_id=0x1fe5a flipped=Some(true) flags=feature=a kani modules=3 attr_macro_calls=2 calls=0x34b9c 0x34b9d',
+        'T INFO cordial::semantic::flip: what a crate has: its cfg, whether the context flipped it, and the attribute macro calls its map declares phase="flipped +kani" krate=core krate_id=0x1fe5a flipped=Some(true) flags=feature=a kani modules=3 attr_macro_calls=2 calls_removed_since_ordinary=1 calls_added_since_ordinary=0 calls=0x34b9c 0x34b9d',
         'T ERROR cordial::attrs: an attribute macro call whose attribute its crate\'s cfg does not have, about to be expanded call=0x34b9c krate=Crate(Id(1fe5a)) krate_name=core attr_index=0 cfg_atoms_that_are_not_the_target=feature=a kani in_file=MacroFile item=pub fn witness_exports() {}',
         'T ERROR cordial::panic: a panic thread="main" location=x queries=query stacktrace:',
         '   0: MacroCallId::macro_arg_(Id(34b9c))',

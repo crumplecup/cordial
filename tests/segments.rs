@@ -463,7 +463,18 @@ fn a_run_says_what_each_stage_wrote_started_walked_and_forgot() -> Result<()> {
     assert!(found.contains(&"made") && found.contains(&"found_by") && found.contains(&"krate_flipped"), "{found:?}");
     // The crates, at the three moments, and what the walk of the reachable facts read and why.
     let crate_says = told_by("what a crate has: its cfg, whether the context flipped it").expect("the crates are said");
-    for field in ["phase", "krate", "krate_id", "flipped", "flags", "modules", "attr_macro_calls", "calls"] {
+    for field in [
+        "phase",
+        "krate",
+        "krate_id",
+        "flipped",
+        "flags",
+        "modules",
+        "attr_macro_calls",
+        "calls_removed_since_ordinary",
+        "calls_added_since_ordinary",
+        "calls",
+    ] {
         assert!(crate_says.contains(&field), "a crate says `{field}`: {crate_says:?}");
     }
     let phases: Vec<&str> = told
